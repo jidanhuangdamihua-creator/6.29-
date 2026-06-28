@@ -1,0 +1,313 @@
+# ============================================================================
+# 全局实验配置文件 (Global Experiment Configuration)
+# ============================================================================
+# 本文件定义了实验的核心参数，包括数据集、模型和训练超参数
+
+# 基础实验设置 (Basic Experiment Settings)
+experiment:
+  name: "demand_forecasting_experiment"
+  description: "Multi-source multi-layer transfer learning for demand forecasting"
+  seed: 42
+  device: "auto"  # auto, cpu, metal (for Mac M1)
+
+# ============================================================================
+# 实验矩阵配置 (Experiment Matrix Configuration) - 新增
+# 用于定义多组实验的组合配置，支持矩阵化运行
+# ============================================================================
+experiment_matrix:
+  # 启用此实验矩阵功能（false时使用上方单一配置）
+  enabled: false
+  
+  # 要运行的数据集列表
+  datasets_to_run:
+    - "demand-forecasting"      # Dataset1: 需求预测
+    # - "italian-pasta-demand"  # Dataset2: 意大利面需求（可选）
+    # - "rossmann-store-sales"  # Dataset3: Rossmann门店（可选）
+  
+  # 源序列数 K 的取值列表（迁移学习中的关键参数）
+  source_counts:
+    - 2   # 最少源序列
+    - 3   # 默认
+    - 5   # 更多源序列
+  
+  # 预测步长取值列表（时间序列预测中的关键参数）
+  horizons:
+    - 7   # 短期（周级）
+    - 12  # 中期（月级）
+    - 24  # 中长期（双月级）
+  
+  # 实验场景配置（用于快速切换多种实验配置组合）
+  scenarios:
+    # 场景1: 快速原型验证
+    prototype:
+      enabled: false
+      epochs: 10
+      batch_size: 64
+      train_ratio: 0.5
+      description: "Fast prototype for quick validation"
+      
+    # 场景2: 标准完整训练
+    standard:
+      enabled: true
+      epochs: 100
+      batch_size: 32
+      train_ratio: 0.6
+      description: "Standard training with full dataset"
+      
+    # 场景3: 细致超参数调优
+    tuning:
+      enabled: false
+      epochs: 200
+      batch_size: 16
+      train_ratio: 0.6
+      description: "Detailed hyperparameter tuning"
+      
+    # 场景4: 生产级模型训练
+    production:
+      enabled: false
+      epochs: 300
+      batch_size: 16
+      train_ratio: 0.6
+      description: "Production-grade model training"
+  
+  # 要运行的对比方法列表
+  enabled_methods:
+    - "baseline"
+    - "lstm"
+    - "cnn_lstm"
+    - "attention_lstm"
+    # - "arima"              # 可选
+    # - "prophet"            # 可选
+    # - "transfer_learning"  # 可选
+  
+  # 矩阵运行控制参数
+  run_control:
+    # 是否交叉运行所有组合（笛卡尔积）
+    # 如果 false，按照 scenarios 中的活跃场景序列运行
+    cross_product_mode: false
+    
+    # 是否保存每个实验的配置快照
+    save_config_snapshot: true
+    
+    # 是否保存每个实验的环境快照
+    save_env_snapshot: true
+    
+    # 输出目录（运行时快照保存位置）
+    snapshot_output_dir: "./outputs/run_snapshots/"
+
+# 数据集配置 (Dataset Configuration)
+dataset:
+  # 可选: Dataset1 (demand-forecasting), Dataset2 (italian-pasta-demand), Dataset3 (rossmann-store-sales)
+  name: "demand-forecasting"
+  path: "./demand-forecasting-kernels-only (1)/"
+  
+  # 时间序列目标配置
+  target_product_id: null  # 如果为null，则使用所有产品，否则指定特定产品ID
+  
+  # 源序列配置
+  num_source_sequences: 3  # K: 使用多少个源序列
+  use_information_sharing: true  # 是否启用信息共享模式
+  
+  # 预测配置
+  forecast_horizon: 12  # 预测步长（时间步数）
+  lookback_window: 24   # 历史观察窗口大小
+  
+  # 数据划分
+  train_ratio: 0.6
+  val_ratio: 0.2
+  test_ratio: 0.2
+  
+  # 数据预处理
+  normalize: true
+  normalization_method: "minmax"  # minmax, standard, robust
+
+# 模型配置 (Model Configuration)
+model:
+  # 模型架构选择
+  architecture: "cnn_lstm"  # 可选: cnn, lstm, cnn_lstm, transformer, multihead_attention
+  
+  # CNN层配置
+  cnn:
+    num_filters: [32, 64, 128]  # 各层滤波器数
+    kernel_size: [3, 3, 3]
+    stride: 1
+    padding: "same"
+    activation: "relu"
+    dropout_rate: 0.2
+  
+  # LSTM层配置
+  lstm:
+    units: 64
+    num_layers: 2
+    dropout_rate: 0.2
+    return_sequences: true
+  
+  # 注意力机制配置
+  attention:
+    enabled: true
+    num_heads: 4
+    attention_dim: 64
+  
+  # 输出层配置
+  output:
+    units: 1  # 预测输出维度
+    activation: "linear"  # linear for regression tasks
+
+# 训练配置 (Training Configuration)
+training:
+  epochs: 100
+  batch_size: 32
+  learning_rate: 0.001
+  optimizer: "adam"  # adam, sgd, rmsprop
+  
+  # 学习率调度
+  lr_scheduler:
+    enabled: true
+    type: "exponential"  # exponential, step, cosine
+    decay_rate: 0.95
+    decay_steps: 10
+  
+  # 早停配置
+  early_stopping:
+    enabled: true
+    monitor: "val_loss"
+    patience: 15
+    restore_best_weights: true
+  
+  # 损失函数
+  loss: "mse"  # mse, mae, rmse, huber
+  
+  # 评估指标
+  metrics:
+    - "mae"
+    - "mse"
+    - "r2_score"
+    - "mape"
+
+# 组件选择 (Component Selection)
+methods:
+  # 指定要运行的方法列表
+  comparison_methods:
+    - "baseline"          # 简单基准方法
+    - "arima"             # 传统时间序列
+    - "prophet"           # Facebook Prophet
+    - "lstm"              # 单独LSTM
+    - "cnn_lstm"          # CNN+LSTM
+    - "attention_lstm"    # 带注意力的LSTM
+    - "transfer_learning" # 迁移学习
+
+# 日志与输出 (Logging and Output)
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_file: "./logs/experiment.log"
+  save_frequency: 10  # 每N个epoch保存一次
+  
+output:
+  results_dir: "./results/"
+  models_dir: "./models/"
+  figures_dir: "./figures/"
+  save_predictions: true
+  save_model_weights: true
+
+# Mac M1 环境特定配置 (Mac M1 Specific Configuration)
+mac_m1:
+  use_metal_acceleration: false  # 设为true将使用Apple Metal加速（实验性）
+  tensorflow_force_cpu: true     # 强制使用CPU以避免兼容性问题
+  max_threads: 4                 # CPU最大线程数
+
+# 高级配置 (Advanced Configuration)
+advanced:
+  mixed_precision: false         # 混合精度训练（Mac M1可能不稳定）
+  gradient_clipping:
+    enabled: true
+    max_norm: 1.0
+  batch_normalization: true
+  use_validation_split: true     # 使用训练集内部验证划分
+
+# ============================================================================
+# 依赖版本配置 (Dependency Version Configuration) - 新增
+# 用于记录与验证项目依赖的推荐版本，特别针对 macOS M1 + Python 3.9
+# ============================================================================
+dependencies:
+  python_version:
+    min: "3.8"
+    recommended: "3.9"
+    max: "3.11"
+    tested_on: ["3.9", "3.10"]
+    note: "Python 3.12+ 不推荐用于 TensorFlow"
+  
+  # 核心依赖（必需）
+  core:
+    numpy:
+      version: ">=1.19.0,<1.24.0"
+      mac_m1_note: "1.21.0+ 支持 ARM64"
+    pandas:
+      version: ">=1.0.0,<2.2.0"
+      mac_m1_note: "建议 1.3.0 以上"
+    scikit-learn:
+      version: ">=0.24.0,<1.4.0"
+      mac_m1_note: "1.0.0+ 完全支持"
+    pyyaml:
+      version: ">=5.3,<6.1"
+      mac_m1_note: "通用支持"
+  
+  # 深度学习框架（高优先级）
+  deeplearning:
+    tensorflow:
+      version: ">=2.10.0,<2.14.0"
+      mac_m1_specific: "tensorflow-macos>=2.10.0"
+      mac_m1_note: "必须使用 tensorflow-macos，不能用标准 tensorflow"
+      installation: "pip install tensorflow-macos"
+    keras:
+      version: ">=2.10.0"
+      mac_m1_note: "自 TensorFlow 2.11+ 已内置，无需单独安装"
+  
+  # 可视化和数据处理（推荐）
+  visualization:
+    matplotlib:
+      version: ">=3.3.0,<3.8.0"
+      mac_m1_note: "3.5.0+ 支持"
+    seaborn:
+      version: ">=0.11.0,<0.13.0"
+      mac_m1_note: "通用支持"
+  
+  # 时间序列分析（可选）
+  timeseries:
+    statsmodels:
+      version: ">=0.12.0,<0.14.0"
+      mac_m1_note: "0.13.0+ 支持"
+    scipy:
+      version: ">=1.5.0,<1.12.0"
+      mac_m1_note: "1.7.0+ 完全支持"
+  
+  # 开发和测试工具（可选）
+  development:
+    jupyter:
+      version: ">=1.0.0"
+      mac_m1_note: "支持"
+    ipython:
+      version: ">=7.0.0"
+      mac_m1_note: "支持"
+    pytest:
+      version: ">=6.0.0"
+      mac_m1_note: "支持"
+  
+  # 平台特定说明
+  platform_notes:
+    mac_m1:
+      architecture: "ARM64"
+      tensorflow_gpu: "不推荐(不稳定)"
+      tensorflow_metal: "实验性，可选启用"
+      recommended_approach: "CPU+多线程"
+      thread_recommendation: "4-8 threads (根据核心数)"
+    
+    macos_version:
+      min: "10.13"
+      recommended: "11.0+"
+      note: "Big Sur 或更新版本推荐"
+    
+    installation_order:
+      step1: "创建 Python 3.9 虚拟环境"
+      step2: "pip install -U pip setuptools wheel"
+      step3: "pip install -r requirements.txt"
+      step4: "对 Mac M1: pip install tensorflow-macos keras-macos (可选)"

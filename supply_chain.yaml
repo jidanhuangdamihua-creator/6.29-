@@ -1,0 +1,121 @@
+# ============================================================================
+# 供应链仿真配置文件 (Supply Chain Simulation Configuration)
+# ============================================================================
+# 本文件定义供应链成本计算和库存优化的参数
+
+supply_chain:
+  # 库存初始状态 (Initial Inventory State)
+  initial_inventory:
+    quantity: 100          # 初始库存量
+    value: 10000          # 初始库存价值
+    location: "warehouse" # 库存位置
+  
+  # 订货参数 (Ordering Parameters)
+  ordering:
+    order_quantity_Q: 50      # 订货批量（Economic Order Quantity）
+    lead_time_days: 3         # 订货前置期（天数）
+    min_order_quantity: 10    # 最小订货量
+    max_order_quantity: 200   # maximum订货量
+    review_period: 1          # 库存复查周期（天）
+  
+  # 成本参数 (Cost Parameters)
+  costs:
+    # 订货成本 - 每次订货的固定成本
+    ordering_cost_per_order: 100  # 元/次订货
+    
+    # 采购成本 - 单位产品的成本
+    unit_acquisition_cost: 50     # 元/单位
+    
+    # 持有成本 - 单位产品的年度持有成本
+    holding_cost_annual: 5        # 元/单位/年
+    holding_cost_daily: 0.0137    # 元/单位/天 (calculated as annual/365)
+    
+    # 缺货成本 - 单位产品的缺货成本
+    stockout_cost_per_unit: 25    # 元/单位（缺货惩罚）
+    
+    # 处理/运输成本
+    transportation_cost_per_order: 50  # 元/订单
+    handling_cost_per_unit: 2          # 元/单位
+
+  # 服务水平 (Service Level)
+  service_level:
+    target_fill_rate: 0.95        # 目标订单完成率（95%）
+    target_service_level: 0.95    # 目标服务水平（Type I：无缺货天数比例）
+    acceptable_stockout_rate: 0.05 # 可接受的缺货率
+  
+  # 安全库存参数 (Safety Stock Parameters)
+  safety_stock:
+    enabled: true
+    z_score: 1.65                 # 95% 服务水平对应的Z值
+    calculation_method: "zscore"  # zscore, percentage_of_mean, fixed
+    percentage: 0.20              # 相对于平均需求的百分比（当使用percentage_of_mean时）
+    fixed_quantity: 20            # 固定安全库存量（当使用fixed时）
+  
+  # 需求特征 (Demand Characteristics)
+  demand:
+    # 由历史数据推导，这里提供默认/参考值
+    mean_daily_demand: 10        # 平均日需求
+    std_daily_demand: 3          # 日需求标准差
+    demand_distribution: "normal" # normal, poisson, empirical
+    demand_seasonality: true      # 是否考虑季节性
+    seasonality_pattern: "monthly" # daily, weekly, monthly, quarterly
+
+  # 约束条件 (Constraints)
+  constraints:
+    warehouse_capacity: 500       # 仓库最大容量
+    min_stock_level: 10          # 最低库存警告线
+    max_backorder_allowed: 30    # 最大可接受的缺货量
+    order_cancellation_rate: 0.02 # 订单取消率
+
+  # 仿真参数 (Simulation Parameters)
+  simulation:
+    time_period_days: 365        # 仿真周期（天数）
+    num_simulations: 100         # 蒙特卡洛仿真次数
+    random_seed: 42              # 随机种子
+    
+  # 优化目标 (Optimization Objectives)
+  optimization:
+    objectives:
+      - "minimize_total_cost"    # 最小化总体成本
+      - "maintain_service_level" # 维持服务水平
+      - "reduce_inventory_cost"  # 降低库存成本
+    
+    # 权重（针对多目标优化）
+    weights:
+      total_cost: 0.5
+      service_level: 0.3
+      inventory_turnover: 0.2
+
+  # 产品等级分类 (Product Classification)
+  product_classes:
+    A:
+      percentage: 0.80           # ABC分类中的占比
+      service_level_target: 0.98 # 高价值产品更高服务水平
+      review_frequency: "daily"
+    
+    B:
+      percentage: 0.15
+      service_level_target: 0.95
+      review_frequency: "weekly"
+    
+    C:
+      percentage: 0.05
+      service_level_target: 0.90
+      review_frequency: "monthly"
+
+  # 报告和分析 (Reporting and Analysis)
+  reporting:
+    enable_detailed_logs: true
+    save_simulation_results: true
+    generate_charts: true
+    export_format: "csv"  # csv, excel, json
+
+# 成本计算示例公式注释
+# ============================================================================
+# 年度总成本 = 订货成本 + 采购成本 + 持有成本 + 缺货成本
+#
+# 订货成本 = (年需求量 / 订货批量) × 每次订货成本
+# 采购成本 = 年需求量 × 单位采购成本
+# 持有成本 = (订货批量/2 + 安全库存) × 单位持有成本
+# 缺货成本 = 缺货量 × 缺货成本
+# ============================================================================

@@ -1,0 +1,85 @@
+"""Unified single-experiment entry for reproducible paper review."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import tf_compat  # must be imported before tensorflow/keras
+
+from dataset_registry import get_default_dataset_path
+from experiment_runner import results_to_dataframe, run_all_experiments, save_results_to_csv
+from result_visualizer import run_result_visualization
+
+
+ROOT = Path(__file__).resolve().parent
+
+
+def _resolve_dataset_path(dataset_name: str) -> str:
+    return str(ROOT / get_default_dataset_path(dataset_name))
+
+
+def _load_config() -> dict:
+    config_path = ROOT / "configs" / "default_config.json"
+    with config_path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def main() -> None:
+    cfg = _load_config()
+
+    dataset_name = cfg["dataset_name"]
+    feature_cols = cfg["feature_cols"]
+    include_sales_in_knn = bool(cfg.get("include_sales_in_knn", True))
+
+    experiment_result = run_all_experiments(
+        dataset_name=dataset_name,
+        data_path=_resolve_dataset_path(dataset_name),
+        feature_cols=feature_cols,
+        k=int(cfg["k"]),
+        horizon=int(cfg["horizon"]),
+        window_size=10,
+        weight_mode=str(cfg["weight_mode"]),
+        estimator_name="random_forest",
+        keep_ratio=float(cfg["keep_ratio"]),
+        include_sales_in_knn=include_sales_in_knn,
+        learning_rate=0.001,
+        source_epochs=int(cfg["source_epochs"]),
+        target_epochs=int(cfg["target_epochs"]),
+        batch_size=int(cfg["batch_size"]),
+        enabled_methods=["No-TL", "SS-TL", "MSWA-TL", "MSSB-TL", "MSML-TL", "MSML-TL-RFE"],
+    )
+
+    results_df = results_to_dataframe(experiment_result)
+
+    experiment_results_dir = ROOT / "outputs" / "experiment_results"
+    experiment_results_dir.mkdir(parents=True, exist_ok=True)
+    raw_csv_path = experiment_results_dir / f"{dataset_name.lower()}_results.csv"
+    save_results_to_csv(results_df, str(raw_csv_path))
+
+    report = run_result_visualization(
+        csv_path=str(raw_csv_path),
+        output_dir=str(ROOT / "outputs" / "results_reports"),
+    )
+
+    final_table_path = ROOT / "outputs" / "results_reports" / "final_results_table.csv"
+    base_cols = ["dataset", "method", "include_sales_in_knn", "rmse", "accuracy", "prediction_shape", "rank"]
+    final_cols = [c for c in base_cols if c in report["results_df"].columns]
+    final_table = report["results_df"][final_cols].copy()
+    final_table.to_csv(final_table_path, index=False, encoding="utf-8")
+
+    print("Single Experiment Pipeline Completed")
+    print("Raw Results CSV:")
+    print(raw_csv_path)
+    print("Formatted Results Table:")
+    print(report["formatted_table_path"])
+    print("RMSE Plot:")
+    print(report["rmse_plot_path"])
+    print("Accuracy Plot:")
+    print(report["accuracy_plot_path"])
+    print("Final Reviewer Table:")
+    print(final_table_path)
+
+
+if __name__ == "__main__":
+    main()

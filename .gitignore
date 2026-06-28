@@ -1,0 +1,13 @@
+.venv/
+.venv311/
+__pycache__/
+*.pyc
+outputs/
+.DS_Store
+
+# Local docs (do not version)
+想要的输出.docx
+论文复现评估版仓库.docx
+_git_backup/
+output/
+数据集/

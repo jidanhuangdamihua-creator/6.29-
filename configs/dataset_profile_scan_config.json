@@ -1,0 +1,30 @@
+{
+  "output_root": "outputs/dataset_profiles",
+  "cold_start_window": {
+    "train_days": 15,
+    "val_days": 15,
+    "test_days": 180
+  },
+  "datasets": [
+    {
+      "name": "Dataset1",
+      "path": "数据集/原始数据/(Dataset 1"
+    },
+    {
+      "name": "Dataset2",
+      "path": "数据集/原始数据/(Dataset 2.csv"
+    },
+    {
+      "name": "Dataset3",
+      "path": "数据集/原始数据/(Dataset 3.ipynb"
+    },
+    {
+      "name": "Dataset4",
+      "path": "数据集/原始数据/Dataset 4叮咚数据集"
+    },
+    {
+      "name": "Dataset5",
+      "path": "数据集/原始数据/Dataset 5Favorita"
+    }
+  ]
+}

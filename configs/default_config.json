@@ -1,0 +1,256 @@
+{
+  "dataset_name": "Dataset1",
+  "feature_cols": [
+    "sales",
+    "year",
+    "month",
+    "week",
+    "day"
+  ],
+  "horizon": 1,
+  "k": 3,
+  "weight_mode": "inverse_distance",
+  "keep_ratio": 0.5,
+  "source_epochs": 2,
+  "target_epochs": 2,
+  "batch_size": 16,
+  "dataset_paths": {
+    "Dataset1": "Dataset 1/train.csv",
+    "Dataset2": "Dataset 2.csv",
+    "Dataset3": "Dataset 3/train ross.csv"
+  },
+  "features": {
+    "default_feature_cols": [
+      "sales",
+      "year",
+      "month",
+      "week",
+      "day"
+    ]
+  },
+  "preprocessing": {
+    "source_split_mode": "ratio",
+    "source_train_ratio": 0.8,
+    "source_val_ratio": 0.1,
+    "source_test_ratio": 0.1,
+    "target_split_mode": "ratio",
+    "target_train_ratio": 0.067,
+    "target_val_ratio": 0.067,
+    "target_test_ratio": 0.866,
+    "target_train_val_days": 30,
+    "target_test_days": 180
+  },
+  "methods": {
+    "all_methods": [
+      "No-TL",
+      "SS-TL",
+      "MSWA-TL",
+      "MSSB-TL",
+      "MSML-TL",
+      "MSML-TL-RFE"
+    ],
+    "smoke_methods": [
+      "No-TL",
+      "SS-TL",
+      "MSML-TL",
+      "MSML-TL-RFE"
+    ]
+  },
+  "single_experiment": {
+    "dataset_name": "Dataset1",
+    "k": 3,
+    "horizon": 1,
+    "window_size": 10,
+    "weight_mode": "inverse_distance",
+    "estimator_name": "random_forest",
+    "keep_ratio": 0.5,
+    "learning_rate": 0.001,
+    "source_epochs": 2,
+    "target_epochs": 2,
+    "batch_size": 16
+  },
+  "matrix": {
+    "dataset_names": [
+      "Dataset1",
+      "Dataset2",
+      "Dataset3"
+    ],
+    "horizons": [
+      1,
+      5
+    ],
+    "source_counts": [
+      1,
+      3,
+      5,
+      6,
+      9
+    ],
+    "information_sharing_scenarios": [
+      "without_information_sharing",
+      "with_information_sharing"
+    ],
+    "weight_modes": [
+      "inverse_distance",
+      "raw_distance"
+    ],
+    "keep_ratios": [
+      0.5,
+      0.8
+    ],
+    "enabled_methods_options": [
+      [
+        "No-TL",
+        "SS-TL",
+        "MSWA-TL",
+        "MSSB-TL",
+        "MSML-TL",
+        "MSML-TL-RFE"
+      ]
+    ]
+  },
+  "paper_reproduction": {
+    "strict_paper_mode": false,
+    "paper_strict_mode": false,
+    "strict_paper_split": false,
+    "paper_strict_split": false,
+    "use_id_static_features_in_signature": false,
+    "metric_protocol": {
+      "current_metric_space": "normalized_minmax_space",
+      "current_rmse_definition": "RMSE on MinMax-scaled targets after split-wise normalization fit on train only.",
+      "current_accuracy_definition": "1 / (RMSE + 1e-8)",
+      "paper_metric_space": "original_sales_space",
+      "paper_accuracy_definition": "1 / (RMSE + 1e-8)",
+      "strict_paper_metrics": false,
+      "alignment_status": "PARTIAL",
+      "notes": "Default engineering results are computed in normalized minmax space. Strict paper metric mode re-computes metrics in original sales space by inverse-transforming predictions/targets with train-fitted MinMax scaler."
+    },
+    "split_protocol": {
+      "paper_reference": "TODO_UNCONFIRMED_FROM_ORIGINAL_PAPER",
+      "alignment_status": "PARTIAL",
+      "notes": "Current code explicitly reconstructs a rolling target window of 30 train+val days plus 180 test days, then applies a 0.067/0.067/0.866 temporal split inside that window. This is auditable, but the exact paper window boundaries are still unconfirmed.",
+      "source_split": {
+        "mode": "ratio",
+        "train_ratio": 0.8,
+        "val_ratio": 0.1,
+        "test_ratio": 0.1
+      },
+      "target_window": {
+        "kind": "rolling_recent_days",
+        "train_val_days": 30,
+        "test_days": 180
+      },
+      "target_eval_split": {
+        "mode": "ratio",
+        "train_ratio": 0.067,
+        "val_ratio": 0.067,
+        "test_ratio": 0.866,
+        "date_boundaries": {}
+      }
+    },
+    "paper_split_protocol": {
+      "target_observed_window_days": 30,
+      "target_forecast_window_days": 180,
+      "validation_strategy": "time_holdout",
+      "rolling_or_fixed_split": "rolling_recent_days",
+      "source_selection_window": "full_history",
+      "source_pool_scope": "all_source_items",
+      "paper_reference_note": "按论文相对窗口复刻",
+      "dataset_notes": {
+        "Dataset1": "需求预测挑战赛：按论文相对窗口复刻",
+        "Dataset2": "意大利面需求：按论文相对窗口复刻",
+        "Dataset3": "Rossmann 门店：按论文相对窗口复刻"
+      }
+    },
+    "strict_dataset_protocol": {
+      "Dataset1": {
+        "target_entity_id": 1,
+        "target_item_id": 10,
+        "allowed_entities": [1, 2, 3],
+        "source_item_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+        "target_split_days": {
+          "train_days": 15,
+          "val_days": 15,
+          "test_days": 180
+        },
+        "source_split_ratio": {
+          "train_ratio": 0.8,
+          "val_ratio": 0.1,
+          "test_ratio": 0.1
+        },
+        "without_information_sharing_scope": "same_store"
+      },
+      "Dataset2": {
+        "target_entity_id": "B1",
+        "target_item_id": 10,
+        "target_split_days": {
+          "train_days": 14,
+          "val_days": 15,
+          "test_days": 179
+        },
+        "source_split_ratio": {
+          "train_ratio": 0.8,
+          "val_ratio": 0.1,
+          "test_ratio": 0.1
+        },
+        "without_information_sharing_scope": "same_brand"
+      },
+      "Dataset3": {
+        "target_store_id": 10,
+        "target_split_days": {
+          "train_days": 16,
+          "val_days": 15,
+          "test_days": 181
+        },
+        "source_split_ratio": {
+          "train_ratio": 0.8,
+          "val_ratio": 0.1,
+          "test_ratio": 0.1
+        },
+        "without_information_sharing_scope": "same_region",
+        "region_field": "region_id",
+        "region_alignment_status": "PARTIAL",
+        "region_alignment_todo": "Dataset3 raw CSV lacks explicit region metadata; strict without-information-sharing may require external store metadata."
+      }
+    },
+    "strict_source_selection": {
+      "enforce_ss_tl_knn_top1": true,
+      "enforce_multi_source_topk3": true,
+      "multi_source_top_k": 3,
+      "alignment_status": "PARTIAL",
+      "notes": "SS-TL uses KNN nearest single source; multi-source methods use nearest top-3 in strict mode."
+    },
+    "paper_source_protocol": {
+      "max_pretrained_models_from_paper": 5,
+      "default_paper_multi_source_count": 3,
+      "allow_extended_source_counts": true,
+      "paper_source_counts": [1, 3, 5],
+      "extended_source_counts": [6, 9],
+      "alignment_status": "ALIGNED",
+      "notes": "Paper-track multi-source TL experiments must use at most five pretrained source models. Any source_count above 5 is classified as extended experiments only."
+    },
+    "source_pretrained_protocol": {
+      "paper_max_pretrained_models": 5,
+      "paper_source_counts": [1, 3, 5],
+      "extended_source_counts": [6, 9],
+      "alignment_status": "ALIGNED",
+      "notes": "Backward-compatible alias. Prefer paper_source_protocol."
+    }
+  },
+  "outputs": {
+    "experiment_results_dir": "outputs/experiment_results",
+    "matrix_runs_dir": "outputs/matrix_runs",
+    "results_reports_dir": "outputs/results_reports",
+    "paper_alignment_dir": "outputs/paper_alignment_reports",
+    "paper_results_csv": "paper_results.csv",
+    "full_paper_results_csv": "full_paper_results.csv",
+    "extended_results_csv": "extended_results.csv"
+  },
+  "runtime": {
+    "verbose_mode": "summary"
+  },
+  "project": {
+    "name": "multi_source_multi_layer_tl_reproduction",
+    "paper": "A multi-source multi-layer-based transfer learning approach for forecasting customer demands of newly launched products"
+  }
+}

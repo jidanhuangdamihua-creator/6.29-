@@ -1,0 +1,30 @@
+[2026-03-13 18:12:46] INFO     - experiment - setup_logging:77 - ✓ 日志文件已启用: ./logs/experiment.log
+[2026-03-13 18:12:46] INFO     - experiment - setup_environment:289 - 
+======================================================================
+[2026-03-13 18:12:46] INFO     - experiment - setup_environment:290 - 开始环境初始化 (Starting Environment Initialization)
+[2026-03-13 18:12:46] INFO     - experiment - setup_environment:291 - ======================================================================
+[2026-03-13 18:12:46] INFO     - experiment - setup_environment:296 - 
+步骤1: 检查依赖库
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:225 - ======================================================================
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:226 - 检查依赖库 (Checking Dependencies)
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:227 - ======================================================================
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:230 - 
+必要的包 (Required Packages):
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:236 -   ✓ numpy: 1.26.4
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:236 -   ✓ pandas: 2.3.3
+[2026-03-13 18:12:46] ERROR    - experiment - check_dependencies:239 -   ✗ scikit-learn: NOT INSTALLED (required: scikit-learn>=0.24.0)
+[2026-03-13 18:12:46] ERROR    - experiment - check_dependencies:239 -   ✗ pyyaml: NOT INSTALLED (required: pyyaml>=5.3)
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:243 - 
+可选的包 (Optional Packages):
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:249 -   ✓ tensorflow: 2.20.0
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:249 -   ✓ keras: 3.10.0
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:249 -   ✓ matplotlib: 3.9.4
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:249 -   ✓ seaborn: 0.13.2
+[2026-03-13 18:12:46] WARNING  - experiment - check_dependencies:252 -   ⚠ statsmodels: NOT INSTALLED (optional: statsmodels>=0.12.0)
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:254 - ======================================================================
+[2026-03-13 18:12:46] ERROR    - experiment - check_dependencies:257 - 缺少必要的依赖库! 请安装所有必要的包。
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:258 - 
+推荐安装命令:
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:259 - pip install numpy pandas scikit-learn pyyaml
+[2026-03-13 18:12:46] INFO     - experiment - check_dependencies:260 - pip install tensorflow keras matplotlib seaborn statsmodels  # 可选
+[2026-03-13 18:12:46] ERROR    - experiment - setup_environment:304 - 缺少必要的依赖库，无法继续!
