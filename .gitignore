@@ -11,3 +11,9 @@ outputs/
 _git_backup/
 output/
 数据集/
+数据集/固化数据/
+*.parquet
+*.bak
+_root_inventory.md
+_import_scan.md
+_column_scan.md

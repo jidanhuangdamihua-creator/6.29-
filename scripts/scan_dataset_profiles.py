@@ -701,7 +701,7 @@ def _search_protocol_in_project_files(dataset_name: str) -> Optional[Dict[str, A
 
 def _search_strict_protocol_in_project(dataset_name: str) -> Optional[Dict[str, Any]]:
     try:
-        from data_preprocessing import STRICT_DATASET_PROTOCOL
+        from src.data_processing.data_preprocessing import STRICT_DATASET_PROTOCOL
         if dataset_name in STRICT_DATASET_PROTOCOL:
             return dict(STRICT_DATASET_PROTOCOL[dataset_name])
     except ImportError:

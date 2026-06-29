@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from experiment_runner import (
+from src.experiment.experiment_runner import (
     prepare_base_data_for_experiments,
     run_msml_experiment,
     run_msml_rfe_experiment,

@@ -10,7 +10,7 @@ if str(ROOT) not in sys.path:
 	sys.path.insert(0, str(ROOT))
 
 import numpy as np
-from cnn_model import build_base_cnn, get_model_summary_dict
+from src.models.cnn_model import build_base_cnn, get_model_summary_dict
 
 # Generate random dummy input: batch=8, timesteps=10, features=7
 X_dummy = np.random.rand(8, 10, 7).astype(np.float32)

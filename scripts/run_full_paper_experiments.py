@@ -33,7 +33,7 @@ import pandas as pd
 
 from dataset_registry import list_dataset_names, normalize_dataset_name
 
-from environment import setup_logging
+from src.utils.environment import setup_logging
 from paper_reproduction_protocol import (
     MULTI_SOURCE_TL_METHODS,
     build_alignment_fields,
@@ -300,7 +300,7 @@ def _load_experiment_runners() -> None:
     global run_no_tl_experiment
     global run_ss_tl_experiment
 
-    from experiment_runner import (
+    from src.experiment.experiment_runner import (
         prepare_base_data_for_experiments,
         run_msml_experiment,
         run_msml_rfe_experiment,
@@ -309,7 +309,7 @@ def _load_experiment_runners() -> None:
         run_no_tl_experiment,
         run_ss_tl_experiment,
     )
-    from result_visualizer import add_rank_column, run_result_visualization
+    from src.visualization.result_visualizer import add_rank_column, run_result_visualization
 
 
 def _strict_multi_source_topk(protocol: Dict[str, Any]) -> int:

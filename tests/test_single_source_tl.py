@@ -13,10 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from config import Config
-from environment import setup_logging
+from src.utils.config import Config
+from src.utils.environment import setup_logging
 
-from data_preprocessing import (
+from src.data_processing.data_preprocessing import (
     build_source_target_split,
     build_tabular_sequence,
     extract_datetime_features,
@@ -25,7 +25,7 @@ from data_preprocessing import (
     temporal_split_by_ratio_or_dates,
     to_cnn_tensor,
 )
-from single_source_tl import (
+from src.transfer_methods.single_source_tl import (
     build_target_model_from_source,
     evaluate_regression_model,
     fine_tune_target_model,

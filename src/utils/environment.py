@@ -18,7 +18,7 @@ from typing import Optional, Tuple, Dict, Any
 from pathlib import Path
 
 try:
-    from config import Config
+    from src.utils.config import Config
 except ImportError:
     from .config import Config
 

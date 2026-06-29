@@ -21,7 +21,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 import pandas as pd
 
-from data_preprocessing import extract_datetime_features, load_dataset
+from src.data_processing.data_preprocessing import extract_datetime_features, load_dataset
 from dataset_registry import get_default_dataset_path
 
 # ---------------------------------------------------------------------------

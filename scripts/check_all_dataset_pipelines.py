@@ -26,7 +26,7 @@ import pandas as pd
 
 from dataset_registry import list_dataset_names
 
-from data_preprocessing import (
+from src.data_processing.data_preprocessing import (
     build_source_target_split,
     build_tabular_sequence,
     extract_datetime_features,

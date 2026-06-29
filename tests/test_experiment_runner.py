@@ -16,8 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from environment import setup_logging
-from experiment_runner import (
+from src.utils.environment import setup_logging
+from src.experiment.experiment_runner import (
     print_results_table,
     results_to_dataframe,
     run_all_experiments,

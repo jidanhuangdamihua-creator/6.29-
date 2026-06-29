@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from source_selector import SourceSelector
+from src.source_selection.source_selector import SourceSelector
 
 __all__ = ["SourceSelector"]

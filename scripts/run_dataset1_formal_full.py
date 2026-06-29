@@ -13,10 +13,10 @@ if str(ROOT) not in sys.path:
 
 import tf_compat  # must be imported before tensorflow/keras
 
-from environment import setup_logging
-from experiment_runner import results_to_dataframe, run_all_experiments, save_results_to_csv
+from src.utils.environment import setup_logging
+from src.experiment.experiment_runner import results_to_dataframe, run_all_experiments, save_results_to_csv
 from paper_reproduction_protocol import get_results_output_paths, load_paper_protocol
-from source_selector import KNN_REPRESENTATION_PAPER_OBSERVED_SEQUENCE
+from src.source_selection.source_selector import KNN_REPRESENTATION_PAPER_OBSERVED_SEQUENCE
 from src.utils.experiment_hyperparams import FIXED_CLIPNORM, FIXED_DROPOUT, FIXED_LEARNING_RATE
 from src.utils.runtime_control import set_verbose_mode
 

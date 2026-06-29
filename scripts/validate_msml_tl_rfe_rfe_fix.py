@@ -16,16 +16,16 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from data_preprocessing import temporal_split_by_ratio_or_dates
-from experiment_runner import prepare_base_data_for_experiments, run_msml_rfe_experiment
-from msml_tl_rfe import (
+from src.data_processing.data_preprocessing import temporal_split_by_ratio_or_dates
+from src.experiment.experiment_runner import prepare_base_data_for_experiments, run_msml_rfe_experiment
+from src.transfer_methods.msml_tl_rfe import (
     _normalize_source_key,
     _prepare_source_split,
     build_joint_rfe_training_dataframe,
     run_rfe_feature_selection,
 )
 from paper_reproduction_protocol import load_paper_protocol, resolve_strict_paper_mode
-from source_selector import SourceSelector
+from src.source_selection.source_selector import SourceSelector
 from scripts.run_full_paper_experiments import (
     _apply_information_sharing_filter,
     _load_config,

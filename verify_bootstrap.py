@@ -44,8 +44,8 @@ sys.path.insert(0, current_dir)
 # 导入配置和环境模块
 try:
     # 尝试直接导入
-    from config import Config
-    from environment import (
+    from src.utils.config import Config
+    from src.utils.environment import (
         setup_logging,
         perform_dry_run,
         save_environment_snapshot,

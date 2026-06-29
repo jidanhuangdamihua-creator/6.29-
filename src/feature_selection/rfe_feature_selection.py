@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from msml_tl_rfe import (
+from src.transfer_methods.msml_tl_rfe import (
     apply_selected_features_to_df,
     build_joint_rfe_training_dataframe,
     run_rfe_feature_selection,

@@ -16,7 +16,7 @@ from sklearn.preprocessing import MinMaxScaler
 from dataset_registry import get_dataset_profile, normalize_dataset_name
 
 try:
-    from environment import setup_logging
+    from src.utils.environment import setup_logging
 except ImportError:
     setup_logging = None
 

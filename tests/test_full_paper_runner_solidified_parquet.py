@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from data_preprocessing import temporal_split_by_ratio_or_dates
+from src.data_processing.data_preprocessing import temporal_split_by_ratio_or_dates
 from scripts import fix_d3_parquet as d3_fix
 from scripts.aggregate_d1_d6_results import (
     SOURCE_CSVS,
@@ -23,7 +23,7 @@ from scripts.run_full_paper_experiments import (
     _resolve_dataset_feature_cols,
     _save_dataset_result_csvs,
 )
-from source_selector import SourceSelector
+from src.source_selection.source_selector import SourceSelector
 from src.utils.parquet_data_loader import attach_window_attrs
 
 

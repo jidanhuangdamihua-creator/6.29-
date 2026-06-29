@@ -16,10 +16,10 @@ if str(ROOT) not in sys.path:
 import pandas as pd
 
 from dataset_registry import get_default_dataset_path, normalize_dataset_name
-from config import Config
-from environment import setup_logging
+from src.utils.config import Config
+from src.utils.environment import setup_logging
 
-from data_preprocessing import (
+from src.data_processing.data_preprocessing import (
     build_tabular_sequence,
     build_source_target_split,
     extract_datetime_features,

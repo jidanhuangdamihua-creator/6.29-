@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 try:
-    from environment import setup_logging
+    from src.utils.environment import setup_logging
 except ImportError:
     setup_logging = None
 

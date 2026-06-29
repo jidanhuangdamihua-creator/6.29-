@@ -27,7 +27,7 @@ import pandas as pd
 
 from dataset_registry import list_dataset_names
 
-from experiment_runner import (
+from src.experiment.experiment_runner import (
     prepare_base_data_for_experiments,
     run_msml_experiment,
     run_ss_tl_experiment,

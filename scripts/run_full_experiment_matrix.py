@@ -13,8 +13,8 @@ if str(ROOT) not in sys.path:
 
 import tf_compat  # must be imported before tensorflow/keras
 
-from experiment_matrix_runner import run_experiment_matrix
-from environment import setup_logging
+from src.experiment.experiment_matrix_runner import run_experiment_matrix
+from src.utils.environment import setup_logging
 from paper_reproduction_protocol import (
     load_paper_protocol,
     resolve_strict_paper_mode,

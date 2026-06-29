@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
 
 import tf_compat  # must be imported before tensorflow/keras
 
-from experiment_matrix_runner import build_smoke_test_matrix, run_experiment_matrix
+from src.experiment.experiment_matrix_runner import build_smoke_test_matrix, run_experiment_matrix
 
 
 def main() -> None:

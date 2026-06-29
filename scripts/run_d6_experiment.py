@@ -5,6 +5,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from src.constants import SOURCE_HISTORY_DAYS
+from src.constants import RESULT_SCHEMA_COLUMNS
+
 import tf_compat  # must be imported before tensorflow/keras
 
 import pandas as pd
@@ -17,10 +20,9 @@ from src.utils.parquet_data_loader import (
     attach_window_attrs,
     load_knn_results,
 )
-from data_preprocessing import infer_source_selection_feature_columns
+from src.data_processing.data_preprocessing import infer_source_selection_feature_columns
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-REFERENCE_SCHEMA_CSV = PROJECT_ROOT / "outputs" / "final_summary" / "d1_d6_unified_results.csv"
 TRACE_COLUMNS = [
     "dataset_id",
     "scenario",
@@ -36,7 +38,7 @@ config = {
     "parquet_dir": "数据集/固化数据",
     "knn_json_dir": "outputs/knn_selection/Dataset6",
     "info_sharing": "without",
-    "source_history_days": 300,
+    "source_history_days": SOURCE_HISTORY_DAYS,
     "entity_col": "entity_id",
     "enabled_methods": [
         "No-TL",
@@ -72,11 +74,8 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _reference_result_columns(reference_csv: Path = REFERENCE_SCHEMA_CSV) -> list[str]:
-    columns = pd.read_csv(reference_csv, nrows=0).columns.tolist()
-    start = columns.index("dataset")
-    end = columns.index("error") + 1
-    return columns[start:end]
+def _reference_result_columns() -> list[str]:
+    return RESULT_SCHEMA_COLUMNS
 
 
 def _align_results_to_reference_schema(df: pd.DataFrame) -> pd.DataFrame:

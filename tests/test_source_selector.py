@@ -15,10 +15,10 @@ if str(ROOT) not in sys.path:
 
 import pandas as pd
 
-from config import Config
-from environment import setup_logging
-from data_preprocessing import build_source_target_split, extract_datetime_features, load_dataset
-from source_selector import SourceSelector
+from src.utils.config import Config
+from src.utils.environment import setup_logging
+from src.data_processing.data_preprocessing import build_source_target_split, extract_datetime_features, load_dataset
+from src.source_selection.source_selector import SourceSelector
 
 
 def _choose_target_short_history(target_df: pd.DataFrame, history_length: int = 30) -> pd.DataFrame:

@@ -15,7 +15,7 @@ from pathlib import Path
 import tf_compat  # must be imported before tensorflow/keras
 
 from dataset_registry import get_dataset_path_map
-from experiment_matrix_runner import build_full_matrix_default, run_experiment_matrix
+from src.experiment.experiment_matrix_runner import build_full_matrix_default, run_experiment_matrix
 
 
 ROOT = Path(__file__).resolve().parent

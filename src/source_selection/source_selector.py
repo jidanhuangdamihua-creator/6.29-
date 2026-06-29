@@ -18,10 +18,10 @@ from typing import Dict, List, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-from data_preprocessing import infer_source_selection_feature_columns
+from src.data_processing.data_preprocessing import infer_source_selection_feature_columns
 
 try:
-    from environment import setup_logging
+    from src.utils.environment import setup_logging
 except ImportError:
     setup_logging = None
 

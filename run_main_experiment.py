@@ -8,8 +8,8 @@ from pathlib import Path
 import tf_compat  # must be imported before tensorflow/keras
 
 from dataset_registry import get_default_dataset_path
-from experiment_runner import results_to_dataframe, run_all_experiments, save_results_to_csv
-from result_visualizer import run_result_visualization
+from src.experiment.experiment_runner import results_to_dataframe, run_all_experiments, save_results_to_csv
+from src.visualization.result_visualizer import run_result_visualization
 
 
 ROOT = Path(__file__).resolve().parent

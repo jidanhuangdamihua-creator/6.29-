@@ -15,7 +15,7 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 
-from cnn_model import build_base_cnn
+from src.models.cnn_model import build_base_cnn
 from src.utils.runtime_control import keras_verbose
 
 LOGGER_NAME = "experiment"

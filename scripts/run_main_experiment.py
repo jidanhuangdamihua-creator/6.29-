@@ -14,8 +14,8 @@ if str(ROOT) not in sys.path:
 import tf_compat  # must be imported before tensorflow/keras
 
 from dataset_registry import normalize_dataset_name
-from experiment_runner import results_to_dataframe, run_all_experiments, save_results_to_csv
-from environment import setup_logging
+from src.experiment.experiment_runner import results_to_dataframe, run_all_experiments, save_results_to_csv
+from src.utils.environment import setup_logging
 from paper_reproduction_protocol import (
     get_results_output_paths,
     load_paper_protocol,

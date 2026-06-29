@@ -21,10 +21,10 @@ from dataset_registry import list_dataset_names
 try:
     from .experiment_runner import results_to_dataframe, run_all_experiments
 except ImportError:
-    from experiment_runner import results_to_dataframe, run_all_experiments
+    from src.experiment.experiment_runner import results_to_dataframe, run_all_experiments
 
 try:
-    from environment import setup_logging
+    from src.utils.environment import setup_logging
 except ImportError:
     setup_logging = None
 

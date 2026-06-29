@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from data_preprocessing import normalize_features
+from src.data_processing.data_preprocessing import normalize_features
 
 
 class TestNormalizeFeaturesFullFit(unittest.TestCase):

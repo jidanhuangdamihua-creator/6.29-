@@ -13,10 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from config import Config
-from environment import setup_logging
-from data_preprocessing import build_source_target_split, extract_datetime_features, load_dataset
-from mswa_tl import run_mswa_tl
+from src.utils.config import Config
+from src.utils.environment import setup_logging
+from src.data_processing.data_preprocessing import build_source_target_split, extract_datetime_features, load_dataset
+from src.transfer_methods.mswa_tl import run_mswa_tl
 
 
 def main() -> None:

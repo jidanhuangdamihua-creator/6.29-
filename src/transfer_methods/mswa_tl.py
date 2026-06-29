@@ -18,23 +18,23 @@ import numpy as np
 import pandas as pd
 
 try:
-    from environment import setup_logging
+    from src.utils.environment import setup_logging
 except ImportError:
     setup_logging = None
 
-from data_preprocessing import (
+from src.data_processing.data_preprocessing import (
     build_tabular_sequence,
     normalize_features,
     temporal_split_by_ratio_or_dates,
     to_cnn_tensor,
 )
-from single_source_tl import (
+from src.transfer_methods.single_source_tl import (
     build_target_model_from_source,
     evaluate_regression_model,
     fine_tune_target_model,
     train_source_model,
 )
-from source_selector import SourceSelector
+from src.source_selection.source_selector import SourceSelector
 
 
 LOGGER_NAME = "experiment"

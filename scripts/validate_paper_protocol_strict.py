@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from experiment_runner import prepare_base_data_for_experiments
+from src.experiment.experiment_runner import prepare_base_data_for_experiments
 from paper_reproduction_protocol import (
     MULTI_SOURCE_TL_METHODS,
     assess_metric_alignment,

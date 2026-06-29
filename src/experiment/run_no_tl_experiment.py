@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from data_preprocessing import (
+from src.data_processing.data_preprocessing import (
     build_tabular_sequence,
     normalize_features,
     temporal_split_by_ratio_or_dates,

@@ -19,8 +19,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 import numpy as np
 import pandas as pd
 
-from config import Config
-from data_preprocessing import (
+from src.utils.config import Config
+from src.data_processing.data_preprocessing import (
     build_source_target_split,
     build_tabular_sequence,
     extract_datetime_features,
@@ -30,7 +30,7 @@ from data_preprocessing import (
     to_cnn_tensor,
 )
 try:
-    from environment import setup_logging
+    from src.utils.environment import setup_logging
 except ImportError:
     setup_logging = None
 
@@ -45,7 +45,7 @@ from paper_reproduction_protocol import (
     resolve_strict_paper_mode,
     validate_paper_protocol_config,
 )
-from source_selector import SourceSelector
+from src.source_selection.source_selector import SourceSelector
 
 
 LOGGER_NAME = "experiment"
@@ -470,7 +470,7 @@ def run_ss_tl_experiment(
 ) -> Dict[str, Any]:
     """运行 SS-TL，并返回统一结构。"""
     try:
-        from single_source_tl import (
+        from src.transfer_methods.single_source_tl import (
             build_target_model_from_source,
             evaluate_regression_model,
             fine_tune_target_model,
@@ -672,7 +672,7 @@ def run_mswa_experiment(
 ) -> Dict[str, Any]:
     """运行 MSWA-TL，并返回统一结构。"""
     try:
-        from mswa_tl import run_mswa_tl
+        from src.transfer_methods.mswa_tl import run_mswa_tl
     except ModuleNotFoundError as exc:
         raise RuntimeError(f"MSWA-TL dependency missing: {exc}") from exc
 
@@ -713,7 +713,7 @@ def run_mssb_experiment(
 ) -> Dict[str, Any]:
     """运行 MSSB-TL，并返回统一结构。"""
     try:
-        from mssb_tl import run_mssb_tl
+        from src.transfer_methods.mssb_tl import run_mssb_tl
     except ModuleNotFoundError as exc:
         raise RuntimeError(f"MSSB-TL dependency missing: {exc}") from exc
 
@@ -754,7 +754,7 @@ def run_msml_experiment(
 ) -> Dict[str, Any]:
     """运行 MSML-TL，并返回统一结构。"""
     try:
-        from msml_tl import run_msml_tl
+        from src.transfer_methods.msml_tl import run_msml_tl
     except ModuleNotFoundError as exc:
         raise RuntimeError(f"MSML-TL dependency missing: {exc}") from exc
 
@@ -797,7 +797,7 @@ def run_msml_rfe_experiment(
 ) -> Dict[str, Any]:
     """运行 MSML-TL-RFE，并返回统一结构。"""
     try:
-        from msml_tl_rfe import run_msml_tl_rfe
+        from src.transfer_methods.msml_tl_rfe import run_msml_tl_rfe
     except ModuleNotFoundError as exc:
         raise RuntimeError(f"MSML-TL-RFE dependency missing: {exc}") from exc
 
