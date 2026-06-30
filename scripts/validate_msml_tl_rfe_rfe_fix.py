@@ -307,7 +307,6 @@ def _run_full_training(
             source_df=source_df,
             target_df=target_df,
             feature_cols=feature_cols,
-            k=int(source_count),
             number_of_sources=int(source_count),
             horizon=int(horizon),
             window_size=int(cfg["single_experiment"]["window_size"]),
@@ -319,9 +318,7 @@ def _run_full_training(
             source_epochs=int(cfg["single_experiment"]["source_epochs"]),
             target_epochs=int(cfg["single_experiment"]["target_epochs"]),
             batch_size=int(cfg["single_experiment"]["batch_size"]),
-            random_state=int(seed),
             metric_protocol=protocol.get("metric_protocol", {}),
-            source_selection_window=source_selection_window_cfg,
         )
 
         meta = raw.get("meta", {}) if isinstance(raw, dict) else {}

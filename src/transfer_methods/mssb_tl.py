@@ -34,6 +34,7 @@ from src.transfer_methods.single_source_tl import (
     train_source_model,
 )
 from src.source_selection.source_selector import SourceSelector
+from src.evaluation.metrics import smape
 
 
 LOGGER_NAME = "experiment"
@@ -100,10 +101,14 @@ def evaluate_predictions(y_true: np.ndarray, y_pred: np.ndarray, eps: float = 1e
 
     rmse = float(np.sqrt(np.mean((y_pred_flat - y_true_arr) ** 2)))
     accuracy = float(1.0 / (rmse + eps))
+    smape_value = float(smape(y_true_arr, y_pred_flat, epsilon=eps))
 
     return {
         "rmse": rmse,
         "accuracy": accuracy,
+        "smape": smape_value,
+        "y_true": y_true_arr,
+        "y_pred": y_pred_arr,
         "prediction_shape": tuple(y_pred_arr.shape),
     }
 
@@ -242,8 +247,10 @@ def run_single_source_tl_for_mssb(
         "fine_tuned": True,
         "val_rmse": float(val_eval["rmse"]),
         "val_accuracy": float(val_eval["accuracy"]),
+        "val_smape": float(val_eval["smape"]),
         "test_rmse": float(test_eval["rmse"]),
         "test_accuracy": float(test_eval["accuracy"]),
+        "test_smape": float(test_eval["smape"]),
         "y_val_pred": np.asarray(y_val_pred),
         "y_test_pred": np.asarray(y_test_pred),
         "y_val_true": np.asarray(y_tgt_val),
@@ -386,8 +393,12 @@ def run_mssb_tl(
                 "weight": float(selected["weight"]),
                 "val_rmse": float(one_result["val_rmse"]),
                 "val_accuracy": float(one_result["val_accuracy"]),
+                "val_smape": float(one_result["val_smape"]),
                 "test_rmse": float(one_result["test_rmse"]),
                 "test_accuracy": float(one_result["test_accuracy"]),
+                "test_smape": float(one_result["test_smape"]),
+                "y_test_true": np.asarray(one_result["y_test_true"]),
+                "y_test_pred": np.asarray(one_result["y_test_pred"]),
                 "prediction_shape": pred_shape,
             }
         )
@@ -404,6 +415,9 @@ def run_mssb_tl(
     final_result = {
         "rmse": float(best_source_result["test_rmse"]),
         "accuracy": float(best_source_result["test_accuracy"]),
+        "smape": float(best_source_result["test_smape"]),
+        "y_true": np.asarray(best_source_result["y_test_true"]),
+        "y_pred": np.asarray(best_source_result["y_test_pred"]),
         "prediction_shape": tuple(best_source_result["prediction_shape"]),
     }
 

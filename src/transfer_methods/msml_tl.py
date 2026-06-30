@@ -36,6 +36,7 @@ from src.data_processing.data_preprocessing import (
 )
 from src.source_selection.source_selector import SourceSelector
 from src.utils.runtime_control import keras_verbose
+from src.evaluation.metrics import smape
 
 
 LOGGER_NAME = "experiment"
@@ -529,11 +530,13 @@ def evaluate_msml_model(
 
     rmse = float(np.sqrt(np.mean((y_pred_flat - y_true) ** 2)))
     accuracy = float(1.0 / (rmse + eps))
+    smape_value = float(smape(y_true, y_pred_flat, epsilon=eps))
 
     logger.info("[evaluate_msml_model] Finished. RMSE=%.4f Accuracy=%.4f", rmse, accuracy)
     return {
         "rmse": rmse,
         "accuracy": accuracy,
+        "smape": smape_value,
         "y_pred": y_pred,
         "y_true": y_true,
         "prediction_shape": tuple(y_pred.shape),
@@ -720,6 +723,9 @@ def run_msml_tl(
         "fused_result": {
             "rmse": eval_result["rmse"],
             "accuracy": eval_result["accuracy"],
+            "smape": eval_result["smape"],
+            "y_true": eval_result["y_true"],
+            "y_pred": eval_result["y_pred"],
             "prediction_shape": eval_result["prediction_shape"],
         },
         "frozen_layers": frozen_layers,

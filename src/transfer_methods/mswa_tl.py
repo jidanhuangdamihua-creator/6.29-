@@ -35,6 +35,7 @@ from src.transfer_methods.single_source_tl import (
     train_source_model,
 )
 from src.source_selection.source_selector import SourceSelector
+from src.evaluation.metrics import smape
 
 
 LOGGER_NAME = "experiment"
@@ -264,10 +265,14 @@ def evaluate_fused_predictions(y_true: np.ndarray, y_pred: np.ndarray, eps: floa
 
     rmse = float(np.sqrt(np.mean((y_pred_flat - y_true_arr) ** 2)))
     accuracy = float(1.0 / (rmse + eps))
+    smape_value = float(smape(y_true_arr, y_pred_flat, epsilon=eps))
 
     return {
         "rmse": rmse,
         "accuracy": accuracy,
+        "smape": smape_value,
+        "y_true": y_true_arr,
+        "y_pred": y_pred_arr,
         "prediction_shape": tuple(y_pred_arr.shape),
     }
 

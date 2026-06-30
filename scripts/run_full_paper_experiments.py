@@ -965,33 +965,28 @@ def run_experiment(
     elif method_name == "MSWA-TL":
         raw = run_mswa_experiment(
             **common_kwargs,
-            k=number_of_sources,
             number_of_sources=number_of_sources,
             weight_mode=str(exp_cfg["weight_mode"]),
         )
     elif method_name == "MSSB-TL":
         raw = run_mssb_experiment(
             **common_kwargs,
-            k=number_of_sources,
             number_of_sources=number_of_sources,
             weight_mode=str(exp_cfg["weight_mode"]),
         )
     elif method_name == "MSML-TL":
         raw = run_msml_experiment(
             **common_kwargs,
-            k=number_of_sources,
             number_of_sources=number_of_sources,
             weight_mode=str(exp_cfg["weight_mode"]),
         )
     elif method_name == "MSML-TL-RFE":
         raw = run_msml_rfe_experiment(
             **common_kwargs,
-            k=number_of_sources,
             number_of_sources=number_of_sources,
             weight_mode=str(exp_cfg["weight_mode"]),
             estimator_name=str(exp_cfg.get("estimator_name", "random_forest")),
             keep_ratio=float(exp_cfg["keep_ratio"]),
-            full_target_df=target_df,
         )
     else:
         raise ValueError(f"Unsupported method: {method_name}")

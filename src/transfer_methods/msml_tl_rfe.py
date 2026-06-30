@@ -47,6 +47,7 @@ from src.transfer_methods.msml_tl import (
     freeze_fused_layers,
 )
 from src.utils.runtime_control import keras_verbose
+from src.evaluation.metrics import smape
 
 LOGGER_NAME = "experiment"
 
@@ -129,9 +130,15 @@ def run_rfe_feature_selection(
         estimator_name, keep_ratio,
     )
 
-    cols = _validate_feature_cols(train_df, feature_cols, where="train_df")
+    requested_cols = _validate_feature_cols(train_df, feature_cols, where="train_df")
     if target_col not in train_df.columns:
         raise ValueError(f"Target column '{target_col}' not found in train_df")
+    cols = [c for c in requested_cols if c != target_col]
+    if not cols:
+        raise ValueError(
+            "RFE candidate features must include at least one non-target column; "
+            f"target_col={target_col!r}"
+        )
 
     X = train_df[cols].to_numpy()
     y = train_df[target_col].to_numpy()
@@ -219,7 +226,7 @@ def build_joint_rfe_training_dataframe(
         len(target_train_df), len(selected_source_dfs),
     )
 
-    cols_to_keep = list(feature_cols) + [target_col]
+    cols_to_keep = list(dict.fromkeys(list(feature_cols) + [target_col]))
     dfs_to_concat = [target_train_df[cols_to_keep].copy()]
 
     for i, src_df in enumerate(selected_source_dfs):
@@ -492,11 +499,13 @@ def evaluate_msml_rfe_model(
 
     rmse = float(np.sqrt(np.mean((y_pred_flat - y_true) ** 2)))
     accuracy = float(1.0 / (rmse + eps))
+    smape_value = float(smape(y_true, y_pred_flat, epsilon=eps))
 
     logger.info("[evaluate_msml_rfe_model] Finished. RMSE=%.4f Accuracy=%.4f", rmse, accuracy)
     return {
         "rmse": rmse,
         "accuracy": accuracy,
+        "smape": smape_value,
         "y_pred": y_pred,
         "y_true": y_true,
         "prediction_shape": tuple(y_pred.shape),
@@ -820,6 +829,9 @@ def run_msml_tl_rfe(
         "fused_result": {
             "rmse": eval_result["rmse"],
             "accuracy": eval_result["accuracy"],
+            "smape": eval_result["smape"],
+            "y_true": eval_result["y_true"],
+            "y_pred": eval_result["y_pred"],
             "prediction_shape": eval_result["prediction_shape"],
         },
         "frozen_layers": frozen_layers,

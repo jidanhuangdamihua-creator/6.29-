@@ -188,7 +188,6 @@ def run_single_entity_experiment(
     model_feature_cols = _resolve_model_feature_cols(source_df, target_entity_df, feature_cols, config)
     source_model_df = _build_model_dataframe(source_df, model_feature_cols)
     target_model_df = _build_model_dataframe(target_entity_df, model_feature_cols)
-    full_target_df = target_model_df
     source_model_df.attrs["information_sharing_scenario"] = scenario
     target_model_df.attrs["information_sharing_scenario"] = scenario
 
@@ -221,10 +220,7 @@ def run_single_entity_experiment(
                 "batch_size": int(config["batch_size"]),
             }
             if method not in {"SS-TL"}:
-                kwargs["k"] = _source_count_for_method(method, config)
                 kwargs["number_of_sources"] = _source_count_for_method(method, config)
-            if method == "MSML-TL-RFE":
-                kwargs["full_target_df"] = full_target_df
             raw = runner(**kwargs)
         rows.append(_row_from_result(raw, method, entity_key, config, time.perf_counter() - t0))
     return rows

@@ -347,14 +347,12 @@ def _extract_method_metrics(raw_result: Dict[str, Any], method_name: str) -> Dic
     result["normalized_accuracy"] = _coalesce_metric(result.get("normalized_accuracy"), result.get("accuracy_current"))
     result["normalized_mae"] = _coalesce_metric(result.get("normalized_mae"), result.get("mae_current"))
     result["normalized_smape"] = _coalesce_metric(result.get("normalized_smape"), result.get("smape_current"))
-    result["smape"] = float(
-        _coalesce_metric(
-            result.get("original_scale_smape"),
-            result.get("smape"),
-            result.get("normalized_smape"),
-            float("nan"),
-        )
+    smape_value = _coalesce_metric(
+        result.get("original_scale_smape"),
+        result.get("smape"),
+        result.get("normalized_smape"),
     )
+    result["smape"] = float(smape_value) if smape_value is not None else float("nan")
     if _coalesce_metric(result.get("original_scale_smape")) is not None:
         result["metric_space_used"] = str(result.get("metric_space_paper", "original_sales_space"))
     elif _coalesce_metric(result.get("normalized_smape")) is not None:
@@ -476,6 +474,7 @@ def run_ss_tl_experiment(
             fine_tune_target_model,
             train_source_model,
         )
+        from src.evaluation.metrics import compute_metrics_with_protocol
     except ModuleNotFoundError as exc:
         raise RuntimeError(f"SS-TL dependency missing: {exc}") from exc
 
@@ -591,9 +590,20 @@ def run_ss_tl_experiment(
         model=target_model,
         X_test=X_target_test,
         y_test=y_target_test,
-        metric_protocol=metric_protocol,
-        sales_scaler=tgt_scaler,
-        feature_columns=tgt_feature_columns,
+    )
+    y_pred = target_model.predict(X_target_test, verbose=0)
+    ss_raw.update(
+        compute_metrics_with_protocol(
+            y_true=y_target_test,
+            y_pred=y_pred.flatten(),
+            metric_protocol=metric_protocol,
+            sales_scaler=tgt_scaler,
+            feature_columns=tgt_feature_columns,
+        )
+    )
+    ss_raw.setdefault(
+        "y_pred_shape",
+        _shape_to_tuple(getattr(y_pred, "shape", None)),
     )
 
     result = {
@@ -676,21 +686,19 @@ def run_mswa_experiment(
     except ModuleNotFoundError as exc:
         raise RuntimeError(f"MSWA-TL dependency missing: {exc}") from exc
 
+    k = int(number_of_sources) if number_of_sources is not None else int(k)
     raw = run_mswa_tl(
         source_df=source_df,
         target_df=target_df,
         feature_cols=feature_cols,
         k=k,
-        number_of_sources=number_of_sources,
         horizon=horizon,
         window_size=window_size,
         weight_mode=weight_mode,
-        include_sales_in_knn=include_sales_in_knn,
         learning_rate=learning_rate,
         source_epochs=source_epochs,
         target_epochs=target_epochs,
         batch_size=batch_size,
-        metric_protocol=metric_protocol,
     )
     return _extract_method_metrics(raw, method_name="MSWA-TL")
 
@@ -717,21 +725,19 @@ def run_mssb_experiment(
     except ModuleNotFoundError as exc:
         raise RuntimeError(f"MSSB-TL dependency missing: {exc}") from exc
 
+    k = int(number_of_sources) if number_of_sources is not None else int(k)
     raw = run_mssb_tl(
         source_df=source_df,
         target_df=target_df,
         feature_cols=feature_cols,
         k=k,
-        number_of_sources=number_of_sources,
         horizon=horizon,
         window_size=window_size,
         weight_mode=weight_mode,
-        include_sales_in_knn=include_sales_in_knn,
         learning_rate=learning_rate,
         source_epochs=source_epochs,
         target_epochs=target_epochs,
         batch_size=batch_size,
-        metric_protocol=metric_protocol,
     )
     return _extract_method_metrics(raw, method_name="MSSB-TL")
 
@@ -758,21 +764,19 @@ def run_msml_experiment(
     except ModuleNotFoundError as exc:
         raise RuntimeError(f"MSML-TL dependency missing: {exc}") from exc
 
+    k = int(number_of_sources) if number_of_sources is not None else int(k)
     raw = run_msml_tl(
         source_df=source_df,
         target_df=target_df,
         feature_cols=feature_cols,
         k=k,
-        number_of_sources=number_of_sources,
         horizon=horizon,
         window_size=window_size,
         weight_mode=weight_mode,
-        include_sales_in_knn=include_sales_in_knn,
         learning_rate=learning_rate,
         source_epochs=source_epochs,
         target_epochs=target_epochs,
         batch_size=batch_size,
-        metric_protocol=metric_protocol,
     )
     return _extract_method_metrics(raw, method_name="MSML-TL")
 
@@ -801,23 +805,21 @@ def run_msml_rfe_experiment(
     except ModuleNotFoundError as exc:
         raise RuntimeError(f"MSML-TL-RFE dependency missing: {exc}") from exc
 
+    k = int(number_of_sources) if number_of_sources is not None else int(k)
     raw = run_msml_tl_rfe(
         source_df=source_df,
         target_df=target_df,
         feature_cols=feature_cols,
         k=k,
-        number_of_sources=number_of_sources,
         horizon=horizon,
         window_size=window_size,
         weight_mode=weight_mode,
         estimator_name=estimator_name,
         keep_ratio=keep_ratio,
-        include_sales_in_knn=include_sales_in_knn,
         learning_rate=learning_rate,
         source_epochs=source_epochs,
         target_epochs=target_epochs,
         batch_size=batch_size,
-        metric_protocol=metric_protocol,
     )
     return _extract_method_metrics(raw, method_name="MSML-TL-RFE")
 
@@ -972,7 +974,6 @@ def run_all_experiments(
                     source_df=source_df,
                     target_df=target_df,
                     feature_cols=cols,
-                    k=effective_source_count,
                     number_of_sources=effective_source_count,
                     horizon=horizon,
                     window_size=window_size,
@@ -989,7 +990,6 @@ def run_all_experiments(
                     source_df=source_df,
                     target_df=target_df,
                     feature_cols=cols,
-                    k=effective_source_count,
                     number_of_sources=effective_source_count,
                     horizon=horizon,
                     window_size=window_size,
@@ -1006,7 +1006,6 @@ def run_all_experiments(
                     source_df=source_df,
                     target_df=target_df,
                     feature_cols=cols,
-                    k=effective_source_count,
                     number_of_sources=effective_source_count,
                     horizon=horizon,
                     window_size=window_size,
@@ -1023,7 +1022,6 @@ def run_all_experiments(
                     source_df=source_df,
                     target_df=target_df,
                     feature_cols=cols,
-                    k=effective_source_count,
                     number_of_sources=effective_source_count,
                     horizon=horizon,
                     window_size=window_size,
