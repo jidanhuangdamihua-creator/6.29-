@@ -81,3 +81,40 @@ RESULT_SCHEMA_COLUMNS = [
     "alignment_notes",
     "error",
 ]
+
+
+from pathlib import Path
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+SOLIDIFIED_KNN_ROOT: Path = _PROJECT_ROOT / "configs" / "solidified" / "knn"
+
+D3_WITHOUT_INFO_SHARING_DOMAIN_FILTER: dict[str, object] = {
+    "column": "region",
+    "value": 1,
+}
+
+D1_TARGET_TRAIN_WINDOW: dict[str, str] = {
+    "start": "2017-06-05",
+    "end": "2017-06-19",
+}
+
+D2_TARGET_TRAIN_WINDOW: dict[str, str] = {
+    "start": "2018-06-05",
+    "end": "2018-06-19",
+}
+
+SOLIDIFIED_TARGET_WINDOWS: dict[int, dict[str, str]] = {
+    4: {
+        "train_start": "2024-12-16",
+        "test_end": "2025-07-13",
+    },
+    5: {
+        "train_start": "2017-01-17",
+        "test_end": "2017-08-15",
+    },
+    6: {
+        "train_start": "2015-10-26",
+        "test_end": "2016-05-22",
+    },
+}

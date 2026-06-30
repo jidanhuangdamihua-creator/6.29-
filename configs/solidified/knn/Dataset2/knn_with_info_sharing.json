@@ -1,0 +1,100 @@
+{
+  "dataset_id": 2,
+  "dataset": "D2",
+  "info_sharing": "with",
+  "k": 3,
+  "target_train_window": {
+    "start": "2018-06-05",
+    "end": "2018-06-19"
+  },
+  "domain_filter": {
+    "column": "brand_id",
+    "value": 1
+  },
+  "group_cols": [
+    "brand_id",
+    "item_id"
+  ],
+  "source_pool_size": 210366,
+  "feature_cols": [
+    "sales",
+    "promo",
+    "year",
+    "month",
+    "week",
+    "day"
+  ],
+  "feature_info": {
+    "selected_features": [
+      "sales",
+      "promo",
+      "year",
+      "month",
+      "week",
+      "day"
+    ],
+    "modeling_source_features": [
+      "sales",
+      "item_id",
+      "promo",
+      "year",
+      "month",
+      "week",
+      "day",
+      "brand_id"
+    ],
+    "modeling_target_features": [
+      "sales",
+      "item_id",
+      "promo",
+      "year",
+      "month",
+      "week",
+      "day",
+      "brand_id"
+    ],
+    "candidate_pool": [
+      "sales",
+      "item_id",
+      "promo",
+      "year",
+      "month",
+      "week",
+      "day",
+      "brand_id"
+    ],
+    "missing_in_source": [],
+    "missing_in_target": [],
+    "excluded_by_rule": [
+      "item_id",
+      "brand_id"
+    ],
+    "include_sales_in_knn": true,
+    "knn_feature_mode": "paper_available_features_no_ids"
+  },
+  "results": {
+    "1_10": [
+      {
+        "source_entity": "2_33",
+        "source_brand_id": 2,
+        "source_item_id": 33,
+        "distance": 20.29778313018444,
+        "weight": 0.3487268015640137
+      },
+      {
+        "source_entity": "1_41",
+        "source_brand_id": 1,
+        "source_item_id": 41,
+        "distance": 21.72556098240043,
+        "weight": 0.325808893763088
+      },
+      {
+        "source_entity": "4_3",
+        "source_brand_id": 4,
+        "source_item_id": 3,
+        "distance": 21.748563170931547,
+        "weight": 0.3254643046728982
+      }
+    ]
+  }
+}

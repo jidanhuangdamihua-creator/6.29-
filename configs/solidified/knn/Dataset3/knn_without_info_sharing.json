@@ -1,0 +1,119 @@
+{
+  "dataset_id": 3,
+  "dataset": "D3",
+  "info_sharing": "without",
+  "k": 3,
+  "target_train_window": {
+    "start": "2015-01-03",
+    "end": "2015-01-17"
+  },
+  "domain_filter": {
+    "column": "region",
+    "value": 1
+  },
+  "group_cols": [
+    "entity_id"
+  ],
+  "source_pool_size": 8478,
+  "feature_cols": [
+    "sales",
+    "year",
+    "month",
+    "week",
+    "day",
+    "Customers",
+    "Open",
+    "Promo",
+    "SchoolHoliday"
+  ],
+  "feature_info": {
+    "selected_features": [
+      "sales",
+      "year",
+      "month",
+      "week",
+      "day",
+      "Customers",
+      "Open",
+      "Promo",
+      "SchoolHoliday"
+    ],
+    "modeling_source_features": [
+      "sales",
+      "entity_id",
+      "item_id",
+      "store_id",
+      "year",
+      "month",
+      "week",
+      "day",
+      "Customers",
+      "Open",
+      "Promo",
+      "SchoolHoliday",
+      "region"
+    ],
+    "modeling_target_features": [
+      "sales",
+      "entity_id",
+      "item_id",
+      "store_id",
+      "year",
+      "month",
+      "week",
+      "day",
+      "Customers",
+      "Open",
+      "Promo",
+      "SchoolHoliday",
+      "region"
+    ],
+    "candidate_pool": [
+      "sales",
+      "entity_id",
+      "item_id",
+      "store_id",
+      "year",
+      "month",
+      "week",
+      "day",
+      "Customers",
+      "Open",
+      "Promo",
+      "SchoolHoliday",
+      "region"
+    ],
+    "missing_in_source": [],
+    "missing_in_target": [],
+    "excluded_by_rule": [
+      "entity_id",
+      "item_id",
+      "store_id",
+      "region"
+    ],
+    "include_sales_in_knn": true,
+    "knn_feature_mode": "paper_available_features_no_ids"
+  },
+  "results": {
+    "10": [
+      {
+        "source_entity": "6",
+        "source_entity_id": 6,
+        "distance": 3492.7743986693445,
+        "weight": 0.3820142698135173
+      },
+      {
+        "source_entity": "2",
+        "source_entity_id": 2,
+        "distance": 4079.8810031666367,
+        "weight": 0.32704131823843524
+      },
+      {
+        "source_entity": "1",
+        "source_entity_id": 1,
+        "distance": 4586.063889655267,
+        "weight": 0.29094441194804754
+      }
+    ]
+  }
+}
