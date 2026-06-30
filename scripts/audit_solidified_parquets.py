@@ -12,6 +12,8 @@ from typing import Any
 import pandas as pd
 import pyarrow.parquet as pq
 
+from src.constants import SOLIDIFIED_TARGET_WINDOWS
+
 ROOT = Path(__file__).resolve().parents[1]
 PARQUET_DIR = ROOT / "数据集" / "固化数据"
 OUTPUT_PATH = ROOT / "outputs" / "parquet_audit_report.md"
@@ -132,12 +134,15 @@ def load_target_selection_json(dataset_id: int) -> dict[str, Any]:
 
 
 def extract_d456_window_info(data: dict[str, Any], dataset_id: int) -> dict[str, Any]:
+    if dataset_id not in SOLIDIFIED_TARGET_WINDOWS:
+        raise ValueError(f"unsupported dataset id: {dataset_id}")
+    solidified_window = SOLIDIFIED_TARGET_WINDOWS[dataset_id]
+
     if dataset_id == 4:
-        target_windows = data["target_windows"]
         source_window = data["source_window"]
         return {
-            "train_start": target_windows["target_train_start"],
-            "test_end": target_windows["test_end"],
+            "train_start": solidified_window["train_start"],
+            "test_end": solidified_window["test_end"],
             "source_end": source_window["source_history_end"],
             "target_skus": list(data.get("target_skus") or []),
             "target_store": data.get("target_store_id"),
@@ -145,16 +150,16 @@ def extract_d456_window_info(data: dict[str, Any], dataset_id: int) -> dict[str,
     if dataset_id == 5:
         windows = data["time_windows"]
         return {
-            "train_start": windows["train_start"],
-            "test_end": windows["test_end"],
+            "train_start": solidified_window["train_start"],
+            "test_end": solidified_window["test_end"],
             "source_end": windows["source_end"],
             "target_skus": list(data.get("target_skus") or []),
             "target_store": data.get("target_store"),
         }
     if dataset_id == 6:
         return {
-            "train_start": data["train_start"],
-            "test_end": data["test_end"],
+            "train_start": solidified_window["train_start"],
+            "test_end": solidified_window["test_end"],
             "source_end": data["source_end"],
             "target_skus": list(data.get("target_skus") or []),
             "target_store": data.get("target_store"),

@@ -34,6 +34,7 @@ import pandas as pd
 from dataset_registry import list_dataset_names, normalize_dataset_name
 
 from src.utils.environment import setup_logging
+from src.constants import D3_WITHOUT_INFO_SHARING_DOMAIN_FILTER
 from paper_reproduction_protocol import (
     MULTI_SOURCE_TL_METHODS,
     build_alignment_fields,
@@ -785,32 +786,13 @@ def _signature_static_features_for_dataset(
     return []
 
 
-def _d3_knn_without_sharing_domain_filter() -> Dict[str, Any]:
-    path = ROOT / "outputs" / "knn_selection" / "Dataset3" / "knn_without_info_sharing.json"
-    if not path.exists():
-        raise ValueError(f"Missing Dataset3 KNN domain config file: {path.relative_to(ROOT)}")
-    with path.open("r", encoding="utf-8") as f:
-        payload = json.load(f)
-    domain_filter = payload.get("domain_filter")
-    if not isinstance(domain_filter, dict):
-        raise ValueError(
-            f"Missing field domain_filter in Dataset3 KNN domain config: {path.relative_to(ROOT)}"
-        )
-    for key in ("column", "value"):
-        if key not in domain_filter:
-            raise ValueError(
-                f"Missing field domain_filter.{key} in Dataset3 KNN domain config: {path.relative_to(ROOT)}"
-            )
-    return {"column": str(domain_filter["column"]), "value": domain_filter["value"]}
-
-
 def _without_sharing_domain_filter(dataset_name: str) -> Dict[str, Any]:
     if dataset_name == "Dataset1":
         return {"column": "store_id", "value": 1}
     if dataset_name == "Dataset2":
         return {"column": "brand_id", "value": 1}
     if dataset_name == "Dataset3":
-        return _d3_knn_without_sharing_domain_filter()
+        return dict(D3_WITHOUT_INFO_SHARING_DOMAIN_FILTER)
     raise ValueError(f"No without_information_sharing domain filter configured for {dataset_name}")
 
 

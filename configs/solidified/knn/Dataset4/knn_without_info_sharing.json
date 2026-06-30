@@ -1,0 +1,1105 @@
+{
+  "dataset_id": 4,
+  "dataset": "D4",
+  "info_sharing": "without",
+  "k": 3,
+  "window_size": 10,
+  "horizon": 1,
+  "target_train_window": {
+    "start": "2024-12-16",
+    "end": "2024-12-30"
+  },
+  "domain_filter": {
+    "column": "second_category_id",
+    "value": 20
+  },
+  "group_cols": [
+    "store_id",
+    "product_id"
+  ],
+  "source_pool_size": 573621,
+  "feature_cols": [
+    "sales",
+    "stock_hour6_22_cnt",
+    "activity_flag",
+    "discount",
+    "holiday_flag",
+    "precpt",
+    "avg_temperature",
+    "avg_humidity",
+    "avg_wind_level",
+    "year",
+    "month",
+    "week",
+    "day"
+  ],
+  "feature_info": {
+    "selected_features": [
+      "sales",
+      "stock_hour6_22_cnt",
+      "activity_flag",
+      "discount",
+      "holiday_flag",
+      "precpt",
+      "avg_temperature",
+      "avg_humidity",
+      "avg_wind_level",
+      "year",
+      "month",
+      "week",
+      "day"
+    ],
+    "modeling_source_features": [
+      "sales",
+      "city_id",
+      "store_id",
+      "management_group_id",
+      "first_category_id",
+      "second_category_id",
+      "third_category_id",
+      "product_id",
+      "stock_hour6_22_cnt",
+      "activity_flag",
+      "discount",
+      "holiday_flag",
+      "precpt",
+      "avg_temperature",
+      "avg_humidity",
+      "avg_wind_level",
+      "year",
+      "month",
+      "week",
+      "day",
+      "hours_sale_sum_leakage_risk",
+      "hours_sale_max_leakage_risk",
+      "hours_sale_nonzero_hours_leakage_risk",
+      "hours_stock_sum_leakage_risk",
+      "hours_stock_max_leakage_risk",
+      "hours_stock_nonzero_hours_leakage_risk"
+    ],
+    "modeling_target_features": [
+      "sales",
+      "city_id",
+      "store_id",
+      "management_group_id",
+      "first_category_id",
+      "second_category_id",
+      "third_category_id",
+      "product_id",
+      "stock_hour6_22_cnt",
+      "activity_flag",
+      "discount",
+      "holiday_flag",
+      "precpt",
+      "avg_temperature",
+      "avg_humidity",
+      "avg_wind_level",
+      "year",
+      "month",
+      "week",
+      "day",
+      "hours_sale_sum_leakage_risk",
+      "hours_sale_max_leakage_risk",
+      "hours_sale_nonzero_hours_leakage_risk",
+      "hours_stock_sum_leakage_risk",
+      "hours_stock_max_leakage_risk",
+      "hours_stock_nonzero_hours_leakage_risk"
+    ],
+    "candidate_pool": [
+      "sales",
+      "city_id",
+      "store_id",
+      "management_group_id",
+      "first_category_id",
+      "second_category_id",
+      "third_category_id",
+      "product_id",
+      "stock_hour6_22_cnt",
+      "activity_flag",
+      "discount",
+      "holiday_flag",
+      "precpt",
+      "avg_temperature",
+      "avg_humidity",
+      "avg_wind_level",
+      "year",
+      "month",
+      "week",
+      "day",
+      "hours_sale_sum_leakage_risk",
+      "hours_sale_max_leakage_risk",
+      "hours_sale_nonzero_hours_leakage_risk",
+      "hours_stock_sum_leakage_risk",
+      "hours_stock_max_leakage_risk",
+      "hours_stock_nonzero_hours_leakage_risk"
+    ],
+    "missing_in_source": [],
+    "missing_in_target": [],
+    "excluded_by_rule": [
+      "city_id",
+      "store_id",
+      "management_group_id",
+      "first_category_id",
+      "second_category_id",
+      "third_category_id",
+      "product_id",
+      "hours_sale_sum_leakage_risk",
+      "hours_sale_max_leakage_risk",
+      "hours_sale_nonzero_hours_leakage_risk",
+      "hours_stock_sum_leakage_risk",
+      "hours_stock_max_leakage_risk",
+      "hours_stock_nonzero_hours_leakage_risk"
+    ],
+    "include_sales_in_knn": true,
+    "knn_feature_mode": "paper_available_features_no_ids"
+  },
+  "results": {
+    "166_258": [
+      {
+        "source_entity": "180_432",
+        "source_store_id": 180,
+        "source_product_id": 432,
+        "distance": 10.389430204298982,
+        "weight": 0.34352377319367566
+      },
+      {
+        "source_entity": "268_247",
+        "source_store_id": 268,
+        "source_product_id": 247,
+        "distance": 10.85232223719882,
+        "weight": 0.32887120261007663
+      },
+      {
+        "source_entity": "383_432",
+        "source_store_id": 383,
+        "source_product_id": 432,
+        "distance": 10.894265965635316,
+        "weight": 0.3276050241962476
+      }
+    ],
+    "166_432": [
+      {
+        "source_entity": "383_261",
+        "source_store_id": 383,
+        "source_product_id": 261,
+        "distance": 9.981224220004279,
+        "weight": 0.35307606131971614
+      },
+      {
+        "source_entity": "193_247",
+        "source_store_id": 193,
+        "source_product_id": 247,
+        "distance": 10.629288651175111,
+        "weight": 0.33154912342828596
+      },
+      {
+        "source_entity": "329_261",
+        "source_store_id": 329,
+        "source_product_id": 261,
+        "distance": 11.174422194458199,
+        "weight": 0.31537481525199784
+      }
+    ],
+    "166_433": [
+      {
+        "source_entity": "329_261",
+        "source_store_id": 329,
+        "source_product_id": 261,
+        "distance": 14.326431843972875,
+        "weight": 0.3629774604797274
+      },
+      {
+        "source_entity": "268_247",
+        "source_store_id": 268,
+        "source_product_id": 247,
+        "distance": 16.2983038976453,
+        "weight": 0.319062147911699
+      },
+      {
+        "source_entity": "193_247",
+        "source_store_id": 193,
+        "source_product_id": 247,
+        "distance": 16.35477872763799,
+        "weight": 0.3179603916085736
+      }
+    ],
+    "166_313": [
+      {
+        "source_entity": "383_242",
+        "source_store_id": 383,
+        "source_product_id": 242,
+        "distance": 10.919714187193728,
+        "weight": 0.3584610949889452
+      },
+      {
+        "source_entity": "268_247",
+        "source_store_id": 268,
+        "source_product_id": 247,
+        "distance": 11.36291313616363,
+        "weight": 0.34447968207993795
+      },
+      {
+        "source_entity": "166_242",
+        "source_store_id": 166,
+        "source_product_id": 242,
+        "distance": 13.17680921164149,
+        "weight": 0.29705922293111675
+      }
+    ],
+    "166_311": [
+      {
+        "source_entity": "383_242",
+        "source_store_id": 383,
+        "source_product_id": 242,
+        "distance": 12.656717541685127,
+        "weight": 0.3497428313311798
+      },
+      {
+        "source_entity": "577_433",
+        "source_store_id": 577,
+        "source_product_id": 433,
+        "distance": 13.208963930225565,
+        "weight": 0.3351206235339153
+      },
+      {
+        "source_entity": "174_247",
+        "source_store_id": 174,
+        "source_product_id": 247,
+        "distance": 14.046597568806476,
+        "weight": 0.31513654513490497
+      }
+    ]
+  },
+  "selection_metadata": {
+    "166_258": {
+      "weight_mode": "inverse_distance",
+      "distance_metric": "euclidean",
+      "knn_representation": "paper_observed_sequence",
+      "target_signature_dim": 195,
+      "feature_cols": [
+        "sales",
+        "stock_hour6_22_cnt",
+        "activity_flag",
+        "discount",
+        "holiday_flag",
+        "precpt",
+        "avg_temperature",
+        "avg_humidity",
+        "avg_wind_level",
+        "year",
+        "month",
+        "week",
+        "day"
+      ],
+      "signature_static_feature_cols": [],
+      "signature_component_breakdown": {
+        "time_series_sequence": [
+          "sales",
+          "stock_hour6_22_cnt",
+          "activity_flag",
+          "discount",
+          "holiday_flag",
+          "precpt",
+          "avg_temperature",
+          "avg_humidity",
+          "avg_wind_level",
+          "year",
+          "month",
+          "week",
+          "day"
+        ],
+        "static_metadata": []
+      },
+      "observed_window_rows": 15,
+      "observed_window_unique_dates": 15,
+      "source_window_alignment": "target_observed_dates",
+      "date_coverage_filter": {
+        "before_count": 732,
+        "after_count": 732,
+        "filtered_count": 0,
+        "required_dates": 15,
+        "filtered_entities": []
+      },
+      "trainable_window_filter": {
+        "before_count": 732,
+        "after_count": 727,
+        "filtered_count": 5,
+        "target_train_start": "2024-12-16",
+        "window_size": 10,
+        "horizon": 1,
+        "required_pre_target_rows": 14,
+        "required_source_train_rows": 11,
+        "source_train_ratio": 0.8,
+        "filtered_entities": [
+          {
+            "source_key": [
+              775,
+              242
+            ],
+            "source_key_display": "entity=775|item=242",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              775,
+              261
+            ],
+            "source_key_display": "entity=775|item=261",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              775,
+              432
+            ],
+            "source_key_display": "entity=775|item=432",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              796,
+              261
+            ],
+            "source_key_display": "entity=796|item=261",
+            "pre_target_rows": 9,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              803,
+              261
+            ],
+            "source_key_display": "entity=803|item=261",
+            "pre_target_rows": 7,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          }
+        ],
+        "enabled": true
+      },
+      "target_window_source": "provided_target_df",
+      "target_test_data_excluded": false,
+      "truncation_reason": "no_truncation",
+      "target_group_count": 1,
+      "target_series_mode": "single_group",
+      "target_series_key": [
+        166,
+        258
+      ],
+      "include_sales_in_knn": true,
+      "contains_sales": true,
+      "knn_feature_mode": "paper_available_features_no_ids",
+      "requested_feature_cols": [
+        "sales",
+        "stock_hour6_22_cnt",
+        "activity_flag",
+        "discount",
+        "holiday_flag",
+        "precpt",
+        "avg_temperature",
+        "avg_humidity",
+        "avg_wind_level",
+        "year",
+        "month",
+        "week",
+        "day"
+      ],
+      "missing_in_source": [],
+      "missing_in_target": [],
+      "excluded_by_rule": [
+        "city_id",
+        "store_id",
+        "management_group_id",
+        "first_category_id",
+        "second_category_id",
+        "third_category_id",
+        "product_id",
+        "hours_sale_sum_leakage_risk",
+        "hours_sale_max_leakage_risk",
+        "hours_sale_nonzero_hours_leakage_risk",
+        "hours_stock_sum_leakage_risk",
+        "hours_stock_max_leakage_risk",
+        "hours_stock_nonzero_hours_leakage_risk"
+      ],
+      "adaptive_selection_info": {
+        "adaptive_selection_used": false
+      }
+    },
+    "166_432": {
+      "weight_mode": "inverse_distance",
+      "distance_metric": "euclidean",
+      "knn_representation": "paper_observed_sequence",
+      "target_signature_dim": 195,
+      "feature_cols": [
+        "sales",
+        "stock_hour6_22_cnt",
+        "activity_flag",
+        "discount",
+        "holiday_flag",
+        "precpt",
+        "avg_temperature",
+        "avg_humidity",
+        "avg_wind_level",
+        "year",
+        "month",
+        "week",
+        "day"
+      ],
+      "signature_static_feature_cols": [],
+      "signature_component_breakdown": {
+        "time_series_sequence": [
+          "sales",
+          "stock_hour6_22_cnt",
+          "activity_flag",
+          "discount",
+          "holiday_flag",
+          "precpt",
+          "avg_temperature",
+          "avg_humidity",
+          "avg_wind_level",
+          "year",
+          "month",
+          "week",
+          "day"
+        ],
+        "static_metadata": []
+      },
+      "observed_window_rows": 15,
+      "observed_window_unique_dates": 15,
+      "source_window_alignment": "target_observed_dates",
+      "date_coverage_filter": {
+        "before_count": 732,
+        "after_count": 732,
+        "filtered_count": 0,
+        "required_dates": 15,
+        "filtered_entities": []
+      },
+      "trainable_window_filter": {
+        "before_count": 732,
+        "after_count": 727,
+        "filtered_count": 5,
+        "target_train_start": "2024-12-16",
+        "window_size": 10,
+        "horizon": 1,
+        "required_pre_target_rows": 14,
+        "required_source_train_rows": 11,
+        "source_train_ratio": 0.8,
+        "filtered_entities": [
+          {
+            "source_key": [
+              775,
+              242
+            ],
+            "source_key_display": "entity=775|item=242",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              775,
+              261
+            ],
+            "source_key_display": "entity=775|item=261",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              775,
+              432
+            ],
+            "source_key_display": "entity=775|item=432",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              796,
+              261
+            ],
+            "source_key_display": "entity=796|item=261",
+            "pre_target_rows": 9,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              803,
+              261
+            ],
+            "source_key_display": "entity=803|item=261",
+            "pre_target_rows": 7,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          }
+        ],
+        "enabled": true
+      },
+      "target_window_source": "provided_target_df",
+      "target_test_data_excluded": false,
+      "truncation_reason": "no_truncation",
+      "target_group_count": 1,
+      "target_series_mode": "single_group",
+      "target_series_key": [
+        166,
+        432
+      ],
+      "include_sales_in_knn": true,
+      "contains_sales": true,
+      "knn_feature_mode": "paper_available_features_no_ids",
+      "requested_feature_cols": [
+        "sales",
+        "stock_hour6_22_cnt",
+        "activity_flag",
+        "discount",
+        "holiday_flag",
+        "precpt",
+        "avg_temperature",
+        "avg_humidity",
+        "avg_wind_level",
+        "year",
+        "month",
+        "week",
+        "day"
+      ],
+      "missing_in_source": [],
+      "missing_in_target": [],
+      "excluded_by_rule": [
+        "city_id",
+        "store_id",
+        "management_group_id",
+        "first_category_id",
+        "second_category_id",
+        "third_category_id",
+        "product_id",
+        "hours_sale_sum_leakage_risk",
+        "hours_sale_max_leakage_risk",
+        "hours_sale_nonzero_hours_leakage_risk",
+        "hours_stock_sum_leakage_risk",
+        "hours_stock_max_leakage_risk",
+        "hours_stock_nonzero_hours_leakage_risk"
+      ],
+      "adaptive_selection_info": {
+        "adaptive_selection_used": false
+      }
+    },
+    "166_433": {
+      "weight_mode": "inverse_distance",
+      "distance_metric": "euclidean",
+      "knn_representation": "paper_observed_sequence",
+      "target_signature_dim": 195,
+      "feature_cols": [
+        "sales",
+        "stock_hour6_22_cnt",
+        "activity_flag",
+        "discount",
+        "holiday_flag",
+        "precpt",
+        "avg_temperature",
+        "avg_humidity",
+        "avg_wind_level",
+        "year",
+        "month",
+        "week",
+        "day"
+      ],
+      "signature_static_feature_cols": [],
+      "signature_component_breakdown": {
+        "time_series_sequence": [
+          "sales",
+          "stock_hour6_22_cnt",
+          "activity_flag",
+          "discount",
+          "holiday_flag",
+          "precpt",
+          "avg_temperature",
+          "avg_humidity",
+          "avg_wind_level",
+          "year",
+          "month",
+          "week",
+          "day"
+        ],
+        "static_metadata": []
+      },
+      "observed_window_rows": 15,
+      "observed_window_unique_dates": 15,
+      "source_window_alignment": "target_observed_dates",
+      "date_coverage_filter": {
+        "before_count": 732,
+        "after_count": 732,
+        "filtered_count": 0,
+        "required_dates": 15,
+        "filtered_entities": []
+      },
+      "trainable_window_filter": {
+        "before_count": 732,
+        "after_count": 727,
+        "filtered_count": 5,
+        "target_train_start": "2024-12-16",
+        "window_size": 10,
+        "horizon": 1,
+        "required_pre_target_rows": 14,
+        "required_source_train_rows": 11,
+        "source_train_ratio": 0.8,
+        "filtered_entities": [
+          {
+            "source_key": [
+              775,
+              242
+            ],
+            "source_key_display": "entity=775|item=242",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              775,
+              261
+            ],
+            "source_key_display": "entity=775|item=261",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              775,
+              432
+            ],
+            "source_key_display": "entity=775|item=432",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              796,
+              261
+            ],
+            "source_key_display": "entity=796|item=261",
+            "pre_target_rows": 9,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              803,
+              261
+            ],
+            "source_key_display": "entity=803|item=261",
+            "pre_target_rows": 7,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          }
+        ],
+        "enabled": true
+      },
+      "target_window_source": "provided_target_df",
+      "target_test_data_excluded": false,
+      "truncation_reason": "no_truncation",
+      "target_group_count": 1,
+      "target_series_mode": "single_group",
+      "target_series_key": [
+        166,
+        433
+      ],
+      "include_sales_in_knn": true,
+      "contains_sales": true,
+      "knn_feature_mode": "paper_available_features_no_ids",
+      "requested_feature_cols": [
+        "sales",
+        "stock_hour6_22_cnt",
+        "activity_flag",
+        "discount",
+        "holiday_flag",
+        "precpt",
+        "avg_temperature",
+        "avg_humidity",
+        "avg_wind_level",
+        "year",
+        "month",
+        "week",
+        "day"
+      ],
+      "missing_in_source": [],
+      "missing_in_target": [],
+      "excluded_by_rule": [
+        "city_id",
+        "store_id",
+        "management_group_id",
+        "first_category_id",
+        "second_category_id",
+        "third_category_id",
+        "product_id",
+        "hours_sale_sum_leakage_risk",
+        "hours_sale_max_leakage_risk",
+        "hours_sale_nonzero_hours_leakage_risk",
+        "hours_stock_sum_leakage_risk",
+        "hours_stock_max_leakage_risk",
+        "hours_stock_nonzero_hours_leakage_risk"
+      ],
+      "adaptive_selection_info": {
+        "adaptive_selection_used": false
+      }
+    },
+    "166_313": {
+      "weight_mode": "inverse_distance",
+      "distance_metric": "euclidean",
+      "knn_representation": "paper_observed_sequence",
+      "target_signature_dim": 195,
+      "feature_cols": [
+        "sales",
+        "stock_hour6_22_cnt",
+        "activity_flag",
+        "discount",
+        "holiday_flag",
+        "precpt",
+        "avg_temperature",
+        "avg_humidity",
+        "avg_wind_level",
+        "year",
+        "month",
+        "week",
+        "day"
+      ],
+      "signature_static_feature_cols": [],
+      "signature_component_breakdown": {
+        "time_series_sequence": [
+          "sales",
+          "stock_hour6_22_cnt",
+          "activity_flag",
+          "discount",
+          "holiday_flag",
+          "precpt",
+          "avg_temperature",
+          "avg_humidity",
+          "avg_wind_level",
+          "year",
+          "month",
+          "week",
+          "day"
+        ],
+        "static_metadata": []
+      },
+      "observed_window_rows": 15,
+      "observed_window_unique_dates": 15,
+      "source_window_alignment": "target_observed_dates",
+      "date_coverage_filter": {
+        "before_count": 732,
+        "after_count": 732,
+        "filtered_count": 0,
+        "required_dates": 15,
+        "filtered_entities": []
+      },
+      "trainable_window_filter": {
+        "before_count": 732,
+        "after_count": 727,
+        "filtered_count": 5,
+        "target_train_start": "2024-12-16",
+        "window_size": 10,
+        "horizon": 1,
+        "required_pre_target_rows": 14,
+        "required_source_train_rows": 11,
+        "source_train_ratio": 0.8,
+        "filtered_entities": [
+          {
+            "source_key": [
+              775,
+              242
+            ],
+            "source_key_display": "entity=775|item=242",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              775,
+              261
+            ],
+            "source_key_display": "entity=775|item=261",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              775,
+              432
+            ],
+            "source_key_display": "entity=775|item=432",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              796,
+              261
+            ],
+            "source_key_display": "entity=796|item=261",
+            "pre_target_rows": 9,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              803,
+              261
+            ],
+            "source_key_display": "entity=803|item=261",
+            "pre_target_rows": 7,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          }
+        ],
+        "enabled": true
+      },
+      "target_window_source": "provided_target_df",
+      "target_test_data_excluded": false,
+      "truncation_reason": "no_truncation",
+      "target_group_count": 1,
+      "target_series_mode": "single_group",
+      "target_series_key": [
+        166,
+        313
+      ],
+      "include_sales_in_knn": true,
+      "contains_sales": true,
+      "knn_feature_mode": "paper_available_features_no_ids",
+      "requested_feature_cols": [
+        "sales",
+        "stock_hour6_22_cnt",
+        "activity_flag",
+        "discount",
+        "holiday_flag",
+        "precpt",
+        "avg_temperature",
+        "avg_humidity",
+        "avg_wind_level",
+        "year",
+        "month",
+        "week",
+        "day"
+      ],
+      "missing_in_source": [],
+      "missing_in_target": [],
+      "excluded_by_rule": [
+        "city_id",
+        "store_id",
+        "management_group_id",
+        "first_category_id",
+        "second_category_id",
+        "third_category_id",
+        "product_id",
+        "hours_sale_sum_leakage_risk",
+        "hours_sale_max_leakage_risk",
+        "hours_sale_nonzero_hours_leakage_risk",
+        "hours_stock_sum_leakage_risk",
+        "hours_stock_max_leakage_risk",
+        "hours_stock_nonzero_hours_leakage_risk"
+      ],
+      "adaptive_selection_info": {
+        "adaptive_selection_used": false
+      }
+    },
+    "166_311": {
+      "weight_mode": "inverse_distance",
+      "distance_metric": "euclidean",
+      "knn_representation": "paper_observed_sequence",
+      "target_signature_dim": 195,
+      "feature_cols": [
+        "sales",
+        "stock_hour6_22_cnt",
+        "activity_flag",
+        "discount",
+        "holiday_flag",
+        "precpt",
+        "avg_temperature",
+        "avg_humidity",
+        "avg_wind_level",
+        "year",
+        "month",
+        "week",
+        "day"
+      ],
+      "signature_static_feature_cols": [],
+      "signature_component_breakdown": {
+        "time_series_sequence": [
+          "sales",
+          "stock_hour6_22_cnt",
+          "activity_flag",
+          "discount",
+          "holiday_flag",
+          "precpt",
+          "avg_temperature",
+          "avg_humidity",
+          "avg_wind_level",
+          "year",
+          "month",
+          "week",
+          "day"
+        ],
+        "static_metadata": []
+      },
+      "observed_window_rows": 15,
+      "observed_window_unique_dates": 15,
+      "source_window_alignment": "target_observed_dates",
+      "date_coverage_filter": {
+        "before_count": 732,
+        "after_count": 732,
+        "filtered_count": 0,
+        "required_dates": 15,
+        "filtered_entities": []
+      },
+      "trainable_window_filter": {
+        "before_count": 732,
+        "after_count": 727,
+        "filtered_count": 5,
+        "target_train_start": "2024-12-16",
+        "window_size": 10,
+        "horizon": 1,
+        "required_pre_target_rows": 14,
+        "required_source_train_rows": 11,
+        "source_train_ratio": 0.8,
+        "filtered_entities": [
+          {
+            "source_key": [
+              775,
+              242
+            ],
+            "source_key_display": "entity=775|item=242",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              775,
+              261
+            ],
+            "source_key_display": "entity=775|item=261",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              775,
+              432
+            ],
+            "source_key_display": "entity=775|item=432",
+            "pre_target_rows": 12,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              796,
+              261
+            ],
+            "source_key_display": "entity=796|item=261",
+            "pre_target_rows": 9,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          },
+          {
+            "source_key": [
+              803,
+              261
+            ],
+            "source_key_display": "entity=803|item=261",
+            "pre_target_rows": 7,
+            "required_pre_target_rows": 14,
+            "required_source_train_rows": 11,
+            "source_train_ratio": 0.8
+          }
+        ],
+        "enabled": true
+      },
+      "target_window_source": "provided_target_df",
+      "target_test_data_excluded": false,
+      "truncation_reason": "no_truncation",
+      "target_group_count": 1,
+      "target_series_mode": "single_group",
+      "target_series_key": [
+        166,
+        311
+      ],
+      "include_sales_in_knn": true,
+      "contains_sales": true,
+      "knn_feature_mode": "paper_available_features_no_ids",
+      "requested_feature_cols": [
+        "sales",
+        "stock_hour6_22_cnt",
+        "activity_flag",
+        "discount",
+        "holiday_flag",
+        "precpt",
+        "avg_temperature",
+        "avg_humidity",
+        "avg_wind_level",
+        "year",
+        "month",
+        "week",
+        "day"
+      ],
+      "missing_in_source": [],
+      "missing_in_target": [],
+      "excluded_by_rule": [
+        "city_id",
+        "store_id",
+        "management_group_id",
+        "first_category_id",
+        "second_category_id",
+        "third_category_id",
+        "product_id",
+        "hours_sale_sum_leakage_risk",
+        "hours_sale_max_leakage_risk",
+        "hours_sale_nonzero_hours_leakage_risk",
+        "hours_stock_sum_leakage_risk",
+        "hours_stock_max_leakage_risk",
+        "hours_stock_nonzero_hours_leakage_risk"
+      ],
+      "adaptive_selection_info": {
+        "adaptive_selection_used": false
+      }
+    }
+  }
+}

@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.constants import SOURCE_HISTORY_DAYS
 from src.constants import RESULT_SCHEMA_COLUMNS
+from src.constants import SOLIDIFIED_KNN_ROOT
 
 import tf_compat  # must be imported before tensorflow/keras
 
@@ -36,7 +37,7 @@ config = {
     "dataset_id": 6,
     "dataset_name": "Dataset6",
     "parquet_dir": "数据集/固化数据",
-    "knn_json_dir": "outputs/knn_selection/Dataset6",
+    "knn_json_dir": str(SOLIDIFIED_KNN_ROOT / "Dataset6"),
     "info_sharing": "without",
     "source_history_days": SOURCE_HISTORY_DAYS,
     "entity_col": "entity_id",

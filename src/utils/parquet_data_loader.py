@@ -7,6 +7,8 @@ from typing import Any, Dict, Tuple
 
 import pandas as pd
 
+from src.constants import SOLIDIFIED_TARGET_WINDOWS
+
 
 LOGGER = logging.getLogger("experiment")
 
@@ -20,42 +22,11 @@ def _read_json(path: Path) -> Dict[str, Any]:
         return json.load(f)
 
 
-def _read_target_selection_windows(dataset_id: int, knn_json_dir: str | Path) -> Dict[str, Any]:
-    """Read D4-D6 target train/test bounds from target selection output."""
+def _read_target_selection_windows(dataset_id: int) -> Dict[str, Any]:
+    """Read solidified D4-D6 target train/test bounds."""
     if int(dataset_id) not in {4, 5, 6}:
         return {}
-
-    knn_path = Path(knn_json_dir)
-    outputs_root = knn_path.parent.parent
-    path = (
-        outputs_root
-        / "domain_adaptation"
-        / f"Dataset{int(dataset_id)}"
-        / "target_selection"
-        / "target_selection_result.json"
-    )
-    if not path.exists():
-        raise FileNotFoundError(f"Missing target selection window file: {path}")
-
-    payload = _read_json(path)
-    if int(dataset_id) == 4:
-        target_windows = payload["target_windows"]
-        return {
-            "train_start": target_windows["target_train_start"],
-            "test_end": target_windows["test_end"],
-        }
-    if int(dataset_id) == 5:
-        time_windows = payload["time_windows"]
-        return {
-            "train_start": time_windows["train_start"],
-            "test_end": time_windows["test_end"],
-        }
-    if int(dataset_id) == 6:
-        return {
-            "train_start": payload["train_start"],
-            "test_end": payload["test_end"],
-        }
-    return {}
+    return dict(SOLIDIFIED_TARGET_WINDOWS[int(dataset_id)])
 
 
 def load_knn_results(knn_json_dir: str | Path, info_sharing: str) -> Dict[str, Any]:
@@ -81,7 +52,7 @@ def read_dataset_windows(dataset_id: int, knn_json_dir: str | Path) -> Dict[str,
         windows[f"{scenario}_domain_filter"] = payload.get("domain_filter")
     first = windows.get("without_target_train_window") or windows.get("with_target_train_window") or {}
     windows["target_train_window"] = dict(first) if isinstance(first, dict) else {}
-    windows.update(_read_target_selection_windows(int(dataset_id), knn_json_dir))
+    windows.update(_read_target_selection_windows(int(dataset_id)))
     return windows
 
 

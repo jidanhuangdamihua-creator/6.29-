@@ -1,0 +1,217 @@
+{
+  "dataset_id": 5,
+  "dataset": "D5",
+  "info_sharing": "with",
+  "k": 3,
+  "target_train_window": {
+    "start": "2017-01-17",
+    "end": "2017-01-31"
+  },
+  "domain_filter": {
+    "column": "family",
+    "value": "GROCERY I"
+  },
+  "group_cols": [
+    "store_nbr",
+    "item_nbr"
+  ],
+  "source_pool_size": 45401018,
+  "feature_cols": [
+    "sales",
+    "year",
+    "month",
+    "week",
+    "day",
+    "class",
+    "perishable",
+    "cluster",
+    "transactions",
+    "oil_price",
+    "is_holiday"
+  ],
+  "feature_info": {
+    "selected_features": [
+      "sales",
+      "year",
+      "month",
+      "week",
+      "day",
+      "class",
+      "perishable",
+      "cluster",
+      "transactions",
+      "oil_price",
+      "is_holiday"
+    ],
+    "modeling_source_features": [
+      "sales",
+      "store_nbr",
+      "item_nbr",
+      "year",
+      "month",
+      "week",
+      "day",
+      "class",
+      "perishable",
+      "cluster",
+      "transactions",
+      "oil_price",
+      "is_holiday"
+    ],
+    "modeling_target_features": [
+      "sales",
+      "store_nbr",
+      "item_nbr",
+      "year",
+      "month",
+      "week",
+      "day",
+      "class",
+      "perishable",
+      "cluster",
+      "transactions",
+      "oil_price",
+      "is_holiday"
+    ],
+    "candidate_pool": [
+      "sales",
+      "store_nbr",
+      "item_nbr",
+      "year",
+      "month",
+      "week",
+      "day",
+      "class",
+      "perishable",
+      "cluster",
+      "transactions",
+      "oil_price",
+      "is_holiday"
+    ],
+    "missing_in_source": [],
+    "missing_in_target": [],
+    "excluded_by_rule": [
+      "store_nbr",
+      "item_nbr"
+    ],
+    "include_sales_in_knn": true,
+    "knn_feature_mode": "paper_available_features_no_ids"
+  },
+  "results": {
+    "48_364606": [
+      {
+        "source_entity": "48_564533",
+        "source_store_nbr": 48,
+        "source_item_nbr": 564533,
+        "distance": 40.18706259482024,
+        "weight": 0.4906164796303872
+      },
+      {
+        "source_entity": "48_314384",
+        "source_store_nbr": 48,
+        "source_item_nbr": 314384,
+        "distance": 64.1404708432983,
+        "weight": 0.30739461247420835
+      },
+      {
+        "source_entity": "48_1162382",
+        "source_store_nbr": 48,
+        "source_item_nbr": 1162382,
+        "distance": 97.61147473529944,
+        "weight": 0.20198890789540444
+      }
+    ],
+    "48_1159415": [
+      {
+        "source_entity": "48_938574",
+        "source_store_nbr": 48,
+        "source_item_nbr": 938574,
+        "distance": 18.734993995195193,
+        "weight": 0.3780338956630669
+      },
+      {
+        "source_entity": "48_1146785",
+        "source_store_nbr": 48,
+        "source_item_nbr": 1146785,
+        "distance": 22.44994432064365,
+        "weight": 0.31547796576674564
+      },
+      {
+        "source_entity": "48_215331",
+        "source_store_nbr": 48,
+        "source_item_nbr": 215331,
+        "distance": 23.108440016582687,
+        "weight": 0.30648813857018753
+      }
+    ],
+    "48_1159414": [
+      {
+        "source_entity": "48_1159413",
+        "source_store_nbr": 48,
+        "source_item_nbr": 1159413,
+        "distance": 38.93584466786357,
+        "weight": 0.3551572284669953
+      },
+      {
+        "source_entity": "48_1157564",
+        "source_store_nbr": 48,
+        "source_item_nbr": 1157564,
+        "distance": 42.790185790669334,
+        "weight": 0.3231663154777685
+      },
+      {
+        "source_entity": "48_2027203",
+        "source_store_nbr": 48,
+        "source_item_nbr": 2027203,
+        "distance": 42.988370520409354,
+        "weight": 0.32167645605523615
+      }
+    ],
+    "48_1349808": [
+      {
+        "source_entity": "48_223434",
+        "source_store_nbr": 48,
+        "source_item_nbr": 223434,
+        "distance": 18.867962264113206,
+        "weight": 0.35303532674132115
+      },
+      {
+        "source_entity": "48_575863",
+        "source_store_nbr": 48,
+        "source_item_nbr": 575863,
+        "distance": 20.199009876724155,
+        "weight": 0.32977147215331937
+      },
+      {
+        "source_entity": "48_106716",
+        "source_store_nbr": 48,
+        "source_item_nbr": 106716,
+        "distance": 21.0,
+        "weight": 0.3171932011053593
+      }
+    ],
+    "48_320682": [
+      {
+        "source_entity": "48_987308",
+        "source_store_nbr": 48,
+        "source_item_nbr": 987308,
+        "distance": 57.7408001330082,
+        "weight": 0.41926782199488893
+      },
+      {
+        "source_entity": "48_261052",
+        "source_store_nbr": 48,
+        "source_item_nbr": 261052,
+        "distance": 82.12186067059123,
+        "weight": 0.29479190212652806
+      },
+      {
+        "source_entity": "48_964752",
+        "source_store_nbr": 48,
+        "source_item_nbr": 964752,
+        "distance": 84.6640419540669,
+        "weight": 0.285940275878583
+      }
+    ]
+  }
+}

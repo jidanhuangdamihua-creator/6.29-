@@ -1,0 +1,208 @@
+{
+  "dataset_id": 6,
+  "dataset": "D6",
+  "info_sharing": "with",
+  "k": 3,
+  "target_train_window": {
+    "start": "2015-10-26",
+    "end": "2015-11-09"
+  },
+  "domain_filter": {
+    "column": "dept_id",
+    "value": "FOODS_3"
+  },
+  "group_cols": [
+    "store_id",
+    "item_id"
+  ],
+  "source_pool_size": 15964725,
+  "feature_cols": [
+    "sales",
+    "year",
+    "month",
+    "week",
+    "day",
+    "wm_yr_wk",
+    "weekday",
+    "is_event_1",
+    "is_event_2",
+    "snap",
+    "sell_price"
+  ],
+  "feature_info": {
+    "selected_features": [
+      "sales",
+      "year",
+      "month",
+      "week",
+      "day",
+      "wm_yr_wk",
+      "weekday",
+      "is_event_1",
+      "is_event_2",
+      "snap",
+      "sell_price"
+    ],
+    "modeling_source_features": [
+      "sales",
+      "year",
+      "month",
+      "week",
+      "day",
+      "wm_yr_wk",
+      "weekday",
+      "is_event_1",
+      "is_event_2",
+      "snap",
+      "sell_price"
+    ],
+    "modeling_target_features": [
+      "sales",
+      "year",
+      "month",
+      "week",
+      "day",
+      "wm_yr_wk",
+      "weekday",
+      "is_event_1",
+      "is_event_2",
+      "snap",
+      "sell_price"
+    ],
+    "candidate_pool": [
+      "sales",
+      "year",
+      "month",
+      "week",
+      "day",
+      "wm_yr_wk",
+      "weekday",
+      "is_event_1",
+      "is_event_2",
+      "snap",
+      "sell_price"
+    ],
+    "missing_in_source": [],
+    "missing_in_target": [],
+    "excluded_by_rule": [],
+    "include_sales_in_knn": true,
+    "knn_feature_mode": "paper_available_features_no_ids"
+  },
+  "results": {
+    "CA_1_FOODS_3_586": [
+      {
+        "source_entity": "WI_1_FOODS_3_226",
+        "source_store_id": "WI_1",
+        "source_item_id": "FOODS_3_226",
+        "distance": 28.124722220850465,
+        "weight": 0.37527342019205995
+      },
+      {
+        "source_entity": "CA_2_FOODS_3_252",
+        "source_store_id": "CA_2",
+        "source_item_id": "FOODS_3_252",
+        "distance": 33.1081560948356,
+        "weight": 0.3187873305327743
+      },
+      {
+        "source_entity": "CA_1_FOODS_3_252",
+        "source_store_id": "CA_1",
+        "source_item_id": "FOODS_3_252",
+        "distance": 34.498550694195835,
+        "weight": 0.3059392492751658
+      }
+    ],
+    "CA_1_FOODS_3_080": [
+      {
+        "source_entity": "TX_2_FOODS_3_804",
+        "source_store_id": "TX_2",
+        "source_item_id": "FOODS_3_804",
+        "distance": 25.09183134009951,
+        "weight": 0.36335270208453524
+      },
+      {
+        "source_entity": "WI_3_FOODS_3_282",
+        "source_store_id": "WI_3",
+        "source_item_id": "FOODS_3_282",
+        "distance": 27.642105563795244,
+        "weight": 0.3298296034999307
+      },
+      {
+        "source_entity": "CA_1_FOODS_3_694",
+        "source_store_id": "CA_1",
+        "source_item_id": "FOODS_3_694",
+        "distance": 29.715315916207253,
+        "weight": 0.306817694415534
+      }
+    ],
+    "CA_1_FOODS_3_555": [
+      {
+        "source_entity": "CA_1_FOODS_3_694",
+        "source_store_id": "CA_1",
+        "source_item_id": "FOODS_3_694",
+        "distance": 15.84297951775486,
+        "weight": 0.34778690505083537
+      },
+      {
+        "source_entity": "CA_3_FOODS_3_694",
+        "source_store_id": "CA_3",
+        "source_item_id": "FOODS_3_694",
+        "distance": 16.822603841260722,
+        "weight": 0.32753436183000156
+      },
+      {
+        "source_entity": "WI_1_FOODS_3_586",
+        "source_store_id": "WI_1",
+        "source_item_id": "FOODS_3_586",
+        "distance": 16.97056274847714,
+        "weight": 0.3246787331191631
+      }
+    ],
+    "CA_1_FOODS_3_377": [
+      {
+        "source_entity": "CA_3_FOODS_3_403",
+        "source_store_id": "CA_3",
+        "source_item_id": "FOODS_3_403",
+        "distance": 13.582562350307839,
+        "weight": 0.371748431305914
+      },
+      {
+        "source_entity": "CA_3_FOODS_3_377",
+        "source_store_id": "CA_3",
+        "source_item_id": "FOODS_3_377",
+        "distance": 15.874507866387544,
+        "weight": 0.3180757658679764
+      },
+      {
+        "source_entity": "CA_3_FOODS_3_349",
+        "source_store_id": "CA_3",
+        "source_item_id": "FOODS_3_349",
+        "distance": 16.278820596099706,
+        "weight": 0.31017580282610957
+      }
+    ],
+    "CA_1_FOODS_3_668": [
+      {
+        "source_entity": "CA_3_FOODS_3_226",
+        "source_store_id": "CA_3",
+        "source_item_id": "FOODS_3_226",
+        "distance": 9.695359714832659,
+        "weight": 0.3514172817005612
+      },
+      {
+        "source_entity": "CA_3_FOODS_3_462",
+        "source_store_id": "CA_3",
+        "source_item_id": "FOODS_3_462",
+        "distance": 10.340986413297331,
+        "weight": 0.32947697832131945
+      },
+      {
+        "source_entity": "CA_3_FOODS_3_377",
+        "source_store_id": "CA_3",
+        "source_item_id": "FOODS_3_377",
+        "distance": 10.677078252031311,
+        "weight": 0.3191057399781193
+      }
+    ]
+  }
+}
