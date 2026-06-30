@@ -17,13 +17,15 @@ readonly PID_RESOLUTION_ATTEMPTS=50
 readonly PID_RESOLUTION_INTERVAL_SECONDS=0.1
 readonly MEMORY_WARNING_BYTES=4294967296
 readonly DISABLE_COMPAT_RESULTS_COPY_ENV="RFE_DISABLE_COMPAT_RESULTS_COPY"
-readonly DATASETS=(d1 d2 d3 d4 d5 d6)
+readonly ALL_DATASETS=(d1 d2 d3 d4 d5 d6)
 
 DRY_RUN=0
 SETSID_MODE=""
+ONLY_VALUES=()
+DATASETS=()
 
 usage() {
-    printf 'Usage: bash scripts/parallel_runner.sh [--dry-run]\n'
+    printf 'Usage: bash scripts/parallel_runner.sh [--only d1[,d2...]]... [--dry-run]\n'
 }
 
 fail_usage() {
@@ -34,6 +36,16 @@ fail_usage() {
 
 while (($# > 0)); do
     case "$1" in
+        --only)
+            if (($# < 2)); then
+                fail_usage "--only requires a dataset value"
+            fi
+            ONLY_VALUES+=("$2")
+            shift
+            ;;
+        --only=*)
+            ONLY_VALUES+=("${1#--only=}")
+            ;;
         --dry-run)
             DRY_RUN=1
             ;;
@@ -47,6 +59,64 @@ while (($# > 0)); do
     esac
     shift
 done
+
+select_datasets() {
+    local option_index
+    local token_index
+    local requested_index
+    local candidate_index
+    local raw_value
+    local token
+    local normalized
+    local candidate
+    local requested=()
+    local tokens=()
+
+    if ((${#ONLY_VALUES[@]} == 0)); then
+        DATASETS=("${ALL_DATASETS[@]}")
+        return
+    fi
+
+    for ((option_index = 0; option_index < ${#ONLY_VALUES[@]}; option_index++)); do
+        raw_value="${ONLY_VALUES[${option_index}]}"
+        IFS=',' read -r -a tokens <<<"${raw_value}"
+        for ((token_index = 0; token_index < ${#tokens[@]}; token_index++)); do
+            token="${tokens[${token_index}]}"
+            token="${token#"${token%%[![:space:]]*}"}"
+            token="${token%"${token##*[![:space:]]}"}"
+            if [[ -z "${token}" ]]; then
+                continue
+            fi
+            case "${token}" in
+                d1|D1) normalized="d1" ;;
+                d2|D2) normalized="d2" ;;
+                d3|D3) normalized="d3" ;;
+                d4|D4) normalized="d4" ;;
+                d5|D5) normalized="d5" ;;
+                d6|D6) normalized="d6" ;;
+                *) fail_usage "unknown dataset id: ${token}" ;;
+            esac
+            requested+=("${normalized}")
+        done
+    done
+
+    if ((${#requested[@]} == 0)); then
+        DATASETS=("${ALL_DATASETS[@]}")
+        return
+    fi
+
+    for ((candidate_index = 0; candidate_index < ${#ALL_DATASETS[@]}; candidate_index++)); do
+        candidate="${ALL_DATASETS[${candidate_index}]}"
+        for ((requested_index = 0; requested_index < ${#requested[@]}; requested_index++)); do
+            if [[ "${requested[${requested_index}]}" == "${candidate}" ]]; then
+                DATASETS+=("${candidate}")
+                break
+            fi
+        done
+    done
+}
+
+select_datasets
 
 if [[ "$(pwd -P)" != "${PROJECT_ROOT}" ]]; then
     printf 'ERROR: run this script from the project root: %s\n' "${PROJECT_ROOT}" >&2
@@ -122,6 +192,7 @@ EXIT_CODES=()
 FAILURE_REASONS=()
 LOG_FILES=()
 OUTPUT_DIRS=()
+LAUNCHED_INDICES=()
 
 CLEANUP_STARTED=0
 VALIDATION_ERROR=""
@@ -132,7 +203,14 @@ iso_timestamp() {
 
 dataset_index() {
     local dataset="$1"
-    printf '%s\n' "$((10#${dataset#d} - 1))"
+    local index
+    for ((index = 0; index < ${#DATASETS[@]}; index++)); do
+        if [[ "${DATASETS[${index}]}" == "${dataset}" ]]; then
+            printf '%s\n' "${index}"
+            return 0
+        fi
+    done
+    return 1
 }
 
 log_message() {
@@ -171,11 +249,6 @@ resolve_experiment_pid() {
                 return 0
             fi
         done < <(pgrep -P "${supervisor_pid}" 2>/dev/null || true)
-
-        if pid_matches_experiment "${supervisor_pid}" "${dataset}" "${output_dir}"; then
-            printf '%s\n' "${supervisor_pid}"
-            return 0
-        fi
 
         if ! kill -0 "${supervisor_pid}" 2>/dev/null; then
             break
@@ -220,7 +293,8 @@ terminate_failed_launch() {
         fi
     done < <(pgrep -P "${supervisor_pid}" 2>/dev/null || true)
 
-    if pid_matches_experiment "${supervisor_pid}" "${dataset}" "${output_dir}"; then
+    if [[ "${SETSID_MODE}" == "wait" ]] \
+        && pid_matches_experiment "${supervisor_pid}" "${dataset}" "${output_dir}"; then
         candidates+=("${supervisor_pid}")
         kill -TERM -- "-${supervisor_pid}" 2>/dev/null || true
     fi
@@ -390,29 +464,81 @@ process_group_alive() {
     kill -0 -- "-${pgid}" 2>/dev/null
 }
 
-mark_unsuccessful_results_interrupted() {
-    local dataset
-    local index
+mark_dataset_results_interrupted() {
+    local dataset="$1"
     local csv_path
     local interrupted_path
 
-    for index in "${!DATASETS[@]}"; do
-        dataset="${DATASETS[${index}]}"
-        if [[ "${STATUSES[${index}]:-not_started}" == "succeeded" ]]; then
+    while IFS= read -r csv_path; do
+        if [[ ! -e "${csv_path}" ]]; then
             continue
         fi
-        while IFS= read -r csv_path; do
-            if [[ ! -e "${csv_path}" ]]; then
-                continue
+        interrupted_path="${csv_path}.INTERRUPTED"
+        if [[ -e "${interrupted_path}" ]]; then
+            log_message "[WARNING] interrupted marker already exists; leaving source unchanged: ${interrupted_path}"
+            continue
+        fi
+        mv -- "${csv_path}" "${interrupted_path}"
+        log_message "[INTERRUPTED] ${csv_path} -> ${interrupted_path}"
+    done < <(expected_csvs "${dataset}")
+}
+
+cleanup_after_launch_failure() {
+    local reason="$1"
+    local dataset
+    local index
+    local launched_position
+    local deadline
+    local any_alive
+    local now
+
+    if ((CLEANUP_STARTED == 1)); then
+        return
+    fi
+    CLEANUP_STARTED=1
+    trap - INT TERM
+    set +e
+
+    log_message "[LAUNCH-ABORT] ${reason}"
+    for ((launched_position = 0; launched_position < ${#LAUNCHED_INDICES[@]}; launched_position++)); do
+        index="${LAUNCHED_INDICES[${launched_position}]}"
+        dataset="${DATASETS[${index}]}"
+        if process_group_alive "${PGIDS[${index}]}"; then
+            log_message "[TERM] ${dataset} pgid=${PGIDS[${index}]}"
+            kill -TERM -- "-${PGIDS[${index}]}" 2>/dev/null
+        fi
+    done
+
+    deadline=$((SECONDS + TERMINATION_GRACE_SECONDS))
+    while ((SECONDS < deadline)); do
+        any_alive=0
+        for ((launched_position = 0; launched_position < ${#LAUNCHED_INDICES[@]}; launched_position++)); do
+            index="${LAUNCHED_INDICES[${launched_position}]}"
+            if process_group_alive "${PGIDS[${index}]}"; then
+                any_alive=1
+                break
             fi
-            interrupted_path="${csv_path}.INTERRUPTED"
-            if [[ -e "${interrupted_path}" ]]; then
-                log_message "[WARNING] interrupted marker already exists; leaving source unchanged: ${interrupted_path}"
-                continue
-            fi
-            mv -- "${csv_path}" "${interrupted_path}"
-            log_message "[INTERRUPTED] ${csv_path} -> ${interrupted_path}"
-        done < <(expected_csvs "${dataset}")
+        done
+        if ((any_alive == 0)); then
+            break
+        fi
+        sleep 1
+    done
+
+    for ((launched_position = 0; launched_position < ${#LAUNCHED_INDICES[@]}; launched_position++)); do
+        index="${LAUNCHED_INDICES[${launched_position}]}"
+        dataset="${DATASETS[${index}]}"
+        if process_group_alive "${PGIDS[${index}]}"; then
+            log_message "[KILL] ${dataset} pgid=${PGIDS[${index}]}"
+            kill -KILL -- "-${PGIDS[${index}]}" 2>/dev/null
+        fi
+        wait "${SUPERVISOR_PIDS[${index}]}" 2>/dev/null
+        now="$(date +%s)"
+        DURATIONS["${index}"]=$((now - START_TIMES[${index}]))
+        STATUSES["${index}"]="interrupted"
+        EXIT_CODES["${index}"]="-"
+        append_pid_event "${dataset}" "interrupted" "${DURATIONS[${index}]}" "-"
+        mark_dataset_results_interrupted "${dataset}"
     done
 }
 
@@ -420,6 +546,7 @@ cleanup_after_signal() {
     local reason="$1"
     local dataset
     local index
+    local launched_position
     local deadline
     local any_alive
     local now
@@ -476,7 +603,13 @@ cleanup_after_signal() {
         append_pid_event "${dataset}" "interrupted" "${DURATIONS[${index}]}" "-"
     done
 
-    mark_unsuccessful_results_interrupted
+    for ((launched_position = 0; launched_position < ${#LAUNCHED_INDICES[@]}; launched_position++)); do
+        index="${LAUNCHED_INDICES[${launched_position}]}"
+        if [[ "${STATUSES[${index}]}" == "succeeded" ]]; then
+            continue
+        fi
+        mark_dataset_results_interrupted "${DATASETS[${index}]}"
+    done
 }
 
 handle_signal() {
@@ -520,17 +653,18 @@ for index in "${!DATASETS[@]}"; do
         "${SUPERVISOR_PIDS[${index}]}" "${dataset}" "${OUTPUT_DIRS[${index}]}")"; then
         terminate_failed_launch \
             "${SUPERVISOR_PIDS[${index}]}" "${dataset}" "${OUTPUT_DIRS[${index}]}"
-        cleanup_after_signal "failed to resolve Python PID for ${dataset}"
+        cleanup_after_launch_failure "failed to resolve Python PID for ${dataset}"
         exit 2
     fi
     if ! PGIDS["${index}"]="$(resolve_process_group "${PIDS[${index}]}")"; then
         terminate_failed_launch \
             "${SUPERVISOR_PIDS[${index}]}" "${dataset}" "${OUTPUT_DIRS[${index}]}"
-        cleanup_after_signal "invalid Python process group for ${dataset}: pid=${PIDS[${index}]}"
+        cleanup_after_launch_failure "invalid Python process group for ${dataset}: pid=${PIDS[${index}]}"
         exit 2
     fi
 
     STATUSES["${index}"]="running"
+    LAUNCHED_INDICES+=("${index}")
     append_pid_event "${dataset}" "started"
     log_message "[LAUNCHED] ${dataset} pid=${PIDS[${index}]} pgid=${PGIDS[${index}]} supervisor_pid=${SUPERVISOR_PIDS[${index}]} log=${LOG_FILES[${index}]}"
 done
