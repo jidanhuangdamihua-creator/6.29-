@@ -13,11 +13,14 @@ readonly RESOURCE_LOG="${LOG_ROOT}/resources.log"
 readonly RUNNER_LOG="${LOG_ROOT}/runner.log"
 readonly MONITOR_INTERVAL_SECONDS=30
 readonly TERMINATION_GRACE_SECONDS=10
+readonly PID_RESOLUTION_ATTEMPTS=50
+readonly PID_RESOLUTION_INTERVAL_SECONDS=0.1
 readonly MEMORY_WARNING_BYTES=4294967296
 readonly DISABLE_COMPAT_RESULTS_COPY_ENV="RFE_DISABLE_COMPAT_RESULTS_COPY"
 readonly DATASETS=(d1 d2 d3 d4 d5 d6)
 
 DRY_RUN=0
+SETSID_MODE=""
 
 usage() {
     printf 'Usage: bash scripts/parallel_runner.sh [--dry-run]\n'
@@ -66,12 +69,23 @@ if ((DRY_RUN == 1)); then
     exit 0
 fi
 
-for required_command in nohup setsid top free awk sed; do
+for required_command in nohup setsid pgrep ps top free awk sed; do
     if ! command -v "${required_command}" >/dev/null 2>&1; then
         printf 'ERROR: required Linux command not found: %s\n' "${required_command}" >&2
         exit 2
     fi
 done
+
+setsid_help="$(LC_ALL=C setsid --help 2>&1 || true)"
+if [[ "${setsid_help}" != *"--wait"* ]]; then
+    printf 'ERROR: setsid must support --wait so experiment exit status remains observable\n' >&2
+    exit 2
+fi
+if [[ "${setsid_help}" == *"--fork"* ]]; then
+    SETSID_MODE="fork-wait"
+else
+    SETSID_MODE="wait"
+fi
 
 if [[ ! -x "${PYTHON}" ]]; then
     printf 'ERROR: Python executable not found: %s\n' "${PYTHON}" >&2
@@ -100,6 +114,7 @@ export "${DISABLE_COMPAT_RESULTS_COPY_ENV}=1"
 
 PIDS=()
 PGIDS=()
+SUPERVISOR_PIDS=()
 START_TIMES=()
 DURATIONS=()
 STATUSES=()
@@ -124,6 +139,103 @@ log_message() {
     local message="$1"
     printf '%s\n' "${message}"
     printf '%s\n' "${message}" >>"${RUNNER_LOG}"
+}
+
+pid_matches_experiment() {
+    local pid="$1"
+    local dataset="$2"
+    local output_dir="$3"
+    local command_line
+
+    if ! kill -0 "${pid}" 2>/dev/null; then
+        return 1
+    fi
+    command_line="$(LC_ALL=C ps -ww -o args= -p "${pid}" 2>/dev/null)" || return 1
+    [[ "${command_line}" == *"${UNIFIED_RUNNER}"* \
+        && "${command_line}" == *"--only ${dataset}"* \
+        && "${command_line}" == *"--output-dir ${output_dir}"* ]]
+}
+
+resolve_experiment_pid() {
+    local supervisor_pid="$1"
+    local dataset="$2"
+    local output_dir="$3"
+    local attempt
+    local candidate_pid
+
+    for ((attempt = 0; attempt < PID_RESOLUTION_ATTEMPTS; attempt++)); do
+        while IFS= read -r candidate_pid; do
+            if [[ "${candidate_pid}" =~ ^[0-9]+$ ]] \
+                && pid_matches_experiment "${candidate_pid}" "${dataset}" "${output_dir}"; then
+                printf '%s\n' "${candidate_pid}"
+                return 0
+            fi
+        done < <(pgrep -P "${supervisor_pid}" 2>/dev/null || true)
+
+        if pid_matches_experiment "${supervisor_pid}" "${dataset}" "${output_dir}"; then
+            printf '%s\n' "${supervisor_pid}"
+            return 0
+        fi
+
+        if ! kill -0 "${supervisor_pid}" 2>/dev/null; then
+            break
+        fi
+        sleep "${PID_RESOLUTION_INTERVAL_SECONDS}"
+    done
+    return 1
+}
+
+resolve_process_group() {
+    local pid="$1"
+    local pgid
+
+    pgid="$(LC_ALL=C ps -o pgid= -p "${pid}" 2>/dev/null \
+        | awk 'NR == 1 {gsub(/[[:space:]]/, "", $0); print; exit}')"
+    if [[ ! "${pgid}" =~ ^[0-9]+$ ]] || [[ "${pgid}" != "${pid}" ]]; then
+        return 1
+    fi
+    printf '%s\n' "${pgid}"
+}
+
+terminate_failed_launch() {
+    local supervisor_pid="$1"
+    local dataset="$2"
+    local output_dir="$3"
+    local candidate_pid
+    local candidate_pgid
+    local candidates=()
+
+    while IFS= read -r candidate_pid; do
+        if [[ ! "${candidate_pid}" =~ ^[0-9]+$ ]]; then
+            continue
+        fi
+        candidates+=("${candidate_pid}")
+        candidate_pgid="$(LC_ALL=C ps -o pgid= -p "${candidate_pid}" 2>/dev/null \
+            | awk 'NR == 1 {gsub(/[[:space:]]/, "", $0); print; exit}')" \
+            || candidate_pgid=""
+        if [[ "${candidate_pgid}" =~ ^[0-9]+$ ]] && [[ "${candidate_pgid}" == "${candidate_pid}" ]]; then
+            kill -TERM -- "-${candidate_pgid}" 2>/dev/null || true
+        else
+            kill -TERM "${candidate_pid}" 2>/dev/null || true
+        fi
+    done < <(pgrep -P "${supervisor_pid}" 2>/dev/null || true)
+
+    if pid_matches_experiment "${supervisor_pid}" "${dataset}" "${output_dir}"; then
+        candidates+=("${supervisor_pid}")
+        kill -TERM -- "-${supervisor_pid}" 2>/dev/null || true
+    fi
+
+    sleep 1
+    for candidate_pid in "${candidates[@]}"; do
+        if kill -0 "${candidate_pid}" 2>/dev/null; then
+            kill -KILL -- "-${candidate_pid}" 2>/dev/null \
+                || kill -KILL "${candidate_pid}" 2>/dev/null \
+                || true
+        fi
+    done
+    kill -TERM "${supervisor_pid}" 2>/dev/null || true
+    kill -KILL "${supervisor_pid}" 2>/dev/null || true
+    wait "${supervisor_pid}" 2>/dev/null || true
 }
 
 append_pid_event() {
@@ -356,7 +468,7 @@ cleanup_after_signal() {
             log_message "[KILL] ${dataset} pgid=${PGIDS[${index}]}"
             kill -KILL -- "-${PGIDS[${index}]}" 2>/dev/null
         fi
-        wait "${PIDS[${index}]}" 2>/dev/null
+        wait "${SUPERVISOR_PIDS[${index}]}" 2>/dev/null
         now="$(date +%s)"
         DURATIONS["${index}"]=$((now - START_TIMES[${index}]))
         STATUSES["${index}"]="interrupted"
@@ -379,6 +491,7 @@ trap 'handle_signal SIGTERM 143' TERM
 
 log_message "[START] result root: ${RESULT_ROOT}"
 log_message "[START] log root: ${LOG_ROOT}"
+log_message "[START] setsid mode: ${SETSID_MODE}"
 
 for index in "${!DATASETS[@]}"; do
     dataset="${DATASETS[${index}]}"
@@ -386,18 +499,40 @@ for index in "${!DATASETS[@]}"; do
     OUTPUT_DIRS["${index}"]="${RESULT_ROOT}/${dataset}"
     START_TIMES["${index}"]="$(date +%s)"
     DURATIONS["${index}"]="-"
-    STATUSES["${index}"]="running"
+    STATUSES["${index}"]="starting"
     EXIT_CODES["${index}"]="-"
     FAILURE_REASONS["${index}"]=""
 
-    nohup setsid "${PYTHON}" "${UNIFIED_RUNNER}" \
-        --only "${dataset}" \
-        --output-dir "${OUTPUT_DIRS[${index}]}" \
-        >"${LOG_FILES[${index}]}" 2>&1 </dev/null &
-    PIDS["${index}"]=$!
-    PGIDS["${index}"]="${PIDS[${index}]}"
+    if [[ "${SETSID_MODE}" == "fork-wait" ]]; then
+        nohup setsid --fork --wait "${PYTHON}" "${UNIFIED_RUNNER}" \
+            --only "${dataset}" \
+            --output-dir "${OUTPUT_DIRS[${index}]}" \
+            >"${LOG_FILES[${index}]}" 2>&1 </dev/null &
+    else
+        nohup setsid --wait "${PYTHON}" "${UNIFIED_RUNNER}" \
+            --only "${dataset}" \
+            --output-dir "${OUTPUT_DIRS[${index}]}" \
+            >"${LOG_FILES[${index}]}" 2>&1 </dev/null &
+    fi
+    SUPERVISOR_PIDS["${index}"]=$!
+
+    if ! PIDS["${index}"]="$(resolve_experiment_pid \
+        "${SUPERVISOR_PIDS[${index}]}" "${dataset}" "${OUTPUT_DIRS[${index}]}")"; then
+        terminate_failed_launch \
+            "${SUPERVISOR_PIDS[${index}]}" "${dataset}" "${OUTPUT_DIRS[${index}]}"
+        cleanup_after_signal "failed to resolve Python PID for ${dataset}"
+        exit 2
+    fi
+    if ! PGIDS["${index}"]="$(resolve_process_group "${PIDS[${index}]}")"; then
+        terminate_failed_launch \
+            "${SUPERVISOR_PIDS[${index}]}" "${dataset}" "${OUTPUT_DIRS[${index}]}"
+        cleanup_after_signal "invalid Python process group for ${dataset}: pid=${PIDS[${index}]}"
+        exit 2
+    fi
+
+    STATUSES["${index}"]="running"
     append_pid_event "${dataset}" "started"
-    log_message "[LAUNCHED] ${dataset} pid=${PIDS[${index}]} pgid=${PGIDS[${index}]} log=${LOG_FILES[${index}]}"
+    log_message "[LAUNCHED] ${dataset} pid=${PIDS[${index}]} pgid=${PGIDS[${index}]} supervisor_pid=${SUPERVISOR_PIDS[${index}]} log=${LOG_FILES[${index}]}"
 done
 
 sample_resources
@@ -413,7 +548,7 @@ while ((completed_count < ${#DATASETS[@]})); do
             continue
         fi
 
-        if wait "${PIDS[${index}]}"; then
+        if wait "${SUPERVISOR_PIDS[${index}]}"; then
             process_exit_code=0
         else
             process_exit_code=$?
