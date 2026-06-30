@@ -1,14 +1,86 @@
+import os
 from pathlib import Path
+import re
+import subprocess
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
-from scripts import run_d4_experiment
+from scripts import run_d4_experiment, run_full_paper_experiments
 from scripts.run_full_paper_experiments import ROOT, _resolve_output_paths
 from scripts.run_unified_d1_d6 import build_tasks
 
 
 class UnifiedD1D6OutputContractTest(unittest.TestCase):
+    def test_compat_results_copy_can_be_disabled_by_environment(self):
+        self.assertTrue(
+            hasattr(run_full_paper_experiments, "_should_sync_latest_results_copy")
+        )
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("RFE_DISABLE_COMPAT_RESULTS_COPY", None)
+            self.assertTrue(
+                run_full_paper_experiments._should_sync_latest_results_copy()
+            )
+
+        with patch.dict(
+            os.environ,
+            {"RFE_DISABLE_COMPAT_RESULTS_COPY": "1"},
+            clear=False,
+        ):
+            self.assertFalse(
+                run_full_paper_experiments._should_sync_latest_results_copy()
+            )
+
+    def test_parallel_runner_dry_run_prints_six_isolated_commands(self):
+        runner = ROOT / "scripts" / "parallel_runner.sh"
+        self.assertTrue(runner.is_file(), "parallel runner script is missing")
+
+        completed = subprocess.run(
+            ["bash", str(runner), "--dry-run"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        command_lines = [
+            line for line in completed.stdout.splitlines() if line.startswith("[d")
+        ]
+        self.assertEqual(6, len(command_lines))
+        for dataset_id, line in enumerate(command_lines, start=1):
+            token = f"d{dataset_id}"
+            self.assertIn(f"--only {token}", line)
+            self.assertRegex(
+                line,
+                rf"--output-dir \S*/outputs/runs/\d{{8}}_\d{{6}}/{token}$",
+            )
+            self.assertNotRegex(line, rf"/{token}/{token}(?:/|$)")
+
+        self.assertEqual(
+            {"d1", "d2", "d3", "d4", "d5", "d6"},
+            set(re.findall(r"--only (d[1-6])", completed.stdout)),
+        )
+
+    def test_parallel_runner_has_no_thread_limits_or_aggregation(self):
+        runner = ROOT / "scripts" / "parallel_runner.sh"
+        self.assertTrue(runner.is_file(), "parallel runner script is missing")
+        text = runner.read_text(encoding="utf-8")
+
+        for forbidden in (
+            "OMP_NUM_THREADS",
+            "MKL_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS",
+            "NUMEXPR_NUM_THREADS",
+            "VECLIB_MAXIMUM_THREADS",
+            "TF_NUM_INTEROP_THREADS",
+            "TF_NUM_INTRAOP_THREADS",
+            "aggregate_d1_d6_results.py",
+        ):
+            self.assertNotIn(forbidden, text)
+
     def test_unified_runner_passes_one_output_dir_to_d1_and_d4_tasks(self):
         run_dir = Path("outputs/runs/20990101_010203")
 

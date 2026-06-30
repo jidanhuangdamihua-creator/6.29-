@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import sys
 import time
@@ -90,6 +91,11 @@ FORMAL_LR = 1e-4
 FORMAL_EPOCHS = 50
 FORMAL_CLIPNORM = None
 FORMAL_DROPOUT = 0.1
+DISABLE_COMPAT_RESULTS_COPY_ENV = "RFE_DISABLE_COMPAT_RESULTS_COPY"
+
+
+def _should_sync_latest_results_copy() -> bool:
+    return os.environ.get(DISABLE_COMPAT_RESULTS_COPY_ENV) != "1"
 
 
 def _print_run_paths(output_paths: Dict[str, Path]) -> None:
@@ -256,14 +262,15 @@ def _save_run_results(
     ranking_df.to_csv(output_paths["ranking_csv"], index=False, encoding="utf-8")
     summary_df.to_csv(output_paths["summary_csv"], index=False, encoding="utf-8")
 
-    _sync_latest_results_copy(
-        paper_results_df=paper_results_df,
-        extended_results_df=extended_results_df,
-        ranking_df=ranking_df,
-        summary_df=summary_df,
-        dataset_csv_paths=dataset_csv_paths,
-        output_paths=output_paths,
-    )
+    if _should_sync_latest_results_copy():
+        _sync_latest_results_copy(
+            paper_results_df=paper_results_df,
+            extended_results_df=extended_results_df,
+            ranking_df=ranking_df,
+            summary_df=summary_df,
+            dataset_csv_paths=dataset_csv_paths,
+            output_paths=output_paths,
+        )
 
     saved_paths = {
         "paper_csv": output_paths["paper_csv"],
