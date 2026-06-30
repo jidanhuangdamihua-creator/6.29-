@@ -202,13 +202,18 @@ def _save_dataset_result_csvs(
     results_df: pd.DataFrame,
     results_dir: Path,
     datasets: Optional[Sequence[str]] = None,
+    info_sharing_suffix: Optional[str] = None,
 ) -> Dict[str, Path]:
     saved: Dict[str, Path] = {}
     selected_datasets = tuple(DATASETS) if datasets is None else tuple(datasets)
     for dataset_name in selected_datasets:
         dataset_slug = normalize_dataset_name(dataset_name).lower()
         dataset_df = results_df[results_df["dataset"] == dataset_name].copy()
-        out_path = results_dir / f"{dataset_slug}_results.csv"
+        if info_sharing_suffix is None:
+            filename = f"{dataset_slug}_results.csv"
+        else:
+            filename = f"{dataset_slug}_{info_sharing_suffix}_results.csv"
+        out_path = results_dir / filename
         dataset_df.to_csv(out_path, index=False, encoding="utf-8")
         saved[dataset_name] = out_path
     return saved
@@ -246,6 +251,7 @@ def _save_run_results(
     extended_results_df: pd.DataFrame,
     output_paths: Dict[str, Path],
     datasets: Optional[Sequence[str]] = None,
+    info_sharing_suffix: Optional[str] = None,
 ) -> Dict[str, Path]:
     results_dir = output_paths["results_dir"]
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -256,7 +262,12 @@ def _save_run_results(
     extended_results_df.to_csv(output_paths["extended_csv"], index=False, encoding="utf-8")
     paper_results_df.to_csv(output_paths["full_results_csv"], index=False, encoding="utf-8")
 
-    dataset_csv_paths = _save_dataset_result_csvs(paper_results_df, results_dir, datasets=datasets)
+    dataset_csv_paths = _save_dataset_result_csvs(
+        paper_results_df,
+        results_dir,
+        datasets=datasets,
+        info_sharing_suffix=info_sharing_suffix,
+    )
     ranking_df = _build_ranking_df(paper_results_df)
     summary_df = _build_summary_df(paper_results_df)
     ranking_df.to_csv(output_paths["ranking_csv"], index=False, encoding="utf-8")
@@ -340,6 +351,16 @@ def _scenario_to_bool(scenario: str) -> bool:
     if scenario == "without_information_sharing":
         return False
     raise ValueError(f"Unsupported information sharing scenario: {scenario}")
+
+
+def _info_sharing_cli_to_scenario(info_sharing: Optional[str]) -> Optional[str]:
+    if info_sharing is None:
+        return None
+    if info_sharing == "without":
+        return "without_information_sharing"
+    if info_sharing == "with":
+        return "with_information_sharing"
+    raise ValueError(f"Unsupported --info-sharing value: {info_sharing}")
 
 
 def _use_id_static_features_in_signature(cfg: Dict[str, Any]) -> bool:
@@ -1233,6 +1254,12 @@ def _parse_args() -> argparse.Namespace:
         help="Optional run directory. Defaults to a fresh timestamped outputs/runs directory.",
     )
     parser.add_argument(
+        "--info-sharing",
+        choices=["without", "with"],
+        default=None,
+        help="Limit D1-D3 execution to one information-sharing scenario.",
+    )
+    parser.add_argument(
         "--smoke",
         action="store_true",
         help="Run the minimal D1-D3 scenario smoke matrix without saving full-run outputs.",
@@ -1285,10 +1312,13 @@ def _run_dry_run_checks(
     protocol: Dict[str, Any],
     strict_paper_mode: bool,
     datasets: Optional[Sequence[str]] = None,
+    info_sharing_scenario: Optional[str] = None,
 ) -> None:
     print("[dry-run] config loaded: configs/default_config.json")
     print("[dry-run] D1-D3 source pool and split records")
     run_plan = _build_run_plan(METHODS, protocol=protocol, strict_paper_mode=strict_paper_mode)
+    if info_sharing_scenario is not None:
+        run_plan = [item for item in run_plan if item[2] == info_sharing_scenario]
     selected_datasets = tuple(DATASETS) if datasets is None else tuple(datasets)
     for dataset_name in selected_datasets:
         base = _load_solidified_base_data(
@@ -1621,6 +1651,7 @@ def main() -> None:
     args = _parse_args()
     verbose_mode = str(args.verbose_mode).lower()
     selected_datasets = _resolve_selected_datasets(args.only_dataset)
+    info_sharing_scenario = _info_sharing_cli_to_scenario(args.info_sharing)
 
     set_verbose_mode(verbose_mode)
     setup_logging(log_level="WARNING" if verbose_mode == "summary" else "INFO", log_file=None)
@@ -1656,6 +1687,7 @@ def main() -> None:
             protocol=protocol,
             strict_paper_mode=strict_paper_mode,
             datasets=selected_datasets,
+            info_sharing_scenario=info_sharing_scenario,
         )
         return
     if args.smoke:
@@ -1681,6 +1713,8 @@ def main() -> None:
     source_identification_records: List[Dict[str, Any]] = []
 
     dataset_run_plan = _build_run_plan(METHODS, protocol=protocol, strict_paper_mode=strict_paper_mode)
+    if info_sharing_scenario is not None:
+        dataset_run_plan = [item for item in dataset_run_plan if item[2] == info_sharing_scenario]
     total_runs = len(selected_datasets) * len(dataset_run_plan)
     tracker = ExperimentProgressTracker(total_runs=max(1, total_runs))
 
@@ -1803,6 +1837,7 @@ def main() -> None:
         extended_results_df=extended_results_df,
         output_paths=output_paths,
         datasets=selected_datasets,
+        info_sharing_suffix=args.info_sharing,
     )
 
     # Source identification audit report for Table 5/6 style verification.

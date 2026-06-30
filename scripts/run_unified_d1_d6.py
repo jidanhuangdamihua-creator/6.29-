@@ -121,7 +121,11 @@ def _d4_d6_config_check() -> str:
     )
 
 
-def _build_d1_d3_task(dataset_token: str, run_dir: Path) -> Task:
+def _build_d1_d3_task(
+    dataset_token: str,
+    run_dir: Path,
+    info_sharing: Optional[str] = None,
+) -> Task:
     dataset_id = int(dataset_token[1:])
     dataset_arg = D1_D3_DATASET_ARGS[dataset_token]
     cmd = [
@@ -133,12 +137,20 @@ def _build_d1_d3_task(dataset_token: str, run_dir: Path) -> Task:
         "--output-dir",
         str(run_dir),
     ]
-    result_filename = f"dataset{dataset_id}_results.csv"
+    if info_sharing is None:
+        label = f"D{dataset_id}"
+        scenario = "with+without"
+        result_filename = f"dataset{dataset_id}_results.csv"
+    else:
+        cmd.extend(["--info-sharing", info_sharing])
+        label = f"D{dataset_id}-{info_sharing}"
+        scenario = info_sharing
+        result_filename = f"dataset{dataset_id}_{info_sharing}_results.csv"
     return Task(
         dataset_token=dataset_token,
         dataset_id=dataset_id,
-        label=f"D{dataset_id}",
-        scenario="with+without",
+        label=label,
+        scenario=scenario,
         cmd=cmd,
         config_check=_d1_d3_config_check(),
         result_filename=result_filename,
@@ -171,14 +183,22 @@ def _build_d4_d6_task(dataset_token: str, scenario: str, smoke: bool, run_dir: P
     )
 
 
-def build_tasks(only: Optional[Iterable[str]], smoke: bool, run_dir: Optional[Path] = None) -> List[Task]:
+def build_tasks(
+    only: Optional[Iterable[str]],
+    smoke: bool,
+    run_dir: Optional[Path] = None,
+    info_sharing: Optional[str] = None,
+) -> List[Task]:
     run_dir = UNIFIED_RUN_DIR if run_dir is None else Path(run_dir)
+    if info_sharing is not None and info_sharing not in D4_D6_SCENARIOS:
+        raise ValueError("--info-sharing must be one of: without, with")
     tasks: List[Task] = []
     for dataset_token in expand_only_tokens(only):
         if dataset_token in D1_D3_DATASET_ARGS:
-            tasks.append(_build_d1_d3_task(dataset_token, run_dir))
+            tasks.append(_build_d1_d3_task(dataset_token, run_dir, info_sharing=info_sharing))
             continue
-        for scenario in D4_D6_SCENARIOS:
+        scenarios = (info_sharing,) if info_sharing is not None else D4_D6_SCENARIOS
+        for scenario in scenarios:
             tasks.append(_build_d4_d6_task(dataset_token, scenario, smoke=smoke, run_dir=run_dir))
     return tasks
 
@@ -205,6 +225,12 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Optional shared D1-D6 run directory. Defaults to outputs/runs/<timestamp>.",
+    )
+    parser.add_argument(
+        "--info-sharing",
+        choices=["without", "with"],
+        default=None,
+        help="Run only one information-sharing mode for selected datasets.",
     )
     return parser.parse_args()
 
@@ -365,7 +391,12 @@ def print_result_summary(tasks: Sequence[Task]) -> None:
 def main() -> None:
     args = _parse_args()
     try:
-        tasks = build_tasks(only=args.only, smoke=bool(args.smoke), run_dir=args.output_dir)
+        tasks = build_tasks(
+            only=args.only,
+            smoke=bool(args.smoke),
+            run_dir=args.output_dir,
+            info_sharing=args.info_sharing,
+        )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 

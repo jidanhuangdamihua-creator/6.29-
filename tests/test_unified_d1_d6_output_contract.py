@@ -98,6 +98,99 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
         self.assertEqual("dataset4_with_results.csv", d4_with.result_filename)
         self.assertNotIn("_D4_300d", " ".join(d4_without.cmd + d4_with.cmd))
 
+    def test_unified_runner_can_build_single_mode_tasks(self):
+        run_dir = Path("outputs/runs/20990101_010203")
+
+        without_tasks = build_tasks(
+            ["d1", "d4"],
+            smoke=True,
+            run_dir=run_dir,
+            info_sharing="without",
+        )
+        with_tasks = build_tasks(
+            ["d1", "d4"],
+            smoke=True,
+            run_dir=run_dir,
+            info_sharing="with",
+        )
+
+        self.assertEqual(["D1-without", "D4-without"], [task.label for task in without_tasks])
+        self.assertEqual(["D1-with", "D4-with"], [task.label for task in with_tasks])
+        self.assertEqual("dataset1_without_results.csv", without_tasks[0].result_filename)
+        self.assertEqual("dataset1_with_results.csv", with_tasks[0].result_filename)
+        self.assertIn("--info-sharing", without_tasks[0].cmd)
+        self.assertIn("without", without_tasks[0].cmd)
+        self.assertIn("--info-sharing", with_tasks[0].cmd)
+        self.assertIn("with", with_tasks[0].cmd)
+        self.assertEqual("dataset4_without_results.csv", without_tasks[1].result_filename)
+        self.assertEqual("dataset4_with_results.csv", with_tasks[1].result_filename)
+
+    def test_parallel_mode_runner_dry_run_prints_twelve_isolated_mode_commands(self):
+        runner = ROOT / "scripts" / "parallel_mode_runner.sh"
+        self.assertTrue(runner.is_file(), "parallel mode runner script is missing")
+
+        env = os.environ.copy()
+        env["DRY_RUN"] = "1"
+        env.pop("MAX_JOBS", None)
+        completed = subprocess.run(
+            ["bash", str(runner)],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("[DRY-RUN] MAX_JOBS=10", completed.stdout)
+        command_lines = [
+            line for line in completed.stdout.splitlines() if line.startswith("[DRY-RUN] d")
+        ]
+        self.assertEqual(12, len(command_lines))
+        expected_order = [
+            "d5_without",
+            "d5_with",
+            "d1_without",
+            "d1_with",
+            "d2_without",
+            "d2_with",
+            "d3_without",
+            "d3_with",
+            "d4_without",
+            "d6_without",
+            "d4_with",
+            "d6_with",
+        ]
+        self.assertEqual(expected_order, [line.split(":", 1)[0].split()[-1] for line in command_lines])
+        self.assertRegex(
+            completed.stdout,
+            r"d5_without: .* --info-sharing without --output-dir \S*/outputs/runs/\d{8}_\d{6}/d5_without log=\S*/outputs/parallel_mode_runs/\d{8}_\d{6}/d5_without\.log",
+        )
+        self.assertRegex(
+            completed.stdout,
+            r"d5_with: .* --info-sharing with --output-dir \S*/outputs/runs/\d{8}_\d{6}/d5_with log=\S*/outputs/parallel_mode_runs/\d{8}_\d{6}/d5_with\.log",
+        )
+        self.assertNotRegex(completed.stdout, r"d5_without.*--output-dir \S*/d5(?:\s|$)")
+        self.assertNotRegex(completed.stdout, r"d5_with.*--output-dir \S*/d5(?:\s|$)")
+
+    def test_parallel_mode_runner_dry_run_honors_max_jobs_override(self):
+        runner = ROOT / "scripts" / "parallel_mode_runner.sh"
+        self.assertTrue(runner.is_file(), "parallel mode runner script is missing")
+
+        env = os.environ.copy()
+        env["DRY_RUN"] = "1"
+        env["MAX_JOBS"] = "12"
+        completed = subprocess.run(
+            ["bash", str(runner)],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("[DRY-RUN] MAX_JOBS=12", completed.stdout)
 
     def test_d4_alignment_uses_reference_dataset_to_error_columns_and_keeps_source_trace(self):
         raw = pd.DataFrame(
