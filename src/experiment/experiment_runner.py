@@ -248,7 +248,11 @@ def _coalesce_metric(*values: Any) -> Any:
     return None
 
 
-def _extract_method_metrics(raw_result: Dict[str, Any], method_name: str) -> Dict[str, Any]:
+def _extract_method_metrics(
+    raw_result: Dict[str, Any],
+    method_name: str,
+    metric_protocol: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """
     从不同模块返回结构中统一抽取结果字段。
 
@@ -275,6 +279,33 @@ def _extract_method_metrics(raw_result: Dict[str, Any], method_name: str) -> Dic
 
     if selected is None:
         raise ValueError(f"Cannot extract rmse/accuracy from method={method_name} result.")
+
+    if (
+        metric_protocol is not None
+        and "y_true" in selected
+        and "y_pred" in selected
+        and selected.get("sales_scaler") is not None
+        and selected.get("feature_columns") is not None
+    ):
+        from src.evaluation.metrics import compute_metrics_with_protocol
+
+        metric_result = compute_metrics_with_protocol(
+            y_true=np.asarray(selected["y_true"]).reshape(-1),
+            y_pred=np.asarray(selected["y_pred"]).reshape(-1),
+            metric_protocol=metric_protocol,
+            sales_scaler=selected.get("sales_scaler"),
+            feature_columns=selected.get("feature_columns"),
+        )
+        selected = {
+            **selected,
+            "rmse_current": selected.get("rmse_current", selected.get("rmse")),
+            "accuracy_current": selected.get("accuracy_current", selected.get("accuracy")),
+            "smape_current": selected.get("smape_current", selected.get("smape")),
+            "normalized_rmse": selected.get("normalized_rmse", selected.get("rmse")),
+            "normalized_accuracy": selected.get("normalized_accuracy", selected.get("accuracy")),
+            "normalized_smape": selected.get("normalized_smape", selected.get("smape")),
+            **metric_result,
+        }
 
     prediction_shape = selected.get("prediction_shape")
     if prediction_shape is None:
@@ -335,6 +366,18 @@ def _extract_method_metrics(raw_result: Dict[str, Any], method_name: str) -> Dic
         "metric_notes": str(selected.get("metric_notes", "")),
         "meta": method_meta,
     }
+    for diagnostic_key in (
+        "y_pred_nan_count",
+        "y_pred_inf_count",
+        "y_true_nan_count",
+        "y_true_inf_count",
+        "X_test_nan_count",
+        "X_test_inf_count",
+        "model_weight_nan_count",
+        "model_weight_inf_count",
+    ):
+        if diagnostic_key in selected:
+            result[diagnostic_key] = selected[diagnostic_key]
 
     result["original_scale_rmse"] = _coalesce_metric(result.get("original_scale_rmse"), result.get("rmse_paper"))
     result["original_scale_accuracy"] = _coalesce_metric(
@@ -475,6 +518,7 @@ def run_ss_tl_experiment(
             train_source_model,
         )
         from src.evaluation.metrics import compute_metrics_with_protocol
+        from src.utils.finite_diagnostics import validate_finite_array
     except ModuleNotFoundError as exc:
         raise RuntimeError(f"SS-TL dependency missing: {exc}") from exc
 
@@ -593,6 +637,19 @@ def run_ss_tl_experiment(
     )
     y_pred = target_model.predict(X_target_test, verbose=0)
     ss_raw.update(
+        validate_finite_array(
+            y_pred,
+            name="y_pred",
+            context={
+                key: value
+                for key, value in ss_raw.items()
+                if key.endswith("_nan_count")
+                or key.endswith("_inf_count")
+                or key in {"X_test_shape", "y_true_shape", "y_pred_shape"}
+            },
+        )
+    )
+    ss_raw.update(
         compute_metrics_with_protocol(
             y_true=y_target_test,
             y_pred=y_pred.flatten(),
@@ -642,6 +699,14 @@ def run_ss_tl_experiment(
         "inverse_transform_applied": bool(ss_raw.get("inverse_transform_applied", False)),
         "inverse_transform_available": bool(ss_raw.get("inverse_transform_available", False)),
         "metric_notes": str(ss_raw.get("metric_notes", "")),
+        "y_pred_nan_count": ss_raw.get("y_pred_nan_count"),
+        "y_pred_inf_count": ss_raw.get("y_pred_inf_count"),
+        "y_true_nan_count": ss_raw.get("y_true_nan_count"),
+        "y_true_inf_count": ss_raw.get("y_true_inf_count"),
+        "X_test_nan_count": ss_raw.get("X_test_nan_count"),
+        "X_test_inf_count": ss_raw.get("X_test_inf_count"),
+        "model_weight_nan_count": ss_raw.get("model_weight_nan_count"),
+        "model_weight_inf_count": ss_raw.get("model_weight_inf_count"),
         "meta": {
             "source_key": tuple(first_key),
             "source_selection_policy": "knn_top1",
@@ -700,7 +765,7 @@ def run_mswa_experiment(
         target_epochs=target_epochs,
         batch_size=batch_size,
     )
-    return _extract_method_metrics(raw, method_name="MSWA-TL")
+    return _extract_method_metrics(raw, method_name="MSWA-TL", metric_protocol=metric_protocol)
 
 
 def run_mssb_experiment(
@@ -739,7 +804,7 @@ def run_mssb_experiment(
         target_epochs=target_epochs,
         batch_size=batch_size,
     )
-    return _extract_method_metrics(raw, method_name="MSSB-TL")
+    return _extract_method_metrics(raw, method_name="MSSB-TL", metric_protocol=metric_protocol)
 
 
 def run_msml_experiment(
@@ -778,7 +843,7 @@ def run_msml_experiment(
         target_epochs=target_epochs,
         batch_size=batch_size,
     )
-    return _extract_method_metrics(raw, method_name="MSML-TL")
+    return _extract_method_metrics(raw, method_name="MSML-TL", metric_protocol=metric_protocol)
 
 
 def run_msml_rfe_experiment(
@@ -821,7 +886,7 @@ def run_msml_rfe_experiment(
         target_epochs=target_epochs,
         batch_size=batch_size,
     )
-    return _extract_method_metrics(raw, method_name="MSML-TL-RFE")
+    return _extract_method_metrics(raw, method_name="MSML-TL-RFE", metric_protocol=metric_protocol)
 
 
 def run_all_experiments(

@@ -15,10 +15,22 @@ from src.experiment.experiment_runner import (
     run_no_tl_experiment,
     run_ss_tl_experiment,
 )
+from src.utils.finite_diagnostics import NonFiniteArrayError
+from src.utils.result_validation import annotate_silent_metric_failure
 
 
 LOGGER = logging.getLogger("experiment")
 MODEL_METADATA_COLUMNS = ("date", "entity_id", "item_id")
+DIAGNOSTIC_COLUMNS = (
+    "y_pred_nan_count",
+    "y_pred_inf_count",
+    "y_true_nan_count",
+    "y_true_inf_count",
+    "X_test_nan_count",
+    "X_test_inf_count",
+    "model_weight_nan_count",
+    "model_weight_inf_count",
+)
 
 
 def _scenario_name(config: Dict[str, Any]) -> str:
@@ -146,7 +158,7 @@ def _row_from_result(
 ) -> Dict[str, Any]:
     requested_k = _source_count_for_method(method, config)
     source_meta = _selection_meta(raw, method, requested_k)
-    return {
+    row = {
         "dataset": str(config.get("dataset_name", f"Dataset{config.get('dataset_id', '')}")),
         "dataset_id": int(config.get("dataset_id", 0)),
         "scenario": _scenario_name(config),
@@ -167,7 +179,35 @@ def _row_from_result(
         "training_time": float(raw.get("training_time", elapsed)),
         "prediction_shape": str(raw.get("prediction_shape", "N/A")),
         "selected_sources": source_meta["selected_sources"],
+        "error": str(raw.get("error", "")),
     }
+    for key in DIAGNOSTIC_COLUMNS:
+        if key in raw:
+            row[key] = raw[key]
+    return annotate_silent_metric_failure(row)
+
+
+def _row_from_nonfinite_error(
+    exc: NonFiniteArrayError,
+    method: str,
+    entity_key: str,
+    config: Dict[str, Any],
+    elapsed: float,
+) -> Dict[str, Any]:
+    diagnostics = dict(exc.diagnostics)
+    prediction_shape = diagnostics.get("y_pred_shape", diagnostics.get("prediction_shape", "N/A"))
+    raw = {
+        "rmse": np.nan,
+        "accuracy": np.nan,
+        "mae": np.nan,
+        "mape": np.nan,
+        "smape": np.nan,
+        "training_time": elapsed,
+        "prediction_shape": prediction_shape,
+        "error": f"non_finite_prediction: {exc}",
+        **diagnostics,
+    }
+    return _row_from_result(raw, method, entity_key, config, elapsed)
 
 
 def run_single_entity_experiment(
@@ -221,6 +261,18 @@ def run_single_entity_experiment(
             }
             if method not in {"SS-TL"}:
                 kwargs["number_of_sources"] = _source_count_for_method(method, config)
-            raw = runner(**kwargs)
+            try:
+                raw = runner(**kwargs)
+            except NonFiniteArrayError as exc:
+                rows.append(
+                    _row_from_nonfinite_error(
+                        exc,
+                        method,
+                        entity_key,
+                        config,
+                        time.perf_counter() - t0,
+                    )
+                )
+                continue
         rows.append(_row_from_result(raw, method, entity_key, config, time.perf_counter() - t0))
     return rows

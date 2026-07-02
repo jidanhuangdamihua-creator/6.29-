@@ -37,6 +37,7 @@ from src.data_processing.data_preprocessing import (
 from src.source_selection.source_selector import SourceSelector
 from src.utils.runtime_control import keras_verbose
 from src.evaluation.metrics import smape
+from src.utils.finite_diagnostics import NonFiniteArrayError, summarize_model_weights, validate_finite_array
 
 
 LOGGER_NAME = "experiment"
@@ -523,8 +524,21 @@ def evaluate_msml_model(
         raise ValueError("Target test split produced zero windows; adjust window_size/horizon.")
 
     X_test = to_cnn_tensor(X_test)
+    diagnostics = {}
+    diagnostics.update(validate_finite_array(X_test, name="X_test"))
+    diagnostics.update(validate_finite_array(y_test, name="y_true", context=diagnostics))
+    weight_diagnostics = summarize_model_weights(target_model)
+    diagnostics.update(weight_diagnostics)
+    if weight_diagnostics["model_weight_nan_count"] or weight_diagnostics["model_weight_inf_count"]:
+        raise NonFiniteArrayError(
+            "model weights contain non-finite values: "
+            f"nan_count={weight_diagnostics['model_weight_nan_count']} "
+            f"inf_count={weight_diagnostics['model_weight_inf_count']}",
+            diagnostics=diagnostics,
+        )
 
     y_pred = target_model.predict(X_test, verbose=0)
+    diagnostics.update(validate_finite_array(y_pred, name="y_pred", context=diagnostics))
     y_pred_flat = y_pred.flatten()
     y_true = y_test.flatten()
 
@@ -540,6 +554,7 @@ def evaluate_msml_model(
         "y_pred": y_pred,
         "y_true": y_true,
         "prediction_shape": tuple(y_pred.shape),
+        **diagnostics,
     }
 
 
@@ -680,7 +695,7 @@ def run_msml_tl(
 
     # --- Step 5: 切分 target → 归一化 → 微调 ---
     target_train_df, target_val_df, target_test_df = temporal_split_by_ratio_or_dates(target_df)
-    target_train_df, target_val_df, target_test_df, _, _ = normalize_features(
+    target_train_df, target_val_df, target_test_df, target_scaler, target_feature_columns = normalize_features(
         target_train_df, target_val_df, target_test_df,
     )
 
@@ -727,6 +742,15 @@ def run_msml_tl(
             "y_true": eval_result["y_true"],
             "y_pred": eval_result["y_pred"],
             "prediction_shape": eval_result["prediction_shape"],
+            "sales_scaler": target_scaler,
+            "feature_columns": target_feature_columns,
+            **{
+                key: value
+                for key, value in eval_result.items()
+                if key.endswith("_nan_count")
+                or key.endswith("_inf_count")
+                or key in {"X_test_shape", "y_true_shape", "y_pred_shape"}
+            },
         },
         "frozen_layers": frozen_layers,
     }

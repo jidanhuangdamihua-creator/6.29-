@@ -36,6 +36,7 @@ from src.transfer_methods.single_source_tl import (
 )
 from src.source_selection.source_selector import SourceSelector
 from src.evaluation.metrics import smape
+from src.utils.finite_diagnostics import validate_finite_array
 
 
 LOGGER_NAME = "experiment"
@@ -119,7 +120,9 @@ def run_single_source_tl_for_mswa(
     src_train_df, src_val_df, src_test_df = _prepare_single_source_split(source_sequence_df)
 
     src_train_df, src_val_df, src_test_df, _, _ = normalize_features(src_train_df, src_val_df, src_test_df)
-    tgt_train_df, tgt_val_df, tgt_test_df, _, _ = normalize_features(target_train_df, target_val_df, target_test_df)
+    tgt_train_df, tgt_val_df, tgt_test_df, tgt_scaler, tgt_feature_columns = normalize_features(
+        target_train_df, target_val_df, target_test_df
+    )
 
     x_source, y_source = build_tabular_sequence(src_train_df, horizon=horizon, window_size=window_size)
     x_tgt_train, y_tgt_train = build_tabular_sequence(tgt_train_df, horizon=horizon, window_size=window_size)
@@ -179,6 +182,14 @@ def run_single_source_tl_for_mswa(
 
     eval_result = evaluate_regression_model(target_model, x_tgt_test, y_tgt_test)
     y_pred = target_model.predict(x_tgt_test, verbose=0)
+    diagnostics = {
+        key: value
+        for key, value in eval_result.items()
+        if key.endswith("_nan_count")
+        or key.endswith("_inf_count")
+        or key in {"X_test_shape", "y_true_shape", "y_pred_shape"}
+    }
+    diagnostics.update(validate_finite_array(y_pred, name="y_pred", context=diagnostics))
 
     logger.info(
         "[run_single_source_tl_for_mswa] Finished. rmse=%.4f accuracy=%.4f pred_shape=%s",
@@ -196,6 +207,9 @@ def run_single_source_tl_for_mswa(
         "y_pred": np.asarray(y_pred),
         "y_test": np.asarray(y_tgt_test),
         "prediction_shape": tuple(y_pred.shape),
+        "sales_scaler": tgt_scaler,
+        "feature_columns": tgt_feature_columns,
+        **diagnostics,
     }
 
 
@@ -256,6 +270,9 @@ def evaluate_fused_predictions(y_true: np.ndarray, y_pred: np.ndarray, eps: floa
     y_true_arr = np.asarray(y_true, dtype=np.float64).reshape(-1)
     y_pred_arr = np.asarray(y_pred, dtype=np.float64)
     y_pred_flat = y_pred_arr.reshape(-1)
+    diagnostics = {}
+    diagnostics.update(validate_finite_array(y_true_arr, name="y_true"))
+    diagnostics.update(validate_finite_array(y_pred_arr, name="y_pred", context=diagnostics))
 
     if y_true_arr.shape[0] != y_pred_flat.shape[0]:
         raise ValueError(
@@ -274,6 +291,7 @@ def evaluate_fused_predictions(y_true: np.ndarray, y_pred: np.ndarray, eps: floa
         "y_true": y_true_arr,
         "y_pred": y_pred_arr,
         "prediction_shape": tuple(y_pred_arr.shape),
+        **diagnostics,
     }
 
 
@@ -358,6 +376,8 @@ def run_mswa_tl(
     weights: List[float] = []
     individual_results: List[Dict[str, object]] = []
     y_test_reference: np.ndarray | None = None
+    target_scaler_reference = None
+    target_feature_columns_reference = None
 
     for selected in selected_sources:
         source_key = tuple(selected["source_key"]) if isinstance(selected["source_key"], (list, tuple)) else (selected["source_key"],)
@@ -394,6 +414,8 @@ def run_mswa_tl(
 
         if y_test_reference is None:
             y_test_reference = y_test
+            target_scaler_reference = one_result.get("sales_scaler")
+            target_feature_columns_reference = one_result.get("feature_columns")
         else:
             if y_test_reference.shape != y_test.shape or not np.allclose(y_test_reference, y_test, atol=1e-8):
                 raise ValueError(
@@ -419,6 +441,8 @@ def run_mswa_tl(
         raise ValueError("No valid y_test found from source runs.")
 
     fused_result = evaluate_fused_predictions(y_true=y_test_reference, y_pred=fused_pred)
+    fused_result["sales_scaler"] = target_scaler_reference
+    fused_result["feature_columns"] = target_feature_columns_reference
 
     result = {
         "meta": {

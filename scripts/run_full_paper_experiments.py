@@ -92,6 +92,16 @@ FORMAL_EPOCHS = 50
 FORMAL_CLIPNORM = None
 FORMAL_DROPOUT = 0.1
 DISABLE_COMPAT_RESULTS_COPY_ENV = "RFE_DISABLE_COMPAT_RESULTS_COPY"
+DIAGNOSTIC_COLUMNS = [
+    "y_pred_nan_count",
+    "y_pred_inf_count",
+    "y_true_nan_count",
+    "y_true_inf_count",
+    "X_test_nan_count",
+    "X_test_inf_count",
+    "model_weight_nan_count",
+    "model_weight_inf_count",
+]
 
 
 def _should_sync_latest_results_copy() -> bool:
@@ -1156,6 +1166,7 @@ def run_experiment(
         "original_scale_mape": raw.get("original_scale_mape", np.nan),
         "original_scale_smape": raw.get("original_scale_smape", np.nan),
         "prediction_shape": str(raw["prediction_shape"]),
+        **{column: raw.get(column, np.nan) for column in DIAGNOSTIC_COLUMNS},
         "alignment_notes": alignment["alignment_notes"],
         "error": "",
         "source_identification": source_identification,
@@ -1542,6 +1553,7 @@ def _build_error_row(
         "original_scale_mape": np.nan,
         "original_scale_smape": np.nan,
         "prediction_shape": "N/A",
+        **{column: np.nan for column in DIAGNOSTIC_COLUMNS},
         "alignment_notes": alignment["alignment_notes"],
         "error": f"{type(exc).__name__}: {exc}",
     }
@@ -1631,6 +1643,7 @@ def _result_columns() -> List[str]:
         "original_scale_mape",
         "original_scale_smape",
         "prediction_shape",
+        *DIAGNOSTIC_COLUMNS,
         "alignment_notes",
         "error",
     ]

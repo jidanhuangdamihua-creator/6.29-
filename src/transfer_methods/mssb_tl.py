@@ -35,6 +35,7 @@ from src.transfer_methods.single_source_tl import (
 )
 from src.source_selection.source_selector import SourceSelector
 from src.evaluation.metrics import smape
+from src.utils.finite_diagnostics import validate_finite_array
 
 
 LOGGER_NAME = "experiment"
@@ -92,6 +93,9 @@ def evaluate_predictions(y_true: np.ndarray, y_pred: np.ndarray, eps: float = 1e
     y_true_arr = np.asarray(y_true, dtype=np.float64).reshape(-1)
     y_pred_arr = np.asarray(y_pred, dtype=np.float64)
     y_pred_flat = y_pred_arr.reshape(-1)
+    diagnostics = {}
+    diagnostics.update(validate_finite_array(y_true_arr, name="y_true"))
+    diagnostics.update(validate_finite_array(y_pred_arr, name="y_pred", context=diagnostics))
 
     if y_true_arr.shape[0] != y_pred_flat.shape[0]:
         raise ValueError(
@@ -110,6 +114,7 @@ def evaluate_predictions(y_true: np.ndarray, y_pred: np.ndarray, eps: float = 1e
         "y_true": y_true_arr,
         "y_pred": y_pred_arr,
         "prediction_shape": tuple(y_pred_arr.shape),
+        **diagnostics,
     }
 
 
@@ -162,7 +167,9 @@ def run_single_source_tl_for_mssb(
     src_train_df, src_val_df, src_test_df = _prepare_single_source_split(source_sequence_df)
 
     src_train_df, src_val_df, src_test_df, _, _ = normalize_features(src_train_df, src_val_df, src_test_df)
-    tgt_train_df, tgt_val_df, tgt_test_df, _, _ = normalize_features(target_train_df, target_val_df, target_test_df)
+    tgt_train_df, tgt_val_df, tgt_test_df, tgt_scaler, tgt_feature_columns = normalize_features(
+        target_train_df, target_val_df, target_test_df
+    )
 
     x_source, y_source = build_tabular_sequence(src_train_df, horizon=horizon, window_size=window_size)
     x_tgt_train, y_tgt_train = build_tabular_sequence(tgt_train_df, horizon=horizon, window_size=window_size)
@@ -224,6 +231,10 @@ def run_single_source_tl_for_mssb(
 
     y_val_pred = target_model.predict(x_tgt_val, verbose=0)
     y_test_pred = target_model.predict(x_tgt_test, verbose=0)
+    diagnostics = {}
+    diagnostics.update(validate_finite_array(x_tgt_test, name="X_test"))
+    diagnostics.update(validate_finite_array(y_tgt_test, name="y_true", context=diagnostics))
+    diagnostics.update(validate_finite_array(y_test_pred, name="y_pred", context=diagnostics))
 
     val_eval = evaluate_predictions(y_true=y_tgt_val, y_pred=y_val_pred)
     test_eval = evaluate_predictions(y_true=y_tgt_test, y_pred=y_test_pred)
@@ -256,6 +267,9 @@ def run_single_source_tl_for_mssb(
         "y_val_true": np.asarray(y_tgt_val),
         "y_test_true": np.asarray(y_tgt_test),
         "prediction_shape": tuple(y_test_pred.shape),
+        "sales_scaler": tgt_scaler,
+        "feature_columns": tgt_feature_columns,
+        **diagnostics,
     }
 
 
@@ -399,6 +413,8 @@ def run_mssb_tl(
                 "test_smape": float(one_result["test_smape"]),
                 "y_test_true": np.asarray(one_result["y_test_true"]),
                 "y_test_pred": np.asarray(one_result["y_test_pred"]),
+                "sales_scaler": one_result.get("sales_scaler"),
+                "feature_columns": one_result.get("feature_columns"),
                 "prediction_shape": pred_shape,
             }
         )
@@ -418,8 +434,19 @@ def run_mssb_tl(
         "smape": float(best_source_result["test_smape"]),
         "y_true": np.asarray(best_source_result["y_test_true"]),
         "y_pred": np.asarray(best_source_result["y_test_pred"]),
+        "sales_scaler": best_source_result.get("sales_scaler"),
+        "feature_columns": best_source_result.get("feature_columns"),
         "prediction_shape": tuple(best_source_result["prediction_shape"]),
     }
+    public_individual_results = []
+    for item in individual_results:
+        public_item = dict(item)
+        public_item.pop("sales_scaler", None)
+        public_item.pop("feature_columns", None)
+        public_individual_results.append(public_item)
+    public_best_source_result = dict(best_source_result)
+    public_best_source_result.pop("sales_scaler", None)
+    public_best_source_result.pop("feature_columns", None)
 
     result = {
         "meta": {
@@ -429,8 +456,8 @@ def run_mssb_tl(
             "feature_cols": list(feature_cols),
             "selected_sources": selected_sources,
         },
-        "individual_results": individual_results,
-        "best_source_result": best_source_result,
+        "individual_results": public_individual_results,
+        "best_source_result": public_best_source_result,
         "final_result": final_result,
     }
 

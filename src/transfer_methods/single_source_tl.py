@@ -16,6 +16,7 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 
 from src.models.cnn_model import build_base_cnn
+from src.utils.finite_diagnostics import NonFiniteArrayError, summarize_model_weights, validate_finite_array
 from src.utils.runtime_control import keras_verbose
 
 LOGGER_NAME = "experiment"
@@ -173,7 +174,21 @@ def evaluate_regression_model(
     logger = _get_logger()
     logger.info("[evaluate_regression_model] Start. test_samples=%d", len(X_test))
 
+    diagnostics = {}
+    diagnostics.update(validate_finite_array(X_test, name="X_test"))
+    diagnostics.update(validate_finite_array(y_test, name="y_true"))
+    weight_diagnostics = summarize_model_weights(model)
+    diagnostics.update(weight_diagnostics)
+    if weight_diagnostics["model_weight_nan_count"] or weight_diagnostics["model_weight_inf_count"]:
+        raise NonFiniteArrayError(
+            "model weights contain non-finite values: "
+            f"nan_count={weight_diagnostics['model_weight_nan_count']} "
+            f"inf_count={weight_diagnostics['model_weight_inf_count']}",
+            diagnostics=diagnostics,
+        )
+
     y_pred = model.predict(X_test, verbose=0)
+    diagnostics.update(validate_finite_array(y_pred, name="y_pred", context=diagnostics))
     y_pred_flat = y_pred.flatten()
 
     rmse = float(np.sqrt(np.mean((y_pred_flat - y_test) ** 2)))
@@ -186,4 +201,5 @@ def evaluate_regression_model(
         "rmse": rmse,
         "accuracy": accuracy,
         "y_pred_shape": y_pred.shape,
+        **diagnostics,
     }
