@@ -124,17 +124,45 @@ class SourceSelector:
         feature_cols: Sequence[str],
         include_sales_in_knn: bool,
     ) -> Tuple[List[str], Dict[str, object]]:
-        """自动推断 source selection 特征，并返回诊断信息用于日志。"""
+        """Resolve source-selection features without widening explicit feature lists."""
         requested = list(feature_cols) if feature_cols is not None else []
+        if requested:
+            resolved = self._validate_feature_columns(source_df, requested)
+            self._validate_feature_columns(target_df, resolved)
+            info: Dict[str, object] = {
+                "selected_features": list(resolved),
+                "requested_feature_cols": list(requested),
+                "missing_in_source": [],
+                "missing_in_target": [],
+                "excluded_by_rule": [],
+                "include_sales_in_knn": bool(include_sales_in_knn),
+                "knn_feature_mode": "explicit_feature_cols",
+                "feature_resolution_source": "explicit_feature_cols",
+            }
+            try:
+                runtime_info = infer_source_selection_feature_columns(
+                    source_df=source_df,
+                    target_df=target_df,
+                    candidate_cols=requested,
+                    include_sales_in_knn=include_sales_in_knn,
+                )
+                info["runtime_inferred_features"] = list(runtime_info.get("selected_features", []))
+                info["runtime_knn_feature_mode"] = runtime_info.get("knn_feature_mode", "")
+                info["runtime_excluded_by_rule"] = list(runtime_info.get("excluded_by_rule", []))
+            except Exception as exc:  # diagnostics only; explicit features remain authoritative
+                info["runtime_infer_error"] = f"{type(exc).__name__}: {exc}"
+            return resolved, info
+
         info = infer_source_selection_feature_columns(
             source_df=source_df,
             target_df=target_df,
-            candidate_cols=requested,
+            candidate_cols=[],
             include_sales_in_knn=include_sales_in_knn,
         )
         resolved = list(info.get("selected_features", []))
         if not resolved:
             raise ValueError("No resolved source-selection features.")
+        info["feature_resolution_source"] = "runtime_infer"
         return resolved, info
 
     def _validate_feature_columns(self, df: pd.DataFrame, feature_cols: Sequence[str]) -> List[str]:
@@ -490,6 +518,12 @@ class SourceSelector:
                 },
                 "include_sales_in_knn": bool(include_sales_in_knn),
                 "contains_sales": bool("sales" in resolved_feature_cols),
+                "knn_feature_mode": str(feature_info.get("knn_feature_mode", "")),
+                "feature_resolution_source": str(feature_info.get("feature_resolution_source", "")),
+                "runtime_inferred_features": list(feature_info.get("runtime_inferred_features", [])),
+                "runtime_knn_feature_mode": str(feature_info.get("runtime_knn_feature_mode", "")),
+                "runtime_excluded_by_rule": list(feature_info.get("runtime_excluded_by_rule", [])),
+                "runtime_infer_error": str(feature_info.get("runtime_infer_error", "")),
                 "requested_feature_cols": list(feature_cols),
                 "missing_in_source": list(feature_info.get("missing_in_source", [])),
                 "missing_in_target": list(feature_info.get("missing_in_target", [])),

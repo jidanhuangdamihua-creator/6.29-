@@ -36,5 +36,5 @@ def test_rfe_feature_selection_excludes_duplicate_target_column() -> None:
 
     assert joint.columns.tolist().count("sales") == 1
     assert result["num_original_features"] == 4
-    assert set(result["selected_feature_cols"]).issubset({"year", "month", "week", "day"})
-    assert result["selected_feature_cols"]
+    assert "sales" in result["selected_feature_cols"]
+    assert set(result["selected_feature_cols"]).issubset({"sales", "year", "month", "week", "day"})

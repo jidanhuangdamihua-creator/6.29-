@@ -682,6 +682,11 @@ def _finalize_result_metrics(result: Dict[str, Any]) -> None:
 
 
 def _is_identifier_like_feature_col(column: str) -> bool:
+    # D1-D3 legacy rule intentionally differs from D4-D6
+    # data_preprocessing._is_identifier_like_column:
+    # it additionally excludes date/qty_key/promo_key/region_id and does not
+    # currently apply the generic *_nbr suffix rule. Do not silently unify in
+    # this task; D4-D6 use paper_available_features_no_ids_v2.
     name = str(column).strip().lower()
     if not name:
         return False
@@ -990,6 +995,7 @@ def run_experiment(
             target_epochs=int(exp_cfg["target_epochs"]),
             batch_size=int(exp_cfg["batch_size"]),
             metric_protocol=protocol.get("metric_protocol", {}),
+            feature_cols=feature_cols,
         )
     elif method_name == "SS-TL":
         raw = run_ss_tl_experiment(**common_kwargs)

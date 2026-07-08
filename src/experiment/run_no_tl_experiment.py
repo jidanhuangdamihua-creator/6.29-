@@ -6,6 +6,8 @@ samples or transferred weights.
 
 from __future__ import annotations
 
+from typing import Sequence
+
 import numpy as np
 import pandas as pd
 
@@ -28,6 +30,7 @@ def run_no_tl_experiment(
     target_epochs: int = 3,
     batch_size: int = 16,
     metric_protocol: dict | None = None,
+    feature_cols: Sequence[str] | None = None,
 ):
     """Run No-TL baseline on target data only.
 
@@ -35,13 +38,22 @@ def run_no_tl_experiment(
         dict with keys: method, rmse, accuracy, prediction_shape.
     """
     target_min_df = target_df.copy()
+    explicit_feature_cols = [str(col) for col in feature_cols] if feature_cols is not None else None
 
     tgt_train, tgt_val, tgt_test = temporal_split_by_ratio_or_dates(target_min_df)
-    tgt_train, tgt_val, tgt_test, tgt_scaler, tgt_feature_columns = normalize_features(tgt_train, tgt_val, tgt_test)
+    tgt_train, tgt_val, tgt_test, tgt_scaler, tgt_feature_columns = normalize_features(
+        tgt_train, tgt_val, tgt_test, feature_columns=explicit_feature_cols
+    )
 
-    x_train, y_train = build_tabular_sequence(tgt_train, horizon=horizon, window_size=window_size)
-    x_val, y_val = build_tabular_sequence(tgt_val, horizon=horizon, window_size=window_size)
-    x_test, y_test = build_tabular_sequence(tgt_test, horizon=horizon, window_size=window_size)
+    x_train, y_train = build_tabular_sequence(
+        tgt_train, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
+    )
+    x_val, y_val = build_tabular_sequence(
+        tgt_val, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
+    )
+    x_test, y_test = build_tabular_sequence(
+        tgt_test, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
+    )
 
     if len(y_train) == 0 or len(y_test) == 0:
         raise ValueError("No-TL target windows are empty; adjust window_size/horizon.")

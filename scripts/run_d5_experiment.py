@@ -21,7 +21,8 @@ from src.utils.parquet_data_loader import (
     attach_window_attrs,
     load_knn_results,
 )
-from src.data_processing.data_preprocessing import infer_source_selection_feature_columns
+from src.utils.finite_diagnostics import validate_feature_frame_finite
+from src.utils.knn_feature_loader import resolve_knn_feature_columns
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TRACE_COLUMNS = [
@@ -72,6 +73,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--source-limit", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=None, help="Override source/target epochs for lightweight checks.")
     parser.add_argument("--output-dir", type=Path, default=None, help="Optional run directory.")
+    parser.add_argument("--repair-source-numeric-na", action="store_true")
     return parser.parse_args()
 
 
@@ -99,6 +101,7 @@ def main() -> None:
     if args.epochs is not None:
         config["source_epochs"] = int(args.epochs)
         config["target_epochs"] = int(args.epochs)
+    config["repair_source_numeric_na"] = bool(args.repair_source_numeric_na)
     config["output_filename"] = f"dataset{config['dataset_id']}_{config['info_sharing']}_results.csv"
 
     root = PROJECT_ROOT
@@ -130,8 +133,46 @@ def main() -> None:
     source_df = attach_window_attrs(source_df, windows, role="source")
     target_df = attach_window_attrs(target_df, windows, role="target")
 
-    feature_info = infer_source_selection_feature_columns(source_df, target_df)
-    feature_cols = feature_info["selected_features"]
+    feature_info = resolve_knn_feature_columns(
+        dataset_id=config["dataset_id"],
+        information_sharing=config["info_sharing"],
+        knn_root=SOLIDIFIED_KNN_ROOT,
+        source_df=source_df,
+        target_df=target_df,
+    )
+    feature_cols = list(feature_info["selected_features"])
+    if feature_info["feature_consistency_status"] != "aligned":
+        print(
+            "[FEATURE WARNING] solidified JSON features differ from runtime inferred features "
+            f"json_only={feature_info.get('json_only_features', [])} "
+            f"runtime_only={feature_info.get('runtime_only_features', [])} "
+            f"using={feature_info.get('feature_source')}"
+        )
+    if config["repair_source_numeric_na"]:
+        source_df, repair_diag = validate_feature_frame_finite(
+            source_df,
+            feature_cols,
+            context="source_repair_numeric_na",
+            dataset_id=config["dataset_id"],
+            role="source",
+            stage="source_repair_numeric_na",
+            allow_fill=True,
+        )
+        config["source_numeric_na_repaired"] = bool(repair_diag.get("source_numeric_na_repaired", False))
+        config["repaired_columns"] = repair_diag.get("repaired_columns", {})
+    config.update(
+        {
+            "feature_source": feature_info.get("feature_source", ""),
+            "knn_feature_mode": feature_info.get("knn_feature_mode", ""),
+            "source_selection_feature_cols": list(feature_cols),
+            "model_feature_cols": list(feature_cols),
+            "feature_consistency_status": feature_info.get("feature_consistency_status", ""),
+            "json_only_features": feature_info.get("json_only_features", []),
+            "runtime_only_features": feature_info.get("runtime_only_features", []),
+            "source_numeric_na_repaired": bool(config.get("source_numeric_na_repaired", False)),
+            "repaired_columns": config.get("repaired_columns", {}),
+        }
+    )
 
     knn_data = load_knn_results(config["knn_json_dir"], config["info_sharing"])
     target_entity_keys = list(knn_data["results"].keys())

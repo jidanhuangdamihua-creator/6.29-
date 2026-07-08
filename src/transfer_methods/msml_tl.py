@@ -131,9 +131,13 @@ def train_source_cnn_for_msml(
     _validate_feature_cols(source_sequence_df, feature_cols, where="source_sequence_df")
 
     src_train, src_val, src_test = _prepare_source_split(source_sequence_df)
-    src_train, src_val, src_test, _, _ = normalize_features(src_train, src_val, src_test)
+    src_train, src_val, src_test, _, _ = normalize_features(
+        src_train, src_val, src_test, feature_columns=feature_cols
+    )
 
-    X_source, y_source = build_tabular_sequence(src_train, horizon=horizon, window_size=window_size)
+    X_source, y_source = build_tabular_sequence(
+        src_train, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+    )
     if len(y_source) == 0:
         raise ValueError(
             f"Source sequence (key={source_key}) produced zero training windows; "
@@ -457,8 +461,12 @@ def fine_tune_fused_target_model(
         epochs, batch_size,
     )
 
-    X_train, y_train = build_tabular_sequence(target_train_df, horizon=horizon, window_size=window_size)
-    X_val, y_val = build_tabular_sequence(target_val_df, horizon=horizon, window_size=window_size)
+    X_train, y_train = build_tabular_sequence(
+        target_train_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+    )
+    X_val, y_val = build_tabular_sequence(
+        target_val_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+    )
 
     if len(y_train) == 0:
         raise ValueError("Target train split produced zero windows; adjust window_size/horizon.")
@@ -527,7 +535,9 @@ def evaluate_msml_model(
     logger = _get_logger()
     logger.info("[evaluate_msml_model] Start.")
 
-    X_test, y_test = build_tabular_sequence(target_test_df, horizon=horizon, window_size=window_size)
+    X_test, y_test = build_tabular_sequence(
+        target_test_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+    )
     if len(y_test) == 0:
         raise ValueError("Target test split produced zero windows; adjust window_size/horizon.")
 
@@ -733,7 +743,7 @@ def run_msml_tl(
     # --- Step 5: 切分 target → 归一化 → 微调 ---
     target_train_df, target_val_df, target_test_df = temporal_split_by_ratio_or_dates(target_df)
     target_train_df, target_val_df, target_test_df, target_scaler, target_feature_columns = normalize_features(
-        target_train_df, target_val_df, target_test_df,
+        target_train_df, target_val_df, target_test_df, feature_columns=feature_cols,
     )
 
     ft_result = fine_tune_fused_target_model(
@@ -768,6 +778,7 @@ def run_msml_tl(
             "k": int(k),
             "weight_mode": weight_mode,
             "feature_cols": list(feature_cols),
+            "knn_feature_mode": (selection_result.get("meta", {}) or {}).get("knn_feature_mode", ""),
             "selected_sources": selected_sources,
             "fused_layers": list(layer_names),
             **source_failure_meta(

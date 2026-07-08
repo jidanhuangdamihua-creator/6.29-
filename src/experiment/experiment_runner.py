@@ -150,6 +150,7 @@ def run_no_tl_experiment(
     target_epochs: int = 3,
     batch_size: int = 16,
     metric_protocol: Optional[Dict[str, Any]] = None,
+    feature_cols: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     """运行 No-TL，并返回统一结构。"""
     try:
@@ -165,6 +166,7 @@ def run_no_tl_experiment(
         target_epochs=target_epochs,
         batch_size=batch_size,
         metric_protocol=metric_protocol,
+        feature_cols=feature_cols,
     )
     return _extract_method_metrics(raw, method_name="No-TL")
 
@@ -379,6 +381,20 @@ def _extract_method_metrics(
         if source_diagnostic_key in method_meta:
             result[source_diagnostic_key] = method_meta[source_diagnostic_key]
 
+    for feature_diagnostic_key in (
+        "feature_source",
+        "knn_feature_mode",
+        "source_selection_feature_cols",
+        "model_feature_cols",
+        "feature_consistency_status",
+        "json_only_features",
+        "runtime_only_features",
+        "source_numeric_na_repaired",
+        "repaired_columns",
+    ):
+        if feature_diagnostic_key in method_meta:
+            result[feature_diagnostic_key] = method_meta[feature_diagnostic_key]
+
     for diagnostic_key in (
         "y_pred_nan_count",
         "y_pred_inf_count",
@@ -583,24 +599,30 @@ def run_ss_tl_experiment(
     target_min_df.attrs = target_df.attrs.copy()
 
     src_train, src_val, src_test = temporal_split_by_ratio_or_dates(single_source_df)
-    src_train, src_val, src_test, _, _ = normalize_features(src_train, src_val, src_test)
+    src_train, src_val, src_test, _, _ = normalize_features(
+        src_train, src_val, src_test, feature_columns=cols
+    )
 
-    X_source, y_source = build_tabular_sequence(src_train, horizon=horizon, window_size=window_size)
+    X_source, y_source = build_tabular_sequence(
+        src_train, horizon=horizon, window_size=window_size, feature_columns=cols
+    )
     if len(y_source) == 0:
         raise ValueError("SS-TL source windows are empty; adjust window_size/horizon.")
     X_source = to_cnn_tensor(X_source)
 
     tgt_train, tgt_val, tgt_test = temporal_split_by_ratio_or_dates(target_min_df)
-    tgt_train, tgt_val, tgt_test, tgt_scaler, tgt_feature_columns = normalize_features(tgt_train, tgt_val, tgt_test)
+    tgt_train, tgt_val, tgt_test, tgt_scaler, tgt_feature_columns = normalize_features(
+        tgt_train, tgt_val, tgt_test, feature_columns=cols
+    )
 
     X_target_train, y_target_train = build_tabular_sequence(
-        tgt_train, horizon=horizon, window_size=window_size
+        tgt_train, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
     )
     X_target_val, y_target_val = build_tabular_sequence(
-        tgt_val, horizon=horizon, window_size=window_size
+        tgt_val, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
     )
     X_target_test, y_target_test = build_tabular_sequence(
-        tgt_test, horizon=horizon, window_size=window_size
+        tgt_test, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
     )
 
     if len(y_target_train) == 0 or len(y_target_test) == 0:
@@ -1033,6 +1055,7 @@ def run_all_experiments(
                     target_epochs=target_epochs,
                     batch_size=batch_size,
                     metric_protocol=protocol.get("metric_protocol", {}),
+                    feature_cols=cols,
                 )
             elif method == "SS-TL":
                 one = run_ss_tl_experiment(

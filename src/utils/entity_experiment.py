@@ -20,7 +20,7 @@ from src.transfer_methods.source_failure_tolerance import (
     AllSourcesFailedError,
     error_row_from_all_sources_failed,
 )
-from src.utils.finite_diagnostics import NonFiniteArrayError
+from src.utils.finite_diagnostics import NonFiniteArrayError, validate_feature_frame_finite
 from src.utils.result_validation import annotate_silent_metric_failure
 
 
@@ -139,6 +139,13 @@ def _build_model_dataframe(df: pd.DataFrame, model_feature_cols: Sequence[str]) 
             "val_days": val_days,
             "test_days": n - train_days - val_days,
         }
+    model_only_cols = set(model_df.columns) - set(MODEL_METADATA_COLUMNS)
+    expected_cols = set(str(col) for col in model_feature_cols)
+    assert model_only_cols == expected_cols, (
+        f"CNN 输入列与 model_feature_cols 不一致: "
+        f"多余列={model_only_cols - expected_cols}, "
+        f"缺失列={expected_cols - model_only_cols}"
+    )
     return model_df
 
 
@@ -210,6 +217,21 @@ def _row_from_result(
     for key in DIAGNOSTIC_COLUMNS:
         if key in raw:
             row[key] = raw[key]
+    for key in (
+        "feature_source",
+        "knn_feature_mode",
+        "source_selection_feature_cols",
+        "model_feature_cols",
+        "feature_consistency_status",
+        "json_only_features",
+        "runtime_only_features",
+        "source_numeric_na_repaired",
+        "repaired_columns",
+    ):
+        if key in raw:
+            row[key] = raw[key]
+        elif key in config:
+            row[key] = config[key]
     return annotate_silent_metric_failure(row)
 
 
@@ -254,6 +276,24 @@ def run_single_entity_experiment(
     model_feature_cols = _resolve_model_feature_cols(source_df, target_entity_df, feature_cols, config)
     source_model_df = _build_model_dataframe(source_df, model_feature_cols)
     target_model_df = _build_model_dataframe(target_entity_df, model_feature_cols)
+    validate_feature_frame_finite(
+        source_model_df,
+        model_feature_cols,
+        context="post_build_model_dataframe_source",
+        dataset_id=config.get("dataset_id"),
+        role="source",
+        entity_id="source_pool",
+        stage="post_build_model_dataframe",
+    )
+    validate_feature_frame_finite(
+        target_model_df,
+        model_feature_cols,
+        context="post_build_model_dataframe_target",
+        dataset_id=config.get("dataset_id"),
+        role="target",
+        entity_id=str(entity_key),
+        stage="post_build_model_dataframe",
+    )
     source_model_df.attrs["information_sharing_scenario"] = scenario
     target_model_df.attrs["information_sharing_scenario"] = scenario
 
@@ -272,6 +312,7 @@ def run_single_entity_experiment(
                 learning_rate=float(config["learning_rate"]),
                 target_epochs=int(config["target_epochs"]),
                 batch_size=int(config["batch_size"]),
+                feature_cols=list(model_feature_cols),
             )
         else:
             kwargs = {

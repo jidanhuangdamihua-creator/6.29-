@@ -187,6 +187,8 @@ def run_rfe_feature_selection(
     # 提取已选特征
     selected_indices = np.where(rfe.support_)[0]
     selected_cols = [cols[i] for i in selected_indices]
+    if target_col in feature_cols and target_col not in selected_cols:
+        selected_cols = [target_col] + selected_cols
 
     logger.info(
         "[run_rfe_feature_selection] Finished. "
@@ -349,9 +351,13 @@ def train_source_cnn_for_msml_rfe(
     _validate_feature_cols(source_sequence_df, feature_cols, where="source_sequence_df")
 
     src_train, src_val, src_test = _prepare_source_split(source_sequence_df)
-    src_train, src_val, src_test, _, _ = normalize_features(src_train, src_val, src_test)
+    src_train, src_val, src_test, _, _ = normalize_features(
+        src_train, src_val, src_test, feature_columns=feature_cols
+    )
 
-    X_source, y_source = build_tabular_sequence(src_train, horizon=horizon, window_size=window_size)
+    X_source, y_source = build_tabular_sequence(
+        src_train, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+    )
     if len(y_source) == 0:
         raise ValueError(
             f"Source sequence (key={source_key}) produced zero training windows; "
@@ -426,8 +432,12 @@ def fine_tune_fused_target_model_rfe(
         epochs, batch_size,
     )
 
-    X_train, y_train = build_tabular_sequence(target_train_df, horizon=horizon, window_size=window_size)
-    X_val, y_val = build_tabular_sequence(target_val_df, horizon=horizon, window_size=window_size)
+    X_train, y_train = build_tabular_sequence(
+        target_train_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+    )
+    X_val, y_val = build_tabular_sequence(
+        target_val_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+    )
 
     if len(y_train) == 0:
         raise ValueError("Target train split produced zero windows; adjust window_size/horizon.")
@@ -496,7 +506,9 @@ def evaluate_msml_rfe_model(
     logger = _get_logger()
     logger.info("[evaluate_msml_rfe_model] Start.")
 
-    X_test, y_test = build_tabular_sequence(target_test_df, horizon=horizon, window_size=window_size)
+    X_test, y_test = build_tabular_sequence(
+        target_test_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+    )
     if len(y_test) == 0:
         raise ValueError("Target test split produced zero windows; adjust window_size/horizon.")
 
@@ -699,6 +711,14 @@ def run_msml_tl_rfe(
         random_state=random_state,
     )
     selected_feature_cols = rfe_result["selected_feature_cols"]
+    missing_from_initial = set(selected_feature_cols) - set(feature_cols)
+    if missing_from_initial:
+        raise ValueError(
+            "rfe_selected_feature_cols must be a subset of initial_model_feature_cols: "
+            f"extra={sorted(missing_from_initial)}"
+        )
+    if "sales" not in selected_feature_cols:
+        raise ValueError("RFE selected_feature_cols must include sales for CNN target construction")
     logger.info(
         "[run_msml_tl_rfe] Step 5: RFE completed. "
         "original=%d selected=%d selected_cols=%s",
@@ -826,7 +846,7 @@ def run_msml_tl_rfe(
 
     # --- Step 10: 归一化 target 数据 ---
     target_train_df_rfe, target_val_df_rfe, target_test_df_rfe, target_scaler, target_feature_columns = normalize_features(
-        target_train_df_rfe, target_val_df_rfe, target_test_df_rfe,
+        target_train_df_rfe, target_val_df_rfe, target_test_df_rfe, feature_columns=selected_feature_cols,
     )
     logger.info("[run_msml_tl_rfe] Step 10: Normalized target features")
 
@@ -866,6 +886,9 @@ def run_msml_tl_rfe(
             "k": int(k),
             "weight_mode": weight_mode,
             "feature_cols": list(feature_cols),
+            "initial_model_feature_cols": list(feature_cols),
+            "feature_consistency_status": "rfe_expected_subset",
+            "knn_feature_mode": (selection_result.get("meta", {}) or {}).get("knn_feature_mode", ""),
             "selected_feature_cols": selected_feature_cols,
             "keep_ratio": float(keep_ratio),
             "selected_sources": selected_sources,

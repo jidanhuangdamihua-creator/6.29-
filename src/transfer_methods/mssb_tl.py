@@ -173,15 +173,25 @@ def run_single_source_tl_for_mssb(
 
     src_train_df, src_val_df, src_test_df = _prepare_single_source_split(source_sequence_df)
 
-    src_train_df, src_val_df, src_test_df, _, _ = normalize_features(src_train_df, src_val_df, src_test_df)
+    src_train_df, src_val_df, src_test_df, _, _ = normalize_features(
+        src_train_df, src_val_df, src_test_df, feature_columns=feature_cols
+    )
     tgt_train_df, tgt_val_df, tgt_test_df, tgt_scaler, tgt_feature_columns = normalize_features(
-        target_train_df, target_val_df, target_test_df
+        target_train_df, target_val_df, target_test_df, feature_columns=feature_cols
     )
 
-    x_source, y_source = build_tabular_sequence(src_train_df, horizon=horizon, window_size=window_size)
-    x_tgt_train, y_tgt_train = build_tabular_sequence(tgt_train_df, horizon=horizon, window_size=window_size)
-    x_tgt_val, y_tgt_val = build_tabular_sequence(tgt_val_df, horizon=horizon, window_size=window_size)
-    x_tgt_test, y_tgt_test = build_tabular_sequence(tgt_test_df, horizon=horizon, window_size=window_size)
+    x_source, y_source = build_tabular_sequence(
+        src_train_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+    )
+    x_tgt_train, y_tgt_train = build_tabular_sequence(
+        tgt_train_df, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
+    )
+    x_tgt_val, y_tgt_val = build_tabular_sequence(
+        tgt_val_df, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
+    )
+    x_tgt_test, y_tgt_test = build_tabular_sequence(
+        tgt_test_df, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
+    )
 
     if len(y_source) == 0:
         raise ValueError("Source sequence produced zero training windows; adjust window_size/horizon.")
@@ -475,6 +485,7 @@ def run_mssb_tl(
             "k": int(k),
             "weight_mode": weight_mode,
             "feature_cols": list(feature_cols),
+            "knn_feature_mode": (selection_result.get("meta", {}) or {}).get("knn_feature_mode", ""),
             "selected_sources": selected_sources,
             **source_failure_meta(
                 requested_k=k,

@@ -7,13 +7,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
 from dataset_registry import get_dataset_profile, normalize_dataset_name
+from src.utils.finite_diagnostics import validate_feature_frame_finite, validate_finite_array
 
 try:
     from src.utils.environment import setup_logging
@@ -35,6 +36,7 @@ _SOURCE_SELECTION_LEAKAGE_KEYWORDS = (
     "y_pred",
     "next",
 )
+KNN_FEATURE_MODE_NO_IDS_V2 = "paper_available_features_no_ids_v2"
 
 DEFAULT_PAPER_SPLIT_PROTOCOL = {
     "target_observed_window_days": 30,
@@ -778,6 +780,24 @@ def _infer_feature_columns(df: pd.DataFrame) -> List[str]:
     return infer_modeling_feature_columns(df)
 
 
+def _is_identifier_like_column(col_name: str) -> bool:
+    """Return True for identifier-like columns that must not drive KNN distance."""
+    name = str(col_name).strip().lower()
+    if not name:
+        return False
+    if name in {
+        "id",
+        "store_nbr",
+        "item_nbr",
+        "store_id",
+        "product_id",
+        "entity_id",
+        "item_id",
+    }:
+        return True
+    return name.endswith("_id") or name.endswith("_nbr")
+
+
 def infer_modeling_feature_columns(df: pd.DataFrame) -> List[str]:
     """
     推断“可用于建模”的数值特征列（与 build_tabular_sequence 口径保持一致）。
@@ -833,23 +853,28 @@ def infer_source_selection_feature_columns(
 
     common_cols = [c for c in ordered_pool if c in source_set and c in target_set]
 
-    excluded_by_rule: List[str] = []
-    selected_features: List[str] = []
-    for col in common_cols:
+    def _should_exclude_source_selection_col(col: str) -> bool:
         lower = str(col).lower()
         should_exclude = (
             col in _SOURCE_SELECTION_EXCLUDE_EXACT
             or any(token in lower for token in _SOURCE_SELECTION_LEAKAGE_KEYWORDS)
+            or _is_identifier_like_column(col)
         )
         if col == "sales" and not include_sales_in_knn:
             should_exclude = True
+        return should_exclude
+
+    excluded_by_rule: List[str] = []
+    selected_features: List[str] = []
+    for col in common_cols:
+        should_exclude = _should_exclude_source_selection_col(col)
         if should_exclude:
             excluded_by_rule.append(col)
             continue
         selected_features.append(col)
 
     if not selected_features:
-        selected_features = [c for c in common_cols if c not in _SOURCE_SELECTION_EXCLUDE_EXACT]
+        selected_features = [c for c in common_cols if not _should_exclude_source_selection_col(c)]
 
     if not selected_features:
         raise ValueError(
@@ -866,12 +891,23 @@ def infer_source_selection_feature_columns(
         "missing_in_target": missing_in_target,
         "excluded_by_rule": excluded_by_rule,
         "include_sales_in_knn": bool(include_sales_in_knn),
+        "knn_feature_mode": KNN_FEATURE_MODE_NO_IDS_V2,
     }
 
 
-def _assert_no_object_feature_columns(df: pd.DataFrame, where: str) -> None:
+def _assert_no_object_feature_columns(
+    df: pd.DataFrame,
+    where: str,
+    feature_columns: Optional[Sequence[str]] = None,
+) -> None:
     """严格校验建模候选列，禁止 object/string 混入。"""
-    candidate_cols = [c for c in df.columns if c not in _NON_FEATURE_COLUMNS]
+    if feature_columns is None:
+        candidate_cols = [c for c in df.columns if c not in _NON_FEATURE_COLUMNS]
+    else:
+        candidate_cols = [str(c) for c in feature_columns]
+        missing = [c for c in candidate_cols if c not in df.columns]
+        if missing:
+            raise ValueError(f"Missing explicit feature columns before {where}: {missing}")
     bad_cols = [
         c
         for c in candidate_cols
@@ -889,6 +925,8 @@ def normalize_features(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
+    feature_columns: Optional[Sequence[str]] = None,
+    validate_finite: bool = True,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, MinMaxScaler, List[str]]:
     """
     对数值特征进行 MinMax 归一化。
@@ -908,13 +946,39 @@ def normalize_features(
     logger = _get_logger()
     logger.info("[normalize_features] Start.")
 
-    _assert_no_object_feature_columns(train_df, where="normalize_features(train_df)")
-    _assert_no_object_feature_columns(val_df, where="normalize_features(val_df)")
-    _assert_no_object_feature_columns(test_df, where="normalize_features(test_df)")
+    explicit_feature_columns = feature_columns is not None
+    if explicit_feature_columns:
+        resolved_feature_columns = [str(col) for col in feature_columns or []]
+    else:
+        logger.warning(
+            "[normalize_features] 未提供显式特征列表，已回退到自动推断，结果可能与 KNN 选源特征不一致"
+        )
+        resolved_feature_columns = _infer_feature_columns(train_df)
 
-    feature_columns = _infer_feature_columns(train_df)
-    if not feature_columns:
+    _assert_no_object_feature_columns(
+        train_df, where="normalize_features(train_df)", feature_columns=resolved_feature_columns
+    )
+    _assert_no_object_feature_columns(
+        val_df, where="normalize_features(val_df)", feature_columns=resolved_feature_columns
+    )
+    _assert_no_object_feature_columns(
+        test_df, where="normalize_features(test_df)", feature_columns=resolved_feature_columns
+    )
+
+    if not resolved_feature_columns:
         raise ValueError("No numeric feature columns found for normalization.")
+    if "sales" not in resolved_feature_columns:
+        raise ValueError("sales column is required in feature_columns for normalization and inverse metrics.")
+    if validate_finite:
+        validate_feature_frame_finite(
+            train_df, resolved_feature_columns, context="pre_normalize_train", stage="pre_normalize_train"
+        )
+        validate_feature_frame_finite(
+            val_df, resolved_feature_columns, context="pre_normalize_val", stage="pre_normalize_val"
+        )
+        validate_feature_frame_finite(
+            test_df, resolved_feature_columns, context="pre_normalize_test", stage="pre_normalize_test"
+        )
 
     scaler = MinMaxScaler()
     train_scaled = train_df.copy()
@@ -923,28 +987,41 @@ def normalize_features(
 
     # 先显式转为float，避免将浮点归一化结果写回整型列触发兼容性告警。
     for frame in (train_scaled, val_scaled, test_scaled):
-        for col in feature_columns:
+        for col in resolved_feature_columns:
             frame[col] = frame[col].astype(np.float64)
 
-    scaler.fit(train_df[feature_columns])
+    scaler.fit(train_df[resolved_feature_columns])
 
-    train_values = scaler.transform(train_df[feature_columns])
-    val_values = scaler.transform(val_df[feature_columns])
-    test_values = scaler.transform(test_df[feature_columns])
+    train_values = scaler.transform(train_df[resolved_feature_columns])
+    val_values = scaler.transform(val_df[resolved_feature_columns])
+    test_values = scaler.transform(test_df[resolved_feature_columns])
 
-    for idx, col in enumerate(feature_columns):
+    for idx, col in enumerate(resolved_feature_columns):
         train_scaled[col] = train_values[:, idx]
         val_scaled[col] = val_values[:, idx]
         test_scaled[col] = test_values[:, idx]
 
-    logger.info("[normalize_features] Finished. features=%s", feature_columns)
-    return train_scaled, val_scaled, test_scaled, scaler, feature_columns
+    if validate_finite:
+        validate_feature_frame_finite(
+            train_scaled, resolved_feature_columns, context="post_normalize_train", stage="post_normalize_train"
+        )
+        validate_feature_frame_finite(
+            val_scaled, resolved_feature_columns, context="post_normalize_val", stage="post_normalize_val"
+        )
+        validate_feature_frame_finite(
+            test_scaled, resolved_feature_columns, context="post_normalize_test", stage="post_normalize_test"
+        )
+
+    logger.info("[normalize_features] Finished. features=%s", resolved_feature_columns)
+    return train_scaled, val_scaled, test_scaled, scaler, resolved_feature_columns
 
 
 def build_tabular_sequence(
     df: pd.DataFrame,
     horizon: int,
     window_size: int = 10,
+    feature_columns: Optional[Sequence[str]] = None,
+    validate_finite: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     构建滑窗序列数据。
@@ -971,10 +1048,23 @@ def build_tabular_sequence(
         raise ValueError("window_size must be positive")
 
     ordered = df.sort_values(["entity_id", "item_id", "date"]).reset_index(drop=True)
-    _assert_no_object_feature_columns(ordered, where="build_tabular_sequence")
-    feature_columns = _infer_feature_columns(ordered)
-    if "sales" not in feature_columns:
+    if feature_columns is None:
+        logger.warning(
+            "[build_tabular_sequence] 未提供显式特征列表，已回退到自动推断，结果可能与 KNN 选源特征不一致"
+        )
+        resolved_feature_columns = _infer_feature_columns(ordered)
+    else:
+        resolved_feature_columns = [str(col) for col in feature_columns]
+
+    _assert_no_object_feature_columns(
+        ordered, where="build_tabular_sequence", feature_columns=resolved_feature_columns
+    )
+    if "sales" not in resolved_feature_columns:
         raise ValueError("sales column is required to build targets")
+    if validate_finite:
+        validate_feature_frame_finite(
+            ordered, resolved_feature_columns, context="pre_sequence", stage="pre_sequence"
+        )
 
     group_cols = ["entity_id", "item_id"]
     x_list: List[np.ndarray] = []
@@ -982,7 +1072,7 @@ def build_tabular_sequence(
 
     for _, group in ordered.groupby(group_cols, sort=False):
         g = group.sort_values("date").reset_index(drop=True)
-        values = g[feature_columns].to_numpy(dtype=np.float32)
+        values = g[resolved_feature_columns].to_numpy(dtype=np.float32)
         sales_values = g["sales"].to_numpy(dtype=np.float32)
         n = len(g)
         max_end = n - horizon
@@ -999,8 +1089,12 @@ def build_tabular_sequence(
         X = np.asarray(x_list, dtype=np.float32)
         y = np.asarray(y_list, dtype=np.float32)
     else:
-        X = np.empty((0, window_size, len(feature_columns)), dtype=np.float32)
+        X = np.empty((0, window_size, len(resolved_feature_columns)), dtype=np.float32)
         y = np.empty((0,), dtype=np.float32)
+
+    if validate_finite:
+        validate_finite_array(X, name="X")
+        validate_finite_array(y, name="y")
 
     logger.info("[build_tabular_sequence] Finished. X_shape=%s y_shape=%s", X.shape, y.shape)
     return X, y
