@@ -9,6 +9,7 @@ from src.evaluation.metrics import compute_metrics_with_protocol
 from src.experiment.experiment_runner import _extract_method_metrics
 from src.utils import entity_experiment
 from src.utils.entity_experiment import _row_from_result
+from src.utils.result_validation import annotate_silent_metric_failure
 
 
 class DummyMinMaxScaler:
@@ -154,7 +155,39 @@ def test_entity_row_marks_present_shape_missing_metrics_as_diagnostic_failure() 
 
     assert row["error"]
     assert "silent_metric_failure" in row["error"]
+    assert row["result_status"] == "failed"
+    assert row["failure_type"] == "silent_metric_failure"
     assert row["y_pred_nan_count"] == 170
+
+
+def test_silent_metric_failure_annotation_preserves_training_exception() -> None:
+    row = annotate_silent_metric_failure(
+        {
+            "rmse": np.nan,
+            "smape": np.nan,
+            "prediction_shape": (8, 1),
+            "error": "RuntimeError: optimizer exploded",
+        }
+    )
+
+    assert row["error"] == "RuntimeError: optimizer exploded"
+    assert row["result_status"] == "failed"
+    assert row["failure_type"] == "training_exception"
+
+
+def test_silent_metric_failure_annotation_marks_missing_metric_without_exception() -> None:
+    row = annotate_silent_metric_failure(
+        {
+            "rmse": np.nan,
+            "smape": 12.0,
+            "prediction_shape": (8, 1),
+            "error": "",
+        }
+    )
+
+    assert row["result_status"] == "failed"
+    assert row["failure_type"] == "silent_metric_failure"
+    assert row["error"].startswith("silent_metric_failure: rmse")
 
 
 def test_source_failure_diagnostics_propagate_to_extracted_metrics_and_entity_row() -> None:
@@ -283,9 +316,36 @@ def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_invers
     for row in rows:
         assert row["metric_protocol"] == json.dumps(metric_protocol, ensure_ascii=False, sort_keys=True)
         assert row["metric_space_used"] == "normalized_minmax_space"
-        assert row["paper_metric_aligned"] is False
+        assert row["paper_metric_aligned"] == "no_paper_reference"
         assert row["inverse_transform_applied"] is False
         assert row["metric_protocol_note"] == "inverse transform not available for solidified parquet path"
+
+
+def test_d4_d6_entity_row_does_not_fabricate_paper_or_scale_metrics() -> None:
+    row = _row_from_result(
+        {
+            "rmse": 1.25,
+            "accuracy": 0.5,
+            "smape": 7.5,
+            "prediction_shape": (12, 1),
+            "error": "",
+        },
+        method="MSWA-TL",
+        entity_key="target",
+        config={
+            "dataset_id": 5,
+            "dataset_name": "Dataset5",
+            "info_sharing": "without",
+            "source_count": 3,
+        },
+        elapsed=1.0,
+    )
+
+    assert row["paper_metric_aligned"] == "no_paper_reference"
+    assert row["rmse_paper"] == ""
+    assert row["smape_paper"] == ""
+    assert row["normalized_rmse"] == ""
+    assert row["original_scale_rmse"] == ""
 
 
 def test_should_skip_source_exception_only_skips_numeric_source_failures() -> None:

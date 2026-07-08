@@ -8,7 +8,15 @@ from typing import Any, Dict, List, Sequence
 import numpy as np
 import pandas as pd
 
-from src.constants import MIXED_METRIC_PROTOCOL_NOTE, MIXED_METRIC_SPACE
+from src.constants import (
+    MIXED_METRIC_PROTOCOL_NOTE,
+    MIXED_METRIC_SPACE,
+    NO_PAPER_REFERENCE,
+    NOT_APPLICABLE,
+    RESULT_CONTRACT_VERSION,
+    SCHEMA_FAMILY_D4_D6,
+    UNKNOWN,
+)
 from src.experiment.experiment_runner import (
     run_msml_experiment,
     run_msml_rfe_experiment,
@@ -97,6 +105,25 @@ def _source_count_for_method(method: str, config: Dict[str, Any]) -> int:
 
 def _stable_json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+
+
+def _blank_if_missing(row: Dict[str, Any], keys: Sequence[str]) -> None:
+    for key in keys:
+        if key not in row or row[key] is None:
+            row[key] = ""
+
+
+def _d4_d6_has_no_paper_reference(config: Dict[str, Any]) -> bool:
+    return int(config.get("dataset_id", 0)) in {4, 5, 6}
+
+
+def _target_split_days(config: Dict[str, Any]) -> Dict[str, Any]:
+    split = dict(config.get("target_split_config", {}) or config.get("split_config", {}) or {})
+    return {
+        "train_days": split.get("train_days", config.get("train_days", "")),
+        "val_days": split.get("val_days", config.get("val_days", "")),
+        "test_days": split.get("test_days", config.get("test_days", "")),
+    }
 
 
 def _metric_protocol_note(raw: Dict[str, Any], config: Dict[str, Any]) -> str:
@@ -268,7 +295,10 @@ def _row_from_result(
 ) -> Dict[str, Any]:
     requested_k = _source_count_for_method(method, config)
     source_meta = _selection_meta(raw, method, requested_k)
+    split_days = _target_split_days(config)
     row = {
+        "result_contract_version": RESULT_CONTRACT_VERSION,
+        "schema_family": SCHEMA_FAMILY_D4_D6,
         "dataset": str(config.get("dataset_name", f"Dataset{config.get('dataset_id', '')}")),
         "dataset_id": int(config.get("dataset_id", 0)),
         "scenario": _scenario_name(config),
@@ -310,11 +340,32 @@ def _row_from_result(
     )
     row["rmse_metric_space"] = str(raw.get("rmse_metric_space", row["metric_space_used"]))
     row["smape_metric_space"] = str(raw.get("smape_metric_space", row["metric_space_used"]))
-    row["paper_metric_aligned"] = bool(raw.get("paper_metric_aligned", False))
+    row["paper_metric_aligned"] = (
+        NO_PAPER_REFERENCE if _d4_d6_has_no_paper_reference(config) else bool(raw.get("paper_metric_aligned", False))
+    )
     row["inverse_transform_applied"] = bool(raw.get("inverse_transform_applied", False))
     row["inverse_transform_available"] = bool(raw.get("inverse_transform_available", False))
     row["metric_protocol_note"] = _metric_protocol_note(raw, config)
     row["metric_protocol_error"] = str(raw.get("metric_protocol_error", ""))
+    row["alignment_status"] = str(raw.get("alignment_status", NO_PAPER_REFERENCE))
+    row["metric_alignment_status"] = str(raw.get("metric_alignment_status", NO_PAPER_REFERENCE))
+    row["split_alignment_status"] = str(raw.get("split_alignment_status", NO_PAPER_REFERENCE))
+    row["source_protocol_aligned"] = str(raw.get("source_protocol_aligned", NO_PAPER_REFERENCE))
+    row["target_split_mode"] = str(raw.get("target_split_mode", config.get("target_split_mode", "days")))
+    row["source_split_mode"] = str(raw.get("source_split_mode", config.get("source_split_mode", "ratio")))
+    row["target_window_days"] = raw.get(
+        "target_window_days",
+        config.get(
+            "target_window_days",
+            int(split_days["train_days"] or 0) + int(split_days["val_days"] or 0) + int(split_days["test_days"] or 0)
+            if all(str(split_days[key]).strip() for key in ("train_days", "val_days", "test_days"))
+            else "",
+        ),
+    )
+    row.update(split_days)
+    row["requested_source_count"] = source_meta["requested_k"]
+    row["actual_pretrained_model_count"] = source_meta["valid_source_count"]
+    row["pretrained_model_count"] = source_meta["valid_source_count"]
     for key in ("target_entity_id", "target_store_id", "target_item_id"):
         if key in raw:
             row[key] = raw[key]
@@ -326,6 +377,45 @@ def _row_from_result(
     for key in METRIC_STATUS_COLUMNS:
         if key in raw:
             row[key] = raw[key]
+    if _d4_d6_has_no_paper_reference(config):
+        row["paper_metric_aligned"] = NO_PAPER_REFERENCE
+        for key in (
+            "rmse_paper",
+            "accuracy_paper",
+            "mae_paper",
+            "mape_paper",
+            "smape_paper",
+        ):
+            row[key] = ""
+        for key in (
+            "original_scale_rmse",
+            "original_scale_accuracy",
+            "original_scale_mae",
+            "original_scale_mape",
+            "original_scale_smape",
+        ):
+            if key not in raw:
+                row[key] = ""
+    _blank_if_missing(
+        row,
+        (
+            "normalized_rmse",
+            "normalized_accuracy",
+            "normalized_mae",
+            "normalized_mape",
+            "normalized_smape",
+            "original_scale_rmse",
+            "original_scale_accuracy",
+            "original_scale_mae",
+            "original_scale_mape",
+            "original_scale_smape",
+            "rmse_paper",
+            "accuracy_paper",
+            "mae_paper",
+            "mape_paper",
+            "smape_paper",
+        ),
+    )
     if "metric_protocol_note" not in row or not row["metric_protocol_note"]:
         row["metric_protocol_note"] = _metric_protocol_note(raw, config)
     for key in SOURCE_DOMAIN_DIAGNOSTIC_COLUMNS:
@@ -352,6 +442,12 @@ def _row_from_result(
             row[key] = raw[key]
         elif key in config:
             row[key] = config[key]
+        elif key in {"source_numeric_na_repaired", "repaired_columns"}:
+            row[key] = NOT_APPLICABLE
+        elif key in {"source_selection_feature_cols", "model_feature_cols"}:
+            row[key] = UNKNOWN
+    if "source_domain_filter_name" not in row:
+        row["source_domain_filter_name"] = str(config.get("source_domain_filter_name", ""))
     return annotate_silent_metric_failure(row)
 
 
@@ -407,6 +503,8 @@ def run_single_entity_experiment(
         stage="post_build_model_dataframe",
     )
     target_model_df = _build_model_dataframe(target_entity_df, model_feature_cols)
+    config = dict(config)
+    config["target_split_config"] = dict(target_model_df.attrs.get("split_config", {}) or {})
     validate_feature_frame_finite(
         target_model_df,
         model_feature_cols,

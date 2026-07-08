@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from scripts import aggregate_d1_d6_results as aggregate
+from src.constants import RESULT_CONTRACT_VERSION
 
 
 def _write_result(path, *, dataset_id: int, mode: str, method: str = "No-TL") -> None:
@@ -92,3 +93,70 @@ def test_discover_source_csvs_prefers_mode_path_then_newest_mtime(tmp_path) -> N
     selected, _ = aggregate.discover_source_csvs(tmp_path, allow_missing=True)
 
     assert selected[(5, "without")] == preferred
+
+
+def test_aggregate_full_canonical_uses_superset_order_and_preserves_extra_columns(tmp_path) -> None:
+    d1_path = tmp_path / "d1_without" / "results" / "dataset1_without_results.csv"
+    d4_path = tmp_path / "d4_without" / "results" / "dataset4_without_results.csv"
+    d1_path.parent.mkdir(parents=True, exist_ok=True)
+    d4_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        [
+            {
+                "dataset_id": 1,
+                "information_sharing": "without",
+                "scenario": "without_information_sharing",
+                "target_entity_key": "GLOBAL",
+                "method": "No-TL",
+                "rmse": 1.0,
+                "smape": 2.0,
+                "metric_space_current": "normalized_minmax_space",
+                "target_window_days": 210,
+                "metric_protocol": "{}",
+                "legacy_d1_only_metric": "keep-me",
+                "error": "",
+            }
+        ]
+    ).to_csv(d1_path, index=False)
+    pd.DataFrame(
+        [
+            {
+                "dataset_id": 4,
+                "information_sharing": "without",
+                "scenario": "without_information_sharing",
+                "target_entity_key": "store-a",
+                "method": "MSWA-TL",
+                "rmse": 3.0,
+                "smape": 4.0,
+                "selected_sources": "[]",
+                "source_identifier": "unknown",
+                "source_selection_feature_cols": "[\"sales\"]",
+                "y_pred_nan_count": 0,
+                "legacy_d4_only_diagnostic": "keep-too",
+                "error": "",
+            }
+        ]
+    ).to_csv(d4_path, index=False)
+
+    output = tmp_path / "canonical.csv"
+    aggregate.aggregate(run_dir=tmp_path, output=output, allow_missing=True)
+
+    df = pd.read_csv(output, dtype=str, keep_default_na=False)
+    for column in (
+        "result_contract_version",
+        "schema_family",
+        "result_status",
+        "failure_type",
+        "metric_protocol",
+        "target_window_days",
+        "selected_sources",
+        "source_identifier",
+        "source_selection_feature_cols",
+        "y_pred_nan_count",
+        "legacy_d1_only_metric",
+        "legacy_d4_only_diagnostic",
+    ):
+        assert column in df.columns
+    assert df.loc[0, "result_contract_version"] == RESULT_CONTRACT_VERSION
+    assert df.columns.get_loc("result_contract_version") < df.columns.get_loc("legacy_d1_only_metric")
+    assert df.columns.get_loc("selected_sources") < df.columns.get_loc("legacy_d4_only_diagnostic")

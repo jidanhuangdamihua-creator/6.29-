@@ -11,6 +11,7 @@ import pandas as pd
 from scripts import run_d4_experiment, run_full_paper_experiments, run_unified_d1_d6
 from scripts.run_full_paper_experiments import ROOT, _resolve_output_paths
 from scripts.run_unified_d1_d6 import build_tasks
+from src.constants import RESULT_CONTRACT_VERSION
 
 
 class UnifiedD1D6OutputContractTest(unittest.TestCase):
@@ -251,14 +252,45 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
             "selected_sources",
         ]
 
-        self.assertEqual("dataset", reference_columns[0])
-        self.assertEqual("error", reference_columns[-1])
-        self.assertEqual(reference_columns + extra_columns, aligned.columns.tolist())
+        self.assertEqual("result_contract_version", reference_columns[0])
+        self.assertIn("dataset", reference_columns)
+        self.assertIn("error", reference_columns)
+        for column in reference_columns + extra_columns:
+            self.assertIn(column, aligned.columns)
         self.assertEqual("Dataset4", aligned.loc[0, "dataset"])
         self.assertEqual("MSWA-TL", aligned.loc[0, "method"])
-        self.assertIsNone(aligned.loc[0, "error"])
+        self.assertEqual("", aligned.loc[0, "error"])
         self.assertEqual("store-b", aligned.loc[0, "source_identifier"])
         self.assertNotIn("unified_dataset", aligned.columns)
+        self.assertEqual("d1_d6_superset_v1", aligned.loc[0, "result_contract_version"])
+
+    def test_full_paper_materialize_uses_superset_order_without_cropping_extras(self):
+        paper_df, _ = run_full_paper_experiments._materialize_result_dataframes(
+            [
+                {
+                    "dataset": "Dataset1",
+                    "method": "No-TL",
+                    "information_sharing": "without_information_sharing",
+                    "rmse": 1.0,
+                    "smape": 2.0,
+                    "prediction_shape": (2, 1),
+                    "selected_sources": "not_applicable",
+                    "legacy_metric_only": "keep-me",
+                    "error": "",
+                }
+            ],
+            [],
+        )
+
+        self.assertEqual(RESULT_CONTRACT_VERSION, paper_df.loc[0, "result_contract_version"])
+        self.assertEqual("d1_d3_single_target_runtime_knn", paper_df.loc[0, "schema_family"])
+        self.assertEqual("success", paper_df.loc[0, "result_status"])
+        self.assertIn("selected_sources", paper_df.columns)
+        self.assertIn("legacy_metric_only", paper_df.columns)
+        self.assertLess(
+            paper_df.columns.get_loc("result_contract_version"),
+            paper_df.columns.get_loc("legacy_metric_only"),
+        )
 
 
     def test_full_paper_runner_resolves_explicit_output_dir_without_new_timestamp(self):

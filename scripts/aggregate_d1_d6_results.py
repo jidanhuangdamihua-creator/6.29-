@@ -14,6 +14,15 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
+from src.constants import (
+    RESULT_CONTRACT_VERSION,
+    RESULT_SCHEMA_COLUMNS,
+    SCHEMA_FAMILY_D1_D3,
+    SCHEMA_FAMILY_D4_D6,
+    preferred_columns_with_extras,
+)
+from src.utils.result_validation import annotate_silent_metric_failure
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "final_summary"
 EXPECTED_DATASET_IDS = tuple(range(1, 7))
@@ -237,6 +246,15 @@ def _normalize_row(row: Dict[str, str], dataset_hint: int, source_path: Path) ->
     out = dict(row)
     dataset_id = _dataset_id_from_row(out, dataset_hint)
     out["dataset_id"] = str(dataset_id)
+    out.setdefault("result_contract_version", RESULT_CONTRACT_VERSION)
+    if not str(out.get("result_contract_version", "")).strip():
+        out["result_contract_version"] = RESULT_CONTRACT_VERSION
+    out.setdefault(
+        "schema_family",
+        SCHEMA_FAMILY_D1_D3 if dataset_id in {1, 2, 3} else SCHEMA_FAMILY_D4_D6,
+    )
+    if not str(out.get("schema_family", "")).strip():
+        out["schema_family"] = SCHEMA_FAMILY_D1_D3 if dataset_id in {1, 2, 3} else SCHEMA_FAMILY_D4_D6
     mode = normalize_information_sharing(out.get("information_sharing") or out.get("scenario"))
     if mode in EXPECTED_MODES:
         out["information_sharing"] = mode
@@ -260,7 +278,9 @@ def _normalize_row(row: Dict[str, str], dataset_hint: int, source_path: Path) ->
                 out["selected_features"] = out[alt]
                 break
     out["source_csv_path"] = str(source_path)
-    return out
+    for column in RESULT_SCHEMA_COLUMNS:
+        out.setdefault(column, "")
+    return annotate_silent_metric_failure(out)
 
 
 def _read_source(path: Path, dataset_hint: int) -> List[Dict[str, str]]:
@@ -273,14 +293,15 @@ def _read_source(path: Path, dataset_hint: int) -> List[Dict[str, str]]:
 
 
 def _union_fieldnames(rows: Sequence[Dict[str, str]]) -> List[str]:
-    columns: List[str] = []
+    discovered = []
     seen = set()
-    for name in PREFERRED_COLUMNS:
-        if any(name in row for row in rows):
-            columns.append(name)
-            seen.add(name)
-    extras = sorted({key for row in rows for key in row.keys() if key not in seen})
-    return columns + extras
+    for row in rows:
+        for key in row:
+            if key not in seen:
+                discovered.append(key)
+                seen.add(key)
+    preferred = list(dict.fromkeys(list(RESULT_SCHEMA_COLUMNS) + PREFERRED_COLUMNS))
+    return preferred_columns_with_extras(discovered, preferred)
 
 
 def _write_csv(path: Path, rows: Sequence[Dict[str, Any]], fieldnames: Sequence[str]) -> None:
@@ -550,7 +571,8 @@ def aggregate(
         if not allow_missing:
             raise FileNotFoundError(f"No result CSV rows found under {run_dir}")
         output.parent.mkdir(parents=True, exist_ok=True)
-        _write_csv(output, [], PREFERRED_COLUMNS)
+        empty_columns = list(dict.fromkeys(list(RESULT_SCHEMA_COLUMNS) + PREFERRED_COLUMNS))
+        _write_csv(output, [], empty_columns)
         audit_rows = _build_audit_rows([], discovery_audit)
         audit_path = output.with_name(f"{output.stem}_audit.csv")
         _write_csv(audit_path, audit_rows, sorted({key for row in audit_rows for key in row}))

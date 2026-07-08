@@ -1,16 +1,32 @@
 # source domain 历史窗口天数，论文固定值
+import json
+
 SOURCE_HISTORY_DAYS = 300
 MIXED_METRIC_SPACE = "mixed_metric_space"
 MIXED_METRIC_PROTOCOL_NOTE = (
     "non-strict protocol uses normalized RMSE and original-scale sMAPE when inverse transform is available"
 )
+RESULT_CONTRACT_VERSION = "d1_d6_superset_v1"
+SCHEMA_FAMILY_D1_D3 = "d1_d3_single_target_runtime_knn"
+SCHEMA_FAMILY_D4_D6 = "d4_d6_entity_solidified_knn"
+NOT_APPLICABLE = "not_applicable"
+UNKNOWN = "unknown"
+NO_PAPER_REFERENCE = "no_paper_reference"
 
 # D1–D6 统一结果 schema，与 run_full_paper_experiments._result_columns() 保持一致
 RESULT_SCHEMA_COLUMNS = [
+    "result_contract_version",
+    "schema_family",
+    "result_status",
+    "failure_type",
     "dataset",
+    "dataset_id",
+    "scenario",
+    "target_entity_key",
     "target_entity_id",
     "target_store_id",
     "target_item_id",
+    "source_identifier",
     "method",
     "information_sharing",
     "source_count",
@@ -23,9 +39,11 @@ RESULT_SCHEMA_COLUMNS = [
     "split_alignment_status",
     "source_pretrained_alignment_status",
     "paper_metric_space",
+    "current_metric_space",
     "metric_space_current",
     "metric_space_paper",
     "metric_space_used",
+    "metric_space",
     "rmse_metric_space",
     "smape_metric_space",
     "paper_metric_aligned",
@@ -52,6 +70,9 @@ RESULT_SCHEMA_COLUMNS = [
     "target_strict_paper_mode",
     "target_split_mode",
     "source_split_mode",
+    "train_days",
+    "val_days",
+    "test_days",
     "paper_pretrained_model_cap",
     "pretrained_model_count",
     "requested_source_count",
@@ -108,6 +129,10 @@ RESULT_SCHEMA_COLUMNS = [
     "model_weight_inf_count",
     "feature_source",
     "knn_feature_mode",
+    "selected_sources",
+    "selected_source_count",
+    "source_failure_messages",
+    "source_domain_filter_name",
     "source_selection_feature_cols",
     "model_feature_cols",
     "feature_consistency_status",
@@ -118,6 +143,31 @@ RESULT_SCHEMA_COLUMNS = [
     "alignment_notes",
     "error",
 ]
+
+
+def preferred_columns_with_extras(columns, preferred_columns=None):
+    """Return preferred schema columns first, preserving every extra column."""
+    preferred_source = RESULT_SCHEMA_COLUMNS if preferred_columns is None else list(preferred_columns)
+    seen = set()
+    ordered = []
+    input_columns = list(columns)
+    input_set = set(input_columns)
+    for column in preferred_source:
+        if column in input_set and column not in seen:
+            ordered.append(column)
+            seen.add(column)
+    for column in input_columns:
+        if column not in seen:
+            ordered.append(column)
+            seen.add(column)
+    return ordered
+
+
+def stable_json_cell(value):
+    """Serialize list/dict CSV cells with the D1-D6 contract JSON policy."""
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    return value
 
 
 from pathlib import Path

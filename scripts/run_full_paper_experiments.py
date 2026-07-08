@@ -35,7 +35,17 @@ import pandas as pd
 from dataset_registry import list_dataset_names, normalize_dataset_name
 
 from src.utils.environment import setup_logging
-from src.constants import D3_WITHOUT_INFO_SHARING_DOMAIN_FILTER
+from src.constants import (
+    D3_WITHOUT_INFO_SHARING_DOMAIN_FILTER,
+    NOT_APPLICABLE,
+    RESULT_CONTRACT_VERSION,
+    RESULT_SCHEMA_COLUMNS,
+    SCHEMA_FAMILY_D1_D3,
+    UNKNOWN,
+    preferred_columns_with_extras,
+    stable_json_cell,
+)
+from src.utils.result_validation import annotate_silent_metric_failure
 from paper_reproduction_protocol import (
     MULTI_SOURCE_TL_METHODS,
     build_alignment_fields,
@@ -654,6 +664,83 @@ def _coalesce_metric(*values: Any) -> Any:
     return None
 
 
+def _stable_json_dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+
+
+def _source_identifier_from_meta(method_name: str, method_meta: Dict[str, Any]) -> str:
+    if method_name == "No-TL":
+        return NOT_APPLICABLE
+    if "source_key" in method_meta and method_meta.get("source_key") not in (None, ""):
+        return str(method_meta.get("source_key"))
+    if method_name == "SS-TL":
+        selected = method_meta.get("selected_sources")
+        if isinstance(selected, list) and len(selected) == 1 and isinstance(selected[0], dict):
+            source_key = selected[0].get("source_key")
+            return UNKNOWN if source_key in (None, "") else str(source_key)
+    return NOT_APPLICABLE if method_name in MULTI_SOURCE_TL_METHODS else UNKNOWN
+
+
+def _selected_sources_from_meta(method_name: str, method_meta: Dict[str, Any]) -> str:
+    if method_name == "No-TL":
+        return NOT_APPLICABLE
+    if "selected_sources" not in method_meta:
+        return UNKNOWN
+    selected = method_meta.get("selected_sources")
+    if isinstance(selected, list):
+        return _stable_json_dumps(selected)
+    return UNKNOWN
+
+
+def _source_domain_contract_fields(source_df: pd.DataFrame) -> Dict[str, Any]:
+    domain_filter = source_df.attrs.get("domain_filter_used", None)
+    scope_mode = str(source_df.attrs.get("source_pool_scope_mode", "") or "")
+    if domain_filter is None:
+        source_domain_filter = UNKNOWN
+    elif isinstance(domain_filter, dict):
+        source_domain_filter = _stable_json_dumps(domain_filter)
+    else:
+        source_domain_filter = str(domain_filter)
+    return {
+        "knn_json_domain_filter": NOT_APPLICABLE,
+        "source_domain_filter": source_domain_filter,
+        "source_domain_filter_name": scope_mode or UNKNOWN,
+        "source_domain_filter_applied": bool(domain_filter not in (None, {}) and domain_filter != {"mode": "full_source_pool"}),
+        "source_domain_filter_reason": scope_mode or UNKNOWN,
+        "source_pool_size_before_filter": int(source_df.attrs.get("source_pool_size_before_filter", len(source_df))),
+        "source_pool_size_after_filter": int(len(source_df)),
+        "source_domain_filter_error": "",
+    }
+
+
+def _apply_result_contract_defaults(row: Dict[str, Any], schema_family: str) -> Dict[str, Any]:
+    out = dict(row)
+    out.setdefault("result_contract_version", RESULT_CONTRACT_VERSION)
+    out.setdefault("schema_family", schema_family)
+    return annotate_silent_metric_failure(out)
+
+
+def _align_frame_to_preferred_columns(df: pd.DataFrame, schema_family: str) -> pd.DataFrame:
+    aligned = df.copy()
+    missing = [column for column in RESULT_SCHEMA_COLUMNS if column not in aligned.columns]
+    if missing:
+        aligned = pd.concat(
+            [aligned, pd.DataFrame("", index=aligned.index, columns=missing)],
+            axis=1,
+        )
+    if "result_contract_version" in aligned.columns:
+        aligned["result_contract_version"] = aligned["result_contract_version"].fillna("").replace(
+            "",
+            RESULT_CONTRACT_VERSION,
+        )
+    if "schema_family" in aligned.columns:
+        aligned["schema_family"] = aligned["schema_family"].fillna("").replace("", schema_family)
+    if not aligned.empty:
+        aligned = pd.DataFrame([annotate_silent_metric_failure(row) for row in aligned.to_dict(orient="records")])
+    aligned = aligned.apply(lambda column: column.map(stable_json_cell))
+    return aligned[preferred_columns_with_extras(aligned.columns)]
+
+
 def _finalize_result_metrics(result: Dict[str, Any]) -> None:
     """Ensure sMAPE aliases and metric_space_used are consistent for CSV output."""
     result["original_scale_smape"] = _coalesce_metric(
@@ -887,8 +974,10 @@ def _apply_information_sharing_filter(
     with_information_sharing: keep full source pool.
     """
     scenario = "with_information_sharing" if use_information_sharing else "without_information_sharing"
+    source_pool_size_before_filter = int(len(source_df))
     source_df = source_df.copy()
     source_df.attrs["information_sharing_scenario"] = scenario
+    source_df.attrs["source_pool_size_before_filter"] = source_pool_size_before_filter
     source_df.attrs["signature_static_feature_cols"] = _signature_static_features_for_dataset(
         dataset_name=dataset_name,
         use_information_sharing=use_information_sharing,
@@ -898,10 +987,13 @@ def _apply_information_sharing_filter(
     if use_information_sharing:
         source_df.attrs["source_pool_scope_mode"] = "with_information_sharing_full_pool"
         source_df.attrs["domain_filter_used"] = {"mode": "full_source_pool"}
+        source_df.attrs["source_pool_size_after_filter"] = int(len(source_df))
         return source_df
 
     domain_filter = _without_sharing_domain_filter(dataset_name)
     filtered = _apply_source_domain_filter(dataset_name, source_df, domain_filter)
+    filtered.attrs["source_pool_size_before_filter"] = source_pool_size_before_filter
+    filtered.attrs["source_pool_size_after_filter"] = int(len(filtered))
     filtered.attrs["source_pool_scope_mode"] = _source_scope_mode_for_domain_filter(dataset_name)
     return filtered
 
@@ -1112,6 +1204,8 @@ def run_experiment(
                 )
 
     result = {
+        "result_contract_version": RESULT_CONTRACT_VERSION,
+        "schema_family": SCHEMA_FAMILY_D1_D3,
         "dataset": dataset_name,
         "method": str(raw["method"]),
         "information_sharing": information_sharing_scenario,
@@ -1128,9 +1222,15 @@ def run_experiment(
         "metric_space_current": str(raw.get("metric_space_current", alignment["current_metric_space"])),
         "metric_space_paper": str(raw.get("metric_space_paper", alignment["paper_metric_space"])),
         "metric_space_used": str(raw.get("metric_space_used", "normalized")),
+        "metric_space": str(raw.get("metric_space", raw.get("metric_space_used", "normalized"))),
+        "rmse_metric_space": str(raw.get("rmse_metric_space", raw.get("metric_space_used", "normalized"))),
+        "smape_metric_space": str(raw.get("smape_metric_space", raw.get("metric_space_used", "normalized"))),
         "paper_metric_aligned": bool(raw.get("paper_metric_aligned", False)),
         "inverse_transform_applied": bool(raw.get("inverse_transform_applied", False)),
         "inverse_transform_available": bool(raw.get("inverse_transform_available", False)),
+        "metric_protocol": _stable_json_dumps(protocol.get("metric_protocol", {})),
+        "metric_protocol_note": str(raw.get("metric_protocol_note", "")),
+        "metric_protocol_error": str(raw.get("metric_protocol_error", "")),
         "metric_notes": str(raw.get("metric_notes", "")),
         "paper_split_reference": alignment["paper_split_reference"],
         "target_start_date": alignment["target_start_date"],
@@ -1142,6 +1242,9 @@ def run_experiment(
         "target_strict_paper_mode": alignment["target_strict_paper_mode"],
         "target_split_mode": alignment["target_split_mode"],
         "source_split_mode": alignment["source_split_mode"],
+        "train_days": target_df.attrs.get("train_days", ""),
+        "val_days": target_df.attrs.get("val_days", ""),
+        "test_days": target_df.attrs.get("test_days", ""),
         "paper_pretrained_model_cap": alignment["paper_pretrained_model_cap"],
         "pretrained_model_count": alignment["actual_pretrained_model_count"],
         "requested_source_count": alignment["requested_source_count"],
@@ -1189,6 +1292,20 @@ def run_experiment(
         "original_scale_smape": raw.get("original_scale_smape", np.nan),
         "prediction_shape": str(raw["prediction_shape"]),
         **{column: raw.get(column, np.nan) for column in DIAGNOSTIC_COLUMNS},
+        **_source_domain_contract_fields(source_df),
+        "source_identifier": _source_identifier_from_meta(method_name, method_meta),
+        "selected_sources": _selected_sources_from_meta(method_name, method_meta),
+        "selected_source_count": int(method_meta.get("selected_source_count", len(method_meta.get("selected_sources", [])) if isinstance(method_meta.get("selected_sources"), list) else 0)),
+        "source_selection_feature_cols": _stable_json_dumps(list(feature_cols)),
+        "model_feature_cols": _stable_json_dumps(list(feature_cols)),
+        "feature_source": "runtime_feature_cols",
+        "knn_feature_mode": NOT_APPLICABLE,
+        "feature_consistency_status": "runtime_no_knn_json",
+        "json_only_features": NOT_APPLICABLE,
+        "runtime_only_features": _stable_json_dumps(list(feature_cols)),
+        "source_numeric_na_repaired": NOT_APPLICABLE,
+        "repaired_columns": NOT_APPLICABLE,
+        "source_failure_messages": _stable_json_dumps(method_meta.get("source_failure_messages", [])),
         "alignment_notes": alignment["alignment_notes"],
         "error": "",
         "source_identification": source_identification,
@@ -1211,7 +1328,7 @@ def run_experiment(
         target_metadata=target_metadata,
     )
     _finalize_result_metrics(result)
-    return result
+    return _apply_result_contract_defaults(result, SCHEMA_FAMILY_D1_D3)
 
 
 def _build_run_plan(
@@ -1505,6 +1622,8 @@ def _build_error_row(
         protocol=protocol,
     )
     result = {
+        "result_contract_version": RESULT_CONTRACT_VERSION,
+        "schema_family": SCHEMA_FAMILY_D1_D3,
         "dataset": dataset_name,
         "method": method_name,
         "information_sharing": information_sharing_scenario,
@@ -1521,9 +1640,15 @@ def _build_error_row(
         "metric_space_current": alignment["current_metric_space"],
         "metric_space_paper": alignment["paper_metric_space"],
         "metric_space_used": "normalized",
+        "metric_space": "normalized",
+        "rmse_metric_space": "normalized",
+        "smape_metric_space": "normalized",
         "paper_metric_aligned": False,
         "inverse_transform_applied": False,
         "inverse_transform_available": False,
+        "metric_protocol": _stable_json_dumps(protocol.get("metric_protocol", {})),
+        "metric_protocol_note": "",
+        "metric_protocol_error": "",
         "metric_notes": "",
         "paper_split_reference": alignment["paper_split_reference"],
         "target_start_date": alignment["target_start_date"],
@@ -1535,6 +1660,9 @@ def _build_error_row(
         "target_strict_paper_mode": alignment["target_strict_paper_mode"],
         "target_split_mode": alignment["target_split_mode"],
         "source_split_mode": alignment["source_split_mode"],
+        "train_days": "",
+        "val_days": "",
+        "test_days": "",
         "paper_pretrained_model_cap": alignment["paper_pretrained_model_cap"],
         "pretrained_model_count": alignment["actual_pretrained_model_count"],
         "requested_source_count": alignment["requested_source_count"],
@@ -1582,6 +1710,27 @@ def _build_error_row(
         "original_scale_smape": np.nan,
         "prediction_shape": "N/A",
         **{column: np.nan for column in DIAGNOSTIC_COLUMNS},
+        "knn_json_domain_filter": NOT_APPLICABLE,
+        "source_domain_filter": UNKNOWN,
+        "source_domain_filter_name": UNKNOWN,
+        "source_domain_filter_applied": False,
+        "source_domain_filter_reason": UNKNOWN,
+        "source_pool_size_before_filter": "",
+        "source_pool_size_after_filter": "",
+        "source_domain_filter_error": "",
+        "source_identifier": NOT_APPLICABLE if method_name == "No-TL" else UNKNOWN,
+        "selected_sources": NOT_APPLICABLE if method_name == "No-TL" else UNKNOWN,
+        "selected_source_count": 0,
+        "source_selection_feature_cols": UNKNOWN,
+        "model_feature_cols": UNKNOWN,
+        "feature_source": UNKNOWN,
+        "knn_feature_mode": NOT_APPLICABLE,
+        "feature_consistency_status": UNKNOWN,
+        "json_only_features": NOT_APPLICABLE,
+        "runtime_only_features": UNKNOWN,
+        "source_numeric_na_repaired": NOT_APPLICABLE,
+        "repaired_columns": NOT_APPLICABLE,
+        "source_failure_messages": "[]",
         "alignment_notes": alignment["alignment_notes"],
         "error": f"{type(exc).__name__}: {exc}",
     }
@@ -1591,104 +1740,20 @@ def _build_error_row(
         target_metadata=target_metadata,
     )
     _finalize_result_metrics(result)
-    return result
+    return _apply_result_contract_defaults(result, SCHEMA_FAMILY_D1_D3)
 
 
 def _result_columns() -> List[str]:
-    return [
-        "dataset",
-        "target_entity_id",
-        "target_store_id",
-        "target_item_id",
-        "method",
-        "information_sharing",
-        "source_count",
-        "experiment_scope",
-        "experiment_track",
-        "source_protocol_aligned",
-        "strict_paper_mode",
-        "alignment_status",
-        "metric_alignment_status",
-        "split_alignment_status",
-        "source_pretrained_alignment_status",
-        "paper_metric_space",
-        "metric_space_current",
-        "metric_space_paper",
-        "metric_space_used",
-        "paper_metric_aligned",
-        "inverse_transform_applied",
-        "inverse_transform_available",
-        "metric_notes",
-        "paper_split_reference",
-        "target_start_date",
-        "target_end_date",
-        "target_window_days",
-        "target_window_expected_days",
-        "target_window_range_days",
-        "target_window_unique_days",
-        "target_strict_paper_mode",
-        "target_split_mode",
-        "source_split_mode",
-        "paper_pretrained_model_cap",
-        "pretrained_model_count",
-        "requested_source_count",
-        "actual_pretrained_model_count",
-        "requested_k",
-        "effective_k",
-        "valid_source_count",
-        "skipped_source_count",
-        "failed_source_count",
-        "failed_source_keys",
-        "skipped_nonfinite_source_count",
-        "failed_sources",
-        "date_alignment_mode",
-        "learning_rate",
-        "source_epochs",
-        "target_epochs",
-        "epochs",
-        "clipnorm",
-        "dropout",
-        "rmse",
-        "accuracy",
-        "training_time",
-        "mae",
-        "mape",
-        "smape",
-        "rmse_current",
-        "accuracy_current",
-        "mae_current",
-        "mape_current",
-        "smape_current",
-        "rmse_paper",
-        "accuracy_paper",
-        "mae_paper",
-        "mape_paper",
-        "smape_paper",
-        "normalized_rmse",
-        "normalized_accuracy",
-        "normalized_mae",
-        "normalized_mape",
-        "normalized_smape",
-        "original_scale_rmse",
-        "original_scale_accuracy",
-        "original_scale_mae",
-        "original_scale_mape",
-        "original_scale_smape",
-        "prediction_shape",
-        *DIAGNOSTIC_COLUMNS,
-        "alignment_notes",
-        "error",
-    ]
+    return list(RESULT_SCHEMA_COLUMNS)
 
 
 def _materialize_result_dataframes(
     paper_records: Sequence[Dict[str, Any]],
     extended_records: Sequence[Dict[str, Any]],
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    columns = _result_columns()
     return (
-        pd.DataFrame(paper_records, columns=columns),
-        pd.DataFrame(extended_records, columns=columns),
+        _align_frame_to_preferred_columns(pd.DataFrame(paper_records), SCHEMA_FAMILY_D1_D3),
+        _align_frame_to_preferred_columns(pd.DataFrame(extended_records), SCHEMA_FAMILY_D1_D3),
     )
 
 
