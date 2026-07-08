@@ -223,12 +223,15 @@ def _save_dataset_result_csvs(
     results_dir: Path,
     datasets: Optional[Sequence[str]] = None,
     info_sharing_suffix: Optional[str] = None,
+    dataset_frames: Optional[Dict[str, pd.DataFrame]] = None,
 ) -> Dict[str, Path]:
     saved: Dict[str, Path] = {}
     selected_datasets = tuple(DATASETS) if datasets is None else tuple(datasets)
     for dataset_name in selected_datasets:
         dataset_slug = normalize_dataset_name(dataset_name).lower()
         dataset_df = results_df[results_df["dataset"] == dataset_name].copy()
+        if dataset_frames is not None:
+            dataset_frames[dataset_name] = dataset_df
         if info_sharing_suffix is None:
             filename = f"{dataset_slug}_results.csv"
         else:
@@ -246,6 +249,7 @@ def _sync_latest_results_copy(
     summary_df: pd.DataFrame,
     dataset_csv_paths: Dict[str, Path],
     output_paths: Dict[str, Path],
+    dataset_result_frames: Optional[Dict[str, pd.DataFrame]] = None,
 ) -> None:
     """Write optional latest copies under outputs/experiment_results/ for backward compatibility."""
     compat_dir = ROOT / "outputs" / "experiment_results"
@@ -260,7 +264,8 @@ def _sync_latest_results_copy(
         output_paths["summary_csv"].name: summary_df,
     }
     for dataset_name, src_path in dataset_csv_paths.items():
-        copies[src_path.name] = pd.read_csv(src_path)
+        frame = None if dataset_result_frames is None else dataset_result_frames.get(dataset_name)
+        copies[src_path.name] = frame if frame is not None else pd.read_csv(src_path)
 
     for filename, frame in copies.items():
         frame.to_csv(compat_dir / filename, index=False, encoding="utf-8")
@@ -282,11 +287,13 @@ def _save_run_results(
     extended_results_df.to_csv(output_paths["extended_csv"], index=False, encoding="utf-8")
     paper_results_df.to_csv(output_paths["full_results_csv"], index=False, encoding="utf-8")
 
+    dataset_result_frames: Dict[str, pd.DataFrame] = {}
     dataset_csv_paths = _save_dataset_result_csvs(
         paper_results_df,
         results_dir,
         datasets=datasets,
         info_sharing_suffix=info_sharing_suffix,
+        dataset_frames=dataset_result_frames,
     )
     ranking_df = _build_ranking_df(paper_results_df)
     summary_df = _build_summary_df(paper_results_df)
@@ -301,6 +308,7 @@ def _save_run_results(
             summary_df=summary_df,
             dataset_csv_paths=dataset_csv_paths,
             output_paths=output_paths,
+            dataset_result_frames=dataset_result_frames,
         )
 
     saved_paths = {
@@ -371,6 +379,16 @@ def _scenario_to_bool(scenario: str) -> bool:
     if scenario == "without_information_sharing":
         return False
     raise ValueError(f"Unsupported information sharing scenario: {scenario}")
+
+
+def normalize_information_sharing_contract(value: Any) -> str:
+    """Normalize only the information_sharing contract field to with/without."""
+    text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if text in {"with", "with_information_sharing"}:
+        return "with"
+    if text in {"without", "without_information_sharing"}:
+        return "without"
+    raise ValueError(f"Unsupported information_sharing contract value: {value!r}")
 
 
 def _info_sharing_cli_to_scenario(info_sharing: Optional[str]) -> Optional[str]:
@@ -735,6 +753,10 @@ def _align_frame_to_preferred_columns(df: pd.DataFrame, schema_family: str) -> p
         )
     if "schema_family" in aligned.columns:
         aligned["schema_family"] = aligned["schema_family"].fillna("").replace("", schema_family)
+    if "information_sharing" in aligned.columns and not aligned.empty:
+        aligned["information_sharing"] = aligned["information_sharing"].map(
+            normalize_information_sharing_contract
+        )
     if not aligned.empty:
         aligned = pd.DataFrame([annotate_silent_metric_failure(row) for row in aligned.to_dict(orient="records")])
     aligned = aligned.apply(lambda column: column.map(stable_json_cell))
@@ -1142,6 +1164,9 @@ def run_experiment(
     skipped_nonfinite_source_count = int(method_meta.get("skipped_nonfinite_source_count", 0))
     failed_sources = method_meta.get("failed_sources", [])
     date_alignment_mode = str(method_meta.get("date_alignment_mode", ""))
+    information_sharing_contract = normalize_information_sharing_contract(
+        information_sharing_scenario
+    )
     if method_name == "SS-TL":
         key = method_meta.get("source_key")
         if isinstance(key, list):
@@ -1150,7 +1175,7 @@ def run_experiment(
             {
                 "dataset": dataset_name,
                 "method": str(raw["method"]),
-                "information_sharing": information_sharing_scenario,
+                "information_sharing": information_sharing_contract,
                 "requested_source_count": int(requested_source_count),
                 "effective_source_count": int(selection_effective_k),
                 "requested_k": int(selection_requested_k),
@@ -1180,7 +1205,7 @@ def run_experiment(
                     {
                         "dataset": dataset_name,
                         "method": str(raw["method"]),
-                        "information_sharing": information_sharing_scenario,
+                        "information_sharing": information_sharing_contract,
                         "requested_source_count": int(requested_source_count),
                         "effective_source_count": int(selection_effective_k),
                         "requested_k": int(selection_requested_k),
@@ -1208,7 +1233,7 @@ def run_experiment(
         "schema_family": SCHEMA_FAMILY_D1_D3,
         "dataset": dataset_name,
         "method": str(raw["method"]),
-        "information_sharing": information_sharing_scenario,
+        "information_sharing": information_sharing_contract,
         "source_count": int(number_of_sources),
         "experiment_scope": alignment["experiment_scope"],
         "experiment_track": alignment["experiment_track"],
@@ -1626,7 +1651,9 @@ def _build_error_row(
         "schema_family": SCHEMA_FAMILY_D1_D3,
         "dataset": dataset_name,
         "method": method_name,
-        "information_sharing": information_sharing_scenario,
+        "information_sharing": normalize_information_sharing_contract(
+            information_sharing_scenario
+        ),
         "source_count": int(source_count),
         "experiment_scope": alignment["experiment_scope"],
         "experiment_track": alignment["experiment_track"],

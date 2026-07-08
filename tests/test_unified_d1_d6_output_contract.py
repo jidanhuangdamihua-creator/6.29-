@@ -1,5 +1,6 @@
 import argparse
 import os
+import tempfile
 from pathlib import Path
 import re
 import subprocess
@@ -291,6 +292,142 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
             paper_df.columns.get_loc("result_contract_version"),
             paper_df.columns.get_loc("legacy_metric_only"),
         )
+        self.assertEqual("without", paper_df.loc[0, "information_sharing"])
+        self.assertNotIn(
+            paper_df.loc[0, "information_sharing"],
+            {"with_information_sharing", "without_information_sharing"},
+        )
+
+    def test_full_paper_materialize_normalizes_only_information_sharing_contract(self):
+        paper_df, _ = run_full_paper_experiments._materialize_result_dataframes(
+            [
+                {
+                    "dataset": "Dataset1",
+                    "method": "MSWA-TL",
+                    "information_sharing": "with_information_sharing",
+                    "scenario": "with_information_sharing",
+                    "source_domain_filter_reason": "with_information_sharing_full_pool",
+                    "source_pool_scope_mode": "with_information_sharing_full_pool",
+                    "signature_components": {"scenario": "with_information_sharing"},
+                    "rmse": 1.0,
+                    "smape": 2.0,
+                    "prediction_shape": (2, 1),
+                    "error": "",
+                }
+            ],
+            [],
+        )
+
+        self.assertEqual("with", paper_df.loc[0, "information_sharing"])
+        self.assertEqual("with_information_sharing", paper_df.loc[0, "scenario"])
+        self.assertEqual(
+            "with_information_sharing_full_pool",
+            paper_df.loc[0, "source_domain_filter_reason"],
+        )
+        self.assertEqual(
+            "with_information_sharing_full_pool",
+            paper_df.loc[0, "source_pool_scope_mode"],
+        )
+        self.assertIn(
+            "with_information_sharing",
+            str(paper_df.loc[0, "signature_components"]),
+        )
+
+    def test_full_paper_materialize_rejects_unknown_information_sharing_contract(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported information_sharing contract value"):
+            run_full_paper_experiments._materialize_result_dataframes(
+                [
+                    {
+                        "dataset": "Dataset1",
+                        "method": "MSWA-TL",
+                        "information_sharing": "cross_store",
+                        "rmse": 1.0,
+                        "smape": 2.0,
+                        "prediction_shape": (2, 1),
+                        "error": "",
+                    }
+                ],
+                [],
+            )
+
+    def test_error_row_normalizes_information_sharing_contract(self):
+        row = run_full_paper_experiments._build_error_row(
+            dataset_name="Dataset1",
+            method_name="MSWA-TL",
+            source_count=3,
+            information_sharing_scenario="without_information_sharing",
+            protocol={},
+            strict_paper_mode=True,
+            exc=RuntimeError("boom"),
+        )
+
+        self.assertEqual("without", row["information_sharing"])
+
+    def test_latest_results_copy_reuses_dataset_frames_without_shape_changes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_root = Path(tmpdir)
+            output_dir = fake_root / "run"
+            paper_df = pd.DataFrame(
+                [
+                    {
+                        "dataset": "Dataset1",
+                        "method": "No-TL",
+                        "information_sharing": "without",
+                        "rmse": 1.0,
+                        "accuracy": 0.5,
+                        "smape": 2.0,
+                        "error": "",
+                        "legacy_metric_only": "keep-me",
+                    },
+                    {
+                        "dataset": "Dataset1",
+                        "method": "MSWA-TL",
+                        "information_sharing": "with",
+                        "rmse": 0.9,
+                        "accuracy": 0.6,
+                        "smape": 1.8,
+                        "error": "",
+                        "legacy_metric_only": "keep-too",
+                    },
+                ]
+            )
+            extended_df = pd.DataFrame(columns=paper_df.columns)
+
+            with patch.object(run_full_paper_experiments, "ROOT", fake_root), patch.object(
+                run_full_paper_experiments,
+                "_should_sync_latest_results_copy",
+                return_value=True,
+            ), patch.object(
+                run_full_paper_experiments,
+                "add_rank_column",
+                side_effect=lambda df, metric_col, ascending: df.assign(rank=range(1, len(df) + 1)),
+                create=True,
+            ):
+                paths = run_full_paper_experiments._resolve_output_paths(
+                    protocol={},
+                    output_dir=output_dir,
+                )
+                saved = run_full_paper_experiments._save_run_results(
+                    paper_results_df=paper_df,
+                    extended_results_df=extended_df,
+                    output_paths=paths,
+                    datasets=["Dataset1"],
+                )
+
+            run_dataset_df = pd.read_csv(saved["Dataset1"], dtype=str, keep_default_na=False)
+            compat_dataset_df = pd.read_csv(
+                fake_root / "outputs" / "experiment_results" / "dataset1_results.csv",
+                dtype=str,
+                keep_default_na=False,
+            )
+
+        self.assertEqual(list(run_dataset_df.columns), list(compat_dataset_df.columns))
+        self.assertEqual(len(run_dataset_df), len(compat_dataset_df))
+        self.assertEqual(
+            run_dataset_df["method"].value_counts().sort_index().to_dict(),
+            compat_dataset_df["method"].value_counts().sort_index().to_dict(),
+        )
+        self.assertEqual(run_dataset_df.to_dict("records"), compat_dataset_df.to_dict("records"))
 
 
     def test_full_paper_runner_resolves_explicit_output_dir_without_new_timestamp(self):

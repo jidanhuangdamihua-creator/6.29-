@@ -160,3 +160,49 @@ def test_aggregate_full_canonical_uses_superset_order_and_preserves_extra_column
     assert df.loc[0, "result_contract_version"] == RESULT_CONTRACT_VERSION
     assert df.columns.get_loc("result_contract_version") < df.columns.get_loc("legacy_d1_only_metric")
     assert df.columns.get_loc("selected_sources") < df.columns.get_loc("legacy_d4_only_diagnostic")
+
+
+def test_aggregate_canonical_information_sharing_does_not_leak_legacy_aliases(tmp_path) -> None:
+    d1_path = tmp_path / "d1_without" / "results" / "dataset1_without_results.csv"
+    d4_path = tmp_path / "d4_with" / "results" / "dataset4_with_results.csv"
+    d1_path.parent.mkdir(parents=True, exist_ok=True)
+    d4_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        [
+            {
+                "dataset_id": 1,
+                "information_sharing": "without_information_sharing",
+                "scenario": "without_information_sharing",
+                "target_entity_key": "GLOBAL",
+                "method": "No-TL",
+                "rmse": 1.0,
+                "smape": 2.0,
+                "error": "",
+            }
+        ]
+    ).to_csv(d1_path, index=False)
+    pd.DataFrame(
+        [
+            {
+                "dataset_id": 4,
+                "information_sharing": "with",
+                "scenario": "with_information_sharing",
+                "target_entity_key": "store-a",
+                "method": "MSWA-TL",
+                "rmse": 3.0,
+                "smape": 4.0,
+                "error": "",
+            }
+        ]
+    ).to_csv(d4_path, index=False)
+
+    output = tmp_path / "canonical.csv"
+    result = aggregate.aggregate(run_dir=tmp_path, output=output, allow_missing=True)
+
+    canonical_df = pd.read_csv(output, dtype=str, keep_default_na=False)
+    best_df = pd.read_csv(result["extra_paths"][2], dtype=str, keep_default_na=False)
+    for df in (canonical_df, best_df):
+        assert set(df["information_sharing"]).issubset({"with", "without"})
+        assert not df["information_sharing"].isin(
+            {"with_information_sharing", "without_information_sharing"}
+        ).any()
