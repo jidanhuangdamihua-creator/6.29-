@@ -49,6 +49,14 @@ from src.transfer_methods.msml_tl import (
 from src.utils.runtime_control import keras_verbose
 from src.evaluation.metrics import smape
 from src.utils.finite_diagnostics import NonFiniteArrayError, summarize_model_weights, validate_finite_array
+from src.transfer_methods.source_failure_tolerance import (
+    SOURCE_LEVEL_EXCEPTIONS,
+    all_sources_failed_message,
+    make_failed_source,
+    normalize_successful_source_weights,
+    should_skip_source_exception,
+    source_failure_meta,
+)
 
 LOGGER_NAME = "experiment"
 
@@ -727,20 +735,42 @@ def run_msml_tl_rfe(
     source_weights: List[float] = []
     source_models_info: List[Dict[str, object]] = []
     input_shape_ref: Optional[Tuple[int, ...]] = None
+    failed_sources: List[Dict[str, object]] = []
 
     for source_key in selected_source_keys:
         source_sequence_df_rfe = selected_source_sequences_rfe[source_key]
 
-        train_result = train_source_cnn_for_msml_rfe(
-            source_sequence_df=source_sequence_df_rfe,
-            feature_cols=selected_feature_cols,
-            horizon=horizon,
-            window_size=window_size,
-            learning_rate=learning_rate,
-            source_epochs=source_epochs,
-            batch_size=batch_size,
-            source_key=source_key,
-        )
+        try:
+            train_result = train_source_cnn_for_msml_rfe(
+                source_sequence_df=source_sequence_df_rfe,
+                feature_cols=selected_feature_cols,
+                horizon=horizon,
+                window_size=window_size,
+                learning_rate=learning_rate,
+                source_epochs=source_epochs,
+                batch_size=batch_size,
+                source_key=source_key,
+            )
+            weight_diagnostics = summarize_model_weights(train_result["model"])
+            if weight_diagnostics["model_weight_nan_count"] or weight_diagnostics["model_weight_inf_count"]:
+                raise NonFiniteArrayError(
+                    "source model weights contain non-finite values: "
+                    f"nan_count={weight_diagnostics['model_weight_nan_count']} "
+                    f"inf_count={weight_diagnostics['model_weight_inf_count']}",
+                    diagnostics=weight_diagnostics,
+                )
+        except SOURCE_LEVEL_EXCEPTIONS as exc:
+            if not should_skip_source_exception(exc):
+                raise
+            failed_source = make_failed_source(source_key, exc)
+            failed_sources.append(failed_source)
+            logger.warning(
+                "[run_msml_tl_rfe] Skipping failed source_key=%s exception_type=%s message=%s",
+                source_key,
+                failed_source["exception_type"],
+                failed_source["exception_message"],
+            )
+            continue
 
         if input_shape_ref is None:
             input_shape_ref = train_result["input_shape"]
@@ -770,6 +800,13 @@ def run_msml_tl_rfe(
             "weight": weight_for_this_source,
             "num_samples": int(train_result["num_samples"]),
         })
+
+    if not source_models:
+        raise RuntimeError(all_sources_failed_message("MSML-TL-RFE", failed_sources))
+
+    source_weights = normalize_successful_source_weights(source_weights)
+    for info, normalized_weight in zip(source_models_info, source_weights):
+        info["weight"] = float(normalized_weight)
 
     logger.info("[run_msml_tl_rfe] Step 7: Trained %d source CNN models", len(source_models))
 
@@ -833,6 +870,12 @@ def run_msml_tl_rfe(
             "keep_ratio": float(keep_ratio),
             "selected_sources": selected_sources,
             "fused_layers": list(layer_names),
+            **source_failure_meta(
+                requested_k=k,
+                selected_sources=selected_sources,
+                valid_source_count=len(source_models_info),
+                failed_sources=failed_sources,
+            ),
         },
         "rfe_info": {
             "selected_feature_cols": selected_feature_cols,

@@ -36,6 +36,13 @@ from src.transfer_methods.single_source_tl import (
 from src.source_selection.source_selector import SourceSelector
 from src.evaluation.metrics import smape
 from src.utils.finite_diagnostics import validate_finite_array
+from src.transfer_methods.source_failure_tolerance import (
+    SOURCE_LEVEL_EXCEPTIONS,
+    all_sources_failed_message,
+    make_failed_source,
+    should_skip_source_exception,
+    source_failure_meta,
+)
 
 
 LOGGER_NAME = "experiment"
@@ -360,6 +367,7 @@ def run_mssb_tl(
 
     individual_results: List[Dict[str, object]] = []
     test_shape_reference: Optional[Tuple[int, ...]] = None
+    failed_sources: List[Dict[str, object]] = []
 
     for selected in selected_sources:
         source_key = tuple(selected["source_key"]) if isinstance(selected["source_key"], (list, tuple)) else (selected["source_key"],)
@@ -388,8 +396,18 @@ def run_mssb_tl(
                 target_epochs=target_epochs,
                 batch_size=batch_size,
             )
-        except Exception as exc:
-            raise RuntimeError(f"SS-TL failed for source_key={source_key}: {exc}") from exc
+        except SOURCE_LEVEL_EXCEPTIONS as exc:
+            if not should_skip_source_exception(exc):
+                raise
+            failed_source = make_failed_source(source_key, exc)
+            failed_sources.append(failed_source)
+            logger.warning(
+                "[run_mssb_tl] Skipping failed source_key=%s exception_type=%s message=%s",
+                source_key,
+                failed_source["exception_type"],
+                failed_source["exception_message"],
+            )
+            continue
 
         pred_shape = tuple(one_result["prediction_shape"])
         if test_shape_reference is None:
@@ -418,6 +436,9 @@ def run_mssb_tl(
                 "prediction_shape": pred_shape,
             }
         )
+
+    if not individual_results:
+        raise RuntimeError(all_sources_failed_message("MSSB-TL", failed_sources))
 
     best_source_result, best_index = select_best_source_model(individual_results)
 
@@ -455,6 +476,12 @@ def run_mssb_tl(
             "weight_mode": weight_mode,
             "feature_cols": list(feature_cols),
             "selected_sources": selected_sources,
+            **source_failure_meta(
+                requested_k=k,
+                selected_sources=selected_sources,
+                valid_source_count=len(individual_results),
+                failed_sources=failed_sources,
+            ),
         },
         "individual_results": public_individual_results,
         "best_source_result": public_best_source_result,

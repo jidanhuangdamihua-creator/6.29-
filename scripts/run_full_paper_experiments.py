@@ -1039,6 +1039,10 @@ def run_experiment(
     selection_effective_k = int(method_meta.get("effective_k", len(method_meta.get("selected_sources", [])) if isinstance(method_meta.get("selected_sources"), list) else number_of_sources))
     valid_source_count = int(method_meta.get("valid_source_count", selection_effective_k))
     skipped_source_count = int(method_meta.get("skipped_source_count", 0))
+    failed_source_count = int(method_meta.get("failed_source_count", skipped_source_count))
+    failed_source_keys = method_meta.get("failed_source_keys", [])
+    skipped_nonfinite_source_count = int(method_meta.get("skipped_nonfinite_source_count", 0))
+    failed_sources = method_meta.get("failed_sources", [])
     date_alignment_mode = str(method_meta.get("date_alignment_mode", ""))
     if method_name == "SS-TL":
         key = method_meta.get("source_key")
@@ -1055,6 +1059,10 @@ def run_experiment(
                 "effective_k": int(selection_effective_k),
                 "valid_source_count": int(valid_source_count),
                 "skipped_source_count": int(skipped_source_count),
+                "failed_source_count": int(failed_source_count),
+                "failed_source_keys": failed_source_keys,
+                "skipped_nonfinite_source_count": int(skipped_nonfinite_source_count),
+                "failed_sources": failed_sources,
                 "date_alignment_mode": date_alignment_mode,
                 "source_rank": 1,
                 "source_key": str(key),
@@ -1081,6 +1089,10 @@ def run_experiment(
                         "effective_k": int(selection_effective_k),
                         "valid_source_count": int(valid_source_count),
                         "skipped_source_count": int(skipped_source_count),
+                        "failed_source_count": int(failed_source_count),
+                        "failed_source_keys": failed_source_keys,
+                        "skipped_nonfinite_source_count": int(skipped_nonfinite_source_count),
+                        "failed_sources": failed_sources,
                         "date_alignment_mode": date_alignment_mode,
                         "source_rank": int(idx),
                         "source_key": str(source_meta.get("source_key")),
@@ -1132,6 +1144,10 @@ def run_experiment(
         "effective_k": int(selection_effective_k),
         "valid_source_count": int(valid_source_count),
         "skipped_source_count": int(skipped_source_count),
+        "failed_source_count": int(failed_source_count),
+        "failed_source_keys": failed_source_keys,
+        "skipped_nonfinite_source_count": int(skipped_nonfinite_source_count),
+        "failed_sources": failed_sources,
         "date_alignment_mode": date_alignment_mode,
         "learning_rate": float(exp_cfg.get("learning_rate", 0.001)),
         "source_epochs": int(exp_cfg["source_epochs"]),
@@ -1449,6 +1465,8 @@ def _run_smoke(
                             "effective_k": int(record.get("effective_k", source_count)),
                             "valid_source_count": int(record.get("valid_source_count", source_count)),
                             "skipped_source_count": int(record.get("skipped_source_count", 0)),
+                            "failed_source_count": int(record.get("failed_source_count", record.get("skipped_source_count", 0))),
+                            "skipped_nonfinite_source_count": int(record.get("skipped_nonfinite_source_count", 0)),
                         },
                         ensure_ascii=True,
                         sort_keys=True,
@@ -1519,6 +1537,10 @@ def _build_error_row(
         "effective_k": 0,
         "valid_source_count": 0,
         "skipped_source_count": 0,
+        "failed_source_count": 0,
+        "failed_source_keys": [],
+        "skipped_nonfinite_source_count": 0,
+        "failed_sources": [],
         "date_alignment_mode": "",
         "learning_rate": FORMAL_LR,
         "source_epochs": FORMAL_EPOCHS,
@@ -1609,6 +1631,10 @@ def _result_columns() -> List[str]:
         "effective_k",
         "valid_source_count",
         "skipped_source_count",
+        "failed_source_count",
+        "failed_source_keys",
+        "skipped_nonfinite_source_count",
+        "failed_sources",
         "date_alignment_mode",
         "learning_rate",
         "source_epochs",

@@ -74,3 +74,47 @@ def test_entity_row_marks_present_shape_missing_metrics_as_diagnostic_failure() 
     assert row["error"]
     assert "silent_metric_failure" in row["error"]
     assert row["y_pred_nan_count"] == 170
+
+
+def test_source_failure_diagnostics_propagate_to_extracted_metrics_and_entity_row() -> None:
+    failed_sources = [
+        {
+            "failed_source_key": ("bad", "item"),
+            "exception_type": "NonFiniteArrayError",
+            "exception_message": "model weights contain non-finite values: nan_count=1 inf_count=0",
+        }
+    ]
+    raw = {
+        "fused_result": {
+            "rmse": 0.25,
+            "accuracy": 4.0,
+            "smape": 10.0,
+            "prediction_shape": (2, 1),
+        },
+        "meta": {
+            "selected_sources": [{"source_key": ("bad", "item")}, {"source_key": ("good", "item")}],
+            "valid_source_count": 1,
+            "skipped_source_count": 1,
+            "failed_source_count": 1,
+            "failed_source_keys": [("bad", "item")],
+            "skipped_nonfinite_source_count": 1,
+            "failed_sources": failed_sources,
+        },
+    }
+
+    extracted = _extract_method_metrics(raw, method_name="MSWA-TL")
+    row = _row_from_result(
+        extracted,
+        method="MSWA-TL",
+        entity_key="target",
+        config={"dataset_id": 5, "dataset_name": "Dataset5", "info_sharing": "without", "source_count": 2},
+        elapsed=1.0,
+    )
+
+    assert extracted["failed_sources"] == failed_sources
+    assert row["valid_source_count"] == 1
+    assert row["skipped_source_count"] == 1
+    assert row["failed_source_count"] == 1
+    assert row["skipped_nonfinite_source_count"] == 1
+    assert row["failed_source_keys"] == [("bad", "item")]
+    assert row["failed_sources"] == failed_sources

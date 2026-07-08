@@ -366,6 +366,17 @@ def _extract_method_metrics(
         "metric_notes": str(selected.get("metric_notes", "")),
         "meta": method_meta,
     }
+    for source_diagnostic_key in (
+        "failed_source_count",
+        "failed_source_keys",
+        "skipped_source_count",
+        "skipped_nonfinite_source_count",
+        "valid_source_count",
+        "failed_sources",
+    ):
+        if source_diagnostic_key in method_meta:
+            result[source_diagnostic_key] = method_meta[source_diagnostic_key]
+
     for diagnostic_key in (
         "y_pred_nan_count",
         "y_pred_inf_count",

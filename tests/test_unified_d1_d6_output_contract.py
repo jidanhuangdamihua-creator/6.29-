@@ -1,3 +1,4 @@
+import argparse
 import os
 from pathlib import Path
 import re
@@ -7,7 +8,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from scripts import run_d4_experiment, run_full_paper_experiments
+from scripts import run_d4_experiment, run_full_paper_experiments, run_unified_d1_d6
 from scripts.run_full_paper_experiments import ROOT, _resolve_output_paths
 from scripts.run_unified_d1_d6 import build_tasks
 
@@ -124,6 +125,38 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
         self.assertIn("with", with_tasks[0].cmd)
         self.assertEqual("dataset4_without_results.csv", without_tasks[1].result_filename)
         self.assertEqual("dataset4_with_results.csv", with_tasks[1].result_filename)
+
+    def test_unified_runner_exits_nonzero_when_child_task_fails(self):
+        failed_task = run_unified_d1_d6.Task(
+            dataset_token="d5",
+            dataset_id=5,
+            label="D5-without",
+            scenario="without",
+            cmd=["python", "scripts/run_d5_experiment.py"],
+            config_check="[CONFIG CHECK]",
+            result_filename="dataset5_without_results.csv",
+            returncode=1,
+        )
+
+        with patch.object(run_unified_d1_d6, "_parse_args") as parse_args, patch.object(
+            run_unified_d1_d6, "build_tasks", return_value=[failed_task]
+        ), patch.object(
+            run_unified_d1_d6, "run_task", return_value=failed_task
+        ), patch.object(
+            run_unified_d1_d6, "print_result_summary"
+        ):
+            parse_args.return_value = argparse.Namespace(
+                only=["d5"],
+                smoke=False,
+                dry_run=False,
+                output_dir=None,
+                info_sharing="without",
+            )
+
+            with self.assertRaises(SystemExit) as ctx:
+                run_unified_d1_d6.main()
+
+        self.assertEqual(1, ctx.exception.code)
 
     def test_parallel_mode_runner_dry_run_prints_twelve_isolated_mode_commands(self):
         runner = ROOT / "scripts" / "parallel_mode_runner.sh"

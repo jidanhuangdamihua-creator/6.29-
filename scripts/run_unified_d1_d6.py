@@ -406,6 +406,11 @@ def main() -> None:
 
     completed_tasks = [run_task(task) for task in tasks]
     print_result_summary(completed_tasks)
+    failed_tasks = [task for task in completed_tasks if task.returncode not in (None, 0)]
+    if failed_tasks:
+        labels = ", ".join(f"{task.label}(returncode={task.returncode})" for task in failed_tasks)
+        print(f"[orchestrator] 子进程失败，统一 runner 返回非零状态: {labels}")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

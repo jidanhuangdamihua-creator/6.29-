@@ -38,6 +38,14 @@ from src.source_selection.source_selector import SourceSelector
 from src.utils.runtime_control import keras_verbose
 from src.evaluation.metrics import smape
 from src.utils.finite_diagnostics import NonFiniteArrayError, summarize_model_weights, validate_finite_array
+from src.transfer_methods.source_failure_tolerance import (
+    SOURCE_LEVEL_EXCEPTIONS,
+    all_sources_failed_message,
+    make_failed_source,
+    normalize_successful_source_weights,
+    should_skip_source_exception,
+    source_failure_meta,
+)
 
 
 LOGGER_NAME = "experiment"
@@ -642,6 +650,7 @@ def run_msml_tl(
     source_weights: List[float] = []
     source_models_info: List[Dict[str, object]] = []
     input_shape_ref: Optional[Tuple[int, ...]] = None
+    failed_sources: List[Dict[str, object]] = []
 
     for selected in selected_sources:
         source_key = tuple(selected["source_key"]) if isinstance(selected["source_key"], (list, tuple)) else (selected["source_key"],)
@@ -656,16 +665,37 @@ def run_msml_tl(
         if source_sequence_df.empty:
             raise ValueError(f"Selected source_key not found in source_df: {source_key}")
 
-        train_result = train_source_cnn_for_msml(
-            source_sequence_df=source_sequence_df,
-            feature_cols=feature_cols,
-            horizon=horizon,
-            window_size=window_size,
-            learning_rate=learning_rate,
-            source_epochs=source_epochs,
-            batch_size=batch_size,
-            source_key=source_key,
-        )
+        try:
+            train_result = train_source_cnn_for_msml(
+                source_sequence_df=source_sequence_df,
+                feature_cols=feature_cols,
+                horizon=horizon,
+                window_size=window_size,
+                learning_rate=learning_rate,
+                source_epochs=source_epochs,
+                batch_size=batch_size,
+                source_key=source_key,
+            )
+            weight_diagnostics = summarize_model_weights(train_result["model"])
+            if weight_diagnostics["model_weight_nan_count"] or weight_diagnostics["model_weight_inf_count"]:
+                raise NonFiniteArrayError(
+                    "source model weights contain non-finite values: "
+                    f"nan_count={weight_diagnostics['model_weight_nan_count']} "
+                    f"inf_count={weight_diagnostics['model_weight_inf_count']}",
+                    diagnostics=weight_diagnostics,
+                )
+        except SOURCE_LEVEL_EXCEPTIONS as exc:
+            if not should_skip_source_exception(exc):
+                raise
+            failed_source = make_failed_source(source_key, exc)
+            failed_sources.append(failed_source)
+            logger.warning(
+                "[run_msml_tl] Skipping failed source_key=%s exception_type=%s message=%s",
+                source_key,
+                failed_source["exception_type"],
+                failed_source["exception_message"],
+            )
+            continue
 
         if input_shape_ref is None:
             input_shape_ref = train_result["input_shape"]
@@ -683,6 +713,13 @@ def run_msml_tl(
             "weight": float(selected["weight"]),
             "num_samples": int(train_result["num_samples"]),
         })
+
+    if not source_models:
+        raise RuntimeError(all_sources_failed_message("MSML-TL", failed_sources))
+
+    source_weights = normalize_successful_source_weights(source_weights)
+    for info, normalized_weight in zip(source_models_info, source_weights):
+        info["weight"] = float(normalized_weight)
 
     # --- Step 3: 确定可融合层并做加权参数融合 ---
     layer_names = get_transferable_layer_names(source_models[0])
@@ -733,6 +770,12 @@ def run_msml_tl(
             "feature_cols": list(feature_cols),
             "selected_sources": selected_sources,
             "fused_layers": list(layer_names),
+            **source_failure_meta(
+                requested_k=k,
+                selected_sources=selected_sources,
+                valid_source_count=len(source_models_info),
+                failed_sources=failed_sources,
+            ),
         },
         "source_models_info": source_models_info,
         "fused_result": {

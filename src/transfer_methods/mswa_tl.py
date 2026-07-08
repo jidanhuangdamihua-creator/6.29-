@@ -37,6 +37,14 @@ from src.transfer_methods.single_source_tl import (
 from src.source_selection.source_selector import SourceSelector
 from src.evaluation.metrics import smape
 from src.utils.finite_diagnostics import validate_finite_array
+from src.transfer_methods.source_failure_tolerance import (
+    SOURCE_LEVEL_EXCEPTIONS,
+    all_sources_failed_message,
+    make_failed_source,
+    normalize_successful_source_weights,
+    should_skip_source_exception,
+    source_failure_meta,
+)
 
 
 LOGGER_NAME = "experiment"
@@ -378,6 +386,7 @@ def run_mswa_tl(
     y_test_reference: np.ndarray | None = None
     target_scaler_reference = None
     target_feature_columns_reference = None
+    failed_sources: List[Dict[str, object]] = []
 
     for selected in selected_sources:
         source_key = tuple(selected["source_key"]) if isinstance(selected["source_key"], (list, tuple)) else (selected["source_key"],)
@@ -406,8 +415,18 @@ def run_mswa_tl(
                 target_epochs=target_epochs,
                 batch_size=batch_size,
             )
-        except Exception as exc:
-            raise RuntimeError(f"SS-TL failed for source_key={source_key}: {exc}") from exc
+        except SOURCE_LEVEL_EXCEPTIONS as exc:
+            if not should_skip_source_exception(exc):
+                raise
+            failed_source = make_failed_source(source_key, exc)
+            failed_sources.append(failed_source)
+            logger.warning(
+                "[run_mswa_tl] Skipping failed source_key=%s exception_type=%s message=%s",
+                source_key,
+                failed_source["exception_type"],
+                failed_source["exception_message"],
+            )
+            continue
 
         y_pred = np.asarray(one_result["y_pred"])
         y_test = np.asarray(one_result["y_test"])
@@ -436,7 +455,14 @@ def run_mswa_tl(
             }
         )
 
-    fused_pred = weighted_prediction_fusion(predictions_list=predictions, weights=weights)
+    if not individual_results:
+        raise RuntimeError(all_sources_failed_message("MSWA-TL", failed_sources))
+
+    normalized_weights = normalize_successful_source_weights(weights)
+    for item, normalized_weight in zip(individual_results, normalized_weights):
+        item["weight"] = float(normalized_weight)
+
+    fused_pred = weighted_prediction_fusion(predictions_list=predictions, weights=normalized_weights)
     if y_test_reference is None:
         raise ValueError("No valid y_test found from source runs.")
 
@@ -451,6 +477,12 @@ def run_mswa_tl(
             "weight_mode": weight_mode,
             "feature_cols": list(feature_cols),
             "selected_sources": selected_sources,
+            **source_failure_meta(
+                requested_k=k,
+                selected_sources=selected_sources,
+                valid_source_count=len(individual_results),
+                failed_sources=failed_sources,
+            ),
         },
         "individual_results": individual_results,
         "fused_result": fused_result,
