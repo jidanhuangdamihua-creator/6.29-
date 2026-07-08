@@ -38,6 +38,7 @@ from src.source_selection.source_selector import SourceSelector
 from src.utils.runtime_control import keras_verbose
 from src.evaluation.metrics import smape
 from src.utils.finite_diagnostics import NonFiniteArrayError, summarize_model_weights, validate_finite_array
+from src.utils.source_fillna import fill_source_numeric_na
 from src.transfer_methods.source_failure_tolerance import (
     AllSourcesFailedError,
     SOURCE_LEVEL_EXCEPTIONS,
@@ -130,6 +131,7 @@ def train_source_cnn_for_msml(
 
     _validate_feature_cols(source_sequence_df, feature_cols, where="source_sequence_df")
 
+    source_sequence_df = fill_source_numeric_na(source_sequence_df, feature_columns=feature_cols)
     src_train, src_val, src_test = _prepare_source_split(source_sequence_df)
     src_train, src_val, src_test, _, _ = normalize_features(
         src_train, src_val, src_test, feature_columns=feature_cols

@@ -60,3 +60,30 @@ def test_original_dataframe_not_mutated():
     assert df["sales"].isna().sum() == 1
     assert result["sales"].isna().sum() == 0
     assert df is not result
+
+
+def test_feature_columns_limits_numeric_fill_to_model_inputs():
+    df = pd.DataFrame(
+        {
+            "sales": [1.0, np.nan, 3.0],
+            "oil_price": [np.nan, 10.0, 11.0],
+            "numeric_text": ["1.0", None, "3.0"],
+            "onpromotion": [np.nan, 1.0, 0.0],
+            "is_holiday": pd.Series([True, None, False], dtype="boolean"),
+            "family": pd.Series(["A", None, "B"], dtype="category"),
+        }
+    )
+
+    result = fill_source_numeric_na(
+        df,
+        feature_columns=["sales", "oil_price", "numeric_text", "is_holiday", "family"],
+    )
+
+    assert result["sales"].tolist() == [1.0, 0.0, 3.0]
+    assert result["oil_price"].tolist() == [0.0, 10.0, 11.0]
+    assert result["numeric_text"].tolist() == [1.0, 0.0, 3.0]
+    assert pd.api.types.is_numeric_dtype(result["numeric_text"])
+
+    assert result["onpromotion"].isna().sum() == 1
+    assert result["is_holiday"].isna().sum() == 1
+    assert pd.isna(result["family"].iloc[1])

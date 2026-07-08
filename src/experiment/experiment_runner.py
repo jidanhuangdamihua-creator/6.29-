@@ -46,6 +46,7 @@ from paper_reproduction_protocol import (
     validate_paper_protocol_config,
 )
 from src.source_selection.source_selector import SourceSelector
+from src.utils.source_fillna import fill_source_numeric_na
 
 
 LOGGER_NAME = "experiment"
@@ -594,6 +595,7 @@ def run_ss_tl_experiment(
         "val_ratio": 0.1,
         "test_ratio": 0.1,
     }
+    single_source_df = fill_source_numeric_na(single_source_df, feature_columns=cols)
 
     target_min_df = target_df[[c for c in keep_cols if c in target_df.columns]].copy()
     target_min_df.attrs = target_df.attrs.copy()

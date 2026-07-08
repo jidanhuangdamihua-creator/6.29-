@@ -36,6 +36,7 @@ from src.transfer_methods.single_source_tl import (
 from src.source_selection.source_selector import SourceSelector
 from src.evaluation.metrics import smape
 from src.utils.finite_diagnostics import validate_finite_array
+from src.utils.source_fillna import fill_source_numeric_na
 from src.transfer_methods.source_failure_tolerance import (
     AllSourcesFailedError,
     SOURCE_LEVEL_EXCEPTIONS,
@@ -171,6 +172,7 @@ def run_single_source_tl_for_mssb(
     _validate_feature_cols(target_val_df, feature_cols, where="target_val_df")
     _validate_feature_cols(target_test_df, feature_cols, where="target_test_df")
 
+    source_sequence_df = fill_source_numeric_na(source_sequence_df, feature_columns=feature_cols)
     src_train_df, src_val_df, src_test_df = _prepare_single_source_split(source_sequence_df)
 
     src_train_df, src_val_df, src_test_df, _, _ = normalize_features(

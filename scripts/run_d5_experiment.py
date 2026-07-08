@@ -70,6 +70,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--info-sharing", choices=["without", "with"], default=config["info_sharing"])
     parser.add_argument("--smoke", action="store_true", help="Run tiny target/source limits with the same window logic.")
     parser.add_argument("--target-limit", type=int, default=None)
+    parser.add_argument("--target-keys", nargs="+", default=None)
     parser.add_argument("--source-limit", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=None, help="Override source/target epochs for lightweight checks.")
     parser.add_argument("--output-dir", type=Path, default=None, help="Optional run directory.")
@@ -96,6 +97,8 @@ def main() -> None:
     config["smoke"] = bool(args.smoke)
     if args.target_limit is not None:
         config["smoke_target_limit"] = int(args.target_limit)
+    if args.target_keys is not None:
+        config["target_keys"] = [str(key) for key in args.target_keys]
     if args.source_limit is not None:
         config["smoke_source_limit"] = int(args.source_limit)
     if args.epochs is not None:
@@ -176,14 +179,29 @@ def main() -> None:
 
     knn_data = load_knn_results(config["knn_json_dir"], config["info_sharing"])
     target_entity_keys = list(knn_data["results"].keys())
-    if config["smoke"]:
+    if config.get("target_keys"):
+        requested_target_keys = [str(key) for key in config["target_keys"]]
+        missing_target_keys = [key for key in requested_target_keys if key not in knn_data["results"]]
+        if missing_target_keys:
+            raise ValueError(f"--target-keys not found in D5 KNN results: {missing_target_keys}")
+        target_entity_keys = requested_target_keys
+    elif config["smoke"]:
         target_entity_keys = target_entity_keys[: int(config["smoke_target_limit"])]
+
+    if config["smoke"] or args.source_limit is not None:
         selected_source_entities = {
             str(item.get("source_entity"))
-            for values in knn_data["results"].values()
-            for item in values[: int(config["smoke_source_limit"])]
+            for key in target_entity_keys
+            for item in knn_data["results"].get(key, [])[: int(config["smoke_source_limit"])]
             if isinstance(item, dict) and item.get("source_entity") is not None
         }
+        if not selected_source_entities and config["smoke"]:
+            selected_source_entities = {
+                str(item.get("source_entity"))
+                for values in knn_data["results"].values()
+                for item in values[: int(config["smoke_source_limit"])]
+                if isinstance(item, dict) and item.get("source_entity") is not None
+            }
         if selected_source_entities:
             source_df = source_df[source_df[config["entity_col"]].astype(str).isin(selected_source_entities)].copy()
 

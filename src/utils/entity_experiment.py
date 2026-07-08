@@ -277,15 +277,6 @@ def run_single_entity_experiment(
     source_model_df = _build_model_dataframe(source_df, model_feature_cols)
     target_model_df = _build_model_dataframe(target_entity_df, model_feature_cols)
     validate_feature_frame_finite(
-        source_model_df,
-        model_feature_cols,
-        context="post_build_model_dataframe_source",
-        dataset_id=config.get("dataset_id"),
-        role="source",
-        entity_id="source_pool",
-        stage="post_build_model_dataframe",
-    )
-    validate_feature_frame_finite(
         target_model_df,
         model_feature_cols,
         context="post_build_model_dataframe_target",
