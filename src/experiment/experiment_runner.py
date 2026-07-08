@@ -19,6 +19,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 import numpy as np
 import pandas as pd
 
+from src.constants import MIXED_METRIC_SPACE
 from src.utils.config import Config
 from src.data_processing.data_preprocessing import (
     build_source_target_split,
@@ -251,6 +252,14 @@ def _coalesce_metric(*values: Any) -> Any:
     return None
 
 
+def _summarize_metric_space(rmse_metric_space: Any, smape_metric_space: Any, fallback: Any) -> str:
+    rmse_space = str(rmse_metric_space or "").strip()
+    smape_space = str(smape_metric_space or "").strip()
+    if rmse_space and smape_space:
+        return rmse_space if rmse_space == smape_space else MIXED_METRIC_SPACE
+    return str(fallback)
+
+
 def _extract_method_metrics(
     raw_result: Dict[str, Any],
     method_name: str,
@@ -361,11 +370,24 @@ def _extract_method_metrics(
         "prediction_shape": _shape_to_tuple(prediction_shape),
         "metric_space": str(selected.get("metric_space", selected.get("metric_space_current", "normalized_minmax_space"))),
         "metric_space_used": str(selected.get("metric_space_used", selected.get("metric_space", "normalized_minmax_space"))),
+        "rmse_metric_space": str(
+            selected.get(
+                "rmse_metric_space",
+                selected.get("metric_space_used", selected.get("metric_space", "normalized_minmax_space")),
+            )
+        ),
+        "smape_metric_space": str(
+            selected.get(
+                "smape_metric_space",
+                selected.get("metric_space_used", selected.get("metric_space", "normalized_minmax_space")),
+            )
+        ),
         "metric_space_current": str(selected.get("metric_space_current", "normalized_minmax_space")),
         "metric_space_paper": str(selected.get("metric_space_paper", "original_sales_space")),
         "paper_metric_aligned": bool(selected.get("paper_metric_aligned", False)),
         "inverse_transform_applied": bool(selected.get("inverse_transform_applied", False)),
         "inverse_transform_available": bool(selected.get("inverse_transform_available", False)),
+        "metric_protocol_note": str(selected.get("metric_protocol_note", "")),
         "metric_notes": str(selected.get("metric_notes", "")),
         "meta": method_meta,
     }
@@ -426,7 +448,15 @@ def _extract_method_metrics(
         result.get("normalized_smape"),
     )
     result["smape"] = float(smape_value) if smape_value is not None else float("nan")
-    if _coalesce_metric(result.get("original_scale_smape")) is not None:
+    fallback_metric_space = result.get("metric_space_used", result.get("metric_space", "normalized_minmax_space"))
+    if "rmse_metric_space" in selected or "smape_metric_space" in selected:
+        result["metric_space_used"] = _summarize_metric_space(
+            result.get("rmse_metric_space"),
+            result.get("smape_metric_space"),
+            fallback_metric_space,
+        )
+        result["metric_space"] = result["metric_space_used"]
+    elif _coalesce_metric(result.get("original_scale_smape")) is not None:
         result["metric_space_used"] = str(result.get("metric_space_paper", "original_sales_space"))
     elif _coalesce_metric(result.get("normalized_smape")) is not None:
         result["metric_space_used"] = str(result.get("metric_space_current", "normalized_minmax_space"))
@@ -730,11 +760,24 @@ def run_ss_tl_experiment(
         "prediction_shape": _shape_to_tuple(ss_raw.get("y_pred_shape")),
         "metric_space": str(ss_raw.get("metric_space", ss_raw.get("metric_space_current", "normalized_minmax_space"))),
         "metric_space_used": str(ss_raw.get("metric_space_used", ss_raw.get("metric_space", "normalized_minmax_space"))),
+        "rmse_metric_space": str(
+            ss_raw.get(
+                "rmse_metric_space",
+                ss_raw.get("metric_space_used", ss_raw.get("metric_space", "normalized_minmax_space")),
+            )
+        ),
+        "smape_metric_space": str(
+            ss_raw.get(
+                "smape_metric_space",
+                ss_raw.get("metric_space_used", ss_raw.get("metric_space", "normalized_minmax_space")),
+            )
+        ),
         "metric_space_current": str(ss_raw.get("metric_space_current", "normalized_minmax_space")),
         "metric_space_paper": str(ss_raw.get("metric_space_paper", "original_sales_space")),
         "paper_metric_aligned": bool(ss_raw.get("paper_metric_aligned", False)),
         "inverse_transform_applied": bool(ss_raw.get("inverse_transform_applied", False)),
         "inverse_transform_available": bool(ss_raw.get("inverse_transform_available", False)),
+        "metric_protocol_note": str(ss_raw.get("metric_protocol_note", "")),
         "metric_notes": str(ss_raw.get("metric_notes", "")),
         "y_pred_nan_count": ss_raw.get("y_pred_nan_count"),
         "y_pred_inf_count": ss_raw.get("y_pred_inf_count"),
@@ -1150,7 +1193,14 @@ def run_all_experiments(
         ):
             one["training_time"] = elapsed_time
 
-        if _coalesce_metric(one.get("original_scale_smape"), one.get("smape_paper")) is not None:
+        if "rmse_metric_space" in one or "smape_metric_space" in one:
+            one["metric_space_used"] = _summarize_metric_space(
+                one.get("rmse_metric_space"),
+                one.get("smape_metric_space"),
+                one.get("metric_space_used", one.get("metric_space", "normalized_minmax_space")),
+            )
+            one["metric_space"] = one["metric_space_used"]
+        elif _coalesce_metric(one.get("original_scale_smape"), one.get("smape_paper")) is not None:
             one["metric_space_used"] = str(one.get("metric_space_paper", "original_sales_space"))
         elif _coalesce_metric(one.get("normalized_smape"), one.get("smape_current")) is not None:
             one["metric_space_used"] = str(one.get("metric_space_current", "normalized_minmax_space"))
@@ -1258,6 +1308,14 @@ def results_to_dataframe(experiment_results: Dict[str, Any]) -> pd.DataFrame:
                 "target_strict_paper_mode": protocol.get("target_strict_paper_mode", "False"),
                 "metric_space": one.get("metric_space", one.get("metric_space_current", "normalized_minmax_space")),
                 "metric_space_used": one.get("metric_space_used", one.get("metric_space", "normalized_minmax_space")),
+                "rmse_metric_space": one.get(
+                    "rmse_metric_space",
+                    one.get("metric_space_used", one.get("metric_space", "normalized_minmax_space")),
+                ),
+                "smape_metric_space": one.get(
+                    "smape_metric_space",
+                    one.get("metric_space_used", one.get("metric_space", "normalized_minmax_space")),
+                ),
                 "rmse": float(one.get("rmse", np.nan)),
                 "accuracy": float(one.get("accuracy", np.nan)),
                 "mae": float(one.get("mae", np.nan)),
@@ -1323,6 +1381,8 @@ def results_to_dataframe(experiment_results: Dict[str, Any]) -> pd.DataFrame:
             "include_sales_in_knn",
             "metric_space",
             "metric_space_used",
+            "rmse_metric_space",
+            "smape_metric_space",
             "rmse",
             "accuracy",
             "mae",

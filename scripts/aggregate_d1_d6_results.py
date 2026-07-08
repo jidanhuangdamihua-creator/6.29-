@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Aggregate existing D1-D6 experiment result CSVs into final summary tables."""
+"""Aggregate D1-D6 experiment result CSVs into final summary tables."""
 
 from __future__ import annotations
 
+import argparse
 import csv
 import math
 import re
@@ -15,23 +16,22 @@ import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "final_summary"
+EXPECTED_DATASET_IDS = tuple(range(1, 7))
+EXPECTED_MODES = ("without", "with")
 
-# Latest completed runs with valid metric rows (do not rerun experiments).
+# Legacy completed runs kept for explicit fallback only. They are not used by default.
 SOURCE_CSVS: Dict[int, Path] = {
     1: PROJECT_ROOT / "outputs/runs/20260625_224541/results/dataset1_results.csv",
     2: PROJECT_ROOT / "outputs/runs/20260625_224541/results/dataset2_results.csv",
-    3: PROJECT_ROOT
-    / "outputs/runs/20260627_213402/results/dataset3_results.csv",
-    4: PROJECT_ROOT
-    / "outputs/runs/20260627_164818_D4_300d_without/results/dataset4_results.csv",
-    5: PROJECT_ROOT
-    / "outputs/runs/20260627_151252_D5_300d_without/results/dataset5_results.csv",
-    6: PROJECT_ROOT
-    / "outputs/runs/20260627_160244_D6_300d_without/results/dataset6_results.csv",
+    3: PROJECT_ROOT / "outputs/runs/20260627_213402/results/dataset3_results.csv",
+    4: PROJECT_ROOT / "outputs/runs/20260627_164818_D4_300d_without/results/dataset4_results.csv",
+    5: PROJECT_ROOT / "outputs/runs/20260627_151252_D5_300d_without/results/dataset5_results.csv",
+    6: PROJECT_ROOT / "outputs/runs/20260627_160244_D6_300d_without/results/dataset6_results.csv",
 }
 
 PREFERRED_COLUMNS = [
     "dataset_id",
+    "information_sharing",
     "target_entity_key",
     "target_entity_id",
     "target_store_id",
@@ -41,12 +41,29 @@ PREFERRED_COLUMNS = [
     "smape",
     "rmse",
     "mae",
+    "metric_space_used",
+    "paper_metric_aligned",
     "valid_source_count",
     "skipped_source_count",
+    "failed_source_count",
+    "failed_source_keys",
+    "skipped_nonfinite_source_count",
+    "failed_sources",
     "selected_features",
     "date_alignment_mode",
     "source_csv_path",
 ]
+
+
+def normalize_information_sharing(value: Any) -> str:
+    text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if not text:
+        return ""
+    if "without" in text or text in {"no_information", "no_info", "none"}:
+        return "without"
+    if text in {"with", "with_information_sharing", "info_sharing"} or "with_info" in text:
+        return "with"
+    return text
 
 
 def _parse_float(value: Any) -> Optional[float]:
@@ -75,6 +92,126 @@ def _dataset_id_from_row(row: Dict[str, str], fallback: int) -> int:
     return fallback
 
 
+def _dataset_id_from_path(path: Path) -> Optional[int]:
+    match = re.search(r"dataset(\d+)", path.name.lower())
+    return int(match.group(1)) if match else None
+
+
+def _mode_from_path(path: Path, dataset_id: int) -> str:
+    text = str(path).lower()
+    dataset = f"dataset{dataset_id}"
+    if f"d{dataset_id}_without" in text or f"{dataset}_without" in text:
+        return "without"
+    if f"d{dataset_id}_with" in text or f"{dataset}_with" in text:
+        return "with"
+    return ""
+
+
+def _modes_from_csv(path: Path) -> List[str]:
+    try:
+        df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    except Exception:
+        return []
+    modes = set()
+    for column in ("information_sharing", "scenario"):
+        if column not in df.columns:
+            continue
+        for value in df[column].dropna().astype(str).unique().tolist():
+            mode = normalize_information_sharing(value)
+            if mode in EXPECTED_MODES:
+                modes.add(mode)
+    return sorted(modes)
+
+
+def _candidate_score(path: Path, dataset_id: int, mode: str) -> int:
+    text = str(path).lower()
+    name = path.name.lower()
+    if f"d{dataset_id}_{mode}" in text:
+        return 4
+    if f"dataset{dataset_id}_{mode}" in name:
+        return 3
+    if f"_{mode}" in text:
+        return 2
+    return 1
+
+
+def _choose_candidate(
+    candidates: Sequence[Path],
+    dataset_id: int,
+    mode: str,
+    strict: bool,
+) -> Tuple[Path, str]:
+    ranked = sorted(
+        candidates,
+        key=lambda p: (_candidate_score(p, dataset_id, mode), p.stat().st_mtime),
+        reverse=True,
+    )
+    if len(ranked) == 1:
+        return ranked[0], ""
+    top_score = _candidate_score(ranked[0], dataset_id, mode)
+    tied = [p for p in ranked if _candidate_score(p, dataset_id, mode) == top_score]
+    if strict and len(tied) > 1:
+        raise ValueError(
+            f"Multiple result CSV candidates for D{dataset_id} {mode}: "
+            + ", ".join(str(p) for p in tied)
+        )
+    return ranked[0], (
+        f"multiple candidates for D{dataset_id} {mode}; selected newest/highest-priority path {ranked[0]}"
+    )
+
+
+def discover_source_csvs(
+    run_dir: Path,
+    *,
+    strict: bool = False,
+    allow_missing: bool = False,
+) -> Tuple[Dict[Tuple[int, str], Path], List[Dict[str, Any]]]:
+    run_dir = Path(run_dir)
+    paths = sorted(run_dir.rglob("results/dataset*.csv")) if run_dir.exists() else []
+    buckets: Dict[Tuple[int, str], List[Path]] = defaultdict(list)
+
+    for path in paths:
+        dataset_id = _dataset_id_from_path(path)
+        if dataset_id is None or dataset_id not in EXPECTED_DATASET_IDS:
+            continue
+        mode = _mode_from_path(path, dataset_id)
+        modes = [mode] if mode in EXPECTED_MODES else _modes_from_csv(path)
+        if not modes:
+            modes = [""]
+        for candidate_mode in modes:
+            buckets[(dataset_id, candidate_mode)].append(path)
+
+    selected: Dict[Tuple[int, str], Path] = {}
+    audit_rows: List[Dict[str, Any]] = []
+    for dataset_id in EXPECTED_DATASET_IDS:
+        for mode in EXPECTED_MODES:
+            candidates = list(dict.fromkeys(buckets.get((dataset_id, mode), []) + buckets.get((dataset_id, ""), [])))
+            if not candidates:
+                row = {
+                    "dataset_id": dataset_id,
+                    "information_sharing": mode,
+                    "source_csv_path": "",
+                    "status": "missing",
+                    "warning": f"Missing result CSV for D{dataset_id} {mode}",
+                }
+                audit_rows.append(row)
+                if strict and not allow_missing:
+                    raise FileNotFoundError(row["warning"])
+                continue
+            path, warning = _choose_candidate(candidates, dataset_id, mode, strict=strict)
+            selected[(dataset_id, mode)] = path
+            audit_rows.append(
+                {
+                    "dataset_id": dataset_id,
+                    "information_sharing": mode,
+                    "source_csv_path": str(path),
+                    "status": "selected",
+                    "warning": warning,
+                }
+            )
+    return selected, audit_rows
+
+
 def _assert_dataset3_result_target_is_store10(df: pd.DataFrame, path: Path) -> None:
     """Reject Dataset3 result CSVs whose target identity cannot be proven store 10."""
     target_identity_columns = [
@@ -100,7 +237,11 @@ def _normalize_row(row: Dict[str, str], dataset_hint: int, source_path: Path) ->
     out = dict(row)
     dataset_id = _dataset_id_from_row(out, dataset_hint)
     out["dataset_id"] = str(dataset_id)
-    if not out.get("scenario") and out.get("information_sharing"):
+    mode = normalize_information_sharing(out.get("information_sharing") or out.get("scenario"))
+    if mode in EXPECTED_MODES:
+        out["information_sharing"] = mode
+        out["scenario"] = mode
+    elif not out.get("scenario") and out.get("information_sharing"):
         out["scenario"] = out["information_sharing"]
     if not out.get("target_entity_key") and not out.get("target_entity_id"):
         if dataset_id == 3:
@@ -200,24 +341,59 @@ def _mean_metric(rows: Iterable[Dict[str, str]], metric: str) -> Tuple[Optional[
     return statistics.fmean(values), len(values)
 
 
-def aggregate() -> None:
-    all_rows: List[Dict[str, str]] = []
-    source_paths: Dict[int, Path] = {}
+def _distribution(rows: Sequence[Dict[str, str]], column: str) -> str:
+    counter = Counter(str(row.get(column, "")).strip() or "<empty>" for row in rows)
+    return ";".join(f"{key}:{counter[key]}" for key in sorted(counter))
 
-    for dataset_id in sorted(SOURCE_CSVS):
-        path = SOURCE_CSVS[dataset_id]
-        if not path.is_file():
-            raise FileNotFoundError(f"Missing source CSV for D{dataset_id}: {path}")
-        rows = _read_source(path, dataset_id)
-        if not rows:
-            raise ValueError(f"Source CSV has no rows for D{dataset_id}: {path}")
-        source_paths[dataset_id] = path
-        all_rows.extend(rows)
 
-    all_fieldnames = _union_fieldnames(all_rows)
-    all_results_path = OUTPUT_DIR / "d1_d6_all_results.csv"
-    _write_csv(all_results_path, all_rows, all_fieldnames)
+def _duplicate_count(rows: Sequence[Dict[str, str]]) -> int:
+    keys = [
+        (
+            row.get("dataset_id", ""),
+            row.get("method", ""),
+            _target_key(row),
+            row.get("information_sharing") or row.get("scenario", ""),
+        )
+        for row in rows
+    ]
+    counter = Counter(keys)
+    return sum(count - 1 for count in counter.values() if count > 1)
 
+
+def _build_audit_rows(
+    all_rows: Sequence[Dict[str, str]],
+    discovery_audit: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    grouped: Dict[Tuple[int, str], List[Dict[str, str]]] = defaultdict(list)
+    for row in all_rows:
+        mode = normalize_information_sharing(row.get("information_sharing") or row.get("scenario"))
+        if mode in EXPECTED_MODES:
+            grouped[(int(row["dataset_id"]), mode)].append(row)
+
+    audit_rows: List[Dict[str, Any]] = []
+    for audit in discovery_audit:
+        dataset_id = int(audit["dataset_id"])
+        mode = str(audit["information_sharing"])
+        group = grouped.get((dataset_id, mode), [])
+        if audit["status"] == "missing":
+            audit_rows.append(dict(audit, rows=0))
+            continue
+        audit_rows.append(
+            {
+                **audit,
+                "rows": len(group),
+                "error_rows": sum(1 for row in group if str(row.get("error", "")).strip()),
+                "missing_rmse": sum(1 for row in group if _parse_float(row.get("rmse")) is None),
+                "missing_smape": sum(1 for row in group if _parse_float(row.get("smape")) is None),
+                "metric_space_used_distribution": _distribution(group, "metric_space_used"),
+                "paper_metric_aligned_distribution": _distribution(group, "paper_metric_aligned"),
+                "duplicate_dataset_method_target_mode_rows": _duplicate_count(group),
+            }
+        )
+    return audit_rows
+
+
+def _write_metric_summaries(output: Path, all_rows: Sequence[Dict[str, str]]) -> List[Path]:
     dataset_method_rows: List[Dict[str, Any]] = []
     method_values: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: {"smape": [], "rmse": []})
     dataset_method_groups: Dict[Tuple[int, str], List[Dict[str, str]]] = defaultdict(list)
@@ -247,19 +423,11 @@ def aggregate() -> None:
             }
         )
 
-    dataset_method_path = OUTPUT_DIR / "d1_d6_dataset_method_metrics.csv"
+    dataset_method_path = output.with_name(f"{output.stem}_dataset_method_metrics.csv")
     _write_csv(
         dataset_method_path,
         dataset_method_rows,
-        [
-            "dataset_id",
-            "method",
-            "row_count",
-            "smape_valid_count",
-            "rmse_valid_count",
-            "mean_smape",
-            "mean_rmse",
-        ],
+        ["dataset_id", "method", "row_count", "smape_valid_count", "rmse_valid_count", "mean_smape", "mean_rmse"],
     )
 
     method_mean_rows: List[Dict[str, Any]] = []
@@ -277,26 +445,21 @@ def aggregate() -> None:
             }
         )
 
-    method_mean_path = OUTPUT_DIR / "d1_d6_method_mean_metrics.csv"
+    method_mean_path = output.with_name(f"{output.stem}_method_mean_metrics.csv")
     _write_csv(
         method_mean_path,
         method_mean_rows,
-        [
-            "method",
-            "row_count",
-            "smape_valid_count",
-            "rmse_valid_count",
-            "mean_smape",
-            "mean_rmse",
-        ],
+        ["method", "row_count", "smape_valid_count", "rmse_valid_count", "mean_smape", "mean_rmse"],
     )
+    return [dataset_method_path, method_mean_path]
 
+
+def _write_best_method_outputs(output: Path, all_rows: Sequence[Dict[str, str]]) -> List[Path]:
     best_by_target_rows: List[Dict[str, Any]] = []
     wins_by_dataset: Dict[int, Counter] = defaultdict(Counter)
-
     target_groups: Dict[Tuple[int, str, str], List[Dict[str, str]]] = defaultdict(list)
     for row in all_rows:
-        key = (int(row["dataset_id"]), _target_key(row), row.get("scenario", ""))
+        key = (int(row["dataset_id"]), _target_key(row), row.get("information_sharing") or row.get("scenario", ""))
         target_groups[key].append(row)
 
     for (dataset_id, target, scenario), group in sorted(target_groups.items()):
@@ -314,7 +477,7 @@ def aggregate() -> None:
             {
                 "dataset_id": dataset_id,
                 "target_entity_key": target,
-                "scenario": scenario,
+                "information_sharing": scenario,
                 "best_method": method,
                 "best_smape": best_smape,
                 "best_rmse": _parse_float(best_row.get("rmse")) or "",
@@ -323,14 +486,14 @@ def aggregate() -> None:
         )
         wins_by_dataset[dataset_id][method] += 1
 
-    best_target_path = OUTPUT_DIR / "d1_d6_best_method_by_target.csv"
+    best_target_path = output.with_name(f"{output.stem}_best_method_by_target.csv")
     _write_csv(
         best_target_path,
         best_by_target_rows,
         [
             "dataset_id",
             "target_entity_key",
-            "scenario",
+            "information_sharing",
             "best_method",
             "best_smape",
             "best_rmse",
@@ -342,7 +505,7 @@ def aggregate() -> None:
         "# D1-D6 Best Method Summary by Dataset",
         "",
         "Best method per target entity is chosen by lowest sMAPE within each "
-        "`(dataset_id, target_entity_key, scenario)` group.",
+        "`(dataset_id, target_entity_key, information_sharing)` group.",
         "",
     ]
     for dataset_id in sorted(wins_by_dataset):
@@ -356,52 +519,105 @@ def aggregate() -> None:
             md_lines.append(f"  - {method}: {wins}")
         if counter:
             top_method, top_wins = counter.most_common(1)[0]
-            md_lines.append(
-                f"- Most frequent winner: **{top_method}** ({top_wins}/{total_targets} targets)"
-            )
+            md_lines.append(f"- Most frequent winner: **{top_method}** ({top_wins}/{total_targets} targets)")
         md_lines.append("")
 
-    best_dataset_md_path = OUTPUT_DIR / "d1_d6_best_method_by_dataset.md"
-    best_dataset_md_path.parent.mkdir(parents=True, exist_ok=True)
+    best_dataset_md_path = output.with_name(f"{output.stem}_best_method_by_dataset.md")
     best_dataset_md_path.write_text("\n".join(md_lines).rstrip() + "\n", encoding="utf-8")
+    return [best_target_path, best_dataset_md_path]
+
+
+def aggregate(
+    *,
+    run_dir: Path = PROJECT_ROOT / "outputs" / "runs",
+    output: Path = OUTPUT_DIR / "d1_d6_all_results.csv",
+    strict: bool = False,
+    allow_missing: bool = False,
+    legacy_fallback: bool = False,
+) -> Dict[str, Any]:
+    selected, discovery_audit = discover_source_csvs(run_dir, strict=strict, allow_missing=allow_missing)
+    if not selected and legacy_fallback:
+        selected = {(dataset_id, ""): path for dataset_id, path in SOURCE_CSVS.items()}
+
+    unique_paths = list(dict.fromkeys(selected.values()))
+    all_rows: List[Dict[str, str]] = []
+    for path in unique_paths:
+        dataset_hint = _dataset_id_from_path(path) or 0
+        rows = _read_source(path, dataset_hint)
+        all_rows.extend(rows)
+
+    if not all_rows:
+        if not allow_missing:
+            raise FileNotFoundError(f"No result CSV rows found under {run_dir}")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        _write_csv(output, [], PREFERRED_COLUMNS)
+        audit_rows = _build_audit_rows([], discovery_audit)
+        audit_path = output.with_name(f"{output.stem}_audit.csv")
+        _write_csv(audit_path, audit_rows, sorted({key for row in audit_rows for key in row}))
+        return {"all_results_path": output, "audit_path": audit_path, "audit_rows": audit_rows}
+
+    output = Path(output)
+    all_fieldnames = _union_fieldnames(all_rows)
+    _write_csv(output, all_rows, all_fieldnames)
+
+    audit_rows = _build_audit_rows(all_rows, discovery_audit)
+    audit_path = output.with_name(f"{output.stem}_audit.csv")
+    _write_csv(audit_path, audit_rows, sorted({key for row in audit_rows for key in row}))
+
+    extra_paths = _write_metric_summaries(output, all_rows)
+    extra_paths.extend(_write_best_method_outputs(output, all_rows))
 
     row_counts = Counter(int(row["dataset_id"]) for row in all_rows)
-    method_counts = Counter(
-        (int(row["dataset_id"]), row.get("method", "")) for row in all_rows
-    )
     smape_nan, smape_inf, rmse_nan, rmse_inf = _metric_stats(all_rows)
 
     print("=== D1-D6 Aggregation Complete ===")
     print("\nSource CSV paths used:")
-    for dataset_id in sorted(source_paths):
-        print(f"  D{dataset_id}: {source_paths[dataset_id]}")
-
+    for path in unique_paths:
+        print(f"  {path}")
+    for row in audit_rows:
+        if row.get("warning"):
+            print(f"WARNING: {row['warning']}")
     print(f"\nTotal row count: {len(all_rows)}")
     print("\nRow count by dataset:")
     for dataset_id in sorted(row_counts):
         print(f"  D{dataset_id}: {row_counts[dataset_id]}")
-
-    print("\nMethod count by dataset:")
-    for dataset_id in sorted(row_counts):
-        methods = sorted({method for (ds, method) in method_counts if ds == dataset_id})
-        print(f"  D{dataset_id}: {len(methods)} methods -> {', '.join(methods)}")
-
     print("\nNaN/inf metric counts:")
     print(f"  smape NaN/empty: {smape_nan}")
     print(f"  smape inf: {smape_inf}")
     print(f"  rmse NaN/empty: {rmse_nan}")
     print(f"  rmse inf: {rmse_inf}")
-
     print("\nOutput file paths:")
-    for path in [
-        all_results_path,
-        method_mean_path,
-        dataset_method_path,
-        best_target_path,
-        best_dataset_md_path,
-    ]:
+    for path in [output, audit_path] + extra_paths:
         print(f"  {path}")
+
+    return {
+        "all_results_path": output,
+        "audit_path": audit_path,
+        "extra_paths": extra_paths,
+        "audit_rows": audit_rows,
+    }
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Aggregate D1-D6 result CSVs from a run directory.")
+    parser.add_argument("--run-dir", type=Path, default=PROJECT_ROOT / "outputs" / "runs")
+    parser.add_argument("--output", type=Path, default=OUTPUT_DIR / "d1_d6_all_results.csv")
+    parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--allow-missing", action="store_true")
+    parser.add_argument("--legacy-fallback", action="store_true")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = _parse_args()
+    aggregate(
+        run_dir=args.run_dir,
+        output=args.output,
+        strict=bool(args.strict),
+        allow_missing=bool(args.allow_missing),
+        legacy_fallback=bool(args.legacy_fallback),
+    )
 
 
 if __name__ == "__main__":
-    aggregate()
+    main()

@@ -1,5 +1,9 @@
 # source domain 历史窗口天数，论文固定值
 SOURCE_HISTORY_DAYS = 300
+MIXED_METRIC_SPACE = "mixed_metric_space"
+MIXED_METRIC_PROTOCOL_NOTE = (
+    "non-strict protocol uses normalized RMSE and original-scale sMAPE when inverse transform is available"
+)
 
 # D1–D6 统一结果 schema，与 run_full_paper_experiments._result_columns() 保持一致
 RESULT_SCHEMA_COLUMNS = [
@@ -22,10 +26,22 @@ RESULT_SCHEMA_COLUMNS = [
     "metric_space_current",
     "metric_space_paper",
     "metric_space_used",
+    "rmse_metric_space",
+    "smape_metric_space",
     "paper_metric_aligned",
     "inverse_transform_applied",
     "inverse_transform_available",
+    "metric_protocol",
+    "metric_protocol_note",
+    "metric_protocol_error",
     "metric_notes",
+    "knn_json_domain_filter",
+    "source_domain_filter",
+    "source_domain_filter_applied",
+    "source_domain_filter_reason",
+    "source_pool_size_before_filter",
+    "source_pool_size_after_filter",
+    "source_domain_filter_error",
     "paper_split_reference",
     "target_start_date",
     "target_end_date",

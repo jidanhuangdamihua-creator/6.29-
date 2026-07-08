@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Sequence
 import numpy as np
 import pandas as pd
 
+from src.constants import MIXED_METRIC_PROTOCOL_NOTE, MIXED_METRIC_SPACE
 from src.experiment.experiment_runner import (
     run_msml_experiment,
     run_msml_rfe_experiment,
@@ -22,6 +23,7 @@ from src.transfer_methods.source_failure_tolerance import (
 )
 from src.utils.finite_diagnostics import NonFiniteArrayError, validate_feature_frame_finite
 from src.utils.result_validation import annotate_silent_metric_failure
+from src.utils.source_fillna import fill_source_numeric_na
 
 
 LOGGER = logging.getLogger("experiment")
@@ -35,6 +37,49 @@ DIAGNOSTIC_COLUMNS = (
     "X_test_inf_count",
     "model_weight_nan_count",
     "model_weight_inf_count",
+)
+METRIC_STATUS_COLUMNS = (
+    "metric_space",
+    "metric_space_current",
+    "metric_space_paper",
+    "metric_space_used",
+    "rmse_metric_space",
+    "smape_metric_space",
+    "paper_metric_aligned",
+    "inverse_transform_applied",
+    "inverse_transform_available",
+    "metric_notes",
+    "metric_protocol_note",
+    "metric_protocol_error",
+    "rmse_current",
+    "accuracy_current",
+    "mae_current",
+    "mape_current",
+    "smape_current",
+    "rmse_paper",
+    "accuracy_paper",
+    "mae_paper",
+    "mape_paper",
+    "smape_paper",
+    "normalized_rmse",
+    "normalized_accuracy",
+    "normalized_mae",
+    "normalized_mape",
+    "normalized_smape",
+    "original_scale_rmse",
+    "original_scale_accuracy",
+    "original_scale_mae",
+    "original_scale_mape",
+    "original_scale_smape",
+)
+SOURCE_DOMAIN_DIAGNOSTIC_COLUMNS = (
+    "knn_json_domain_filter",
+    "source_domain_filter",
+    "source_domain_filter_applied",
+    "source_domain_filter_reason",
+    "source_pool_size_before_filter",
+    "source_pool_size_after_filter",
+    "source_domain_filter_error",
 )
 
 
@@ -52,6 +97,29 @@ def _source_count_for_method(method: str, config: Dict[str, Any]) -> int:
 
 def _stable_json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+
+
+def _metric_protocol_note(raw: Dict[str, Any], config: Dict[str, Any]) -> str:
+    if raw.get("metric_protocol_note"):
+        return str(raw["metric_protocol_note"])
+    rmse_metric_space = str(raw.get("rmse_metric_space", "") or "").strip()
+    smape_metric_space = str(raw.get("smape_metric_space", "") or "").strip()
+    if raw.get("metric_space_used") == MIXED_METRIC_SPACE or (
+        rmse_metric_space and smape_metric_space and rmse_metric_space != smape_metric_space
+    ):
+        return MIXED_METRIC_PROTOCOL_NOTE
+    if raw.get("metric_notes"):
+        return str(raw["metric_notes"])
+    protocol = dict(config.get("metric_protocol", {}) or {})
+    if (
+        int(config.get("dataset_id", 0)) in {4, 5, 6}
+        and str(protocol.get("current_metric_space", "normalized_minmax_space")) == "normalized_minmax_space"
+        and str(protocol.get("paper_metric_space", "original_sales_space")) == "original_sales_space"
+        and not bool(raw.get("paper_metric_aligned", False))
+        and not bool(raw.get("inverse_transform_applied", False))
+    ):
+        return "inverse transform not available for solidified parquet path"
+    return ""
 
 
 def _method_runner(method: str):
@@ -149,6 +217,26 @@ def _build_model_dataframe(df: pd.DataFrame, model_feature_cols: Sequence[str]) 
     return model_df
 
 
+def _sanitize_source_model_dataframe(
+    source_model_df: pd.DataFrame,
+    model_feature_cols: Sequence[str],
+) -> pd.DataFrame:
+    """Return finite source model features without touching target/schema paths."""
+    attrs = source_model_df.attrs.copy()
+    sanitized = fill_source_numeric_na(source_model_df, feature_columns=model_feature_cols)
+    for col in dict.fromkeys(str(col) for col in model_feature_cols):
+        if col not in sanitized.columns:
+            continue
+        if pd.api.types.is_numeric_dtype(sanitized[col]):
+            sanitized[col] = (
+                pd.to_numeric(sanitized[col], errors="coerce")
+                .replace([np.inf, -np.inf], np.nan)
+                .fillna(0)
+            )
+    sanitized.attrs.update(attrs)
+    return sanitized
+
+
 def _selection_meta(raw: Dict[str, Any], method: str, requested_k: int) -> Dict[str, Any]:
     meta = raw.get("meta", {}) if isinstance(raw.get("meta"), dict) else {}
     selected = meta.get("selected_sources", [])
@@ -209,6 +297,24 @@ def _row_from_result(
         "selected_sources": _stable_json_dumps(source_meta["selected_sources"]),
         "error": str(raw.get("error", "")),
     }
+    metric_protocol = dict(config.get("metric_protocol", {}) or {})
+    row["metric_protocol"] = _stable_json_dumps(metric_protocol) if metric_protocol else ""
+    row["metric_space_current"] = str(
+        raw.get("metric_space_current", metric_protocol.get("current_metric_space", "normalized_minmax_space"))
+    )
+    row["metric_space_paper"] = str(
+        raw.get("metric_space_paper", metric_protocol.get("paper_metric_space", "original_sales_space"))
+    )
+    row["metric_space_used"] = str(
+        raw.get("metric_space_used", raw.get("metric_space", row["metric_space_current"]))
+    )
+    row["rmse_metric_space"] = str(raw.get("rmse_metric_space", row["metric_space_used"]))
+    row["smape_metric_space"] = str(raw.get("smape_metric_space", row["metric_space_used"]))
+    row["paper_metric_aligned"] = bool(raw.get("paper_metric_aligned", False))
+    row["inverse_transform_applied"] = bool(raw.get("inverse_transform_applied", False))
+    row["inverse_transform_available"] = bool(raw.get("inverse_transform_available", False))
+    row["metric_protocol_note"] = _metric_protocol_note(raw, config)
+    row["metric_protocol_error"] = str(raw.get("metric_protocol_error", ""))
     for key in ("target_entity_id", "target_store_id", "target_item_id"):
         if key in raw:
             row[key] = raw[key]
@@ -217,6 +323,20 @@ def _row_from_result(
     for key in DIAGNOSTIC_COLUMNS:
         if key in raw:
             row[key] = raw[key]
+    for key in METRIC_STATUS_COLUMNS:
+        if key in raw:
+            row[key] = raw[key]
+    if "metric_protocol_note" not in row or not row["metric_protocol_note"]:
+        row["metric_protocol_note"] = _metric_protocol_note(raw, config)
+    for key in SOURCE_DOMAIN_DIAGNOSTIC_COLUMNS:
+        if key in raw:
+            row[key] = raw[key]
+        elif key in config:
+            value = config[key]
+            if key in {"knn_json_domain_filter", "source_domain_filter"}:
+                row[key] = "" if value is None else _stable_json_dumps(value)
+            else:
+                row[key] = value
     for key in (
         "feature_source",
         "knn_feature_mode",
@@ -273,8 +393,19 @@ def run_single_entity_experiment(
     target_entity_df = target_entity_df.copy()
     source_df.attrs["information_sharing_scenario"] = scenario
     target_entity_df.attrs["information_sharing_scenario"] = scenario
+    metric_protocol = dict(config.get("metric_protocol", {}) or {})
     model_feature_cols = _resolve_model_feature_cols(source_df, target_entity_df, feature_cols, config)
     source_model_df = _build_model_dataframe(source_df, model_feature_cols)
+    source_model_df = _sanitize_source_model_dataframe(source_model_df, model_feature_cols)
+    validate_feature_frame_finite(
+        source_model_df,
+        model_feature_cols,
+        context="post_build_model_dataframe_source",
+        dataset_id=config.get("dataset_id"),
+        role="source",
+        entity_id="source_pool",
+        stage="post_build_model_dataframe",
+    )
     target_model_df = _build_model_dataframe(target_entity_df, model_feature_cols)
     validate_feature_frame_finite(
         target_model_df,
@@ -303,6 +434,7 @@ def run_single_entity_experiment(
                 learning_rate=float(config["learning_rate"]),
                 target_epochs=int(config["target_epochs"]),
                 batch_size=int(config["batch_size"]),
+                metric_protocol=metric_protocol,
                 feature_cols=list(model_feature_cols),
             )
         else:
@@ -316,6 +448,7 @@ def run_single_entity_experiment(
                 "source_epochs": int(config["source_epochs"]),
                 "target_epochs": int(config["target_epochs"]),
                 "batch_size": int(config["batch_size"]),
+                "metric_protocol": metric_protocol,
             }
             if method not in {"SS-TL"}:
                 kwargs["number_of_sources"] = _source_count_for_method(method, config)

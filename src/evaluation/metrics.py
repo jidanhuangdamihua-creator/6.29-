@@ -6,6 +6,8 @@ import logging
 
 import numpy as np
 
+from src.constants import MIXED_METRIC_PROTOCOL_NOTE, MIXED_METRIC_SPACE
+
 
 SUPPORTED_METRIC_SPACES = {"normalized_minmax_space", "original_sales_space"}
 
@@ -106,6 +108,7 @@ def compute_metrics_with_protocol(
     paper_accuracy_definition = str(protocol.get("paper_accuracy_definition", "1/(RMSE+1e-8)"))
     current_accuracy_definition = str(protocol.get("current_accuracy_definition", "1/(RMSE+1e-8)"))
     strict_paper_metrics = bool(protocol.get("strict_paper_metrics", False))
+    metric_protocol_note = str(protocol.get("metric_protocol_note", "") or "")
 
     y_true_arr = np.asarray(y_true, dtype=np.float64).reshape(-1)
     y_pred_arr = np.asarray(y_pred, dtype=np.float64).reshape(-1)
@@ -170,6 +173,18 @@ def compute_metrics_with_protocol(
     original_scale_available = paper_space == "original_sales_space" and inverse_transform_available
     original_scale_smape = float(smape_paper) if original_scale_available else None
     smape_final = float(original_scale_smape) if original_scale_smape is not None else float(smape_current)
+    if use_paper_metric:
+        rmse_metric_space = paper_space
+        smape_metric_space = paper_space
+    else:
+        rmse_metric_space = current_space
+        smape_metric_space = paper_space if original_scale_smape is not None else current_space
+
+    # metric_space_used is a summary diagnostic only. When it is mixed_metric_space,
+    # downstream consumers must read rmse_metric_space and smape_metric_space.
+    metric_space_used = rmse_metric_space if rmse_metric_space == smape_metric_space else MIXED_METRIC_SPACE
+    if metric_space_used == MIXED_METRIC_SPACE and not metric_protocol_note:
+        metric_protocol_note = MIXED_METRIC_PROTOCOL_NOTE
 
     return {
         "rmse": float(rmse_final),
@@ -179,6 +194,8 @@ def compute_metrics_with_protocol(
         "smape": float(smape_final),
         "metric_space": metric_space_used,
         "metric_space_used": metric_space_used,
+        "rmse_metric_space": rmse_metric_space,
+        "smape_metric_space": smape_metric_space,
         "rmse_current": float(rmse_current),
         "accuracy_current": float(accuracy_current),
         "mae_current": float(mae_current),
@@ -205,6 +222,7 @@ def compute_metrics_with_protocol(
         "inverse_transform_applied": bool(inverse_transform_applied),
         "inverse_transform_available": bool(inverse_transform_available),
         "strict_paper_metrics": bool(strict_paper_metrics),
+        "metric_protocol_note": metric_protocol_note,
         "metric_notes": " | ".join(notes),
     }
 

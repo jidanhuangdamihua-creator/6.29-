@@ -90,11 +90,19 @@ def test_entity_loop_passes_same_solidified_model_features_to_all_tl_methods(mon
         ],
         ignore_index=True,
     )
+    source_df["class"] = source_df["class"].astype(float)
+    source_df.loc[source_df["entity_id"].eq("48_938574"), "oil_price"] = np.nan
+    source_df.loc[source_df["entity_id"].eq("48_1146785"), "transactions"] = np.inf
+    source_df.loc[source_df["entity_id"].eq("48_1146785"), "class"] = -np.inf
     target_df = _d5_like_frame("48_1159415", 1159415)
     target_df.loc[:, ["transactions", "oil_price"]] = target_df[["transactions", "oil_price"]].fillna(0)
     target_df.attrs["split_role"] = "target"
+    original_target_df = target_df.copy(deep=True)
 
     captured: dict[str, list[str]] = {}
+    source_validation_calls: list[dict[str, object]] = []
+
+    original_validate_feature_frame_finite = entity_experiment.validate_feature_frame_finite
 
     def fake_no_tl_runner(**kwargs):
         captured["No-TL"] = list(kwargs["feature_cols"])
@@ -103,7 +111,20 @@ def test_entity_loop_passes_same_solidified_model_features_to_all_tl_methods(mon
     def fake_tl_runner(**kwargs):
         method = kwargs.pop("_method")
         captured[method] = list(kwargs["feature_cols"])
-        return {"rmse": 1.0, "accuracy": 1.0, "smape": 1.0, "error": ""}
+        source_values = kwargs["source_df"][D5_MODEL_FEATURE_COLS].to_numpy(dtype=float)
+        assert np.isfinite(source_values).all()
+        return {
+            "rmse": 1.0,
+            "accuracy": 1.0,
+            "smape": 1.0,
+            "error": "",
+            "target_store_id": "48",
+            "target_item_id": "1159415",
+            "meta": {
+                "source_key": ("48", "938574"),
+                "selected_sources": [{"source_key": ("48", "938574"), "distance": 0.1}],
+            },
+        }
 
     def fake_method_runner(method):
         if method == "No-TL":
@@ -114,7 +135,20 @@ def test_entity_loop_passes_same_solidified_model_features_to_all_tl_methods(mon
 
         return runner
 
+    def recording_validate_feature_frame_finite(df, feature_columns, **kwargs):
+        result = original_validate_feature_frame_finite(df, feature_columns, **kwargs)
+        if kwargs.get("role") == "source":
+            values = df[list(feature_columns)].to_numpy(dtype=float)
+            assert np.isfinite(values).all()
+            source_validation_calls.append(dict(kwargs))
+        return result
+
     monkeypatch.setattr(entity_experiment, "_method_runner", fake_method_runner)
+    monkeypatch.setattr(
+        entity_experiment,
+        "validate_feature_frame_finite",
+        recording_validate_feature_frame_finite,
+    )
 
     rows = entity_experiment.run_single_entity_experiment(
         entity_key="48_1159415",
@@ -138,9 +172,66 @@ def test_entity_loop_passes_same_solidified_model_features_to_all_tl_methods(mon
 
     assert len(rows) == 6
     assert set(captured) == {"No-TL", "SS-TL", "MSWA-TL", "MSSB-TL", "MSML-TL", "MSML-TL-RFE"}
+    assert source_validation_calls
+    assert source_validation_calls[0]["entity_id"] == "source_pool"
+    assert source_validation_calls[0]["stage"] == "post_build_model_dataframe"
+    pd.testing.assert_frame_equal(target_df, original_target_df)
     for feature_cols in captured.values():
         assert feature_cols == D5_MODEL_FEATURE_COLS
         assert "onpromotion" not in feature_cols
+    tl_rows = [row for row in rows if row["method"] != "No-TL"]
+    assert tl_rows
+    for row in tl_rows:
+        assert row["target_entity_key"] == "48_1159415"
+        assert row["target_store_id"] == "48"
+        assert row["target_item_id"] == "1159415"
+        assert row["source_identifier"]
+        assert row["selected_sources"]
+
+
+@pytest.mark.parametrize("dataset_id", [4, 5, 6])
+def test_source_sanitize_path_is_shared_by_d4_d5_d6(monkeypatch, dataset_id):
+    source_df = _d5_like_frame("source", 1)
+    source_df["class"] = source_df["class"].astype(float)
+    source_df.loc[0, "oil_price"] = np.nan
+    source_df.loc[1, "transactions"] = np.inf
+    source_df.loc[2, "class"] = -np.inf
+    target_df = _d5_like_frame("target", 2)
+    target_df.loc[:, ["transactions", "oil_price"]] = target_df[["transactions", "oil_price"]].fillna(0)
+    target_df.attrs["split_role"] = "target"
+
+    def fake_method_runner(method):
+        def runner(**kwargs):
+            source_values = kwargs["source_df"][D5_MODEL_FEATURE_COLS].to_numpy(dtype=float)
+            assert np.isfinite(source_values).all()
+            return {"rmse": 1.0, "accuracy": 1.0, "smape": 1.0, "error": ""}
+
+        return runner
+
+    monkeypatch.setattr(entity_experiment, "_method_runner", fake_method_runner)
+
+    rows = entity_experiment.run_single_entity_experiment(
+        entity_key="target",
+        source_df=source_df,
+        target_entity_df=target_df,
+        feature_cols=D5_MODEL_FEATURE_COLS,
+        config={
+            "dataset_id": dataset_id,
+            "dataset_name": f"Dataset{dataset_id}",
+            "info_sharing": "without",
+            "source_count": 1,
+            "horizon": 1,
+            "window_size": 3,
+            "learning_rate": 0.001,
+            "source_epochs": 1,
+            "target_epochs": 1,
+            "batch_size": 1,
+        },
+        enabled_methods=["MSWA-TL"],
+    )
+
+    assert rows[0]["dataset_id"] == dataset_id
+    assert rows[0]["target_entity_key"] == "target"
 
 
 def test_source_level_failure_is_recorded_but_target_schema_errors_still_raise(monkeypatch):

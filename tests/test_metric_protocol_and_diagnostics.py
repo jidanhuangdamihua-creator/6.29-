@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 
 import numpy as np
+import pandas as pd
 
+from src.evaluation.metrics import compute_metrics_with_protocol
 from src.experiment.experiment_runner import _extract_method_metrics
+from src.utils import entity_experiment
 from src.utils.entity_experiment import _row_from_result
 
 
@@ -39,10 +42,86 @@ def test_extract_method_metrics_recomputes_multi_source_strict_paper_metrics() -
     )
 
     assert result["metric_space_used"] == "original_sales_space"
+    assert result["rmse_metric_space"] == "original_sales_space"
+    assert result["smape_metric_space"] == "original_sales_space"
     assert result["paper_metric_aligned"] is True
     assert result["inverse_transform_applied"] is True
     assert result["normalized_rmse"] == 0.25
     assert result["rmse"] == 2.5
+
+
+def test_non_strict_inverse_available_reports_mixed_metric_spaces() -> None:
+    result = compute_metrics_with_protocol(
+        y_true=np.array([0.0, 0.5]),
+        y_pred=np.array([0.25, 0.25]),
+        metric_protocol={
+            "current_metric_space": "normalized_minmax_space",
+            "paper_metric_space": "original_sales_space",
+            "strict_paper_metrics": False,
+        },
+        sales_scaler=DummyMinMaxScaler(),
+        feature_columns=["sales"],
+    )
+
+    assert result["metric_space_used"] == "mixed_metric_space"
+    assert result["rmse_metric_space"] == "normalized_minmax_space"
+    assert result["smape_metric_space"] == "original_sales_space"
+    assert result["paper_metric_aligned"] is False
+    assert result["inverse_transform_applied"] is True
+    assert (
+        result["metric_protocol_note"]
+        == "non-strict protocol uses normalized RMSE and original-scale sMAPE when inverse transform is available"
+    )
+
+
+def test_entity_row_reports_mixed_note_without_overwriting_existing_note() -> None:
+    config = {
+        "dataset_id": 5,
+        "dataset_name": "Dataset5",
+        "info_sharing": "without",
+        "metric_protocol": {
+            "current_metric_space": "normalized_minmax_space",
+            "paper_metric_space": "original_sales_space",
+            "strict_paper_metrics": False,
+        },
+    }
+    mixed_raw = {
+        "rmse": 0.25,
+        "accuracy": 4.0,
+        "smape": 10.0,
+        "metric_space_used": "mixed_metric_space",
+        "rmse_metric_space": "normalized_minmax_space",
+        "smape_metric_space": "original_sales_space",
+        "paper_metric_aligned": False,
+        "inverse_transform_applied": True,
+    }
+    mixed_row = _row_from_result(
+        mixed_raw,
+        method="SS-TL",
+        entity_key="target",
+        config=config,
+        elapsed=1.0,
+    )
+
+    assert mixed_row["rmse_metric_space"] == "normalized_minmax_space"
+    assert mixed_row["smape_metric_space"] == "original_sales_space"
+    assert (
+        mixed_row["metric_protocol_note"]
+        == "non-strict protocol uses normalized RMSE and original-scale sMAPE when inverse transform is available"
+    )
+
+    noted_row = _row_from_result(
+        {
+            **mixed_raw,
+            "metric_protocol_note": "keep this diagnostic",
+        },
+        method="SS-TL",
+        entity_key="target",
+        config=config,
+        elapsed=1.0,
+    )
+
+    assert noted_row["metric_protocol_note"] == "keep this diagnostic"
 
 
 def test_validate_finite_array_reports_nan_prediction_counts() -> None:
@@ -138,6 +217,75 @@ def test_source_failure_diagnostics_propagate_to_extracted_metrics_and_entity_ro
     assert json.loads(row["source_failure_messages"]) == [
         "('bad', 'item'): NonFiniteArrayError: model weights contain non-finite values: nan_count=1 inf_count=0"
     ]
+
+
+def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_inverse_transform(monkeypatch) -> None:
+    dates = pd.date_range("2024-01-01", periods=8, freq="D")
+    source_df = pd.DataFrame(
+        {
+            "date": dates,
+            "entity_id": ["source"] * len(dates),
+            "item_id": [1] * len(dates),
+            "sales": np.arange(1.0, 9.0),
+        }
+    )
+    target_df = pd.DataFrame(
+        {
+            "date": dates,
+            "entity_id": ["target"] * len(dates),
+            "item_id": [2] * len(dates),
+            "sales": np.arange(2.0, 10.0),
+        }
+    )
+    metric_protocol = {
+        "current_metric_space": "normalized_minmax_space",
+        "paper_metric_space": "original_sales_space",
+        "strict_paper_metrics": False,
+    }
+    received_protocols: dict[str, dict] = {}
+
+    def fake_runner(method: str):
+        def runner(**kwargs):
+            received_protocols[method] = kwargs["metric_protocol"]
+            return {
+                "rmse": 1.0,
+                "accuracy": 0.5,
+                "smape": 10.0,
+                "error": "",
+            }
+
+        return runner
+
+    monkeypatch.setattr(entity_experiment, "_method_runner", fake_runner)
+
+    rows = entity_experiment.run_single_entity_experiment(
+        entity_key="target",
+        source_df=source_df,
+        target_entity_df=target_df,
+        feature_cols=["sales"],
+        config={
+            "dataset_id": 5,
+            "dataset_name": "Dataset5",
+            "info_sharing": "without",
+            "source_count": 1,
+            "horizon": 1,
+            "window_size": 1,
+            "learning_rate": 0.001,
+            "source_epochs": 1,
+            "target_epochs": 1,
+            "batch_size": 1,
+            "metric_protocol": metric_protocol,
+        },
+        enabled_methods=["No-TL", "MSWA-TL"],
+    )
+
+    assert received_protocols == {"No-TL": metric_protocol, "MSWA-TL": metric_protocol}
+    for row in rows:
+        assert row["metric_protocol"] == json.dumps(metric_protocol, ensure_ascii=False, sort_keys=True)
+        assert row["metric_space_used"] == "normalized_minmax_space"
+        assert row["paper_metric_aligned"] is False
+        assert row["inverse_transform_applied"] is False
+        assert row["metric_protocol_note"] == "inverse transform not available for solidified parquet path"
 
 
 def test_should_skip_source_exception_only_skips_numeric_source_failures() -> None:

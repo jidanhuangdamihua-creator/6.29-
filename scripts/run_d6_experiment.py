@@ -21,6 +21,7 @@ from src.utils.parquet_data_loader import (
     attach_window_attrs,
     load_knn_results,
 )
+from src.utils.d4_d6_runtime import apply_runtime_source_domain_policy, load_default_metric_protocol
 from src.utils.finite_diagnostics import validate_feature_frame_finite
 from src.utils.knn_feature_loader import resolve_knn_feature_columns
 
@@ -102,6 +103,7 @@ def main() -> None:
         config["source_epochs"] = int(args.epochs)
         config["target_epochs"] = int(args.epochs)
     config["repair_source_numeric_na"] = bool(args.repair_source_numeric_na)
+    config["metric_protocol"] = load_default_metric_protocol(PROJECT_ROOT)
     config["output_filename"] = f"dataset{config['dataset_id']}_{config['info_sharing']}_results.csv"
 
     root = PROJECT_ROOT
@@ -175,6 +177,7 @@ def main() -> None:
     )
 
     knn_data = load_knn_results(config["knn_json_dir"], config["info_sharing"])
+    source_df = apply_runtime_source_domain_policy(source_df, knn_data, config)
     target_entity_keys = list(knn_data["results"].keys())
     if config["smoke"]:
         target_entity_keys = target_entity_keys[: int(config["smoke_target_limit"])]
