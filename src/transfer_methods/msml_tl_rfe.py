@@ -50,8 +50,8 @@ from src.utils.runtime_control import keras_verbose
 from src.evaluation.metrics import smape
 from src.utils.finite_diagnostics import NonFiniteArrayError, summarize_model_weights, validate_finite_array
 from src.transfer_methods.source_failure_tolerance import (
+    AllSourcesFailedError,
     SOURCE_LEVEL_EXCEPTIONS,
-    all_sources_failed_message,
     make_failed_source,
     normalize_successful_source_weights,
     should_skip_source_exception,
@@ -802,7 +802,7 @@ def run_msml_tl_rfe(
         })
 
     if not source_models:
-        raise RuntimeError(all_sources_failed_message("MSML-TL-RFE", failed_sources))
+        raise AllSourcesFailedError("MSML-TL-RFE", failed_sources, selected_sources=selected_sources)
 
     source_weights = normalize_successful_source_weights(source_weights)
     for info, normalized_weight in zip(source_models_info, source_weights):

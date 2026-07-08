@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import numpy as np
 
 from src.experiment.experiment_runner import _extract_method_metrics
@@ -99,6 +101,10 @@ def test_source_failure_diagnostics_propagate_to_extracted_metrics_and_entity_ro
             "failed_source_keys": [("bad", "item")],
             "skipped_nonfinite_source_count": 1,
             "failed_sources": failed_sources,
+            "selected_source_count": 2,
+            "source_failure_messages": [
+                "('bad', 'item'): NonFiniteArrayError: model weights contain non-finite values: nan_count=1 inf_count=0"
+            ],
         },
     }
 
@@ -115,6 +121,50 @@ def test_source_failure_diagnostics_propagate_to_extracted_metrics_and_entity_ro
     assert row["valid_source_count"] == 1
     assert row["skipped_source_count"] == 1
     assert row["failed_source_count"] == 1
+    assert row["selected_source_count"] == 2
     assert row["skipped_nonfinite_source_count"] == 1
     assert row["failed_source_keys"] == [("bad", "item")]
-    assert row["failed_sources"] == failed_sources
+    assert json.loads(row["failed_sources"]) == [
+        {
+            "exception_message": "model weights contain non-finite values: nan_count=1 inf_count=0",
+            "exception_type": "NonFiniteArrayError",
+            "failed_source_key": ["bad", "item"],
+        }
+    ]
+    assert json.loads(row["selected_sources"]) == [
+        {"source_key": ["bad", "item"]},
+        {"source_key": ["good", "item"]},
+    ]
+    assert json.loads(row["source_failure_messages"]) == [
+        "('bad', 'item'): NonFiniteArrayError: model weights contain non-finite values: nan_count=1 inf_count=0"
+    ]
+
+
+def test_should_skip_source_exception_only_skips_numeric_source_failures() -> None:
+    from src.transfer_methods.source_failure_tolerance import should_skip_source_exception
+    from src.utils.finite_diagnostics import NonFiniteArrayError
+
+    skip_cases = [
+        NonFiniteArrayError(
+            "model weights contain non-finite values: nan_count=1 inf_count=0",
+            diagnostics={"model_weight_nan_count": 1, "model_weight_inf_count": 0},
+        ),
+        FloatingPointError("overflow encountered in source model"),
+        ValueError("prediction contains NaN values for source_key=('a', 'b')"),
+        RuntimeError("SS-TL failed for source_key=('a', 'b'): invalid value encountered in divide"),
+        RuntimeError("model weights contain non-finite values: nan_count=32545 inf_count=0"),
+    ]
+    for exc in skip_cases:
+        assert should_skip_source_exception(exc), f"expected source skip for {exc!r}"
+
+    fail_fast_cases = [
+        ValueError("sales must remain in model_feature_cols for sequence target construction"),
+        ValueError("Selected source_key not found in source_df: ('missing', 'item')"),
+        ValueError("Inconsistent target y_test across source runs; cannot fuse predictions"),
+        RuntimeError("schema mismatch: feature columns changed"),
+        RuntimeError("target dataframe is missing required dates"),
+        RuntimeError("config path is invalid"),
+        RuntimeError("source optimizer failed"),
+    ]
+    for exc in fail_fast_cases:
+        assert not should_skip_source_exception(exc), f"expected fail-fast for {exc!r}"

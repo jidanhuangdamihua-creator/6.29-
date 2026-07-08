@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Sequence, Tuple
+import re
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -10,34 +11,64 @@ from src.utils.finite_diagnostics import NonFiniteArrayError
 
 
 SOURCE_LEVEL_EXCEPTIONS = (NonFiniteArrayError, FloatingPointError, ValueError, RuntimeError)
-NON_SOURCE_FAILURE_MARKERS = (
-    "target",
-    "feature_cols",
-    "source_df",
-    "target_df",
-    "missing feature",
-    "shape mismatch",
-    "cannot fuse",
-    "selected source_key",
+SOURCE_FAILURE_MARKERS = (
+    "ss-tl failed for source_key",
+    "non-finite",
+    "model weights contain non-finite values",
+    "prediction contains",
+    "nan",
+    "inf",
+    "floating point",
+    "overflow",
+    "invalid value encountered",
 )
+NON_SOURCE_FAILURE_MARKERS = (
+    "sales must remain",
+    "invalid source_key",
+    "source_key not found",
+    "selected source_key not found",
+    "inconsistent target y_test",
+    "target",
+    "schema",
+    "config",
+    "feature columns",
+    "sales not in feature",
+    "sales column",
+)
+
+
+def _message(exc: BaseException) -> str:
+    return str(exc).lower()
+
+
+def _contains_marker(message: str, marker: str) -> bool:
+    if marker in {"nan", "inf"}:
+        return re.search(rf"(?<![a-z]){re.escape(marker)}(?![a-z])", message) is not None
+    return marker in message
 
 
 def is_nonfinite_source_failure(exc: BaseException) -> bool:
     """Return True when a skipped source failed due to detected NaN/Inf values."""
     if isinstance(exc, NonFiniteArrayError):
         return True
-    message = str(exc).lower()
-    return "non-finite" in message or "nan_count" in message or "inf_count" in message
+    message = _message(exc)
+    return (
+        "non-finite" in message
+        or "nan_count" in message
+        or "inf_count" in message
+        or _contains_marker(message, "nan")
+        or _contains_marker(message, "inf")
+    )
 
 
 def should_skip_source_exception(exc: BaseException) -> bool:
     """Return True when an exception is safe to treat as current-source failure."""
-    if isinstance(exc, (NonFiniteArrayError, FloatingPointError)):
-        return True
-    if not isinstance(exc, (ValueError, RuntimeError)):
+    message = _message(exc)
+    if any(_contains_marker(message, marker) for marker in NON_SOURCE_FAILURE_MARKERS):
         return False
-    message = str(exc).lower()
-    return not any(marker in message for marker in NON_SOURCE_FAILURE_MARKERS)
+    if any(_contains_marker(message, marker) for marker in SOURCE_FAILURE_MARKERS):
+        return True
+    return isinstance(exc, (NonFiniteArrayError, FloatingPointError))
 
 
 def make_failed_source(source_key: Tuple[Any, ...], exc: BaseException) -> Dict[str, object]:
@@ -47,6 +78,18 @@ def make_failed_source(source_key: Tuple[Any, ...], exc: BaseException) -> Dict[
         "exception_type": type(exc).__name__,
         "exception_message": str(exc),
     }
+
+
+def source_failure_messages(failed_sources: Sequence[Dict[str, object]]) -> list[str]:
+    """Return concise human-readable source failure summaries."""
+    messages: list[str] = []
+    for entry in failed_sources:
+        messages.append(
+            f"{entry.get('failed_source_key')}: "
+            f"{entry.get('exception_type')}: "
+            f"{entry.get('exception_message')}"
+        )
+    return messages
 
 
 def source_failure_meta(
@@ -69,13 +112,16 @@ def source_failure_meta(
     skipped_source_count = len(failed_sources)
     return {
         "requested_k": int(requested_k),
-        "effective_k": len(selected_sources),
+        "effective_k": int(valid_source_count),
+        "selected_source_count": int(len(selected_sources)),
         "valid_source_count": int(valid_source_count),
         "skipped_source_count": int(skipped_source_count),
         "failed_source_count": int(skipped_source_count),
         "failed_source_keys": failed_source_keys,
         "skipped_nonfinite_source_count": int(skipped_nonfinite_source_count),
+        "selected_sources": list(selected_sources),
         "failed_sources": list(failed_sources),
+        "source_failure_messages": source_failure_messages(failed_sources),
     }
 
 
@@ -92,4 +138,58 @@ def normalize_successful_source_weights(weights: Sequence[float]) -> list[float]
 
 def all_sources_failed_message(method_name: str, failed_sources: Sequence[Dict[str, object]]) -> str:
     """Return a clear error message for all-source failure."""
-    return f"{method_name} failed for all selected sources: {list(failed_sources)}"
+    messages = source_failure_messages(failed_sources)
+    summary = "; ".join(messages[:3])
+    if len(messages) > 3:
+        summary = f"{summary}; ... {len(messages) - 3} more"
+    return (
+        f"{method_name}: all selected sources failed "
+        f"(failed_source_count={len(failed_sources)}). "
+        f"Reasons: {summary}"
+    )
+
+
+class AllSourcesFailedError(RuntimeError):
+    """Raised when every selected source fails with source-level errors."""
+
+    def __init__(
+        self,
+        method_name: str,
+        failed_sources: Sequence[Dict[str, object]],
+        *,
+        selected_sources: Optional[Sequence[Dict[str, object]]] = None,
+    ) -> None:
+        self.method_name = str(method_name)
+        self.failed_sources = list(failed_sources)
+        self.selected_sources = list(selected_sources or [])
+        super().__init__(all_sources_failed_message(self.method_name, self.failed_sources))
+
+
+def is_all_sources_failed_error(exc: BaseException) -> bool:
+    """Return True when an exception is the typed all-source failure."""
+    return isinstance(exc, AllSourcesFailedError)
+
+
+def error_row_from_all_sources_failed(
+    exc: AllSourcesFailedError,
+    *,
+    requested_k: int,
+    elapsed: float,
+) -> Dict[str, object]:
+    """Build raw result payload for entity-level all-source error rows."""
+    return {
+        "rmse": np.nan,
+        "accuracy": np.nan,
+        "mae": np.nan,
+        "mape": np.nan,
+        "smape": np.nan,
+        "training_time": float(elapsed),
+        "prediction_shape": "N/A",
+        "error": str(exc),
+        "meta": source_failure_meta(
+            requested_k=requested_k,
+            selected_sources=exc.selected_sources,
+            valid_source_count=0,
+            failed_sources=exc.failed_sources,
+        ),
+    }

@@ -38,8 +38,8 @@ from src.source_selection.source_selector import SourceSelector
 from src.evaluation.metrics import smape
 from src.utils.finite_diagnostics import validate_finite_array
 from src.transfer_methods.source_failure_tolerance import (
+    AllSourcesFailedError,
     SOURCE_LEVEL_EXCEPTIONS,
-    all_sources_failed_message,
     make_failed_source,
     normalize_successful_source_weights,
     should_skip_source_exception,
@@ -456,7 +456,7 @@ def run_mswa_tl(
         )
 
     if not individual_results:
-        raise RuntimeError(all_sources_failed_message("MSWA-TL", failed_sources))
+        raise AllSourcesFailedError("MSWA-TL", failed_sources, selected_sources=selected_sources)
 
     normalized_weights = normalize_successful_source_weights(weights)
     for item, normalized_weight in zip(individual_results, normalized_weights):

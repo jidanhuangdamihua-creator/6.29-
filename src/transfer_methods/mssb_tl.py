@@ -37,8 +37,8 @@ from src.source_selection.source_selector import SourceSelector
 from src.evaluation.metrics import smape
 from src.utils.finite_diagnostics import validate_finite_array
 from src.transfer_methods.source_failure_tolerance import (
+    AllSourcesFailedError,
     SOURCE_LEVEL_EXCEPTIONS,
-    all_sources_failed_message,
     make_failed_source,
     should_skip_source_exception,
     source_failure_meta,
@@ -438,7 +438,7 @@ def run_mssb_tl(
         )
 
     if not individual_results:
-        raise RuntimeError(all_sources_failed_message("MSSB-TL", failed_sources))
+        raise AllSourcesFailedError("MSSB-TL", failed_sources, selected_sources=selected_sources)
 
     best_source_result, best_index = select_best_source_model(individual_results)
 

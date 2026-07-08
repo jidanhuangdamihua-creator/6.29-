@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any, Dict, List, Sequence
@@ -14,6 +15,10 @@ from src.experiment.experiment_runner import (
     run_mswa_experiment,
     run_no_tl_experiment,
     run_ss_tl_experiment,
+)
+from src.transfer_methods.source_failure_tolerance import (
+    AllSourcesFailedError,
+    error_row_from_all_sources_failed,
 )
 from src.utils.finite_diagnostics import NonFiniteArrayError
 from src.utils.result_validation import annotate_silent_metric_failure
@@ -43,6 +48,10 @@ def _source_count_for_method(method: str, config: Dict[str, Any]) -> int:
     if method == "SS-TL":
         return 1
     return int(config.get("source_count", config.get("k", 3)))
+
+
+def _stable_json_dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
 
 
 def _method_runner(method: str):
@@ -141,12 +150,14 @@ def _selection_meta(raw: Dict[str, Any], method: str, requested_k: int) -> Dict[
     return {
         "requested_k": int(meta.get("requested_k", requested_k)),
         "effective_k": int(meta.get("effective_k", len(selected) if method != "No-TL" else 0)),
+        "selected_source_count": int(meta.get("selected_source_count", len(selected) if method != "No-TL" else 0)),
         "valid_source_count": int(meta.get("valid_source_count", len(selected) if method != "No-TL" else 0)),
         "skipped_source_count": int(meta.get("skipped_source_count", 0)),
         "failed_source_count": int(meta.get("failed_source_count", meta.get("skipped_source_count", 0))),
         "failed_source_keys": meta.get("failed_source_keys", []),
         "skipped_nonfinite_source_count": int(meta.get("skipped_nonfinite_source_count", 0)),
         "failed_sources": meta.get("failed_sources", []),
+        "source_failure_messages": meta.get("source_failure_messages", []),
         "date_alignment_mode": str(meta.get("date_alignment_mode", "")),
         "selected_sources": selected,
         "source_key": str(meta.get("source_key", "")),
@@ -172,12 +183,14 @@ def _row_from_result(
         "method": method,
         "requested_k": source_meta["requested_k"],
         "effective_k": source_meta["effective_k"],
+        "selected_source_count": source_meta["selected_source_count"],
         "valid_source_count": source_meta["valid_source_count"],
         "skipped_source_count": source_meta["skipped_source_count"],
         "failed_source_count": source_meta["failed_source_count"],
         "failed_source_keys": source_meta["failed_source_keys"],
         "skipped_nonfinite_source_count": source_meta["skipped_nonfinite_source_count"],
-        "failed_sources": source_meta["failed_sources"],
+        "failed_sources": _stable_json_dumps(source_meta["failed_sources"]),
+        "source_failure_messages": _stable_json_dumps(source_meta["source_failure_messages"]),
         "date_alignment_mode": source_meta["date_alignment_mode"],
         "rmse": float(raw.get("rmse", np.nan)),
         "accuracy": float(raw.get("accuracy", np.nan)),
@@ -186,9 +199,14 @@ def _row_from_result(
         "smape": float(raw.get("smape", np.nan)),
         "training_time": float(raw.get("training_time", elapsed)),
         "prediction_shape": str(raw.get("prediction_shape", "N/A")),
-        "selected_sources": source_meta["selected_sources"],
+        "selected_sources": _stable_json_dumps(source_meta["selected_sources"]),
         "error": str(raw.get("error", "")),
     }
+    for key in ("target_entity_id", "target_store_id", "target_item_id"):
+        if key in raw:
+            row[key] = raw[key]
+        elif key in config:
+            row[key] = config[key]
     for key in DIAGNOSTIC_COLUMNS:
         if key in raw:
             row[key] = raw[key]
@@ -271,6 +289,14 @@ def run_single_entity_experiment(
                 kwargs["number_of_sources"] = _source_count_for_method(method, config)
             try:
                 raw = runner(**kwargs)
+            except AllSourcesFailedError as exc:
+                raw = error_row_from_all_sources_failed(
+                    exc,
+                    requested_k=_source_count_for_method(method, config),
+                    elapsed=time.perf_counter() - t0,
+                )
+                rows.append(_row_from_result(raw, method, entity_key, config, time.perf_counter() - t0))
+                continue
             except NonFiniteArrayError as exc:
                 rows.append(
                     _row_from_nonfinite_error(

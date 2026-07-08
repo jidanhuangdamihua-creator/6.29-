@@ -371,8 +371,10 @@ def _extract_method_metrics(
         "failed_source_keys",
         "skipped_source_count",
         "skipped_nonfinite_source_count",
+        "selected_source_count",
         "valid_source_count",
         "failed_sources",
+        "source_failure_messages",
     ):
         if source_diagnostic_key in method_meta:
             result[source_diagnostic_key] = method_meta[source_diagnostic_key]
