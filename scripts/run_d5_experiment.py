@@ -6,12 +6,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.constants import SOURCE_HISTORY_DAYS
-from src.constants import RESULT_CONTRACT_VERSION
 from src.constants import RESULT_SCHEMA_COLUMNS
-from src.constants import SCHEMA_FAMILY_D4_D6
-from src.constants import preferred_columns_with_extras
-from src.constants import stable_json_cell
 from src.constants import SOLIDIFIED_KNN_ROOT
+from src.utils.result_schema import TRACE_COLUMNS, align_d4_d6_result_records
 
 import tf_compat  # must be imported before tensorflow/keras
 
@@ -19,7 +16,6 @@ import pandas as pd
 
 from src.utils.run_utils import create_run_dir
 from src.utils.entity_experiment import run_single_entity_experiment
-from src.utils.result_validation import annotate_silent_metric_failure
 from src.utils.parquet_data_loader import (
     load_parquet_source_target,
     read_dataset_windows,
@@ -31,13 +27,6 @@ from src.utils.finite_diagnostics import validate_feature_frame_finite
 from src.utils.knn_feature_loader import resolve_knn_feature_columns
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-TRACE_COLUMNS = [
-    "dataset_id",
-    "scenario",
-    "target_entity_key",
-    "source_identifier",
-    "selected_sources",
-]
 
 config = {
     "use_parquet": True,
@@ -89,17 +78,10 @@ def _reference_result_columns() -> list[str]:
 
 
 def _align_results_to_reference_schema(df: pd.DataFrame) -> pd.DataFrame:
-    aligned = df.copy()
-    reference_columns = _reference_result_columns()
-    missing = [column for column in reference_columns + TRACE_COLUMNS if column not in aligned.columns]
-    if missing:
-        aligned = pd.concat([aligned, pd.DataFrame("", index=aligned.index, columns=missing)], axis=1)
-    aligned["result_contract_version"] = aligned["result_contract_version"].replace("", RESULT_CONTRACT_VERSION)
-    aligned["schema_family"] = aligned["schema_family"].replace("", SCHEMA_FAMILY_D4_D6)
-    if not aligned.empty:
-        aligned = pd.DataFrame([annotate_silent_metric_failure(row) for row in aligned.to_dict(orient="records")])
-        aligned = aligned.apply(lambda column: column.map(stable_json_cell))
-    return aligned[preferred_columns_with_extras(aligned.columns, reference_columns + TRACE_COLUMNS)]
+    if df.empty and len(df.columns) > 0:
+        template = align_d4_d6_result_records([{column: "" for column in df.columns}])
+        return template.iloc[0:0].copy()
+    return align_d4_d6_result_records(df.to_dict(orient="records"))
 
 
 def main() -> None:

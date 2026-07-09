@@ -42,8 +42,11 @@ from src.constants import (
     RESULT_SCHEMA_COLUMNS,
     SCHEMA_FAMILY_D1_D3,
     UNKNOWN,
-    preferred_columns_with_extras,
-    stable_json_cell,
+)
+from src.utils.result_schema import (
+    align_d1_d3_result_records,
+    align_result_records,
+    normalize_information_sharing_contract as _normalize_information_sharing_contract,
 )
 from src.utils.result_validation import annotate_silent_metric_failure
 from paper_reproduction_protocol import (
@@ -383,12 +386,7 @@ def _scenario_to_bool(scenario: str) -> bool:
 
 def normalize_information_sharing_contract(value: Any) -> str:
     """Normalize only the information_sharing contract field to with/without."""
-    text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
-    if text in {"with", "with_information_sharing"}:
-        return "with"
-    if text in {"without", "without_information_sharing"}:
-        return "without"
-    raise ValueError(f"Unsupported information_sharing contract value: {value!r}")
+    return _normalize_information_sharing_contract(value)
 
 
 def _info_sharing_cli_to_scenario(info_sharing: Optional[str]) -> Optional[str]:
@@ -739,28 +737,26 @@ def _apply_result_contract_defaults(row: Dict[str, Any], schema_family: str) -> 
 
 
 def _align_frame_to_preferred_columns(df: pd.DataFrame, schema_family: str) -> pd.DataFrame:
-    aligned = df.copy()
-    missing = [column for column in RESULT_SCHEMA_COLUMNS if column not in aligned.columns]
-    if missing:
-        aligned = pd.concat(
-            [aligned, pd.DataFrame("", index=aligned.index, columns=missing)],
-            axis=1,
+    if df.empty and len(df.columns) > 0:
+        template_record = {
+            column: "with" if column == "information_sharing" else ""
+            for column in df.columns
+        }
+        template = align_result_records(
+            [template_record],
+            schema_family=schema_family,
+            preferred_columns=RESULT_SCHEMA_COLUMNS,
+            normalize_information_sharing=True,
+            fill_missing_contract_defaults=True,
         )
-    if "result_contract_version" in aligned.columns:
-        aligned["result_contract_version"] = aligned["result_contract_version"].fillna("").replace(
-            "",
-            RESULT_CONTRACT_VERSION,
-        )
-    if "schema_family" in aligned.columns:
-        aligned["schema_family"] = aligned["schema_family"].fillna("").replace("", schema_family)
-    if "information_sharing" in aligned.columns and not aligned.empty:
-        aligned["information_sharing"] = aligned["information_sharing"].map(
-            normalize_information_sharing_contract
-        )
-    if not aligned.empty:
-        aligned = pd.DataFrame([annotate_silent_metric_failure(row) for row in aligned.to_dict(orient="records")])
-    aligned = aligned.apply(lambda column: column.map(stable_json_cell))
-    return aligned[preferred_columns_with_extras(aligned.columns)]
+        return template.iloc[0:0].copy()
+    return align_result_records(
+        df.to_dict(orient="records"),
+        schema_family=schema_family,
+        preferred_columns=RESULT_SCHEMA_COLUMNS,
+        normalize_information_sharing=True,
+        fill_missing_contract_defaults=True,
+    )
 
 
 def _finalize_result_metrics(result: Dict[str, Any]) -> None:
@@ -1779,8 +1775,8 @@ def _materialize_result_dataframes(
     extended_records: Sequence[Dict[str, Any]],
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     return (
-        _align_frame_to_preferred_columns(pd.DataFrame(paper_records), SCHEMA_FAMILY_D1_D3),
-        _align_frame_to_preferred_columns(pd.DataFrame(extended_records), SCHEMA_FAMILY_D1_D3),
+        align_d1_d3_result_records(paper_records, schema_family=SCHEMA_FAMILY_D1_D3),
+        align_d1_d3_result_records(extended_records, schema_family=SCHEMA_FAMILY_D1_D3),
     )
 
 
