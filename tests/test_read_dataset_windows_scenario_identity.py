@@ -22,6 +22,13 @@ SCENARIO_IDENTITY_FIELDS = [
     "test_days",
 ]
 
+# PR-B active-scenario specification to convert into tests once production
+# supports the new parameters:
+# - read_dataset_windows(dataset_id, dataset_dir, info_sharing="with") reads only with.
+# - read_dataset_windows(dataset_id, dataset_dir, info_sharing="without") reads only without.
+# - read_dataset_windows(..., knn_payload=payload) uses the payload without reading disk.
+# - info_sharing=None preserves the current without + with dual-read compatibility path.
+
 
 def _read_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
@@ -54,3 +61,43 @@ def test_read_dataset_windows_uses_scenario_identical_target_train_window(
     assert without_window["start"] == expected_solidified_window["train_start"]
     assert windows["train_start"] == expected_solidified_window["train_start"]
     assert windows["test_end"] == expected_solidified_window["test_end"]
+
+
+@pytest.mark.parametrize("dataset_id", [4, 5, 6])
+def test_read_dataset_windows_preserves_legacy_dual_scenario_read_order(
+    monkeypatch: pytest.MonkeyPatch,
+    dataset_id: int,
+) -> None:
+    dataset_dir = KNN_ROOT / f"Dataset{dataset_id}"
+    expected_solidified_window = SOLIDIFIED_TARGET_WINDOWS[dataset_id]
+    shared_window = {
+        "start": expected_solidified_window["train_start"],
+        "end": "scenario-shared-end",
+    }
+    calls: list[str] = []
+
+    def fake_load_knn_results(
+        knn_json_dir: str | Path,
+        info_sharing: str,
+    ) -> dict[str, Any]:
+        assert Path(knn_json_dir) == dataset_dir
+        calls.append(info_sharing)
+        return {
+            "target_train_window": dict(shared_window),
+            "source_pool_size": 10 if info_sharing == "without" else 20,
+            "domain_filter": {"scenario": info_sharing},
+        }
+
+    monkeypatch.setattr(
+        "src.utils.parquet_data_loader.load_knn_results",
+        fake_load_knn_results,
+    )
+
+    windows = read_dataset_windows(dataset_id, dataset_dir)
+
+    assert calls == ["without", "with"]
+    assert windows["without_target_train_window"] == shared_window
+    assert windows["with_target_train_window"] == shared_window
+    assert windows["target_train_window"] == shared_window
+    for key, value in expected_solidified_window.items():
+        assert windows[key] == value
