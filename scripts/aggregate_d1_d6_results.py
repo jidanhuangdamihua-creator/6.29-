@@ -63,6 +63,25 @@ PREFERRED_COLUMNS = [
     "source_csv_path",
 ]
 
+_CsvDataFrameCache = Dict[Path, Tuple[int, int, pd.DataFrame]]
+
+
+def _read_csv_dataframe(path: Path, csv_cache: Optional[_CsvDataFrameCache] = None) -> pd.DataFrame:
+    if csv_cache is None:
+        return pd.read_csv(path, dtype=str, keep_default_na=False)
+
+    path = Path(path)
+    stat = path.stat()
+    cached = csv_cache.get(path)
+    if cached is not None:
+        cached_mtime_ns, cached_size, cached_df = cached
+        if cached_mtime_ns == stat.st_mtime_ns and cached_size == stat.st_size:
+            return cached_df.copy()
+
+    df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    csv_cache[path] = (stat.st_mtime_ns, stat.st_size, df)
+    return df.copy()
+
 
 def normalize_information_sharing(value: Any) -> str:
     text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
@@ -116,9 +135,9 @@ def _mode_from_path(path: Path, dataset_id: int) -> str:
     return ""
 
 
-def _modes_from_csv(path: Path) -> List[str]:
+def _modes_from_csv(path: Path, csv_cache: Optional[_CsvDataFrameCache] = None) -> List[str]:
     try:
-        df = pd.read_csv(path, dtype=str, keep_default_na=False)
+        df = _read_csv_dataframe(path, csv_cache=csv_cache)
     except Exception:
         return []
     modes = set()
@@ -174,6 +193,7 @@ def discover_source_csvs(
     *,
     strict: bool = False,
     allow_missing: bool = False,
+    csv_cache: Optional[_CsvDataFrameCache] = None,
 ) -> Tuple[Dict[Tuple[int, str], Path], List[Dict[str, Any]]]:
     run_dir = Path(run_dir)
     paths = sorted(run_dir.rglob("results/dataset*.csv")) if run_dir.exists() else []
@@ -184,7 +204,7 @@ def discover_source_csvs(
         if dataset_id is None or dataset_id not in EXPECTED_DATASET_IDS:
             continue
         mode = _mode_from_path(path, dataset_id)
-        modes = [mode] if mode in EXPECTED_MODES else _modes_from_csv(path)
+        modes = [mode] if mode in EXPECTED_MODES else _modes_from_csv(path, csv_cache=csv_cache)
         if not modes:
             modes = [""]
         for candidate_mode in modes:
@@ -283,8 +303,12 @@ def _normalize_row(row: Dict[str, str], dataset_hint: int, source_path: Path) ->
     return annotate_silent_metric_failure(out)
 
 
-def _read_source(path: Path, dataset_hint: int) -> List[Dict[str, str]]:
-    df = pd.read_csv(path, dtype=str, keep_default_na=False)
+def _read_source(
+    path: Path,
+    dataset_hint: int,
+    csv_cache: Optional[_CsvDataFrameCache] = None,
+) -> List[Dict[str, str]]:
+    df = _read_csv_dataframe(path, csv_cache=csv_cache)
     if df.columns.empty:
         raise ValueError(f"Invalid CSV (no header): {path}")
     if dataset_hint == 3:
@@ -556,7 +580,13 @@ def aggregate(
     allow_missing: bool = False,
     legacy_fallback: bool = False,
 ) -> Dict[str, Any]:
-    selected, discovery_audit = discover_source_csvs(run_dir, strict=strict, allow_missing=allow_missing)
+    csv_cache: _CsvDataFrameCache = {}
+    selected, discovery_audit = discover_source_csvs(
+        run_dir,
+        strict=strict,
+        allow_missing=allow_missing,
+        csv_cache=csv_cache,
+    )
     if not selected and legacy_fallback:
         selected = {(dataset_id, ""): path for dataset_id, path in SOURCE_CSVS.items()}
 
@@ -564,7 +594,7 @@ def aggregate(
     all_rows: List[Dict[str, str]] = []
     for path in unique_paths:
         dataset_hint = _dataset_id_from_path(path) or 0
-        rows = _read_source(path, dataset_hint)
+        rows = _read_source(path, dataset_hint, csv_cache=csv_cache)
         all_rows.extend(rows)
 
     if not all_rows:

@@ -206,3 +206,66 @@ def test_aggregate_canonical_information_sharing_does_not_leak_legacy_aliases(tm
         assert not df["information_sharing"].isin(
             {"with_information_sharing", "without_information_sharing"}
         ).any()
+
+
+def test_aggregate_reuses_discovery_csv_read_for_source_rows(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "d5_mixed" / "results" / "dataset5_results.csv"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        [
+            {
+                "dataset_id": 5,
+                "information_sharing": "without",
+                "scenario": "without_information_sharing",
+                "target_entity_key": "store-a",
+                "method": "No-TL",
+                "rmse": 1.0,
+                "smape": 2.0,
+                "error": "",
+            },
+            {
+                "dataset_id": 5,
+                "information_sharing": "with",
+                "scenario": "with_information_sharing",
+                "target_entity_key": "store-b",
+                "method": "MSWA-TL",
+                "rmse": 3.0,
+                "smape": 4.0,
+                "error": "",
+            },
+        ]
+    ).to_csv(source, index=False)
+
+    original_read_csv = aggregate.pd.read_csv
+    read_counts = {source: 0}
+
+    def counting_read_csv(path, *args, **kwargs):
+        path_obj = path if isinstance(path, type(source)) else None
+        if path_obj == source:
+            read_counts[source] += 1
+        return original_read_csv(path, *args, **kwargs)
+
+    monkeypatch.setattr(aggregate.pd, "read_csv", counting_read_csv)
+
+    output = tmp_path / "summary.csv"
+    aggregate.aggregate(run_dir=tmp_path, output=output, allow_missing=True)
+
+    assert read_counts[source] == 1
+    df = original_read_csv(output, dtype=str, keep_default_na=False)
+    assert len(df) == 2
+    assert df["information_sharing"].tolist() == ["without", "with"]
+    assert df["method"].tolist() == ["No-TL", "MSWA-TL"]
+
+
+def test_csv_cache_reloads_when_source_size_changes(tmp_path) -> None:
+    source = tmp_path / "results" / "dataset5_results.csv"
+    _write_result(source, dataset_id=5, mode="without", method="A")
+    csv_cache = {}
+
+    first_rows = aggregate._read_source(source, dataset_hint=5, csv_cache=csv_cache)
+    assert [row["method"] for row in first_rows] == ["A"]
+
+    _write_result(source, dataset_id=5, mode="without", method="longer-method-name")
+    second_rows = aggregate._read_source(source, dataset_hint=5, csv_cache=csv_cache)
+
+    assert [row["method"] for row in second_rows] == ["longer-method-name"]
