@@ -37,18 +37,22 @@ def load_solidified_knn_selected_features(
     dataset_id: int,
     information_sharing: str,
     knn_root: str | Path,
+    payload: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Load authoritative selected features from a solidified KNN JSON file."""
     root = Path(knn_root)
     path = root / f"Dataset{int(dataset_id)}" / f"knn_{_scenario_file_token(information_sharing)}_info_sharing.json"
-    if not path.exists():
+    if payload is None and not path.exists():
         return {
             "selected_features": [],
             "knn_feature_mode": "",
             "source": "missing_solidified_json",
             "json_path": str(path),
         }
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload is None:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    else:
+        payload = dict(payload)
     feature_info = payload.get("feature_info", {}) if isinstance(payload.get("feature_info"), dict) else {}
     selected = feature_info.get("selected_features")
     if not selected:
@@ -57,7 +61,7 @@ def load_solidified_knn_selected_features(
         "selected_features": [str(col) for col in (selected or [])],
         "knn_feature_mode": str(feature_info.get("knn_feature_mode", "")),
         "source": "solidified_json",
-        "json_path": str(path),
+        "json_path": str(payload.get("_path", path)),
         "payload": payload,
     }
 
@@ -167,12 +171,14 @@ def resolve_knn_feature_columns(
     knn_root: str | Path,
     source_df: pd.DataFrame,
     target_df: pd.DataFrame,
+    knn_payload: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Resolve D4-D6 feature columns with solidified JSON as authority."""
     json_info = load_solidified_knn_selected_features(
         dataset_id=dataset_id,
         information_sharing=information_sharing,
         knn_root=knn_root,
+        payload=knn_payload,
     )
     runtime_info = infer_source_selection_feature_columns(source_df, target_df)
     runtime_features = [str(col) for col in runtime_info.get("selected_features", [])]

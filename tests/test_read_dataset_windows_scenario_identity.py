@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from src.constants import SOLIDIFIED_TARGET_WINDOWS
-from src.utils.parquet_data_loader import read_dataset_windows
+from src.utils.parquet_data_loader import load_knn_results, read_dataset_windows
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -101,3 +101,108 @@ def test_read_dataset_windows_preserves_legacy_dual_scenario_read_order(
     assert windows["target_train_window"] == shared_window
     for key, value in expected_solidified_window.items():
         assert windows[key] == value
+
+
+@pytest.mark.parametrize("info_sharing", ["with", "without"])
+def test_read_dataset_windows_active_scenario_reads_only_requested_scenario(
+    monkeypatch: pytest.MonkeyPatch,
+    info_sharing: str,
+) -> None:
+    dataset_id = 5
+    dataset_dir = KNN_ROOT / f"Dataset{dataset_id}"
+    expected_solidified_window = SOLIDIFIED_TARGET_WINDOWS[dataset_id]
+    calls: list[str] = []
+
+    def fake_load_knn_results(
+        knn_json_dir: str | Path,
+        scenario: str,
+    ) -> dict[str, Any]:
+        assert Path(knn_json_dir) == dataset_dir
+        calls.append(scenario)
+        return {
+            "target_train_window": {
+                "start": expected_solidified_window["train_start"],
+                "end": f"{scenario}-active-end",
+            },
+            "source_pool_size": 10 if scenario == "without" else 20,
+            "domain_filter": {"scenario": scenario},
+        }
+
+    monkeypatch.setattr(
+        "src.utils.parquet_data_loader.load_knn_results",
+        fake_load_knn_results,
+    )
+
+    windows = read_dataset_windows(dataset_id, dataset_dir, info_sharing=info_sharing)
+
+    assert calls == [info_sharing]
+    assert windows["target_train_window"] == {
+        "start": expected_solidified_window["train_start"],
+        "end": f"{info_sharing}-active-end",
+    }
+    assert windows[f"{info_sharing}_target_train_window"] == windows["target_train_window"]
+    inactive = "without" if info_sharing == "with" else "with"
+    assert f"{inactive}_target_train_window" not in windows
+    assert windows[f"{info_sharing}_source_pool_size"] == (10 if info_sharing == "without" else 20)
+    assert windows[f"{info_sharing}_domain_filter"] == {"scenario": info_sharing}
+    for key, value in expected_solidified_window.items():
+        assert windows[key] == value
+
+
+@pytest.mark.parametrize("info_sharing", ["with", "without"])
+def test_read_dataset_windows_active_scenario_uses_payload_without_loading(
+    monkeypatch: pytest.MonkeyPatch,
+    info_sharing: str,
+) -> None:
+    dataset_id = 5
+    dataset_dir = KNN_ROOT / f"Dataset{dataset_id}"
+    expected_solidified_window = SOLIDIFIED_TARGET_WINDOWS[dataset_id]
+    payload = {
+        "target_train_window": {
+            "start": expected_solidified_window["train_start"],
+            "end": f"{info_sharing}-payload-end",
+        },
+        "source_pool_size": 123,
+        "domain_filter": {"scenario": info_sharing, "source": "payload"},
+    }
+
+    def fail_load_knn_results(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("read_dataset_windows should reuse knn_payload")
+
+    monkeypatch.setattr(
+        "src.utils.parquet_data_loader.load_knn_results",
+        fail_load_knn_results,
+    )
+
+    windows = read_dataset_windows(
+        dataset_id,
+        dataset_dir,
+        info_sharing=info_sharing,
+        knn_payload=payload,
+    )
+
+    assert windows["target_train_window"] == payload["target_train_window"]
+    assert windows[f"{info_sharing}_target_train_window"] == payload["target_train_window"]
+    assert windows[f"{info_sharing}_source_pool_size"] == 123
+    assert windows[f"{info_sharing}_domain_filter"] == {"scenario": info_sharing, "source": "payload"}
+    for key, value in expected_solidified_window.items():
+        assert windows[key] == value
+
+
+def test_load_knn_results_payload_branch_adds_path_without_reading_disk(tmp_path: Path) -> None:
+    payload = {
+        "results": {"target-a": [{"source_entity": "source-a"}]},
+        "selected_features": ["sales"],
+        "feature_cols": ["sales"],
+        "target_train_window": {"start": "2020-01-01", "end": "2020-01-30"},
+    }
+
+    loaded = load_knn_results(tmp_path / "missing", "with", payload=payload)
+
+    assert loaded is not payload
+    assert loaded["results"] == payload["results"]
+    assert loaded["selected_features"] == payload["selected_features"]
+    assert loaded["feature_cols"] == payload["feature_cols"]
+    assert loaded["target_train_window"] == payload["target_train_window"]
+    assert loaded["_path"] == str(tmp_path / "missing" / "knn_with_info_sharing.json")
+    assert "_path" not in payload

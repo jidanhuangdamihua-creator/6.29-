@@ -153,3 +153,41 @@ def test_d5_resolved_knn_feature_columns_are_stable_across_scenarios() -> None:
         assert info["feature_consistency_status"] == FEATURE_STATUS_ALIGNED
         assert info["json_only_features"] == []
         assert info["runtime_only_features"] == []
+
+
+@pytest.mark.parametrize("information_sharing", ["without", "with"])
+def test_d5_resolved_knn_feature_columns_reuse_payload_without_changing_result(
+    monkeypatch: pytest.MonkeyPatch,
+    information_sharing: str,
+) -> None:
+    json_path = (
+        SOLIDIFIED_KNN_ROOT
+        / "Dataset5"
+        / f"knn_{information_sharing}_info_sharing.json"
+    )
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    source_df, target_df = _solidified_feature_frames()
+
+    expected = resolve_knn_feature_columns(
+        dataset_id=5,
+        information_sharing=information_sharing,
+        knn_root=SOLIDIFIED_KNN_ROOT,
+        source_df=source_df.copy(),
+        target_df=target_df.copy(),
+    )
+
+    def fail_read_text(*args: object, **kwargs: object) -> str:
+        raise AssertionError("resolve_knn_feature_columns should reuse knn_payload")
+
+    monkeypatch.setattr(Path, "read_text", fail_read_text)
+
+    actual = resolve_knn_feature_columns(
+        dataset_id=5,
+        information_sharing=information_sharing,
+        knn_root=SOLIDIFIED_KNN_ROOT,
+        source_df=source_df.copy(),
+        target_df=target_df.copy(),
+        knn_payload=payload,
+    )
+
+    assert actual == expected

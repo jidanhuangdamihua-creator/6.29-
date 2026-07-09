@@ -29,24 +29,55 @@ def _read_target_selection_windows(dataset_id: int) -> Dict[str, Any]:
     return dict(SOLIDIFIED_TARGET_WINDOWS[int(dataset_id)])
 
 
-def load_knn_results(knn_json_dir: str | Path, info_sharing: str) -> Dict[str, Any]:
-    """Load precomputed KNN/source-selection JSON for a D4-D6 scenario."""
+def _knn_json_path(knn_json_dir: str | Path, info_sharing: str) -> Path:
     scenario = str(info_sharing).strip().lower()
     if scenario not in {"with", "without"}:
         raise ValueError("info_sharing must be 'with' or 'without'")
-    path = Path(knn_json_dir) / f"knn_{scenario}_info_sharing.json"
+    return Path(knn_json_dir) / f"knn_{scenario}_info_sharing.json"
+
+
+def _payload_with_path(payload: Dict[str, Any], path: Path) -> Dict[str, Any]:
+    loaded = dict(payload)
+    if "_path" not in loaded:
+        loaded["_path"] = str(path)
+    return loaded
+
+
+def load_knn_results(
+    knn_json_dir: str | Path,
+    info_sharing: str,
+    payload: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Load precomputed KNN/source-selection JSON for a D4-D6 scenario."""
+    path = _knn_json_path(knn_json_dir, info_sharing)
+    if payload is not None:
+        return _payload_with_path(payload, path)
     if not path.exists():
         raise FileNotFoundError(f"Missing KNN selection file: {path}")
-    payload = _read_json(path)
-    payload["_path"] = str(path)
-    return payload
+    return _payload_with_path(_read_json(path), path)
 
 
-def read_dataset_windows(dataset_id: int, knn_json_dir: str | Path) -> Dict[str, Any]:
+def read_dataset_windows(
+    dataset_id: int,
+    knn_json_dir: str | Path,
+    info_sharing: str | None = None,
+    knn_payload: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     """Read fixed target/source window metadata from existing KNN JSON files."""
     windows: Dict[str, Any] = {"dataset_id": int(dataset_id)}
-    for scenario in ("without", "with"):
-        payload = load_knn_results(knn_json_dir, scenario)
+    if info_sharing is None:
+        scenarios = ("without", "with")
+    else:
+        scenario = str(info_sharing).strip().lower()
+        if scenario not in {"with", "without"}:
+            raise ValueError("info_sharing must be 'with' or 'without'")
+        scenarios = (scenario,)
+
+    for scenario in scenarios:
+        if knn_payload is not None and info_sharing is not None:
+            payload = _payload_with_path(knn_payload, _knn_json_path(knn_json_dir, scenario))
+        else:
+            payload = load_knn_results(knn_json_dir, scenario)
         windows[f"{scenario}_target_train_window"] = payload.get("target_train_window", {})
         windows[f"{scenario}_source_pool_size"] = payload.get("source_pool_size")
         windows[f"{scenario}_domain_filter"] = payload.get("domain_filter")

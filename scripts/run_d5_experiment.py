@@ -117,9 +117,13 @@ def main() -> None:
         encoding="utf-8",
     )
 
+    knn_data = load_knn_results(config["knn_json_dir"], config["info_sharing"])
+
     windows = read_dataset_windows(
         config["dataset_id"],
         config["knn_json_dir"],
+        info_sharing=config["info_sharing"],
+        knn_payload=knn_data,
     )
     source_df, target_df = load_parquet_source_target(
         dataset_id=config["dataset_id"],
@@ -136,6 +140,7 @@ def main() -> None:
         knn_root=SOLIDIFIED_KNN_ROOT,
         source_df=source_df,
         target_df=target_df,
+        knn_payload=knn_data,
     )
     feature_cols = list(feature_info["selected_features"])
     if feature_info["feature_consistency_status"] != "aligned":
@@ -171,7 +176,6 @@ def main() -> None:
         }
     )
 
-    knn_data = load_knn_results(config["knn_json_dir"], config["info_sharing"])
     source_df = apply_runtime_source_domain_policy(source_df, knn_data, config)
     target_entity_keys = list(knn_data["results"].keys())
     if config.get("target_keys"):
