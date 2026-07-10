@@ -595,6 +595,7 @@ def run_msml_tl(
     source_epochs: int = 3,
     target_epochs: int = 3,
     batch_size: int = 16,
+    group_cols: Sequence[str] = ("entity_id", "item_id"),
 ) -> Dict[str, object]:
     """
     运行 MSML-TL 完整流程。
@@ -644,6 +645,7 @@ def run_msml_tl(
 
     _validate_feature_cols(source_df, feature_cols, where="source_df")
     _validate_feature_cols(target_df, feature_cols, where="target_df")
+    resolved_group_cols = tuple(group_cols)
 
     # --- Step 1: 选源 ---
     selector = SourceSelector()
@@ -652,6 +654,7 @@ def run_msml_tl(
         source_df=source_df,
         feature_cols=feature_cols,
         k=k,
+        group_cols=resolved_group_cols,
         weight_mode=weight_mode,
     )
     selected_sources = selection_result.get("sources", []) if isinstance(selection_result, dict) else selection_result
@@ -667,13 +670,13 @@ def run_msml_tl(
 
     for selected in selected_sources:
         source_key = tuple(selected["source_key"]) if isinstance(selected["source_key"], (list, tuple)) else (selected["source_key"],)
-        if len(source_key) < 2:
+        if len(source_key) != len(resolved_group_cols):
             raise ValueError(f"Invalid source_key format: {source_key}")
 
-        entity_id, item_id = source_key[0], source_key[1]
-        source_sequence_df = source_df[
-            (source_df["entity_id"] == entity_id) & (source_df["item_id"] == item_id)
-        ].copy()
+        source_mask = pd.Series(True, index=source_df.index)
+        for col, value in zip(resolved_group_cols, source_key):
+            source_mask &= source_df[col] == value
+        source_sequence_df = source_df[source_mask].copy()
 
         if source_sequence_df.empty:
             raise ValueError(f"Selected source_key not found in source_df: {source_key}")

@@ -569,6 +569,7 @@ def run_ss_tl_experiment(
     target_epochs: int = 3,
     batch_size: int = 16,
     metric_protocol: Optional[Dict[str, Any]] = None,
+    group_cols: Sequence[str] = ("entity_id", "item_id"),
 ) -> Dict[str, Any]:
     """运行 SS-TL，并返回统一结构。"""
     try:
@@ -589,13 +590,22 @@ def run_ss_tl_experiment(
     cols = _ensure_feature_cols(source_df, target_df, feature_cols)
 
     # 严格论文口径：SS-TL 使用 KNN 选最近单源（k=1），不再取排序后第一个 source。
-    sorted_source = source_df.sort_values(["entity_id", "item_id", "date"]).copy()
+    resolved_group_cols = tuple(group_cols)
+    if len(resolved_group_cols) != 2:
+        raise ValueError(f"group_cols must contain exactly two columns: {resolved_group_cols}")
+    sort_cols = [
+        col
+        for col in dict.fromkeys(("entity_id", "item_id", *resolved_group_cols, "date"))
+        if col in source_df.columns
+    ]
+    sorted_source = source_df.sort_values(sort_cols).copy()
     selector = SourceSelector()
     selection = selector.select_top_k_sources(
         target_df=target_df,
         source_df=sorted_source,
         feature_cols=cols,
         k=1,
+        group_cols=resolved_group_cols,
         weight_mode="inverse_distance",
         debug_mode=False,
         include_sales_in_knn=True,
@@ -607,15 +617,15 @@ def run_ss_tl_experiment(
     source_key = selected[0].get("source_key")
     if isinstance(source_key, list):
         source_key = tuple(source_key)
-    if not isinstance(source_key, tuple) or len(source_key) < 2:
+    if not isinstance(source_key, tuple) or len(source_key) != len(resolved_group_cols):
         raise ValueError(f"Invalid SS-TL source_key from selector: {source_key}")
 
-    first_key = [source_key[0], source_key[1]]
-    single_source_df = sorted_source[
-        (sorted_source["entity_id"] == first_key[0]) & (sorted_source["item_id"] == first_key[1])
-    ].copy()
+    source_mask = pd.Series(True, index=sorted_source.index)
+    for col, value in zip(resolved_group_cols, source_key):
+        source_mask &= sorted_source[col] == value
+    single_source_df = sorted_source[source_mask].copy()
 
-    keep_cols = ["date", "entity_id", "item_id"] + list(cols)
+    keep_cols = ["date", "entity_id", "item_id", *resolved_group_cols, *cols]
     keep_cols = [c for c in keep_cols if c in single_source_df.columns]
     single_source_df = single_source_df[keep_cols].copy()
 
@@ -826,6 +836,7 @@ def run_mswa_experiment(
     target_epochs: int = 3,
     batch_size: int = 16,
     metric_protocol: Optional[Dict[str, Any]] = None,
+    group_cols: Sequence[str] = ("entity_id", "item_id"),
 ) -> Dict[str, Any]:
     """运行 MSWA-TL，并返回统一结构。"""
     try:
@@ -839,6 +850,7 @@ def run_mswa_experiment(
         target_df=target_df,
         feature_cols=feature_cols,
         k=k,
+        group_cols=tuple(group_cols),
         horizon=horizon,
         window_size=window_size,
         weight_mode=weight_mode,
@@ -865,6 +877,7 @@ def run_mssb_experiment(
     target_epochs: int = 3,
     batch_size: int = 16,
     metric_protocol: Optional[Dict[str, Any]] = None,
+    group_cols: Sequence[str] = ("entity_id", "item_id"),
 ) -> Dict[str, Any]:
     """运行 MSSB-TL，并返回统一结构。"""
     try:
@@ -878,6 +891,7 @@ def run_mssb_experiment(
         target_df=target_df,
         feature_cols=feature_cols,
         k=k,
+        group_cols=tuple(group_cols),
         horizon=horizon,
         window_size=window_size,
         weight_mode=weight_mode,
@@ -904,6 +918,7 @@ def run_msml_experiment(
     target_epochs: int = 3,
     batch_size: int = 16,
     metric_protocol: Optional[Dict[str, Any]] = None,
+    group_cols: Sequence[str] = ("entity_id", "item_id"),
 ) -> Dict[str, Any]:
     """运行 MSML-TL，并返回统一结构。"""
     try:
@@ -917,6 +932,7 @@ def run_msml_experiment(
         target_df=target_df,
         feature_cols=feature_cols,
         k=k,
+        group_cols=tuple(group_cols),
         horizon=horizon,
         window_size=window_size,
         weight_mode=weight_mode,
@@ -945,6 +961,7 @@ def run_msml_rfe_experiment(
     target_epochs: int = 3,
     batch_size: int = 16,
     metric_protocol: Optional[Dict[str, Any]] = None,
+    group_cols: Sequence[str] = ("entity_id", "item_id"),
 ) -> Dict[str, Any]:
     """运行 MSML-TL-RFE，并返回统一结构。"""
     try:
@@ -958,6 +975,7 @@ def run_msml_rfe_experiment(
         target_df=target_df,
         feature_cols=feature_cols,
         k=k,
+        group_cols=tuple(group_cols),
         horizon=horizon,
         window_size=window_size,
         weight_mode=weight_mode,

@@ -114,6 +114,10 @@ def main() -> None:
     )
 
     knn_data = load_knn_results(config["knn_json_dir"], config["info_sharing"])
+    group_cols = knn_data.get("group_cols")
+    if not isinstance(group_cols, list) or len(group_cols) != 2:
+        raise ValueError(f"D6 KNN payload requires two group_cols, got: {group_cols}")
+    config["group_cols"] = list(group_cols)
 
     windows = read_dataset_windows(
         config["dataset_id"],

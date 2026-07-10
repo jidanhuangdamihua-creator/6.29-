@@ -203,9 +203,14 @@ def _resolve_model_feature_cols(
     return model_cols
 
 
-def _build_model_dataframe(df: pd.DataFrame, model_feature_cols: Sequence[str]) -> pd.DataFrame:
+def _build_model_dataframe(
+    df: pd.DataFrame,
+    model_feature_cols: Sequence[str],
+    source_selection_group_cols: Sequence[str] = (),
+) -> pd.DataFrame:
     """Return a dataframe containing only identifiers plus numeric/bool model features."""
-    keep_cols = [col for col in MODEL_METADATA_COLUMNS if col in df.columns]
+    metadata_cols = tuple(dict.fromkeys((*MODEL_METADATA_COLUMNS, *source_selection_group_cols)))
+    keep_cols = [col for col in metadata_cols if col in df.columns]
     for col in model_feature_cols:
         if col in df.columns and col not in keep_cols:
             keep_cols.append(col)
@@ -235,7 +240,7 @@ def _build_model_dataframe(df: pd.DataFrame, model_feature_cols: Sequence[str]) 
             "val_days": val_days,
             "test_days": n - train_days - val_days,
         }
-    model_only_cols = set(model_df.columns) - set(MODEL_METADATA_COLUMNS)
+    model_only_cols = set(model_df.columns) - set(metadata_cols)
     expected_cols = set(str(col) for col in model_feature_cols)
     assert model_only_cols == expected_cols, (
         f"CNN 输入列与 model_feature_cols 不一致: "
@@ -502,11 +507,33 @@ def run_single_entity_experiment(
     scenario = _scenario_name(config)
     source_df = source_df.copy()
     target_entity_df = target_entity_df.copy()
+    source_selection_group_cols = tuple(
+        str(col)
+        for col in config.get(
+            "group_cols",
+            config.get("source_selection_group_cols", ("entity_id", "item_id")),
+        )
+    )
+    if len(source_selection_group_cols) != 2:
+        raise ValueError(
+            "source_selection_group_cols must contain exactly two columns: "
+            f"{source_selection_group_cols}"
+        )
+    for role, frame in (("source", source_df), ("target", target_entity_df)):
+        missing = [col for col in source_selection_group_cols if col not in frame.columns]
+        if missing:
+            raise ValueError(
+                f"Missing source_selection_group_cols on {role}_df: {missing}"
+            )
     source_df.attrs["information_sharing_scenario"] = scenario
     target_entity_df.attrs["information_sharing_scenario"] = scenario
     metric_protocol = dict(config.get("metric_protocol", {}) or {})
     model_feature_cols = _resolve_model_feature_cols(source_df, target_entity_df, feature_cols, config)
-    source_model_df = _build_model_dataframe(source_df, model_feature_cols)
+    source_model_df = _build_model_dataframe(
+        source_df,
+        model_feature_cols,
+        source_selection_group_cols=source_selection_group_cols,
+    )
     source_model_df = _sanitize_source_model_dataframe(source_model_df, model_feature_cols)
     validate_feature_frame_finite(
         source_model_df,
@@ -517,7 +544,11 @@ def run_single_entity_experiment(
         entity_id="source_pool",
         stage="post_build_model_dataframe",
     )
-    target_model_df = _build_model_dataframe(target_entity_df, model_feature_cols)
+    target_model_df = _build_model_dataframe(
+        target_entity_df,
+        model_feature_cols,
+        source_selection_group_cols=source_selection_group_cols,
+    )
     config = dict(config)
     config["target_split_config"] = dict(target_model_df.attrs.get("split_config", {}) or {})
     validate_feature_frame_finite(
@@ -562,6 +593,7 @@ def run_single_entity_experiment(
                 "target_epochs": int(config["target_epochs"]),
                 "batch_size": int(config["batch_size"]),
                 "metric_protocol": metric_protocol,
+                "group_cols": source_selection_group_cols,
             }
             if method not in {"SS-TL"}:
                 kwargs["number_of_sources"] = _source_count_for_method(method, config)

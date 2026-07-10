@@ -709,6 +709,7 @@ class SourceSelector:
             "meta": {
                 "weight_mode": weight_mode,
                 "distance_metric": "euclidean",
+                "group_cols": list(group_cols),
                 "target_signature_dim": int(target_signature.shape[0]),
                 "feature_cols": list(resolved_feature_cols),
                 "signature_static_feature_cols": list(static_feature_cols),
