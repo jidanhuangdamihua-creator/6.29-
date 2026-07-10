@@ -41,6 +41,7 @@ from src.transfer_methods.source_failure_tolerance import (
     AllSourcesFailedError,
     SOURCE_LEVEL_EXCEPTIONS,
     make_failed_source,
+    runtime_selection_meta,
     should_skip_source_exception,
     source_failure_meta,
 )
@@ -450,7 +451,12 @@ def run_mssb_tl(
         )
 
     if not individual_results:
-        raise AllSourcesFailedError("MSSB-TL", failed_sources, selected_sources=selected_sources)
+        raise AllSourcesFailedError(
+            "MSSB-TL",
+            failed_sources,
+            selected_sources=selected_sources,
+            selection_meta=runtime_selection_meta(selection_result),
+        )
 
     best_source_result, best_index = select_best_source_model(individual_results)
 
@@ -489,6 +495,7 @@ def run_mssb_tl(
             "feature_cols": list(feature_cols),
             "knn_feature_mode": (selection_result.get("meta", {}) or {}).get("knn_feature_mode", ""),
             "selected_sources": selected_sources,
+            **runtime_selection_meta(selection_result),
             **source_failure_meta(
                 requested_k=k,
                 selected_sources=selected_sources,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -11,6 +11,25 @@ from src.utils.finite_diagnostics import NonFiniteArrayError
 
 
 SOURCE_LEVEL_EXCEPTIONS = (NonFiniteArrayError, FloatingPointError, ValueError, RuntimeError)
+RUNTIME_SELECTION_META_FIELDS = (
+    "selection_authority",
+    "protocol_version",
+    "target_observed_start",
+    "target_observed_end",
+    "source_history_start",
+    "source_history_end",
+    "target_test_excluded",
+    "source_future_excluded",
+    "source_alignment_mode",
+    "feature_cols",
+    "representation",
+    "scaling",
+    "scaler_fit_scope",
+    "selected_sources_runtime",
+    "candidate_pool_digest",
+    "selection_result_digest",
+    "source_skip_diagnostics",
+)
 SOURCE_FAILURE_MARKERS = (
     "ss-tl failed for source_key",
     "non-finite",
@@ -35,6 +54,17 @@ NON_SOURCE_FAILURE_MARKERS = (
     "sales not in feature",
     "sales column",
 )
+
+
+def runtime_selection_meta(selection_result: Mapping[str, object]) -> Dict[str, object]:
+    """Extract the complete D4-D6 runtime selection trace from selector output."""
+    raw_meta = selection_result.get("meta", {})
+    if not isinstance(raw_meta, Mapping) or raw_meta.get("selection_authority") != "runtime":
+        return {}
+    missing = [field for field in RUNTIME_SELECTION_META_FIELDS if field not in raw_meta]
+    if missing:
+        raise ValueError(f"Runtime source selection metadata is incomplete: {missing}")
+    return {field: raw_meta[field] for field in RUNTIME_SELECTION_META_FIELDS}
 
 
 def _message(exc: BaseException) -> str:
@@ -158,10 +188,12 @@ class AllSourcesFailedError(RuntimeError):
         failed_sources: Sequence[Dict[str, object]],
         *,
         selected_sources: Optional[Sequence[Dict[str, object]]] = None,
+        selection_meta: Optional[Mapping[str, object]] = None,
     ) -> None:
         self.method_name = str(method_name)
         self.failed_sources = list(failed_sources)
         self.selected_sources = list(selected_sources or [])
+        self.selection_meta = dict(selection_meta or {})
         super().__init__(all_sources_failed_message(self.method_name, self.failed_sources))
 
 
@@ -186,10 +218,13 @@ def error_row_from_all_sources_failed(
         "training_time": float(elapsed),
         "prediction_shape": "N/A",
         "error": str(exc),
-        "meta": source_failure_meta(
-            requested_k=requested_k,
-            selected_sources=exc.selected_sources,
-            valid_source_count=0,
-            failed_sources=exc.failed_sources,
-        ),
+        "meta": {
+            **source_failure_meta(
+                requested_k=requested_k,
+                selected_sources=exc.selected_sources,
+                valid_source_count=0,
+                failed_sources=exc.failed_sources,
+            ),
+            **exc.selection_meta,
+        },
     }

@@ -27,6 +27,7 @@ from src.experiment.experiment_runner import (
 )
 from src.transfer_methods.source_failure_tolerance import (
     AllSourcesFailedError,
+    RUNTIME_SELECTION_META_FIELDS,
     error_row_from_all_sources_failed,
 )
 from src.utils.finite_diagnostics import NonFiniteArrayError, validate_feature_frame_finite
@@ -269,7 +270,7 @@ def _selection_meta(raw: Dict[str, Any], method: str, requested_k: int) -> Dict[
     selected = meta.get("selected_sources", [])
     if not isinstance(selected, list):
         selected = []
-    return {
+    selection_meta = {
         "requested_k": int(meta.get("requested_k", requested_k)),
         "effective_k": int(meta.get("effective_k", len(selected) if method != "No-TL" else 0)),
         "selected_source_count": int(meta.get("selected_source_count", len(selected) if method != "No-TL" else 0)),
@@ -284,6 +285,10 @@ def _selection_meta(raw: Dict[str, Any], method: str, requested_k: int) -> Dict[
         "selected_sources": selected,
         "source_key": str(meta.get("source_key", "")),
     }
+    for field in RUNTIME_SELECTION_META_FIELDS:
+        if field in meta:
+            selection_meta[field] = meta[field]
+    return selection_meta
 
 
 def _row_from_result(
@@ -327,6 +332,16 @@ def _row_from_result(
         "selected_sources": _stable_json_dumps(source_meta["selected_sources"]),
         "error": str(raw.get("error", "")),
     }
+    runtime_json_fields = {
+        "feature_cols",
+        "selected_sources_runtime",
+        "source_skip_diagnostics",
+    }
+    for field in RUNTIME_SELECTION_META_FIELDS:
+        if field not in source_meta:
+            continue
+        value = source_meta[field]
+        row[field] = _stable_json_dumps(value) if field in runtime_json_fields else value
     metric_protocol = dict(config.get("metric_protocol", {}) or {})
     row["metric_protocol"] = _stable_json_dumps(metric_protocol) if metric_protocol else ""
     row["metric_space_current"] = str(
