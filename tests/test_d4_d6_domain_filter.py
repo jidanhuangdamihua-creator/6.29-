@@ -139,15 +139,16 @@ def test_regenerate_without_filter_matches_runtime_policy(
 @pytest.mark.parametrize(
     ("dataset_id", "group_cols", "domain_filter"),
     (
+        (4, ["store_id", "product_id"], {"second_category_id": 20}),
         (5, ["store_nbr", "item_nbr"], {"family": "GROCERY I"}),
         (6, ["store_id", "item_id"], {"dept_id": "FOODS_3"}),
     ),
 )
 @pytest.mark.parametrize("scenario", ("without", "with"))
-def test_d5_d6_runtime_policy_diagnostics_track_rows_entities_and_config(
+def test_d4_d6_runtime_policy_diagnostics_track_rows_entities_and_config(
     dataset_id: int,
     group_cols: list[str],
-    domain_filter: dict[str, str],
+    domain_filter: dict[str, object],
     scenario: str,
 ) -> None:
     source_df = pd.DataFrame(
@@ -155,9 +156,11 @@ def test_d5_d6_runtime_policy_diagnostics_track_rows_entities_and_config(
             "store_nbr": [1, 1, 2, 3],
             "item_nbr": [10, 10, 20, 30],
             "store_id": [1, 1, 2, 3],
+            "product_id": [10, 10, 20, 30],
             "item_id": [10, 10, 20, 30],
             "family": ["GROCERY I", "GROCERY I", "BEVERAGES", "GROCERY I"],
             "dept_id": ["FOODS_3", "FOODS_3", "FOODS_2", "FOODS_3"],
+            "second_category_id": [20, 20, 30, 20],
         }
     )
     config = {"info_sharing": scenario}
