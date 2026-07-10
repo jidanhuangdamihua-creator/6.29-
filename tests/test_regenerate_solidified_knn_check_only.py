@@ -112,6 +112,14 @@ def test_regenerated_payload_rebuilds_selection_metadata_without_stale_values() 
 
     assert rebuilt["selection_authority"] == "runtime"
     assert rebuilt["protocol_version"] == "runtime_knn_windowed_stats_v1"
+    assert rebuilt["results_semantics"] == "json_top_k_diagnostic_not_training_authority"
+    assert rebuilt["training_selection_authority"] == "runtime_source_selector"
+    assert rebuilt["json_results_used_for"] == [
+        "target_list",
+        "smoke_or_source_limit_candidate_pool",
+        "diagnostics",
+    ]
+    assert rebuilt["results"] == {"target-a": [{"source_entity": "new-source_item"}]}
     assert rebuilt["selection_metadata"] == {"target-a": runtime_meta}
     encoded = json.dumps(rebuilt, default=str)
     assert "paper_observed_sequence" not in encoded

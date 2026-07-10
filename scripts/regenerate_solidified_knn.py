@@ -231,6 +231,13 @@ def _build_regenerated_payload(
         {
             "selection_authority": "runtime",
             "protocol_version": D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+            "results_semantics": "json_top_k_diagnostic_not_training_authority",
+            "training_selection_authority": "runtime_source_selector",
+            "json_results_used_for": [
+                "target_list",
+                "smoke_or_source_limit_candidate_pool",
+                "diagnostics",
+            ],
             "feature_cols": list(feature_cols),
             "feature_info": copy.deepcopy(feature_info),
             "source_pool_size": int(source_pool_size),
