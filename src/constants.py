@@ -2,6 +2,7 @@
 import json
 
 SOURCE_HISTORY_DAYS = 300
+D4_D6_RUNTIME_KNN_PROTOCOL_VERSION = "runtime_knn_windowed_stats_v1"
 MIXED_METRIC_SPACE = "mixed_metric_space"
 MIXED_METRIC_PROTOCOL_NOTE = (
     "non-strict protocol uses normalized RMSE and original-scale sMAPE when inverse transform is available"

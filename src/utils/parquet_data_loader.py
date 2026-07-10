@@ -7,10 +7,26 @@ from typing import Any, Dict, Tuple
 
 import pandas as pd
 
-from src.constants import SOLIDIFIED_TARGET_WINDOWS
+from src.constants import D4_D6_RUNTIME_KNN_PROTOCOL_VERSION, SOLIDIFIED_TARGET_WINDOWS
 
 
 LOGGER = logging.getLogger("experiment")
+
+
+RUNTIME_KNN_WINDOW_ATTRS = (
+    "selection_authority",
+    "protocol_version",
+    "target_observed_start",
+    "target_observed_end",
+    "source_history_start",
+    "source_history_end",
+    "target_test_excluded",
+    "source_future_excluded",
+    "source_alignment_mode",
+    "representation",
+    "scaling",
+    "scaler_fit_scope",
+)
 
 
 def _dataset_name(dataset_id: int) -> str:
@@ -27,6 +43,43 @@ def _read_target_selection_windows(dataset_id: int) -> Dict[str, Any]:
     if int(dataset_id) not in {4, 5, 6}:
         return {}
     return dict(SOLIDIFIED_TARGET_WINDOWS[int(dataset_id)])
+
+
+def derive_d4_d6_runtime_knn_windows(
+    windows: Dict[str, Any],
+    source_history_days: int,
+) -> Dict[str, Any]:
+    """Derive the explicit D4-D6 runtime KNN bounds using inclusive days."""
+    dataset_id = int(windows.get("dataset_id", 0))
+    if dataset_id not in {4, 5, 6}:
+        raise ValueError(f"runtime KNN windows are only defined for D4-D6: dataset_id={dataset_id}")
+    if "train_start" not in windows:
+        raise ValueError("D4-D6 runtime KNN windows require train_start")
+    if int(source_history_days) <= 0:
+        raise ValueError("source_history_days must be positive")
+
+    target_observed_start = pd.to_datetime(windows["train_start"], errors="coerce")
+    if pd.isna(target_observed_start):
+        raise ValueError(f"Invalid D4-D6 train_start: {windows['train_start']!r}")
+    target_observed_start = pd.Timestamp(target_observed_start).normalize()
+    target_observed_end = target_observed_start + pd.Timedelta(days=29)
+    source_history_end = target_observed_end
+    source_history_start = source_history_end - pd.Timedelta(days=int(source_history_days) - 1)
+
+    return {
+        "selection_authority": "runtime",
+        "protocol_version": D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+        "target_observed_start": target_observed_start,
+        "target_observed_end": target_observed_end,
+        "source_history_start": source_history_start,
+        "source_history_end": source_history_end,
+        "target_test_excluded": True,
+        "source_future_excluded": True,
+        "source_alignment_mode": "exact_target_observed_dates",
+        "representation": "mean_std_min_max_last",
+        "scaling": "none",
+        "scaler_fit_scope": "not_applicable",
+    }
 
 
 def _knn_json_path(knn_json_dir: str | Path, info_sharing: str) -> Path:
@@ -151,6 +204,9 @@ def attach_window_attrs(df: pd.DataFrame, windows: Dict[str, Any], role: str) ->
     df.attrs["split_role"] = str(role)
     df.attrs["role"] = str(role)
     df.attrs["split_mode"] = "paper_split_protocol" if role == "target" else "ratio"
+    for key in RUNTIME_KNN_WINDOW_ATTRS:
+        if key in windows:
+            df.attrs[key] = windows[key]
     if role == "target":
         date_col = "date" if "date" in df.columns else "dt" if "dt" in df.columns else None
         if date_col is None:
@@ -182,9 +238,8 @@ def attach_window_attrs(df: pd.DataFrame, windows: Dict[str, Any], role: str) ->
                 f"n_unique={n_unique} train_days={train_days} val_days={val_days}"
             )
 
-        # D4-D6 KNN files use a 30-day observed target train+val window. The solidified
-        # target parquet includes the later evaluation dates; preserving this
-        # metadata lets SourceSelector exclude target test dates.
+        # The target frame retains evaluation dates. Explicit runtime attrs define
+        # the separate 30-day train+validation window used by D4-D6 KNN selection.
         df.attrs["paper_split_protocol"] = "solidified_d4_d6_target_train_window"
         df.attrs["train_days"] = train_days
         df.attrs["val_days"] = val_days
@@ -291,17 +346,29 @@ def load_parquet_source_target(
     target_df = pd.read_parquet(target_path)
     source_df = _coerce_known_model_candidate_columns(source_df, dataset_id=dataset_id, role="source")
     target_df = _coerce_known_model_candidate_columns(target_df, dataset_id=dataset_id, role="target")
-    if "date" in source_df.columns:
-        source_df["date"] = pd.to_datetime(source_df["date"], errors="coerce")
-    if "date" in target_df.columns:
-        target_df["date"] = pd.to_datetime(target_df["date"], errors="coerce")
+    for role, frame in (("source", source_df), ("target", target_df)):
+        if "date" not in frame.columns:
+            raise ValueError(f"D4-D6 {role} dataframe requires date column")
+        frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
+        if frame["date"].isna().any():
+            raise ValueError(f"D4-D6 {role} dataframe contains invalid date values")
 
-    if source_history_days and "date" in source_df.columns and "date" in target_df.columns and not target_df.empty:
-        cutoff = pd.Timestamp(target_df["date"].min()) - pd.Timedelta(days=int(source_history_days))
-        source_df = source_df[source_df["date"] >= cutoff].copy()
+    if source_history_days is None:
+        raise ValueError("D4-D6 runtime KNN requires source_history_days")
+    runtime_windows = dict(windows)
+    runtime_windows.update(
+        derive_d4_d6_runtime_knn_windows(runtime_windows, int(source_history_days))
+    )
+    source_df = source_df[
+        source_df["date"].between(
+            runtime_windows["source_history_start"],
+            runtime_windows["source_history_end"],
+            inclusive="both",
+        )
+    ].copy()
 
-    source_df = attach_window_attrs(source_df, windows, role="source")
-    target_df = attach_window_attrs(target_df, windows, role="target")
+    source_df = attach_window_attrs(source_df, runtime_windows, role="source")
+    target_df = attach_window_attrs(target_df, runtime_windows, role="target")
     source_df.attrs["solidified_parquet_path"] = str(source_path)
     target_df.attrs["solidified_parquet_path"] = str(target_path)
     return source_df, target_df
