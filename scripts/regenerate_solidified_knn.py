@@ -17,14 +17,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.constants import SOLIDIFIED_KNN_ROOT, SOURCE_HISTORY_DAYS
-from src.data_processing.data_preprocessing import infer_source_selection_feature_columns
+from src.constants import (
+    D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+    SOLIDIFIED_KNN_ROOT,
+    SOURCE_HISTORY_DAYS,
+)
 from src.source_selection.source_selector import SourceSelector
 from src.utils.parquet_data_loader import (
-    attach_window_attrs,
     load_parquet_source_target,
     read_dataset_windows,
 )
+from src.utils.source_domain_filter import apply_source_domain_policy
 
 
 def _file_digest(path: Path) -> str:
@@ -178,15 +181,71 @@ def _filter_source_for_scenario(
     scenario: str,
     old_payload: Dict[str, Any],
 ) -> pd.DataFrame:
-    # Existing D4 without-information JSON uses a reduced same-domain source pool;
-    # D5/D6 solidified files currently record identical with/without pool sizes.
-    if int(dataset_id) == 4 and scenario == "without":
-        domain_filter = old_payload.get("domain_filter", {})
-        column = domain_filter.get("column")
-        value = domain_filter.get("value")
-        if column in source_df.columns:
-            return source_df[source_df[column] == value].copy()
-    return source_df.copy()
+    if int(dataset_id) not in {4, 5, 6}:
+        raise ValueError(f"regeneration only supports D4-D6: dataset_id={dataset_id}")
+    return apply_source_domain_policy(
+        source_df,
+        old_payload.get("domain_filter"),
+        information_sharing=scenario,
+    ).frame
+
+
+def _build_regenerated_payload(
+    *,
+    old_payload: Dict[str, Any],
+    feature_cols: Sequence[str],
+    feature_info: Dict[str, Any],
+    source_pool_size: int,
+    results: Dict[str, List[Dict[str, Any]]],
+    selection_metadata: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Build a regenerated payload without inheriting stale selection metadata."""
+    for field in ("k", "group_cols"):
+        if field not in old_payload:
+            raise ValueError(f"KNN payload missing required protocol field: {field}")
+    if not feature_cols:
+        raise ValueError("KNN payload requires non-empty feature_cols")
+    for target_key, metadata in selection_metadata.items():
+        if metadata.get("selection_authority") != "runtime":
+            raise ValueError(f"selection_metadata[{target_key!r}] is not runtime authoritative")
+        if metadata.get("protocol_version") != D4_D6_RUNTIME_KNN_PROTOCOL_VERSION:
+            raise ValueError(f"selection_metadata[{target_key!r}] has invalid protocol_version")
+
+    stable_keys = (
+        "dataset_id",
+        "dataset",
+        "info_sharing",
+        "k",
+        "window_size",
+        "horizon",
+        "target_train_window",
+        "domain_filter",
+        "group_cols",
+    )
+    new_payload = {
+        key: copy.deepcopy(old_payload[key])
+        for key in stable_keys
+        if key in old_payload
+    }
+    new_payload.update(
+        {
+            "selection_authority": "runtime",
+            "protocol_version": D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+            "results_semantics": "json_top_k_diagnostic_not_training_authority",
+            "training_selection_authority": "runtime_source_selector",
+            "json_results_used_for": [
+                "target_list",
+                "smoke_or_source_limit_candidate_pool",
+                "diagnostics",
+            ],
+            "feature_cols": list(feature_cols),
+            "feature_info": copy.deepcopy(feature_info),
+            "source_pool_size": int(source_pool_size),
+            "results": copy.deepcopy(results),
+            "selection_metadata": copy.deepcopy(selection_metadata),
+        }
+    )
+    return new_payload
 
 
 def regenerate_dataset_scenario(
@@ -199,15 +258,22 @@ def regenerate_dataset_scenario(
 ) -> Dict[str, Any]:
     path = _scenario_file(dataset_id, scenario, knn_root)
     old_payload = _load_json(path)
-    windows = read_dataset_windows(dataset_id, knn_root / f"Dataset{int(dataset_id)}")
+    if int(old_payload.get("dataset_id", -1)) != int(dataset_id):
+        raise ValueError(f"KNN payload dataset_id mismatch: expected={dataset_id}")
+    if str(old_payload.get("info_sharing", "")).strip().lower() != str(scenario).strip().lower():
+        raise ValueError(f"KNN payload info_sharing mismatch: expected={scenario}")
+    windows = read_dataset_windows(
+        dataset_id,
+        knn_root / f"Dataset{int(dataset_id)}",
+        info_sharing=scenario,
+        knn_payload=old_payload,
+    )
     source_df, target_df = load_parquet_source_target(
         dataset_id=dataset_id,
         parquet_dir="数据集/固化数据",
         windows=windows,
         source_history_days=SOURCE_HISTORY_DAYS,
     )
-    source_df = attach_window_attrs(source_df, windows, role="source")
-    target_df = attach_window_attrs(target_df, windows, role="target")
     source_df = _filter_source_for_scenario(
         source_df,
         dataset_id=dataset_id,
@@ -215,27 +281,48 @@ def regenerate_dataset_scenario(
         old_payload=old_payload,
     )
 
-    feature_info = infer_source_selection_feature_columns(source_df, target_df)
-    feature_cols = list(feature_info["selected_features"])
-    group_cols = tuple(old_payload.get("group_cols", ["entity_id", "item_id"]))
-    k = int(old_payload.get("k", 3))
+    existing_feature_info = old_payload.get("feature_info", {})
+    feature_cols = list(
+        existing_feature_info.get("selected_features", [])
+        if isinstance(existing_feature_info, dict)
+        else []
+    ) or list(old_payload.get("feature_cols", []))
+    if not feature_cols:
+        raise ValueError("KNN payload missing required feature_cols")
+    missing_features = [
+        col for col in feature_cols if col not in source_df.columns or col not in target_df.columns
+    ]
+    if missing_features:
+        raise ValueError(f"KNN payload feature_cols missing from runtime frames: {missing_features}")
+    feature_info = copy.deepcopy(existing_feature_info) if isinstance(existing_feature_info, dict) else {}
+    feature_info["selected_features"] = list(feature_cols)
+    if "group_cols" not in old_payload:
+        raise ValueError("KNN payload missing required protocol field: group_cols")
+    group_cols = tuple(old_payload["group_cols"])
+    if "k" not in old_payload or int(old_payload["k"]) <= 0:
+        raise ValueError("KNN payload requires positive k")
+    k = int(old_payload["k"])
     selector = SourceSelector()
 
     new_results: Dict[str, List[Dict[str, Any]]] = {}
+    new_selection_metadata: Dict[str, Dict[str, Any]] = {}
     diff_rows: List[Dict[str, Any]] = []
     for target_entity_id, old_rows in old_payload.get("results", {}).items():
         target_entity_df = target_df[target_df["entity_id"].astype(str) == str(target_entity_id)].copy()
         if target_entity_df.empty:
-            new_rows: List[Dict[str, Any]] = []
-        else:
-            selected = selector.select_top_k_sources(
-                target_df=target_entity_df,
-                source_df=source_df,
-                feature_cols=feature_cols,
-                k=k,
-                group_cols=group_cols,
-            )
-            new_rows = [_result_row(row, group_cols) for row in selected.get("sources", [])]
+            raise ValueError(f"KNN target entity missing from runtime target frame: {target_entity_id}")
+        selected = selector.select_top_k_sources(
+            target_df=target_entity_df,
+            source_df=source_df,
+            feature_cols=feature_cols,
+            k=k,
+            group_cols=group_cols,
+        )
+        new_rows = [_result_row(row, group_cols) for row in selected.get("sources", [])]
+        selected_meta = selected.get("meta", {})
+        if not isinstance(selected_meta, dict):
+            raise ValueError(f"Runtime selector returned invalid metadata for target={target_entity_id}")
+        new_selection_metadata[str(target_entity_id)] = copy.deepcopy(selected_meta)
         new_results[str(target_entity_id)] = new_rows
 
         old_features = list((old_payload.get("feature_info", {}) or {}).get("selected_features", old_payload.get("feature_cols", [])))
@@ -262,11 +349,14 @@ def regenerate_dataset_scenario(
             }
         )
 
-    new_payload = copy.deepcopy(old_payload)
-    new_payload["feature_cols"] = feature_cols
-    new_payload["feature_info"] = feature_info
-    new_payload["source_pool_size"] = int(len(source_df))
-    new_payload["results"] = new_results
+    new_payload = _build_regenerated_payload(
+        old_payload=old_payload,
+        feature_cols=feature_cols,
+        feature_info=feature_info,
+        source_pool_size=int(len(source_df)),
+        results=new_results,
+        selection_metadata=new_selection_metadata,
+    )
 
     generated_path = output_root / "generated_json" / f"Dataset{int(dataset_id)}" / path.name
     _write_json(generated_path, new_payload)

@@ -12,13 +12,15 @@ Module 5: Similar Source Selection (KNN-style + Distance Weights)
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
-from typing import Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
 
 from src.data_processing.data_preprocessing import infer_source_selection_feature_columns
+from src.constants import D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
 
 try:
     from src.utils.environment import setup_logging
@@ -242,6 +244,192 @@ class SourceSelector:
             signature_parts.append(self._encode_static_scalar(ordered[col]))
 
         return np.asarray(signature_parts, dtype=np.float64)
+
+    @staticmethod
+    def _runtime_protocol_requested(target_df: pd.DataFrame, source_df: pd.DataFrame) -> bool:
+        """Return whether either frame declares the D4-D6 runtime KNN protocol."""
+        attrs = (target_df.attrs, source_df.attrs)
+        return any(
+            frame_attrs.get("selection_authority") == "runtime"
+            or frame_attrs.get("protocol_version") == D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
+            for frame_attrs in attrs
+        )
+
+    @staticmethod
+    def _strict_digest(payload: object) -> str:
+        """Return a deterministic SHA-256 digest for JSON-compatible diagnostics."""
+        def default(value: object) -> object:
+            if isinstance(value, pd.Timestamp):
+                return value.isoformat()
+            if isinstance(value, np.integer):
+                return int(value)
+            if isinstance(value, np.floating):
+                return float(value)
+            if isinstance(value, np.bool_):
+                return bool(value)
+            raise TypeError(f"Unsupported digest value: {type(value).__name__}")
+
+        encoded = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+            default=default,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _runtime_aligned_signatures(
+        self,
+        target_df: pd.DataFrame,
+        source_df: pd.DataFrame,
+        feature_cols: Sequence[str],
+        group_cols: Tuple[str, str],
+        static_feature_cols: Sequence[str] | None,
+    ) -> Tuple[np.ndarray, List[Tuple], np.ndarray, Dict[str, Any]]:
+        """Build D4-D6 signatures on the exact shared 30-day observed calendar."""
+        required_attrs = (
+            "selection_authority",
+            "protocol_version",
+            "target_observed_start",
+            "target_observed_end",
+            "source_history_start",
+            "source_history_end",
+            "target_test_excluded",
+            "source_future_excluded",
+            "source_alignment_mode",
+            "representation",
+            "scaling",
+            "scaler_fit_scope",
+        )
+        for role, frame in (("target", target_df), ("source", source_df)):
+            missing = [key for key in required_attrs if key not in frame.attrs]
+            if missing:
+                raise ValueError(
+                    f"Missing D4-D6 runtime KNN metadata on {role}: {missing}"
+                )
+            if "date" not in frame.columns:
+                raise ValueError(f"D4-D6 runtime KNN {role} dataframe requires date column")
+
+        for key in required_attrs:
+            if target_df.attrs[key] != source_df.attrs[key]:
+                raise ValueError(f"D4-D6 runtime KNN metadata mismatch for {key}")
+        if target_df.attrs["selection_authority"] != "runtime":
+            raise ValueError("D4-D6 runtime KNN selection_authority must be 'runtime'")
+        if target_df.attrs["protocol_version"] != D4_D6_RUNTIME_KNN_PROTOCOL_VERSION:
+            raise ValueError(
+                "Unsupported D4-D6 runtime KNN protocol_version: "
+                f"{target_df.attrs['protocol_version']!r}"
+            )
+
+        target_observed_start = pd.Timestamp(target_df.attrs["target_observed_start"]).normalize()
+        target_observed_end = pd.Timestamp(target_df.attrs["target_observed_end"]).normalize()
+        source_history_start = pd.Timestamp(source_df.attrs["source_history_start"]).normalize()
+        source_history_end = pd.Timestamp(source_df.attrs["source_history_end"]).normalize()
+        if (target_observed_end - target_observed_start).days != 29:
+            raise ValueError("D4-D6 runtime KNN observed window must contain exactly 30 calendar days")
+        if source_history_end != target_observed_end:
+            raise ValueError("D4-D6 runtime KNN source_history_end must equal target_observed_end")
+        if (source_history_end - source_history_start).days != 299:
+            raise ValueError("D4-D6 runtime KNN source history must contain exactly 300 calendar days")
+
+        required_dates = pd.DatetimeIndex(
+            pd.date_range(target_observed_start, target_observed_end, freq="D")
+        )
+        target = target_df.copy()
+        target["date"] = pd.to_datetime(target["date"], errors="coerce").dt.normalize()
+        if target["date"].isna().any():
+            raise ValueError("D4-D6 runtime KNN target dataframe contains invalid date values")
+        target_observed = target[target["date"].isin(required_dates)].sort_values("date")
+        if target_observed["date"].duplicated().any():
+            raise ValueError("D4-D6 runtime KNN target observed window contains duplicate dates")
+        target_dates = pd.DatetimeIndex(target_observed["date"])
+        if not target_dates.equals(required_dates):
+            missing = required_dates.difference(target_dates).strftime("%Y-%m-%d").tolist()
+            raise ValueError(
+                "D4-D6 runtime KNN target does not cover all observed dates: "
+                f"missing_dates={missing}"
+            )
+
+        target_signature = self._signature_from_df(
+            target_observed,
+            feature_cols,
+            static_feature_cols=static_feature_cols,
+        )
+        source_keys: List[Tuple] = []
+        signatures: List[np.ndarray] = []
+        skipped: List[Dict[str, Any]] = []
+
+        grouped = source_df.groupby(list(group_cols), sort=False)
+        for raw_key, raw_group in grouped:
+            source_key = tuple(raw_key) if isinstance(raw_key, tuple) else (raw_key,)
+            group = raw_group.copy()
+            group["date"] = pd.to_datetime(group["date"], errors="coerce").dt.normalize()
+            if group["date"].isna().any():
+                skipped.append(
+                    {"source_key": source_key, "reason": "invalid_date_values", "missing_dates": []}
+                )
+                continue
+            history = group[
+                group["date"].between(source_history_start, source_history_end, inclusive="both")
+            ]
+            aligned = history[history["date"].isin(required_dates)].sort_values("date")
+            aligned_dates = pd.DatetimeIndex(aligned["date"].drop_duplicates())
+            missing_dates = required_dates.difference(aligned_dates).strftime("%Y-%m-%d").tolist()
+            if missing_dates:
+                skipped.append(
+                    {
+                        "source_key": source_key,
+                        "reason": "missing_target_observed_dates",
+                        "missing_dates": missing_dates,
+                    }
+                )
+                continue
+            if aligned["date"].duplicated().any():
+                skipped.append(
+                    {
+                        "source_key": source_key,
+                        "reason": "duplicate_target_observed_dates",
+                        "missing_dates": [],
+                    }
+                )
+                continue
+            source_keys.append(source_key)
+            signatures.append(
+                self._signature_from_df(
+                    aligned,
+                    feature_cols,
+                    static_feature_cols=static_feature_cols,
+                )
+            )
+
+        if not signatures:
+            raise ValueError(
+                "No valid sources after exact_target_observed_dates alignment: "
+                f"source_skip_diagnostics={skipped}"
+            )
+        source_signatures = np.vstack(signatures).astype(np.float64)
+        digest_keys = sorted(source_keys, key=lambda key: json.dumps(key, default=str))
+        metadata = {
+            key: target_df.attrs[key]
+            for key in required_attrs
+        }
+        for key in (
+            "target_observed_start",
+            "target_observed_end",
+            "source_history_start",
+            "source_history_end",
+        ):
+            metadata[key] = pd.Timestamp(metadata[key]).strftime("%Y-%m-%d")
+        metadata.update(
+            {
+                "source_skip_diagnostics": skipped,
+                "candidate_source_count": int(len(source_keys)),
+                "skipped_source_count": int(len(skipped)),
+                "candidate_pool_digest": self._strict_digest(digest_keys),
+            }
+        )
+        return target_signature, source_keys, source_signatures, metadata
 
     def build_target_signature(
         self,
@@ -493,17 +681,29 @@ class SourceSelector:
             feature_info.get("excluded_by_rule", []),
         )
 
-        target_signature = self.build_target_signature(
-            target_df,
-            resolved_feature_cols,
-            static_feature_cols=static_feature_cols,
-        )
-        source_keys, source_signatures = self.build_source_signatures(
-            source_df=source_df,
-            feature_cols=resolved_feature_cols,
-            group_cols=group_cols,
-            static_feature_cols=static_feature_cols,
-        )
+        runtime_metadata: Dict[str, Any] = {}
+        if self._runtime_protocol_requested(target_df, source_df):
+            target_signature, source_keys, source_signatures, runtime_metadata = (
+                self._runtime_aligned_signatures(
+                    target_df=target_df,
+                    source_df=source_df,
+                    feature_cols=resolved_feature_cols,
+                    group_cols=group_cols,
+                    static_feature_cols=static_feature_cols,
+                )
+            )
+        else:
+            target_signature = self.build_target_signature(
+                target_df,
+                resolved_feature_cols,
+                static_feature_cols=static_feature_cols,
+            )
+            source_keys, source_signatures = self.build_source_signatures(
+                source_df=source_df,
+                feature_cols=resolved_feature_cols,
+                group_cols=group_cols,
+                static_feature_cols=static_feature_cols,
+            )
 
         result_payload: Dict[str, object] = {
             "meta": {
@@ -528,6 +728,7 @@ class SourceSelector:
                 "missing_in_source": list(feature_info.get("missing_in_source", [])),
                 "missing_in_target": list(feature_info.get("missing_in_target", [])),
                 "excluded_by_rule": list(feature_info.get("excluded_by_rule", [])),
+                **runtime_metadata,
             },
             "sources": [],
         }
@@ -560,6 +761,10 @@ class SourceSelector:
         results = sorted(results, key=lambda x: x["distance"])
         for rank, row in enumerate(results, start=1):
             row["source_rank"] = int(rank)
+
+        if runtime_metadata:
+            result_payload["meta"]["selected_sources_runtime"] = list(results)
+            result_payload["meta"]["selection_result_digest"] = self._strict_digest(results)
 
         if debug_mode:
             self._log_debug_selection_details(

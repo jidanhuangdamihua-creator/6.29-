@@ -43,6 +43,7 @@ from src.transfer_methods.source_failure_tolerance import (
     SOURCE_LEVEL_EXCEPTIONS,
     make_failed_source,
     normalize_successful_source_weights,
+    runtime_selection_meta,
     should_skip_source_exception,
     source_failure_meta,
 )
@@ -468,7 +469,12 @@ def run_mswa_tl(
         )
 
     if not individual_results:
-        raise AllSourcesFailedError("MSWA-TL", failed_sources, selected_sources=selected_sources)
+        raise AllSourcesFailedError(
+            "MSWA-TL",
+            failed_sources,
+            selected_sources=selected_sources,
+            selection_meta=runtime_selection_meta(selection_result),
+        )
 
     normalized_weights = normalize_successful_source_weights(weights)
     for item, normalized_weight in zip(individual_results, normalized_weights):
@@ -490,6 +496,7 @@ def run_mswa_tl(
             "feature_cols": list(feature_cols),
             "knn_feature_mode": (selection_result.get("meta", {}) or {}).get("knn_feature_mode", ""),
             "selected_sources": selected_sources,
+            **runtime_selection_meta(selection_result),
             **source_failure_meta(
                 requested_k=k,
                 selected_sources=selected_sources,

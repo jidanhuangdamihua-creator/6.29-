@@ -2,6 +2,7 @@
 import json
 
 SOURCE_HISTORY_DAYS = 300
+D4_D6_RUNTIME_KNN_PROTOCOL_VERSION = "runtime_knn_windowed_stats_v1"
 MIXED_METRIC_SPACE = "mixed_metric_space"
 MIXED_METRIC_PROTOCOL_NOTE = (
     "non-strict protocol uses normalized RMSE and original-scale sMAPE when inverse transform is available"
@@ -130,6 +131,23 @@ RESULT_SCHEMA_COLUMNS = [
     "feature_source",
     "knn_feature_mode",
     "selected_sources",
+    "selection_authority",
+    "protocol_version",
+    "target_observed_start",
+    "target_observed_end",
+    "source_history_start",
+    "source_history_end",
+    "target_test_excluded",
+    "source_future_excluded",
+    "source_alignment_mode",
+    "feature_cols",
+    "representation",
+    "scaling",
+    "scaler_fit_scope",
+    "selected_sources_runtime",
+    "candidate_pool_digest",
+    "selection_result_digest",
+    "source_skip_diagnostics",
     "selected_source_count",
     "source_failure_messages",
     "source_domain_filter_name",

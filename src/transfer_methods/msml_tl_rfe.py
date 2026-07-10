@@ -55,6 +55,7 @@ from src.transfer_methods.source_failure_tolerance import (
     SOURCE_LEVEL_EXCEPTIONS,
     make_failed_source,
     normalize_successful_source_weights,
+    runtime_selection_meta,
     should_skip_source_exception,
     source_failure_meta,
 )
@@ -825,7 +826,12 @@ def run_msml_tl_rfe(
         })
 
     if not source_models:
-        raise AllSourcesFailedError("MSML-TL-RFE", failed_sources, selected_sources=selected_sources)
+        raise AllSourcesFailedError(
+            "MSML-TL-RFE",
+            failed_sources,
+            selected_sources=selected_sources,
+            selection_meta=runtime_selection_meta(selection_result),
+        )
 
     source_weights = normalize_successful_source_weights(source_weights)
     for info, normalized_weight in zip(source_models_info, source_weights):
@@ -895,6 +901,7 @@ def run_msml_tl_rfe(
             "selected_feature_cols": selected_feature_cols,
             "keep_ratio": float(keep_ratio),
             "selected_sources": selected_sources,
+            **runtime_selection_meta(selection_result),
             "fused_layers": list(layer_names),
             **source_failure_meta(
                 requested_k=k,
