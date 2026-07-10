@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 import subprocess
 import sys
+import time
 
 import pandas as pd
 import pytest
@@ -94,6 +95,47 @@ def test_cap_is_stable_after_window_eligibility() -> None:
         "cap_applied": True,
         "hash_key_columns": ["store_id", "item_id"],
     }
+
+
+def test_entity_key_builder_does_not_use_rowwise_pandas_operations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_rowwise_operation(*args: object, **kwargs: object) -> object:
+        if kwargs.get("axis") == 1 or (args and args[0] == 1):
+            raise AssertionError("row-wise pandas operation used for entity keys")
+        raise AssertionError("unexpected pandas operation")
+
+    monkeypatch.setattr(pd.DataFrame, "agg", fail_rowwise_operation)
+    monkeypatch.setattr(pd.DataFrame, "apply", fail_rowwise_operation)
+    source = pd.DataFrame({"store": [1, None], "item": [2, 3]})
+
+    result, _ = stable_cap_entities(source, ["store", "item"], cap=None)
+
+    assert result.index.tolist() == [0, 1]
+
+
+def test_stable_cap_entities_is_fast_and_deterministic_on_large_frame() -> None:
+    rows = 100_000
+    source = pd.DataFrame(
+        {
+            "store": [index % 250 for index in range(rows)],
+            "item": [index % 400 for index in range(rows)],
+            "value": range(rows),
+        }
+    )
+
+    started = time.perf_counter()
+    first, first_meta = stable_cap_entities(source, ["store", "item"], cap=75)
+    elapsed = time.perf_counter() - started
+    second, second_meta = stable_cap_entities(
+        source.sample(frac=1.0, random_state=7), ["store", "item"], cap=75
+    )
+
+    assert elapsed < 3.0
+    assert first_meta == second_meta
+    assert set(map(tuple, first[["store", "item"]].drop_duplicates().to_numpy())) == set(
+        map(tuple, second[["store", "item"]].drop_duplicates().to_numpy())
+    )
 
 
 def test_schema_and_overlap_diagnostics_are_explicit() -> None:
@@ -223,6 +265,7 @@ def test_cli_writes_only_diagnostic_artifacts_from_a_reusable_wide_clean(
             "--dataset", "5", "--mode", "both", "--top-k", "1",
             "--clean-input-root", str(clean_root), "--output-dir", str(output_root),
             "--parquet-root", str(parquet_root), "--knn-root", str(knn_root),
+            "--max-source-entities", "1",
         ]
     )
 
@@ -234,6 +277,8 @@ def test_cli_writes_only_diagnostic_artifacts_from_a_reusable_wide_clean(
     assert result.loc[0, "domain_filter_vacuous_on_narrow"]
     assert "Runtime-window comparability check" in markdown_path.read_text(encoding="utf-8")
     assert "Schema-contract check" in markdown_path.read_text(encoding="utf-8")
+    assert result["wide_with_post_cap_source_entities"].eq(1).all()
+    assert result["wide_without_post_cap_source_entities"].eq(1).all()
 
 
 def test_script_is_directly_invocable_from_repository_root() -> None:

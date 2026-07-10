@@ -92,7 +92,12 @@ def _entity_key_series(frame: pd.DataFrame, group_cols: Sequence[str]) -> pd.Ser
     missing = [column for column in group_cols if column not in frame.columns]
     if missing:
         raise ValueError(f"cannot derive entity key; missing group_cols: {missing}")
-    return frame.loc[:, list(group_cols)].astype("string").fillna("<NA>").agg("\x1f".join, axis=1)
+    if not group_cols:
+        raise ValueError("cannot derive entity key without group_cols")
+    key = frame[group_cols[0]].astype("string").fillna("<NA>")
+    for column in group_cols[1:]:
+        key = key + "\x1f" + frame[column].astype("string").fillna("<NA>")
+    return key
 
 
 def stable_cap_entities(
@@ -103,11 +108,15 @@ def stable_cap_entities(
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Deterministically retain whole entities using SHA-256 of JSON group_cols."""
     keys = _entity_key_series(source, group_cols)
-    unique_keys = sorted(set(keys.tolist()), key=lambda key: hashlib.sha256(key.encode("utf-8")).hexdigest())
-    pre_cap = len(unique_keys)
+    unique_keys = keys.drop_duplicates()
+    ordered_keys = sorted(
+        unique_keys.tolist(),
+        key=lambda key: hashlib.sha256(key.encode("utf-8")).hexdigest(),
+    )
+    pre_cap = len(ordered_keys)
     if cap is not None and cap <= 0:
         raise ValueError("max-source-entities must be positive")
-    selected = unique_keys if cap is None else unique_keys[:cap]
+    selected = ordered_keys if cap is None else ordered_keys[:cap]
     result = source.loc[keys.isin(selected)].copy()
     return result, {
         "max_source_entities": cap,
@@ -217,7 +226,12 @@ def _domain_filter(payload: dict[str, Any]) -> tuple[str, Any]:
 
 
 def _entity_string(frame: pd.DataFrame, group_cols: Sequence[str]) -> pd.Series:
-    return frame.loc[:, list(group_cols)].astype("string").fillna("<NA>").agg("_".join, axis=1)
+    if not group_cols:
+        raise ValueError("cannot derive entity string without group_cols")
+    key = frame[group_cols[0]].astype("string").fillna("<NA>")
+    for column in group_cols[1:]:
+        key = key + "_" + frame[column].astype("string").fillna("<NA>")
+    return key
 
 
 def normalize_wide_clean_schema(
