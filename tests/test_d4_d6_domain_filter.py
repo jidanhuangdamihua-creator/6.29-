@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from scripts.regenerate_solidified_knn import _filter_source_for_scenario
 from src.utils.source_domain_filter import apply_source_domain_policy, normalize_domain_filter
 
 
@@ -75,3 +76,41 @@ def test_with_domain_filter_records_metadata_without_filtering_or_missing_field_
     assert result.diagnostics["source_pool_size_after_filter"] == 2
     assert result.diagnostics["source_domain_filter_reason"] == "with_information_sharing_all_source_pool"
     assert result.diagnostics["source_domain_filter_error"] == ""
+
+
+@pytest.mark.parametrize("dataset_id", [4, 5, 6])
+@pytest.mark.parametrize(
+    "domain_filter",
+    [
+        {"column": "dept_id", "value": "FOODS_3"},
+        {"dept_id": ["FOODS_2", "FOODS_3"]},
+        {"dept_id": "FOODS_3", "second_category_id": 20},
+    ],
+)
+def test_regenerate_without_filter_matches_runtime_policy(
+    dataset_id: int,
+    domain_filter: dict[str, object],
+) -> None:
+    source_df = pd.DataFrame(
+        {
+            "entity_id": ["a", "b", "c", "d"],
+            "dept_id": ["FOODS_1", "FOODS_2", "FOODS_3", "FOODS_3"],
+            "second_category_id": [10, 20, 20, 30],
+        }
+    )
+    source_df.attrs["protocol_version"] = "runtime_knn_windowed_stats_v1"
+
+    expected = apply_source_domain_policy(
+        source_df,
+        domain_filter,
+        information_sharing="without",
+    ).frame
+    actual = _filter_source_for_scenario(
+        source_df,
+        dataset_id=dataset_id,
+        scenario="without",
+        old_payload={"domain_filter": domain_filter},
+    )
+
+    assert actual["entity_id"].tolist() == expected["entity_id"].tolist()
+    assert actual.attrs == expected.attrs

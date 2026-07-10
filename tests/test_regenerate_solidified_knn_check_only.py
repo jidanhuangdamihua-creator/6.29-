@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from scripts.regenerate_solidified_knn import (
+    _build_regenerated_payload,
     _write_json,
     snapshot_knn_config_files,
     verify_knn_config_unchanged,
@@ -74,3 +75,45 @@ def test_check_only_snapshot_detects_unchanged_config_files(tmp_path: Path) -> N
     (generated_dir / path.name).write_text(json.dumps({"results": {"new": []}}), encoding="utf-8")
 
     verify_knn_config_unchanged(tmp_path, before)
+
+
+def test_regenerated_payload_rebuilds_selection_metadata_without_stale_values() -> None:
+    old_payload = {
+        "dataset_id": 4,
+        "dataset": "D4",
+        "info_sharing": "without",
+        "k": 1,
+        "target_train_window": {"start": "2024-01-01", "end": "2024-01-15"},
+        "domain_filter": {"column": "family", "value": "A"},
+        "group_cols": ["entity_id", "item_id"],
+        "results": {"target-a": [{"source_entity": "old-source"}]},
+        "selection_metadata": {
+            "target-a": {
+                "knn_representation": "paper_observed_sequence",
+                "paper_window_diagnostics": {"stale": True},
+            }
+        },
+    }
+    runtime_meta = {
+        "selection_authority": "runtime",
+        "protocol_version": "runtime_knn_windowed_stats_v1",
+        "representation": "mean_std_min_max_last",
+        "selected_sources_runtime": [{"source_key": ("new-source", "item")}],
+    }
+
+    rebuilt = _build_regenerated_payload(
+        old_payload=old_payload,
+        feature_cols=["sales"],
+        feature_info={"selected_features": ["sales"]},
+        source_pool_size=30,
+        results={"target-a": [{"source_entity": "new-source_item"}]},
+        selection_metadata={"target-a": runtime_meta},
+    )
+
+    assert rebuilt["selection_authority"] == "runtime"
+    assert rebuilt["protocol_version"] == "runtime_knn_windowed_stats_v1"
+    assert rebuilt["selection_metadata"] == {"target-a": runtime_meta}
+    encoded = json.dumps(rebuilt, default=str)
+    assert "paper_observed_sequence" not in encoded
+    assert "paper_window_diagnostics" not in encoded
+    assert '"stale": true' not in encoded

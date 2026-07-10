@@ -19,7 +19,6 @@ from src.utils.entity_experiment import run_single_entity_experiment
 from src.utils.parquet_data_loader import (
     load_parquet_source_target,
     read_dataset_windows,
-    attach_window_attrs,
     load_knn_results,
 )
 from src.utils.d4_d6_runtime import apply_runtime_source_domain_policy, load_default_metric_protocol
@@ -128,9 +127,6 @@ def main() -> None:
         windows=windows,
         source_history_days=config["source_history_days"],
     )
-    source_df = attach_window_attrs(source_df, windows, role="source")
-    target_df = attach_window_attrs(target_df, windows, role="target")
-
     feature_info = resolve_knn_feature_columns(
         dataset_id=config["dataset_id"],
         information_sharing=config["info_sharing"],

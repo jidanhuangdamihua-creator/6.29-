@@ -47,6 +47,7 @@ from paper_reproduction_protocol import (
     validate_paper_protocol_config,
 )
 from src.source_selection.source_selector import SourceSelector
+from src.transfer_methods.source_failure_tolerance import runtime_selection_meta
 from src.utils.source_fillna import fill_source_numeric_na
 
 
@@ -793,6 +794,7 @@ def run_ss_tl_experiment(
             "source_distance": float(selected[0].get("distance", 0.0)),
             "source_weight": float(selected[0].get("weight", 1.0)),
             "selected_sources": selected,
+            **runtime_selection_meta(selection),
             "feature_cols": list(cols),
             "input_shape": tuple(input_shape),
             "frozen_layers": list(frozen_names),
