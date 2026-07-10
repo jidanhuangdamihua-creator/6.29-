@@ -27,6 +27,7 @@ def apply_runtime_source_domain_policy(
         source_df,
         knn_data.get("domain_filter"),
         information_sharing=str(config.get("info_sharing", "without")),
+        entity_group_cols=knn_data.get("group_cols"),
     )
     config.update(result.diagnostics)
     return result.frame

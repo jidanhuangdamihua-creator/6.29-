@@ -93,6 +93,15 @@ def test_d4_d6_result_row_records_runtime_top_k_not_json_top_k() -> None:
             "info_sharing": "without",
             "source_count": 1,
             "knn_json_selected_sources": json_top_k,
+            "source_pool_rows_before_filter": 12,
+            "source_pool_rows_after_filter": 9,
+            "excluded_source_row_count": 3,
+            "source_pool_entities_before_filter": 5,
+            "source_pool_entities_after_filter": 4,
+            "excluded_source_entity_count": 1,
+            "source_domain_filter_applied": True,
+            "source_domain_filter_reason": "without_information_sharing_same_domain_protocol",
+            "source_domain_filter_error": "",
         },
         elapsed=0.1,
     )
@@ -108,6 +117,14 @@ def test_d4_d6_result_row_records_runtime_top_k_not_json_top_k() -> None:
     assert row["selection_result_digest"] == "result-sha256"
     assert row["target_test_excluded"] is True
     assert row["source_future_excluded"] is True
+    assert row["source_pool_rows_before_filter"] == 12
+    assert row["source_pool_rows_after_filter"] == 9
+    assert row["excluded_source_row_count"] == 3
+    assert row["source_pool_entities_before_filter"] == 5
+    assert row["source_pool_entities_after_filter"] == 4
+    assert row["excluded_source_entity_count"] == 1
+    assert row["source_domain_filter_applied"] is True
+    assert row["source_domain_filter_reason"] == "without_information_sharing_same_domain_protocol"
 
 
 def test_runtime_authority_fields_are_part_of_result_schema() -> None:
@@ -128,6 +145,12 @@ def test_runtime_authority_fields_are_part_of_result_schema() -> None:
         "candidate_pool_digest",
         "selection_result_digest",
         "source_skip_diagnostics",
+        "source_pool_rows_before_filter",
+        "source_pool_rows_after_filter",
+        "excluded_source_row_count",
+        "source_pool_entities_before_filter",
+        "source_pool_entities_after_filter",
+        "excluded_source_entity_count",
     ):
         assert field in RESULT_SCHEMA_COLUMNS
 

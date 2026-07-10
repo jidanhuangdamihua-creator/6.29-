@@ -8,7 +8,7 @@ import json
 import math
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -27,7 +27,7 @@ from src.utils.parquet_data_loader import (
     load_parquet_source_target,
     read_dataset_windows,
 )
-from src.utils.source_domain_filter import apply_source_domain_policy
+from src.utils.source_domain_filter import SourceDomainPolicyResult, apply_source_domain_policy
 
 
 def _file_digest(path: Path) -> str:
@@ -180,14 +180,15 @@ def _filter_source_for_scenario(
     dataset_id: int,
     scenario: str,
     old_payload: Dict[str, Any],
-) -> pd.DataFrame:
+) -> SourceDomainPolicyResult:
     if int(dataset_id) not in {4, 5, 6}:
         raise ValueError(f"regeneration only supports D4-D6: dataset_id={dataset_id}")
     return apply_source_domain_policy(
         source_df,
         old_payload.get("domain_filter"),
         information_sharing=scenario,
-    ).frame
+        entity_group_cols=old_payload.get("group_cols"),
+    )
 
 
 def _build_regenerated_payload(
@@ -198,6 +199,7 @@ def _build_regenerated_payload(
     source_pool_size: int,
     results: Dict[str, List[Dict[str, Any]]],
     selection_metadata: Dict[str, Dict[str, Any]],
+    source_domain_policy_diagnostics: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Build a regenerated payload without inheriting stale selection metadata."""
     for field in ("k", "group_cols"):
@@ -241,6 +243,9 @@ def _build_regenerated_payload(
             "feature_cols": list(feature_cols),
             "feature_info": copy.deepcopy(feature_info),
             "source_pool_size": int(source_pool_size),
+            "source_domain_policy_diagnostics": copy.deepcopy(
+                dict(source_domain_policy_diagnostics or {})
+            ),
             "results": copy.deepcopy(results),
             "selection_metadata": copy.deepcopy(selection_metadata),
         }
@@ -274,12 +279,13 @@ def regenerate_dataset_scenario(
         windows=windows,
         source_history_days=SOURCE_HISTORY_DAYS,
     )
-    source_df = _filter_source_for_scenario(
+    source_domain_policy = _filter_source_for_scenario(
         source_df,
         dataset_id=dataset_id,
         scenario=scenario,
         old_payload=old_payload,
     )
+    source_df = source_domain_policy.frame
 
     existing_feature_info = old_payload.get("feature_info", {})
     feature_cols = list(
@@ -354,6 +360,7 @@ def regenerate_dataset_scenario(
         feature_cols=feature_cols,
         feature_info=feature_info,
         source_pool_size=int(len(source_df)),
+        source_domain_policy_diagnostics=source_domain_policy.diagnostics,
         results=new_results,
         selection_metadata=new_selection_metadata,
     )

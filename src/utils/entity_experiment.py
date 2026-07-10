@@ -88,6 +88,12 @@ SOURCE_DOMAIN_DIAGNOSTIC_COLUMNS = (
     "source_domain_filter_reason",
     "source_pool_size_before_filter",
     "source_pool_size_after_filter",
+    "source_pool_rows_before_filter",
+    "source_pool_rows_after_filter",
+    "excluded_source_row_count",
+    "source_pool_entities_before_filter",
+    "source_pool_entities_after_filter",
+    "excluded_source_entity_count",
     "source_domain_filter_error",
 )
 

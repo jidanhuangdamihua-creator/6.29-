@@ -106,6 +106,17 @@ def test_regenerated_payload_rebuilds_selection_metadata_without_stale_values() 
         feature_cols=["sales"],
         feature_info={"selected_features": ["sales"]},
         source_pool_size=30,
+        source_domain_policy_diagnostics={
+            "source_pool_rows_before_filter": 40,
+            "source_pool_rows_after_filter": 30,
+            "excluded_source_row_count": 10,
+            "source_pool_entities_before_filter": 12,
+            "source_pool_entities_after_filter": 9,
+            "excluded_source_entity_count": 3,
+            "source_domain_filter_applied": True,
+            "source_domain_filter_reason": "without_information_sharing_same_domain_protocol",
+            "source_domain_filter_error": "",
+        },
         results={"target-a": [{"source_entity": "new-source_item"}]},
         selection_metadata={"target-a": runtime_meta},
     )
@@ -121,6 +132,18 @@ def test_regenerated_payload_rebuilds_selection_metadata_without_stale_values() 
     ]
     assert rebuilt["results"] == {"target-a": [{"source_entity": "new-source_item"}]}
     assert rebuilt["selection_metadata"] == {"target-a": runtime_meta}
+    assert rebuilt["source_pool_size"] == 30
+    assert rebuilt["source_domain_policy_diagnostics"] == {
+        "source_pool_rows_before_filter": 40,
+        "source_pool_rows_after_filter": 30,
+        "excluded_source_row_count": 10,
+        "source_pool_entities_before_filter": 12,
+        "source_pool_entities_after_filter": 9,
+        "excluded_source_entity_count": 3,
+        "source_domain_filter_applied": True,
+        "source_domain_filter_reason": "without_information_sharing_same_domain_protocol",
+        "source_domain_filter_error": "",
+    }
     encoded = json.dumps(rebuilt, default=str)
     assert "paper_observed_sequence" not in encoded
     assert "paper_window_diagnostics" not in encoded
