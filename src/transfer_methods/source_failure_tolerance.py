@@ -13,7 +13,11 @@ from src.utils.finite_diagnostics import NonFiniteArrayError
 SOURCE_LEVEL_EXCEPTIONS = (NonFiniteArrayError, FloatingPointError, ValueError, RuntimeError)
 RUNTIME_SELECTION_META_FIELDS = (
     "selection_authority",
+    "protocol_track",
     "protocol_version",
+    "knn_observed_start",
+    "knn_observed_end",
+    "source_observation_cutoff",
     "target_observed_start",
     "target_observed_end",
     "source_history_start",
@@ -27,6 +31,7 @@ RUNTIME_SELECTION_META_FIELDS = (
     "scaler_fit_scope",
     "selected_sources_runtime",
     "candidate_pool_digest",
+    "candidate_pool_digest_input",
     "selection_result_digest",
     "source_skip_diagnostics",
 )
@@ -59,12 +64,49 @@ NON_SOURCE_FAILURE_MARKERS = (
 def runtime_selection_meta(selection_result: Mapping[str, object]) -> Dict[str, object]:
     """Extract the complete D4-D6 runtime selection trace from selector output."""
     raw_meta = selection_result.get("meta", {})
-    if not isinstance(raw_meta, Mapping) or raw_meta.get("selection_authority") != "runtime":
+    if not isinstance(raw_meta, Mapping) or raw_meta.get("selection_authority") not in {
+        "runtime",
+        "shared_protocol",
+    }:
         return {}
-    missing = [field for field in RUNTIME_SELECTION_META_FIELDS if field not in raw_meta]
+    if raw_meta.get("selection_authority") == "shared_protocol":
+        required = (
+            "selection_authority",
+            "protocol_track",
+            "protocol_version",
+            "knn_observed_start",
+            "knn_observed_end",
+            "source_observation_cutoff",
+            "target_test_excluded",
+            "source_future_excluded",
+            "source_alignment_mode",
+            "feature_cols",
+            "representation",
+            "scaling",
+            "scaler_fit_scope",
+            "selected_sources_runtime",
+            "candidate_pool_digest",
+            "candidate_pool_digest_input",
+            "selection_result_digest",
+            "source_skip_diagnostics",
+        )
+    else:
+        required = tuple(
+            field
+            for field in RUNTIME_SELECTION_META_FIELDS
+            if field
+            not in {
+                "protocol_track",
+                "knn_observed_start",
+                "knn_observed_end",
+                "source_observation_cutoff",
+                "candidate_pool_digest_input",
+            }
+        )
+    missing = [field for field in required if field not in raw_meta]
     if missing:
         raise ValueError(f"Runtime source selection metadata is incomplete: {missing}")
-    return {field: raw_meta[field] for field in RUNTIME_SELECTION_META_FIELDS}
+    return {field: raw_meta[field] for field in RUNTIME_SELECTION_META_FIELDS if field in raw_meta}
 
 
 def _message(exc: BaseException) -> str:

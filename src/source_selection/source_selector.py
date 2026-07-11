@@ -21,6 +21,12 @@ import pandas as pd
 
 from src.data_processing.data_preprocessing import infer_source_selection_feature_columns
 from src.constants import D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
+from src.protocols.candidate_pool import select_daily_sequence_sources
+from src.protocols.experiment_protocol import (
+    PROTOCOL_VERSION,
+    ProtocolViolation,
+    get_experiment_protocol,
+)
 
 try:
     from src.utils.environment import setup_logging
@@ -42,6 +48,118 @@ def _get_logger() -> logging.Logger:
 
 class SourceSelector:
     """相似源选择器：构建签名、计算距离、生成 top-k 与权重。"""
+
+    @staticmethod
+    def _declares_d1_d6(frame: pd.DataFrame) -> bool:
+        dataset_name = str(frame.attrs.get("dataset_name", "")).strip().lower()
+        return dataset_name in {f"dataset{number}" for number in range(1, 7)} or bool(
+            frame.attrs.get("protocol_dataset_id")
+        )
+
+    def _select_with_shared_protocol(
+        self,
+        target_df: pd.DataFrame,
+        source_df: pd.DataFrame,
+        *,
+        k: int,
+        group_cols: Sequence[str],
+        weight_mode: str,
+        include_sales_in_knn: bool,
+    ) -> Dict[str, object]:
+        if weight_mode != "inverse_distance":
+            raise ProtocolViolation("formal D1-D6 selection requires inverse_distance weights")
+        if not include_sales_in_knn:
+            raise ProtocolViolation("formal D1-D6 selection requires the daily sales sequence")
+        required_attrs = (
+            "protocol_dataset_id",
+            "protocol_scenario",
+            "protocol_target_key",
+            "protocol_candidate_keys",
+            "protocol_group_cols",
+            "knn_observed_start",
+            "knn_observed_end",
+            "source_observation_cutoff",
+        )
+        for role, frame in (("target", target_df), ("source", source_df)):
+            missing = [name for name in required_attrs if name not in frame.attrs]
+            if missing:
+                raise ProtocolViolation(
+                    f"{role} is missing shared protocol metadata: {missing}"
+                )
+            if frame.attrs.get("protocol_version") != PROTOCOL_VERSION:
+                raise ProtocolViolation(
+                    f"{role} protocol_version must be {PROTOCOL_VERSION}"
+                )
+        for name in required_attrs:
+            if target_df.attrs[name] != source_df.attrs[name]:
+                raise ProtocolViolation(f"target/source shared protocol metadata mismatch: {name}")
+        configured_group_cols = tuple(target_df.attrs["protocol_group_cols"])
+        if tuple(group_cols) != configured_group_cols:
+            raise ProtocolViolation(
+                f"selector group_cols differ from protocol: {tuple(group_cols)!r} != {configured_group_cols!r}"
+            )
+        protocol = get_experiment_protocol(target_df.attrs["protocol_dataset_id"])
+        result = select_daily_sequence_sources(
+            target_df=target_df,
+            source_df=source_df,
+            protocol=protocol,
+            scenario=target_df.attrs["protocol_scenario"],
+            target_key=target_df.attrs["protocol_target_key"],
+            candidate_keys=target_df.attrs["protocol_candidate_keys"],
+            group_cols=configured_group_cols,
+            observed_start=target_df.attrs["knn_observed_start"],
+            feature_cols=("sales",),
+            k=k,
+        )
+        sources = [
+            {
+                "source_rank": entry.rank,
+                "source_key": entry.source_key,
+                "distance": entry.distance,
+                "weight": entry.weight,
+                "tie_group": entry.tie_group,
+                "date_start": entry.observed_start,
+                "date_end": entry.observed_end,
+            }
+            for entry in result.entries
+        ]
+        excluded = [dict(item) for item in result.excluded_candidates]
+        meta = {
+            "selection_authority": "shared_protocol",
+            "protocol_track": protocol.track,
+            "protocol_version": protocol.protocol_version,
+            "weight_mode": protocol.weight_mode,
+            "distance_metric": "euclidean",
+            "group_cols": list(configured_group_cols),
+            "target_signature_dim": 30,
+            "feature_cols": ["sales"],
+            "requested_feature_cols": ["sales"],
+            "representation": protocol.knn_representation,
+            "knn_representation": protocol.knn_representation,
+            "scaling": "global_minmax_legal_observed_values",
+            "scaler_fit_scope": "target_and_candidate_legal_observed_values",
+            "knn_observed_start": result.observed_start,
+            "knn_observed_end": result.observed_end,
+            "target_observed_start": result.observed_start,
+            "target_observed_end": result.observed_end,
+            "source_observation_cutoff": result.source_observation_cutoff,
+            "target_test_excluded": True,
+            "source_future_excluded": True,
+            "source_alignment_mode": "exact_knn_observed_dates",
+            "candidate_pool_digest": result.candidate_pool_digest,
+            "candidate_pool_digest_input": dict(result.candidate_pool_digest_input),
+            "selection_result_digest": result.selection_result_digest,
+            "selected_sources_runtime": list(sources),
+            "source_skip_diagnostics": excluded,
+            "candidate_source_count": len(target_df.attrs["protocol_candidate_keys"]),
+            "valid_source_count": len(target_df.attrs["protocol_candidate_keys"]) - len(excluded),
+            "skipped_source_count": len(excluded),
+            "requested_k": int(k),
+            "effective_k": int(k),
+            "scaler_min": result.scaler_min,
+            "scaler_max": result.scaler_max,
+        }
+        return {"meta": meta, "sources": sources}
 
     @staticmethod
     def _format_domain_key(key: Tuple) -> str:
@@ -656,6 +774,24 @@ class SourceSelector:
 
         if k <= 0:
             raise ValueError("k must be positive")
+
+        shared_protocol = (
+            target_df.attrs.get("protocol_version") == PROTOCOL_VERSION
+            or source_df.attrs.get("protocol_version") == PROTOCOL_VERSION
+        )
+        if shared_protocol:
+            return self._select_with_shared_protocol(
+                target_df,
+                source_df,
+                k=k,
+                group_cols=group_cols,
+                weight_mode=weight_mode,
+                include_sales_in_knn=include_sales_in_knn,
+            )
+        if self._declares_d1_d6(target_df) or self._declares_d1_d6(source_df):
+            raise ProtocolViolation(
+                "D1-D6 selection requires shared protocol metadata; legacy fallback is forbidden"
+            )
 
         resolved_feature_cols, feature_info = self._resolve_source_selection_features(
             source_df=source_df,

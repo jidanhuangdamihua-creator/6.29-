@@ -32,6 +32,7 @@ from src.transfer_methods.source_failure_tolerance import (
 )
 from src.utils.finite_diagnostics import NonFiniteArrayError, validate_feature_frame_finite
 from src.utils.result_validation import annotate_silent_metric_failure
+from src.protocols.runner_adapter import configure_protocol_frames
 from src.utils.source_fillna import fill_source_numeric_na
 
 
@@ -533,6 +534,39 @@ def run_single_entity_experiment(
             )
     source_df.attrs["information_sharing_scenario"] = scenario
     target_entity_df.attrs["information_sharing_scenario"] = scenario
+    dataset_id = int(config.get("dataset_id", 0))
+    grouping_cols = {4: "second_category_id", 5: "family", 6: "dept_id"}
+    if dataset_id not in grouping_cols:
+        raise ValueError(f"D4-D6 entity runner received unsupported dataset_id={dataset_id}")
+    observed_start = target_entity_df.attrs.get(
+        "knn_observed_start",
+        target_entity_df.attrs.get(
+            "target_observed_start",
+            pd.to_datetime(target_entity_df["date"], errors="raise").min(),
+        ),
+    )
+    source_df, target_entity_df = configure_protocol_frames(
+        source_df,
+        target_entity_df,
+        dataset_id=dataset_id,
+        scenario=scenario,
+        group_cols=source_selection_group_cols,
+        grouping_col=grouping_cols[dataset_id],
+        observed_start=observed_start,
+    )
+    config = dict(config)
+    config.update(
+        {
+            "protocol_track": target_entity_df.attrs["protocol_track"],
+            "protocol_version": target_entity_df.attrs["protocol_version"],
+            "knn_observed_start": target_entity_df.attrs["knn_observed_start"],
+            "knn_observed_end": target_entity_df.attrs["knn_observed_end"],
+            "knn_representation": target_entity_df.attrs["knn_representation"],
+            "target_test_excluded": True,
+            "source_future_excluded": True,
+            "primary_metric_space": "original_sales",
+        }
+    )
     metric_protocol = dict(config.get("metric_protocol", {}) or {})
     model_feature_cols = _resolve_model_feature_cols(source_df, target_entity_df, feature_cols, config)
     source_model_df = _build_model_dataframe(
@@ -555,7 +589,6 @@ def run_single_entity_experiment(
         model_feature_cols,
         source_selection_group_cols=source_selection_group_cols,
     )
-    config = dict(config)
     config["target_split_config"] = dict(target_model_df.attrs.get("split_config", {}) or {})
     validate_feature_frame_finite(
         target_model_df,

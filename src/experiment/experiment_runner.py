@@ -48,6 +48,7 @@ from paper_reproduction_protocol import (
 )
 from src.source_selection.source_selector import SourceSelector
 from src.transfer_methods.source_failure_tolerance import runtime_selection_meta
+from src.protocols.runner_adapter import source_key_mask
 from src.utils.source_fillna import fill_source_numeric_na
 
 
@@ -591,8 +592,8 @@ def run_ss_tl_experiment(
 
     # 严格论文口径：SS-TL 使用 KNN 选最近单源（k=1），不再取排序后第一个 source。
     resolved_group_cols = tuple(group_cols)
-    if len(resolved_group_cols) != 2:
-        raise ValueError(f"group_cols must contain exactly two columns: {resolved_group_cols}")
+    if not resolved_group_cols:
+        raise ValueError("group_cols must contain at least one column")
     sort_cols = [
         col
         for col in dict.fromkeys(("entity_id", "item_id", *resolved_group_cols, "date"))
@@ -620,9 +621,7 @@ def run_ss_tl_experiment(
     if not isinstance(source_key, tuple) or len(source_key) != len(resolved_group_cols):
         raise ValueError(f"Invalid SS-TL source_key from selector: {source_key}")
 
-    source_mask = pd.Series(True, index=sorted_source.index)
-    for col, value in zip(resolved_group_cols, source_key):
-        source_mask &= sorted_source[col] == value
+    source_mask = source_key_mask(sorted_source, resolved_group_cols, source_key)
     single_source_df = sorted_source[source_mask].copy()
 
     keep_cols = ["date", "entity_id", "item_id", *resolved_group_cols, *cols]

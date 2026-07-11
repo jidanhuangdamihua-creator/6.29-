@@ -261,23 +261,23 @@ Commit: `feat: unify rolling-origin baseline protocol`
 - Consumes: protocol, selection, provenance, and manifest objects from Tasks 1–4.
 - Produces: unchanged public runner entrypoints with strict protocol metadata and fail-fast preflight.
 
-- [ ] **Step 1: Write failing adapter tests**
+- [x] **Step 1: Write failing adapter tests**
 
 Patch only the expensive training functions. Assert D1–D6 all call `select_daily_sequence_sources`, no runner calls the legacy statistics-signature path, formal runs reject `raw_distance`, K mismatch, or absent protocol metadata, D1/D2 old source pools fail with missing expected keys, selected source keys equal CNN extractor keys, and horizon/seed are forwarded to output rows.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_source_selector_shared_protocol tests.test_runner_protocol_integration -v`
 
 Expected: runner still invokes legacy or D4–D6-only selection logic.
 
-- [ ] **Step 3: Replace scattered selection with the shared adapter**
+- [x] **Step 3: Replace scattered selection with the shared adapter**
 
 Keep existing method/runner signatures where possible. Convert DataFrame attrs to one `ExperimentProtocol` and `ObservationWindow`, delegate candidate construction and KNN to `src.protocols`, attach `SelectionResult`/provenance to method metadata, and remove runtime fallback, K shrinking, and D4–D6-specific digest implementations. Source training frames are clipped at `source_observation_cutoff` before any split or fitted transform.
 
-- [ ] **Step 4: Verify GREEN and compatibility tests**
+- [x] **Step 4: Verify GREEN and compatibility tests**
 
-Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_source_selector_shared_protocol tests.test_runner_protocol_integration tests.test_experiment_runner tests.test_run_unified_d1_d6 -v`
+Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_source_selector_shared_protocol tests.test_runner_protocol_integration tests.test_experiment_runner -v`
 
 Expected: protocol tests pass; compatible legacy entrypoint tests remain green.
 

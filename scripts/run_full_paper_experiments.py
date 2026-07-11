@@ -48,6 +48,7 @@ from src.utils.result_schema import (
     align_result_records,
     normalize_information_sharing_contract as _normalize_information_sharing_contract,
 )
+from src.protocols.runner_adapter import configure_protocol_frames
 from src.utils.result_validation import annotate_silent_metric_failure
 from paper_reproduction_protocol import (
     MULTI_SOURCE_TL_METHODS,
@@ -1073,6 +1074,19 @@ def run_experiment(
     source_df.attrs["method"] = method_name
     target_df.attrs["method"] = method_name
     source_df, target_df = _project_modeling_frames(source_df, target_df, feature_cols)
+    protocol_group_cols = (
+        ("entity_id",)
+        if dataset_name == "Dataset3"
+        else ("entity_id", "item_id")
+    )
+    source_df, target_df = configure_protocol_frames(
+        source_df,
+        target_df,
+        dataset_id=dataset_name,
+        scenario=information_sharing_scenario,
+        group_cols=protocol_group_cols,
+        observed_start=pd.to_datetime(target_df["date"], errors="raise").min(),
+    )
 
     common_kwargs: Dict[str, Any] = {
         "source_df": source_df,
@@ -1085,6 +1099,7 @@ def run_experiment(
         "target_epochs": int(exp_cfg["target_epochs"]),
         "batch_size": int(exp_cfg["batch_size"]),
         "metric_protocol": protocol.get("metric_protocol", {}),
+        "group_cols": protocol_group_cols,
     }
 
     number_of_sources = int(source_count) if method_name in MULTI_SOURCE_TL_METHODS else (1 if method_name == "SS-TL" else 0)

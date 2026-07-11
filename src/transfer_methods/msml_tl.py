@@ -48,6 +48,7 @@ from src.transfer_methods.source_failure_tolerance import (
     should_skip_source_exception,
     source_failure_meta,
 )
+from src.protocols.runner_adapter import source_key_mask
 
 
 LOGGER_NAME = "experiment"
@@ -673,9 +674,7 @@ def run_msml_tl(
         if len(source_key) != len(resolved_group_cols):
             raise ValueError(f"Invalid source_key format: {source_key}")
 
-        source_mask = pd.Series(True, index=source_df.index)
-        for col, value in zip(resolved_group_cols, source_key):
-            source_mask &= source_df[col] == value
+        source_mask = source_key_mask(source_df, resolved_group_cols, source_key)
         source_sequence_df = source_df[source_mask].copy()
 
         if source_sequence_df.empty:
