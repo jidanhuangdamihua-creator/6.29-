@@ -14,12 +14,29 @@ NOT_APPLICABLE = "not_applicable"
 UNKNOWN = "unknown"
 NO_PAPER_REFERENCE = "no_paper_reference"
 
+STRICT_PROTOCOL_FIELDS = (
+    "protocol_track",
+    "protocol_version",
+    "knn_observed_start",
+    "knn_observed_end",
+    "knn_representation",
+    "target_test_excluded",
+    "source_future_excluded",
+    "candidate_pool_digest",
+    "selection_result_digest",
+    "horizon",
+    "seed",
+    "primary_metric_space",
+    "sample_manifest_digest",
+)
+
 # D1–D6 统一结果 schema，与 run_full_paper_experiments._result_columns() 保持一致
 RESULT_SCHEMA_COLUMNS = [
     "result_contract_version",
     "schema_family",
     "result_status",
     "failure_type",
+    "protocol_track",
     "dataset",
     "dataset_id",
     "scenario",
@@ -139,6 +156,10 @@ RESULT_SCHEMA_COLUMNS = [
     "selected_sources",
     "selection_authority",
     "protocol_version",
+    "knn_observed_start",
+    "knn_observed_end",
+    "knn_representation",
+    "source_observation_cutoff",
     "target_observed_start",
     "target_observed_end",
     "source_history_start",
@@ -152,7 +173,12 @@ RESULT_SCHEMA_COLUMNS = [
     "scaler_fit_scope",
     "selected_sources_runtime",
     "candidate_pool_digest",
+    "candidate_pool_digest_input",
     "selection_result_digest",
+    "horizon",
+    "seed",
+    "primary_metric_space",
+    "sample_manifest_digest",
     "source_skip_diagnostics",
     "selected_source_count",
     "source_failure_messages",

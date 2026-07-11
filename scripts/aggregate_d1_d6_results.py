@@ -21,7 +21,12 @@ from src.constants import (
     SCHEMA_FAMILY_D4_D6,
     preferred_columns_with_extras,
 )
-from src.utils.result_validation import annotate_silent_metric_failure
+from src.utils.result_validation import (
+    annotate_silent_metric_failure,
+    classify_protocol_result,
+    confirmed_baseline_rows,
+    promote_complete_baseline_groups,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "final_summary"
@@ -300,7 +305,9 @@ def _normalize_row(row: Dict[str, str], dataset_hint: int, source_path: Path) ->
     out["source_csv_path"] = str(source_path)
     for column in RESULT_SCHEMA_COLUMNS:
         out.setdefault(column, "")
-    return annotate_silent_metric_failure(out)
+    normalized = annotate_silent_metric_failure(out)
+    normalized["result_status"] = classify_protocol_result(normalized)
+    return normalized
 
 
 def _read_source(
@@ -608,6 +615,8 @@ def aggregate(
         _write_csv(audit_path, audit_rows, sorted({key for row in audit_rows for key in row}))
         return {"all_results_path": output, "audit_path": audit_path, "audit_rows": audit_rows}
 
+    promoted_frame = promote_complete_baseline_groups(pd.DataFrame(all_rows))
+    all_rows = promoted_frame.to_dict(orient="records")
     output = Path(output)
     all_fieldnames = _union_fieldnames(all_rows)
     _write_csv(output, all_rows, all_fieldnames)
@@ -616,8 +625,9 @@ def aggregate(
     audit_path = output.with_name(f"{output.stem}_audit.csv")
     _write_csv(audit_path, audit_rows, sorted({key for row in audit_rows for key in row}))
 
-    extra_paths = _write_metric_summaries(output, all_rows)
-    extra_paths.extend(_write_best_method_outputs(output, all_rows))
+    baseline_rows = confirmed_baseline_rows(promoted_frame).to_dict(orient="records")
+    extra_paths = _write_metric_summaries(output, baseline_rows)
+    extra_paths.extend(_write_best_method_outputs(output, baseline_rows))
 
     row_counts = Counter(int(row["dataset_id"]) for row in all_rows)
     smape_nan, smape_inf, rmse_nan, rmse_inf = _metric_stats(all_rows)

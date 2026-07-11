@@ -16,7 +16,7 @@ from src.constants import (
     preferred_columns_with_extras,
     stable_json_cell,
 )
-from src.utils.result_validation import annotate_silent_metric_failure
+from src.utils.result_validation import annotate_silent_metric_failure, classify_protocol_result
 
 
 TRACE_COLUMNS = [
@@ -146,6 +146,8 @@ def align_result_records(
 
     if rows:
         rows = [annotate_silent_metric_failure(row) for row in rows]
+        for row in rows:
+            row["result_status"] = classify_protocol_result(row)
         rows = [
             {column: stable_json_cell(value) for column, value in row.items()}
             for row in rows

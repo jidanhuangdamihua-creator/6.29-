@@ -94,6 +94,7 @@ def build_sample_manifest(
     scenario: object,
     target_key: Sequence[object],
     observed_end: object,
+    first_forecast_origin: object | None = None,
     input_window: int,
     horizons: Sequence[int] = FORMAL_HORIZONS,
     date_col: str = "date",
@@ -132,6 +133,17 @@ def build_sample_manifest(
     if len(matching) != 1:
         raise ProtocolViolation("observed_end must identify exactly one sample-frame date")
     first_origin_index = int(matching[0])
+    if first_forecast_origin is not None:
+        requested_origin = pd.Timestamp(first_forecast_origin).normalize()
+        origin_matches = prepared.index[prepared[date_col] == requested_origin]
+        if len(origin_matches) != 1:
+            raise ProtocolViolation(
+                "first_forecast_origin must identify exactly one sample-frame date"
+            )
+        requested_index = int(origin_matches[0])
+        if requested_index < first_origin_index:
+            raise ProtocolViolation("first_forecast_origin may not precede observed_end")
+        first_origin_index = requested_index
     if first_origin_index + 1 < input_window:
         raise ProtocolViolation("insufficient observed history for input_window")
     if first_origin_index >= len(prepared) - 1:

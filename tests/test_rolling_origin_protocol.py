@@ -73,6 +73,21 @@ class RollingOriginProtocolTest(unittest.TestCase):
         with self.assertRaisesRegex(ProtocolViolation, "sample manifest mismatch"):
             assert_same_sample_manifest(manifest, keys[:-1], method="BL1")
 
+    def test_manifest_can_start_at_common_model_valid_origin(self) -> None:
+        manifest = build_sample_manifest(
+            self.frame,
+            dataset_id="D1",
+            track="strict_paper",
+            scenario="without",
+            target_key=("Store1", "Item10"),
+            observed_end="2020-01-30",
+            first_forecast_origin="2020-02-04",
+            input_window=5,
+        )
+        first = manifest.for_horizon(1)[0]
+        self.assertEqual(first.forecast_origin, "2020-02-04")
+        self.assertEqual(first.label_date, "2020-02-05")
+
     def test_feature_availability_is_allowlist_only(self) -> None:
         allowlist = {
             "day_of_week": "known_in_advance",

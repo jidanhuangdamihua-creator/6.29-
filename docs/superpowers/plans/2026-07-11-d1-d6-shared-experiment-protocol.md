@@ -297,21 +297,21 @@ Commit: `refactor: route D1-D6 runners through shared protocol`
 **Interfaces:**
 - Produces: `STRICT_PROTOCOL_FIELDS`, `classify_protocol_result`, `validate_confirmed_baseline_group`, strict result columns and legacy-safe aggregation.
 
-- [ ] **Step 1: Write failing schema and aggregation tests**
+- [x] **Step 1: Write failing schema and aggregation tests**
 
 Assert the mandatory fields `protocol_track`, `protocol_version`, `knn_observed_start`, `knn_observed_end`, `knn_representation`, `target_test_excluded`, `source_future_excluded`, `candidate_pool_digest`, `selection_result_digest`, `horizon`, `seed`, `primary_metric_space`, and `sample_manifest_digest`. Rows missing any field become `legacy_unverified`; strict and legacy rows cannot be aggregated together; only complete 5-seed × 5-horizon groups can be `confirmed_baseline`.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_strict_result_contract tests.test_aggregate_d1_d6_results -v`
 
 Expected: current schema accepts incomplete rows and lacks strict field names.
 
-- [ ] **Step 3: Implement classification and aggregation gates**
+- [x] **Step 3: Implement classification and aggregation gates**
 
 Add strict columns without deleting interpretable legacy columns. Alignment classifies rather than silently filling strict evidence fields. Aggregation separates `legacy_unverified`, `trial`, and `confirmed_baseline`, verifies original metric space and manifest consistency, and reports mean/std per horizon plus horizon 1–5 overall.
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [x] **Step 4: Verify GREEN and commit**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_strict_result_contract tests.test_aggregate_d1_d6_results -v`
 

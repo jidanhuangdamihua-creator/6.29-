@@ -285,7 +285,7 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
 
         self.assertEqual(RESULT_CONTRACT_VERSION, paper_df.loc[0, "result_contract_version"])
         self.assertEqual("d1_d3_single_target_runtime_knn", paper_df.loc[0, "schema_family"])
-        self.assertEqual("success", paper_df.loc[0, "result_status"])
+        self.assertEqual("legacy_unverified", paper_df.loc[0, "result_status"])
         self.assertIn("selected_sources", paper_df.columns)
         self.assertIn("legacy_metric_only", paper_df.columns)
         self.assertLess(

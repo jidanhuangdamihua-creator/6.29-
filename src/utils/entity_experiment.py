@@ -33,6 +33,7 @@ from src.transfer_methods.source_failure_tolerance import (
 from src.utils.finite_diagnostics import NonFiniteArrayError, validate_feature_frame_finite
 from src.utils.result_validation import annotate_silent_metric_failure
 from src.protocols.runner_adapter import configure_protocol_frames
+from src.protocols.rolling_origin import build_sample_manifest
 from src.utils.source_fillna import fill_source_numeric_na
 
 
@@ -316,6 +317,24 @@ def _row_from_result(
     row = {
         "result_contract_version": RESULT_CONTRACT_VERSION,
         "schema_family": SCHEMA_FAMILY_D4_D6,
+        "protocol_track": config.get("protocol_track", ""),
+        "protocol_version": config.get("protocol_version", ""),
+        "knn_observed_start": config.get("knn_observed_start", ""),
+        "knn_observed_end": config.get("knn_observed_end", ""),
+        "knn_representation": config.get("knn_representation", ""),
+        "target_test_excluded": config.get("target_test_excluded", ""),
+        "source_future_excluded": config.get("source_future_excluded", ""),
+        "candidate_pool_digest": source_meta.get(
+            "candidate_pool_digest", NOT_APPLICABLE
+        ),
+        "selection_result_digest": source_meta.get(
+            "selection_result_digest", NOT_APPLICABLE
+        ),
+        "horizon": int(config.get("horizon", 1)),
+        "seed": int(config.get("random_state", config.get("seed", 42))),
+        "primary_metric_space": config.get("primary_metric_space", "original_sales"),
+        "sample_manifest_digest": config.get("sample_manifest_digest", ""),
+        "sample_count": config.get("sample_count", ""),
         "dataset": str(config.get("dataset_name", f"Dataset{config.get('dataset_id', '')}")),
         "dataset_id": int(config.get("dataset_id", 0)),
         "scenario": _scenario_name(config),
@@ -348,6 +367,7 @@ def _row_from_result(
         "feature_cols",
         "selected_sources_runtime",
         "source_skip_diagnostics",
+        "candidate_pool_digest_input",
     }
     for field in RUNTIME_SELECTION_META_FIELDS:
         if field not in source_meta:
@@ -554,6 +574,17 @@ def run_single_entity_experiment(
         grouping_col=grouping_cols[dataset_id],
         observed_start=observed_start,
     )
+    protocol_manifest = build_sample_manifest(
+        target_entity_df,
+        dataset_id=target_entity_df.attrs["protocol_dataset_id"],
+        track=target_entity_df.attrs["protocol_track"],
+        scenario=target_entity_df.attrs["protocol_scenario"],
+        target_key=target_entity_df.attrs["protocol_target_key"],
+        observed_end=target_entity_df.attrs["knn_observed_end"],
+        first_forecast_origin=pd.Timestamp(target_entity_df.attrs["knn_observed_end"])
+        + pd.Timedelta(days=int(config["window_size"])),
+        input_window=int(config["window_size"]),
+    )
     config = dict(config)
     config.update(
         {
@@ -565,9 +596,20 @@ def run_single_entity_experiment(
             "target_test_excluded": True,
             "source_future_excluded": True,
             "primary_metric_space": "original_sales",
+            "sample_manifest_digest": protocol_manifest.digest,
+            "sample_count": len(
+                protocol_manifest.for_horizon(int(config["horizon"]))
+            ),
         }
     )
     metric_protocol = dict(config.get("metric_protocol", {}) or {})
+    metric_protocol.update(
+        {
+            "strict_paper_metrics": True,
+            "paper_metric_space": "original_sales_space",
+        }
+    )
+    config["metric_protocol"] = metric_protocol
     model_feature_cols = _resolve_model_feature_cols(source_df, target_entity_df, feature_cols, config)
     source_model_df = _build_model_dataframe(
         source_df,

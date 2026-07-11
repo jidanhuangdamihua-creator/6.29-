@@ -16,8 +16,8 @@ class BaselineProtocolTest(unittest.TestCase):
     def test_baseline_loader_returns_shared_manifest(self) -> None:
         window = pd.DataFrame(
             {
-                "date": pd.date_range("2020-01-01", periods=40, freq="D"),
-                "sales": np.arange(40, dtype=float),
+                "date": pd.date_range("2020-01-01", periods=45, freq="D"),
+                "sales": np.arange(45, dtype=float),
                 "store_id": "1",
                 "item_id": "10",
             }
@@ -26,7 +26,7 @@ class BaselineProtocolTest(unittest.TestCase):
         manifest = data["sample_manifest"]
 
         self.assertEqual(manifest.horizons, (1, 2, 3, 4, 5))
-        self.assertEqual(manifest.for_horizon(1)[0].label_date, "2020-01-31")
+        self.assertEqual(manifest.for_horizon(1)[0].label_date, "2020-02-10")
         self.assertEqual(data["sample_manifest_digest"], manifest.digest)
         self.assertEqual(data["protocol_version"], "d1_d6_protocol_v1")
 
@@ -43,8 +43,8 @@ class BaselineProtocolTest(unittest.TestCase):
     def test_every_baseline_uses_every_manifest_sample_seed_and_horizon(self) -> None:
         window = pd.DataFrame(
             {
-                "date": pd.date_range("2020-01-01", periods=40, freq="D"),
-                "sales": np.arange(40, dtype=float),
+                "date": pd.date_range("2020-01-01", periods=45, freq="D"),
+                "sales": np.arange(45, dtype=float),
                 "store_id": "1",
                 "item_id": "10",
             }

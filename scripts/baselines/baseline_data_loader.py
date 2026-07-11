@@ -12,6 +12,7 @@ from src.protocols.rolling_origin import build_sample_manifest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROTOCOL_MODEL_WINDOW = 10
 
 _DATASET_WINDOWS = {
     "d1": {"train_start": "2017-06-05", "train_end": "2017-06-19",
@@ -191,7 +192,9 @@ def _build_entity_slice(
         scenario=scenario,
         target_key=target_key,
         observed_end=observed_df["date"].max(),
-        input_window=30,
+        first_forecast_origin=observed_df["date"].max()
+        + pd.Timedelta(days=PROTOCOL_MODEL_WINDOW),
+        input_window=PROTOCOL_MODEL_WINDOW,
     )
 
     return {

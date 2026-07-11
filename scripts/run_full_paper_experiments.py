@@ -49,6 +49,7 @@ from src.utils.result_schema import (
     normalize_information_sharing_contract as _normalize_information_sharing_contract,
 )
 from src.protocols.runner_adapter import configure_protocol_frames
+from src.protocols.rolling_origin import build_sample_manifest
 from src.utils.result_validation import annotate_silent_metric_failure
 from paper_reproduction_protocol import (
     MULTI_SOURCE_TL_METHODS,
@@ -1087,6 +1088,24 @@ def run_experiment(
         group_cols=protocol_group_cols,
         observed_start=pd.to_datetime(target_df["date"], errors="raise").min(),
     )
+    protocol_manifest = build_sample_manifest(
+        target_df,
+        dataset_id=target_df.attrs["protocol_dataset_id"],
+        track=target_df.attrs["protocol_track"],
+        scenario=target_df.attrs["protocol_scenario"],
+        target_key=target_df.attrs["protocol_target_key"],
+        observed_end=target_df.attrs["knn_observed_end"],
+        first_forecast_origin=pd.Timestamp(target_df.attrs["knn_observed_end"])
+        + pd.Timedelta(days=int(exp_cfg["window_size"])),
+        input_window=int(exp_cfg["window_size"]),
+    )
+    strict_metric_protocol = dict(protocol.get("metric_protocol", {}) or {})
+    strict_metric_protocol.update(
+        {
+            "strict_paper_metrics": True,
+            "paper_metric_space": "original_sales_space",
+        }
+    )
 
     common_kwargs: Dict[str, Any] = {
         "source_df": source_df,
@@ -1098,7 +1117,7 @@ def run_experiment(
         "source_epochs": int(exp_cfg["source_epochs"]),
         "target_epochs": int(exp_cfg["target_epochs"]),
         "batch_size": int(exp_cfg["batch_size"]),
-        "metric_protocol": protocol.get("metric_protocol", {}),
+        "metric_protocol": strict_metric_protocol,
         "group_cols": protocol_group_cols,
     }
 
@@ -1119,7 +1138,7 @@ def run_experiment(
             learning_rate=float(exp_cfg.get("learning_rate", 0.001)),
             target_epochs=int(exp_cfg["target_epochs"]),
             batch_size=int(exp_cfg["batch_size"]),
-            metric_protocol=protocol.get("metric_protocol", {}),
+            metric_protocol=strict_metric_protocol,
             feature_cols=feature_cols,
         )
     elif method_name == "SS-TL":
@@ -1242,6 +1261,24 @@ def run_experiment(
     result = {
         "result_contract_version": RESULT_CONTRACT_VERSION,
         "schema_family": SCHEMA_FAMILY_D1_D3,
+        "protocol_track": target_df.attrs["protocol_track"],
+        "protocol_version": target_df.attrs["protocol_version"],
+        "knn_observed_start": target_df.attrs["knn_observed_start"],
+        "knn_observed_end": target_df.attrs["knn_observed_end"],
+        "knn_representation": target_df.attrs["knn_representation"],
+        "target_test_excluded": True,
+        "source_future_excluded": True,
+        "candidate_pool_digest": method_meta.get(
+            "candidate_pool_digest", NOT_APPLICABLE
+        ),
+        "selection_result_digest": method_meta.get(
+            "selection_result_digest", NOT_APPLICABLE
+        ),
+        "horizon": int(exp_cfg["horizon"]),
+        "seed": int(exp_cfg.get("seed", 42)),
+        "primary_metric_space": "original_sales",
+        "sample_manifest_digest": protocol_manifest.digest,
+        "sample_count": len(protocol_manifest.for_horizon(int(exp_cfg["horizon"]))),
         "dataset": dataset_name,
         "method": str(raw["method"]),
         "information_sharing": information_sharing_contract,
