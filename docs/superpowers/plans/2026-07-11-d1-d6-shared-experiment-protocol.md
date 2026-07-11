@@ -179,21 +179,21 @@ Commit: `feat: implement deterministic leak-free daily KNN`
 - Consumes: `SelectionResult` and raw target/source DataFrames.
 - Produces: `SourceSliceRef`, `TensorProvenance`, `extract_selected_source_slices`, `validate_cnn_tensor_provenance`.
 
-- [ ] **Step 1: Write failing elementwise provenance tests**
+- [x] **Step 1: Write failing elementwise provenance tests**
 
 Build two selected synthetic sources with known values and dates. Assert exact `(store, item, date_start, date_end)`, KNN vector equality to the raw 30-day slice, extractor key equality to ordered selection keys, CNN tensor/date/feature/label equality to the original rows, and explicit failure after key substitution, date reordering, or one-value mutation.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_knn_cnn_provenance -v`
 
 Expected: provenance module import failure.
 
-- [ ] **Step 3: Implement immutable provenance records and validators**
+- [x] **Step 3: Implement immutable provenance records and validators**
 
 Use normalized keys and ISO date tuples. Extraction accepts only the ordered keys from `SelectionResult`; no fuzzy name lookup or candidate-pool reselection is exposed. Validators use `np.testing.assert_array_equal` semantics and raise a contract-specific `ProtocolViolation` with the mismatched key/date/element.
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [x] **Step 4: Verify GREEN and commit**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_knn_cnn_provenance -v`
 
