@@ -102,7 +102,7 @@ Commit: `feat: add strict D1-D6 protocol definitions`
 - Consumes: `ExperimentProtocol`, `ObservationWindow`.
 - Produces: `normalize_source_key`, `build_candidate_pool_digest(...)`, `build_selection_result_digest(...)`, `select_daily_sequence_sources(target_df, source_df, ...) -> SelectionResult`.
 
-- [ ] **Step 1: Write failing digest goldens**
+- [x] **Step 1: Write failing digest goldens**
 
 ```python
 WITHOUT_INPUT = dict(
@@ -135,7 +135,7 @@ class CandidatePoolDigestTest(unittest.TestCase):
 
 The two literals above are SHA-256 values of the exact canonical JSON contract shown in this task. The production function must reproduce them; tests must not compute expectations with duplicate serialization logic.
 
-- [ ] **Step 2: Write failing leakage, perturbation, tie, K, and missing-date tests**
+- [x] **Step 2: Write failing leakage, perturbation, tie, K, and missing-date tests**
 
 Create deterministic 30-day synthetic frames and assert:
 
@@ -151,17 +151,17 @@ self.assertEqual(tied.ordered_source_keys[:2], (("S1", "I1"), ("S1", "I2")))
 
 Also assert explicit failures for target missing day, duplicate target day, candidate missing day causing valid count below K, duplicate source key/date, target in source pool, future-only candidate data, non-finite distance, and `k > valid_source_count`.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_candidate_pool_digest tests.test_daily_knn_protocol -v`
 
 Expected: missing production functions/classes.
 
-- [ ] **Step 4: Implement canonical serialization and selection**
+- [x] **Step 4: Implement canonical serialization and selection**
 
 Canonical JSON uses UTF-8, `sort_keys=True`, `separators=(",", ":")`, ISO dates, sorted candidate keys, declared column order, and SHA-256. Selection filters to the exact dates, validates uniqueness/completeness, fits one legal-window scaler for the task, computes Euclidean `float64` distances, creates anchored tie groups, selects exactly K, computes inverse-distance weights, and persists digest inputs plus excluded-candidate diagnostics.
 
-- [ ] **Step 5: Freeze goldens, verify GREEN, and commit**
+- [x] **Step 5: Freeze goldens, verify GREEN, and commit**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_candidate_pool_digest tests.test_daily_knn_protocol -v`
 
