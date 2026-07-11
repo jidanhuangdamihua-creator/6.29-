@@ -35,7 +35,7 @@
 - Produces: `ExperimentProtocol`, `ObservationWindow`, `SourcePoolRule`, `get_experiment_protocol(dataset_id)`, `build_candidate_keys(protocol, scenario, target_key, available_keys)`.
 - Consumed by: all later protocol, runner, preflight, and result tasks.
 
-- [ ] **Step 1: Write failing protocol tests**
+- [x] **Step 1: Write failing protocol tests**
 
 ```python
 class ExperimentProtocolContractTest(unittest.TestCase):
@@ -73,17 +73,17 @@ class ExperimentProtocolContractTest(unittest.TestCase):
         )
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_experiment_protocol_contract -v`
 
 Expected: import failure because `src.protocols.experiment_protocol` does not exist.
 
-- [ ] **Step 3: Implement immutable definitions and exact rules**
+- [x] **Step 3: Implement immutable definitions and exact rules**
 
 Implement frozen dataclasses, normalized dataset/scenario aliases, exact D1–D3 identities, D4–D6 group columns (`category`, `family`, `department`), target exclusion, duplicate detection, and fail-fast missing-paper-key diagnostics. `build_candidate_keys` returns keys in normalized lexical order.
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [x] **Step 4: Verify GREEN and commit**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_experiment_protocol_contract -v`
 
