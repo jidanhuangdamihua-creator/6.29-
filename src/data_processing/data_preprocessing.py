@@ -766,6 +766,15 @@ def temporal_split_by_ratio_or_dates(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd
             val_ratio = float(split_config.get("val_ratio", 0.1))
         train_df, val_df, test_df = _split_by_ratio(df, train_ratio, val_ratio)
 
+    inherited_attrs = dict(df.attrs)
+    for partition, split_frame in (
+        ("train", train_df),
+        ("validation", val_df),
+        ("test", test_df),
+    ):
+        split_frame.attrs = dict(inherited_attrs)
+        split_frame.attrs["temporal_partition"] = partition
+
     logger.info(
         "[temporal_split_by_ratio_or_dates] Finished. train=%d val=%d test=%d",
         len(train_df),
@@ -1001,6 +1010,19 @@ def normalize_features(
         val_scaled[col] = val_values[:, idx]
         test_scaled[col] = test_values[:, idx]
 
+    for raw_frame, scaled_frame in (
+        (train_df, train_scaled),
+        (val_df, val_scaled),
+        (test_df, test_scaled),
+    ):
+        if raw_frame.attrs.get("protocol_actual_source_key") is not None:
+            scaled_frame.attrs = dict(raw_frame.attrs)
+            scaled_frame.attrs["protocol_raw_partition"] = raw_frame.copy()
+            scaled_frame.attrs["protocol_fitted_scaler"] = scaler
+            scaled_frame.attrs["protocol_scaler_feature_cols"] = tuple(
+                resolved_feature_columns
+            )
+
     if validate_finite:
         validate_feature_frame_finite(
             train_scaled, resolved_feature_columns, context="post_normalize_train", stage="post_normalize_train"
@@ -1091,6 +1113,42 @@ def build_tabular_sequence(
     else:
         X = np.empty((0, window_size, len(resolved_feature_columns)), dtype=np.float32)
         y = np.empty((0,), dtype=np.float32)
+
+    manifest = df.attrs.get("protocol_sample_manifest")
+    if manifest is not None and df.attrs.get("temporal_partition") == "test":
+        records = tuple(manifest.for_horizon(int(horizon)))
+        actual_date_pairs = []
+        for _, group in ordered.groupby(group_cols, sort=False):
+            g = group.sort_values("date").reset_index(drop=True)
+            dates = pd.to_datetime(g["date"], errors="raise").dt.strftime("%Y-%m-%d")
+            max_end = len(g) - horizon
+            for end_idx in range(window_size - 1, max_end):
+                start_idx = end_idx - window_size + 1
+                target_idx = end_idx + horizon
+                if target_idx < len(g):
+                    actual_date_pairs.append(
+                        (tuple(dates.iloc[start_idx : end_idx + 1]), dates.iloc[target_idx])
+                    )
+        expected_date_pairs = [
+            (tuple(record.input_dates), str(record.label_date)) for record in records
+        ]
+        if actual_date_pairs != expected_date_pairs:
+            raise ValueError(
+                "CNN target sequence does not consume the shared protocol sample manifest: "
+                f"actual={len(actual_date_pairs)} expected={len(expected_date_pairs)}"
+            )
+
+    if df.attrs.get("protocol_actual_source_key") is not None:
+        from src.protocols.provenance import validate_actual_cnn_arrays_against_raw
+
+        validate_actual_cnn_arrays_against_raw(
+            df,
+            input_tensor=X,
+            labels=y,
+            feature_cols=resolved_feature_columns,
+            window_size=window_size,
+            horizon=horizon,
+        )
 
     if validate_finite:
         validate_finite_array(X, name="X")

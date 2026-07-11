@@ -73,6 +73,11 @@ class SourceSelectorSharedProtocolTest(unittest.TestCase):
         self.assertEqual(selection["meta"]["target_observed_end"], "2020-01-30")
         self.assertTrue(selection["meta"]["target_test_excluded"])
         self.assertTrue(selection["meta"]["source_future_excluded"])
+        self.assertTrue(selection["meta"]["cnn_provenance_validated"])
+        self.assertEqual(
+            selection["meta"]["cnn_provenance_source_keys"],
+            [("T1", "I1"), ("S2", "I2")],
+        )
 
     def test_formal_selection_rejects_raw_distance_and_k_shrink(self) -> None:
         source, target = configure_protocol_frames(

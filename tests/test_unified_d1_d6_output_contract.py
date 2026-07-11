@@ -16,6 +16,25 @@ from src.constants import RESULT_CONTRACT_VERSION
 
 
 class UnifiedD1D6OutputContractTest(unittest.TestCase):
+    def test_d3_strict_without_uses_shared_store_pool_not_legacy_region_filter(self):
+        source = pd.DataFrame(
+            {"store_id": [1, 2, 9, 20], "region_id": [1, 2, 3, 4], "sales": [1, 2, 3, 4]}
+        )
+        filtered = run_full_paper_experiments._apply_information_sharing_filter(
+            dataset_name="Dataset3",
+            source_df=source,
+            target_df=pd.DataFrame({"store_id": [10]}),
+            use_information_sharing=False,
+            strict_paper_mode=True,
+            protocol={},
+            cfg={},
+        )
+        self.assertEqual(filtered["store_id"].tolist(), [1, 2, 9, 20])
+        self.assertEqual(
+            filtered.attrs["domain_filter_used"],
+            {"mode": "shared_protocol_exact_pool"},
+        )
+
     def test_compat_results_copy_can_be_disabled_by_environment(self):
         self.assertTrue(
             hasattr(run_full_paper_experiments, "_should_sync_latest_results_copy")

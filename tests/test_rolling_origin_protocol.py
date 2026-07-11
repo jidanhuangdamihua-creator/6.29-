@@ -6,6 +6,10 @@ import unittest
 import numpy as np
 import pandas as pd
 
+from src.data_processing.data_preprocessing import (
+    build_tabular_sequence,
+    temporal_split_by_ratio_or_dates,
+)
 from src.protocols.experiment_protocol import ProtocolViolation
 from src.protocols.reproducibility import set_protocol_seed
 from src.protocols.rolling_origin import (
@@ -110,6 +114,81 @@ class RollingOriginProtocolTest(unittest.TestCase):
         set_protocol_seed(43, include_frameworks=False)
         second = (random.random(), float(np.random.random()))
         self.assertEqual(first, second)
+
+    def test_manifest_label_identity_matches_cnn_sequence_builder(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "date": pd.date_range("2020-01-01", periods=210, freq="D"),
+                "entity_id": "1",
+                "item_id": "10",
+                "sales": np.arange(210, dtype=float),
+            }
+        )
+        frame.attrs.update(
+            {
+                "split_role": "target",
+                "split_mode": "days",
+                "split_config": {"train_days": 15, "val_days": 15, "test_days": 180},
+            }
+        )
+        manifest = build_sample_manifest(
+            frame,
+            dataset_id="D1",
+            track="strict_paper",
+            scenario="without",
+            target_key=("1", "10"),
+            observed_end="2020-01-30",
+            first_forecast_origin="2020-02-09",
+            input_window=10,
+        )
+        frame.attrs["protocol_sample_manifest"] = manifest
+        _, _, test = temporal_split_by_ratio_or_dates(frame)
+        for horizon in range(1, 6):
+            _, cnn_labels = build_tabular_sequence(
+                test,
+                horizon=horizon,
+                window_size=10,
+                feature_columns=("sales",),
+            )
+            manifest_labels = np.asarray(
+                [record.label for record in manifest.for_horizon(horizon)]
+            )
+            np.testing.assert_array_equal(cnn_labels, manifest_labels)
+
+    def test_cnn_sequence_rejects_manifest_input_date_mismatch(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "date": pd.date_range("2020-01-01", periods=210, freq="D"),
+                "entity_id": "1",
+                "item_id": "10",
+                "sales": np.arange(210, dtype=float),
+            }
+        )
+        frame.attrs.update(
+            {
+                "split_role": "target",
+                "split_mode": "days",
+                "split_config": {"train_days": 15, "val_days": 15, "test_days": 180},
+                "protocol_sample_manifest": build_sample_manifest(
+                    frame,
+                    dataset_id="D1",
+                    track="strict_paper",
+                    scenario="without",
+                    target_key=("1", "10"),
+                    observed_end="2020-01-30",
+                    first_forecast_origin="2020-02-09",
+                    input_window=30,
+                ),
+            }
+        )
+        _, _, test = temporal_split_by_ratio_or_dates(frame)
+        with self.assertRaisesRegex(ValueError, "does not consume"):
+            build_tabular_sequence(
+                test,
+                horizon=1,
+                window_size=10,
+                feature_columns=("sales",),
+            )
 
 
 if __name__ == "__main__":

@@ -49,6 +49,10 @@ from paper_reproduction_protocol import (
 from src.source_selection.source_selector import SourceSelector
 from src.transfer_methods.source_failure_tolerance import runtime_selection_meta
 from src.protocols.runner_adapter import source_key_mask
+from src.protocols.provenance import (
+    assert_actual_cnn_training_validated,
+    bind_actual_cnn_source_frame,
+)
 from src.utils.source_fillna import fill_source_numeric_na
 
 
@@ -636,6 +640,12 @@ def run_ss_tl_experiment(
         "test_ratio": 0.1,
     }
     single_source_df = fill_source_numeric_na(single_source_df, feature_columns=cols)
+    bind_actual_cnn_source_frame(
+        single_source_df,
+        source_key=source_key,
+        group_cols=resolved_group_cols,
+        feature_cols=cols,
+    )
 
     target_min_df = target_df[[c for c in keep_cols if c in target_df.columns]].copy()
     target_min_df.attrs = target_df.attrs.copy()
@@ -651,6 +661,7 @@ def run_ss_tl_experiment(
     if len(y_source) == 0:
         raise ValueError("SS-TL source windows are empty; adjust window_size/horizon.")
     X_source = to_cnn_tensor(X_source)
+    assert_actual_cnn_training_validated(src_train, source_key=source_key)
 
     tgt_train, tgt_val, tgt_test = temporal_split_by_ratio_or_dates(target_min_df)
     tgt_train, tgt_val, tgt_test, tgt_scaler, tgt_feature_columns = normalize_features(
@@ -959,6 +970,7 @@ def run_msml_rfe_experiment(
     source_epochs: int = 3,
     target_epochs: int = 3,
     batch_size: int = 16,
+    random_state: int = 42,
     metric_protocol: Optional[Dict[str, Any]] = None,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
 ) -> Dict[str, Any]:
@@ -984,6 +996,7 @@ def run_msml_rfe_experiment(
         source_epochs=source_epochs,
         target_epochs=target_epochs,
         batch_size=batch_size,
+        random_state=int(random_state),
     )
     return _extract_method_metrics(raw, method_name="MSML-TL-RFE", metric_protocol=metric_protocol)
 

@@ -43,11 +43,16 @@ from src.transfer_methods.source_failure_tolerance import (
     SOURCE_LEVEL_EXCEPTIONS,
     make_failed_source,
     normalize_successful_source_weights,
+    enforce_formal_source_success,
     runtime_selection_meta,
     should_skip_source_exception,
     source_failure_meta,
 )
 from src.protocols.runner_adapter import source_key_mask
+from src.protocols.provenance import (
+    assert_actual_cnn_training_validated,
+    bind_actual_cnn_source_frame,
+)
 
 
 LOGGER_NAME = "experiment"
@@ -141,6 +146,11 @@ def run_single_source_tl_for_mswa(
     x_source, y_source = build_tabular_sequence(
         src_train_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
     )
+    if src_train_df.attrs.get("protocol_actual_source_key") is not None:
+        assert_actual_cnn_training_validated(
+            src_train_df,
+            source_key=src_train_df.attrs["protocol_actual_source_key"],
+        )
     x_tgt_train, y_tgt_train = build_tabular_sequence(
         tgt_train_df, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
     )
@@ -415,6 +425,12 @@ def run_mswa_tl(
 
         if source_sequence_df.empty:
             raise ValueError(f"Selected source_key not found in source_df: {source_key}")
+        bind_actual_cnn_source_frame(
+            source_sequence_df,
+            source_key=source_key,
+            group_cols=resolved_group_cols,
+            feature_cols=feature_cols,
+        )
 
         try:
             one_result = run_single_source_tl_for_mswa(
@@ -431,6 +447,7 @@ def run_mswa_tl(
                 batch_size=batch_size,
             )
         except SOURCE_LEVEL_EXCEPTIONS as exc:
+            enforce_formal_source_success(source_df, source_key, exc)
             if not should_skip_source_exception(exc):
                 raise
             failed_source = make_failed_source(source_key, exc)

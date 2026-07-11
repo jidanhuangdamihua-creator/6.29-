@@ -12,6 +12,115 @@ from .candidate_pool import SelectionResult
 from .experiment_protocol import ProtocolViolation, SourceKey, normalize_source_key
 
 
+def bind_actual_cnn_source_frame(
+    frame: pd.DataFrame,
+    *,
+    source_key: Sequence[object],
+    group_cols: Sequence[str],
+    feature_cols: Sequence[str],
+) -> None:
+    """Bind an exact selected key to the dataframe that will enter CNN training."""
+    normalized_key = normalize_source_key(source_key)
+    prepared = _prepare_source(frame, group_cols)
+    actual_keys = tuple(sorted(set(prepared["__protocol_source_key__"])))
+    if actual_keys != (normalized_key,):
+        raise ProtocolViolation(
+            f"actual CNN source frame key mismatch: expected={normalized_key!r} actual={actual_keys!r}"
+        )
+    missing = [column for column in feature_cols if column not in frame.columns]
+    if missing:
+        raise ProtocolViolation(f"actual CNN source frame missing features: {missing!r}")
+    audit = frame.attrs.get("protocol_actual_cnn_audit")
+    if not isinstance(audit, dict):
+        audit = {}
+    audit[normalized_key] = {
+        "bound": True,
+        "actual_tensor_validated": False,
+        "feature_cols": tuple(str(column) for column in feature_cols),
+    }
+    frame.attrs["protocol_actual_cnn_audit"] = audit
+    frame.attrs["protocol_actual_source_key"] = normalized_key
+
+
+def validate_actual_cnn_arrays_against_raw(
+    frame: pd.DataFrame,
+    *,
+    input_tensor: np.ndarray,
+    labels: np.ndarray,
+    feature_cols: Sequence[str],
+    window_size: int,
+    horizon: int,
+) -> None:
+    """Rebuild the exact normalized CNN arrays from raw rows and compare elementwise."""
+    source_key = frame.attrs.get("protocol_actual_source_key")
+    if source_key is None:
+        return
+    raw = frame.attrs.get("protocol_raw_partition")
+    scaler = frame.attrs.get("protocol_fitted_scaler")
+    scaler_features = tuple(frame.attrs.get("protocol_scaler_feature_cols", ()))
+    features = tuple(str(column) for column in feature_cols)
+    if not isinstance(raw, pd.DataFrame) or scaler is None or scaler_features != features:
+        raise ProtocolViolation("actual CNN provenance is missing raw partition or fitted scaler")
+    ordered_raw = raw.sort_values(["entity_id", "item_id", "date"]).reset_index(drop=True)
+    expected_scaled = ordered_raw.copy()
+    transformed = scaler.transform(ordered_raw.loc[:, list(features)])
+    for index, column in enumerate(features):
+        expected_scaled[column] = transformed[:, index]
+
+    expected_x = []
+    expected_y = []
+    input_dates = []
+    label_dates = []
+    for _, group in expected_scaled.groupby(["entity_id", "item_id"], sort=False):
+        group = group.sort_values("date").reset_index(drop=True)
+        values = group.loc[:, list(features)].to_numpy(dtype=np.float32)
+        sales = group["sales"].to_numpy(dtype=np.float32)
+        dates = pd.to_datetime(group["date"], errors="raise").dt.strftime("%Y-%m-%d")
+        for end_index in range(window_size - 1, len(group) - horizon):
+            start_index = end_index - window_size + 1
+            label_index = end_index + horizon
+            expected_x.append(values[start_index : end_index + 1])
+            expected_y.append(float(sales[label_index]))
+            input_dates.append(tuple(dates.iloc[start_index : end_index + 1]))
+            label_dates.append(dates.iloc[label_index])
+    rebuilt_x = np.asarray(expected_x, dtype=np.float32)
+    rebuilt_y = np.asarray(expected_y, dtype=np.float32)
+    actual_x = np.asarray(input_tensor, dtype=np.float32)
+    actual_y = np.asarray(labels, dtype=np.float32)
+    if not np.array_equal(actual_x, rebuilt_x) or not np.array_equal(actual_y, rebuilt_y):
+        raise ProtocolViolation("actual CNN input tensor or labels differ from raw source mapping")
+
+    audit = frame.attrs.get("protocol_actual_cnn_audit")
+    normalized_key = normalize_source_key(source_key)
+    if not isinstance(audit, dict) or normalized_key not in audit:
+        raise ProtocolViolation("actual CNN provenance audit binding is missing")
+    audit[normalized_key].update(
+        {
+            "actual_tensor_validated": True,
+            "window_size": int(window_size),
+            "horizon": int(horizon),
+            "sample_count": int(len(actual_y)),
+            "input_dates": tuple(input_dates),
+            "label_dates": tuple(label_dates),
+        }
+    )
+
+
+def assert_actual_cnn_training_validated(
+    frame: pd.DataFrame,
+    *,
+    source_key: Sequence[object],
+) -> None:
+    """Fail unless the arrays actually sent to CNN training passed provenance."""
+    normalized_key = normalize_source_key(source_key)
+    audit = frame.attrs.get("protocol_actual_cnn_audit")
+    entry = audit.get(normalized_key, {}) if isinstance(audit, dict) else {}
+    if not entry.get("actual_tensor_validated") or int(entry.get("sample_count", 0)) <= 0:
+        raise ProtocolViolation(
+            f"actual CNN training provenance was not validated for {normalized_key!r}"
+        )
+
+
 @dataclass(frozen=True)
 class SourceSliceRef:
     source_key: SourceKey

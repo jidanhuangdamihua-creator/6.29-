@@ -364,21 +364,21 @@ Commit: `fix: regenerate complete D1-D6 protocol source pools`
 **Interfaces:**
 - Produces: documented user commands for regeneration, preflight, formal baseline, and archive acceptance; no commands are run by Codex beyond lightweight tests.
 
-- [ ] **Step 1: Update conflicting tests to assert the production contract**
+- [x] **Step 1: Update conflicting tests to assert the production contract**
 
 Remove assertions that permit statistics signatures, inferred cutoff fields, independent digest rules, candidate shrinking, normalized primary RMSE, or one-seed final results. Preserve unrelated behavioral coverage.
 
-- [ ] **Step 2: Write the runbook**
+- [x] **Step 2: Write the runbook**
 
 Document prerequisites, expected preflight failure on old D1/D2 parquets, user-run regeneration commands, five-seed/horizon commands, required result fields, digest audit, and the exact conditions for labeling an archive `confirmed_baseline`.
 
-- [ ] **Step 3: Run lightweight protocol suite**
+- [x] **Step 3: Run lightweight protocol suite**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_experiment_protocol_contract tests.test_candidate_pool_digest tests.test_daily_knn_protocol tests.test_knn_cnn_provenance tests.test_rolling_origin_protocol tests.test_baseline_protocol tests.test_source_selector_shared_protocol tests.test_runner_protocol_integration tests.test_strict_result_contract tests.test_protocol_preprocessing_contract tests.test_protocol_preflight -v`
 
 Expected: all strict protocol tests pass in under 180 seconds. If exit code is 124, stop immediately and provide this exact command to the user.
 
-- [ ] **Step 4: Run static checks**
+- [x] **Step 4: Run static checks**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m compileall -q src scripts tests`
 
@@ -388,7 +388,7 @@ Run: `git diff --check`
 
 Expected: no whitespace errors in files changed for this implementation; pre-existing unrelated worktree changes are reported separately and not modified.
 
-- [ ] **Step 5: Audit every design requirement and commit**
+- [x] **Step 5: Audit every design requirement and commit**
 
 Map design sections 4–15 to production files and passing tests. Record any environment-only or user-run evidence separately; do not claim a confirmed baseline because formal regeneration/training was intentionally not run.
 

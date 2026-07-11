@@ -27,6 +27,11 @@ from src.protocols.experiment_protocol import (
     ProtocolViolation,
     get_experiment_protocol,
 )
+from src.protocols.provenance import (
+    build_cnn_tensor_provenance,
+    extract_selected_source_slices,
+    validate_cnn_tensor_provenance,
+)
 
 try:
     from src.utils.environment import setup_logging
@@ -63,6 +68,7 @@ class SourceSelector:
         *,
         k: int,
         group_cols: Sequence[str],
+        model_feature_cols: Sequence[str],
         weight_mode: str,
         include_sales_in_knn: bool,
     ) -> Dict[str, object]:
@@ -111,6 +117,28 @@ class SourceSelector:
             feature_cols=("sales",),
             k=k,
         )
+        source_slices = extract_selected_source_slices(
+            result,
+            source_df,
+            training_start=result.observed_start,
+            training_end=result.source_observation_cutoff,
+            model_feature_cols=model_feature_cols,
+        )
+        tensor_provenance = tuple(
+            build_cnn_tensor_provenance(
+                source_slice,
+                window_size=int(target_df.attrs.get("model_window_size", 10)),
+                horizon=int(target_df.attrs.get("model_horizon", 1)),
+                label_col="sales",
+            )
+            for source_slice in source_slices
+        )
+        for provenance in tensor_provenance:
+            validate_cnn_tensor_provenance(
+                provenance,
+                source_df,
+                group_cols=configured_group_cols,
+            )
         sources = [
             {
                 "source_rank": entry.rank,
@@ -158,6 +186,11 @@ class SourceSelector:
             "effective_k": int(k),
             "scaler_min": result.scaler_min,
             "scaler_max": result.scaler_max,
+            "cnn_provenance_validated": True,
+            "cnn_provenance_source_keys": [item.source_key for item in source_slices],
+            "cnn_provenance_sample_counts": [
+                int(item.input_tensor.shape[0]) for item in tensor_provenance
+            ],
         }
         return {"meta": meta, "sources": sources}
 
@@ -785,6 +818,7 @@ class SourceSelector:
                 source_df,
                 k=k,
                 group_cols=group_cols,
+                model_feature_cols=feature_cols,
                 weight_mode=weight_mode,
                 include_sales_in_knn=include_sales_in_knn,
             )

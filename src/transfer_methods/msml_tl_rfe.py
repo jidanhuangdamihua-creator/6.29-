@@ -55,11 +55,16 @@ from src.transfer_methods.source_failure_tolerance import (
     SOURCE_LEVEL_EXCEPTIONS,
     make_failed_source,
     normalize_successful_source_weights,
+    enforce_formal_source_success,
     runtime_selection_meta,
     should_skip_source_exception,
     source_failure_meta,
 )
 from src.protocols.runner_adapter import source_key_mask
+from src.protocols.provenance import (
+    assert_actual_cnn_training_validated,
+    bind_actual_cnn_source_frame,
+)
 
 LOGGER_NAME = "experiment"
 
@@ -362,6 +367,11 @@ def train_source_cnn_for_msml_rfe(
     X_source, y_source = build_tabular_sequence(
         src_train, horizon=horizon, window_size=window_size, feature_columns=feature_cols
     )
+    if src_train.attrs.get("protocol_actual_source_key") is not None:
+        assert_actual_cnn_training_validated(
+            src_train,
+            source_key=src_train.attrs["protocol_actual_source_key"],
+        )
     if len(y_source) == 0:
         raise ValueError(
             f"Source sequence (key={source_key}) produced zero training windows; "
@@ -765,6 +775,12 @@ def run_msml_tl_rfe(
 
     for source_key in selected_source_keys:
         source_sequence_df_rfe = selected_source_sequences_rfe[source_key]
+        bind_actual_cnn_source_frame(
+            source_sequence_df_rfe,
+            source_key=source_key,
+            group_cols=resolved_group_cols,
+            feature_cols=selected_feature_cols,
+        )
 
         try:
             train_result = train_source_cnn_for_msml_rfe(
@@ -786,6 +802,7 @@ def run_msml_tl_rfe(
                     diagnostics=weight_diagnostics,
                 )
         except SOURCE_LEVEL_EXCEPTIONS as exc:
+            enforce_formal_source_success(source_df, source_key, exc)
             if not should_skip_source_exception(exc):
                 raise
             failed_source = make_failed_source(source_key, exc)

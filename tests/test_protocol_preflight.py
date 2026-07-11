@@ -75,6 +75,11 @@ class ProtocolPreflightTest(unittest.TestCase):
         self.assertEqual(d1["status"], "passed")
         self.assertEqual(d1["candidate_count"], 27)
         self.assertEqual(len(d1["candidate_pool_digest"]), 64)
+        self.assertEqual(d1["candidate_count_valid"], 27)
+        self.assertEqual(d1["candidate_exclusions"], [])
+        self.assertEqual(len(d1["ordered_top_k"]), 3)
+        self.assertIn("candidate_keys", d1["candidate_pool_digest_input"])
+        self.assertTrue(d1["cnn_provenance_validated"])
 
         d5_source = pd.concat(
             [

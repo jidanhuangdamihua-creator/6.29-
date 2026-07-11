@@ -322,6 +322,7 @@ def _row_from_result(
         "knn_observed_start": config.get("knn_observed_start", ""),
         "knn_observed_end": config.get("knn_observed_end", ""),
         "knn_representation": config.get("knn_representation", ""),
+        "source_observation_cutoff": config.get("source_observation_cutoff", ""),
         "target_test_excluded": config.get("target_test_excluded", ""),
         "source_future_excluded": config.get("source_future_excluded", ""),
         "candidate_pool_digest": source_meta.get(
@@ -368,6 +369,8 @@ def _row_from_result(
         "selected_sources_runtime",
         "source_skip_diagnostics",
         "candidate_pool_digest_input",
+        "cnn_provenance_source_keys",
+        "cnn_provenance_sample_counts",
     }
     for field in RUNTIME_SELECTION_META_FIELDS:
         if field not in source_meta:
@@ -574,6 +577,8 @@ def run_single_entity_experiment(
         grouping_col=grouping_cols[dataset_id],
         observed_start=observed_start,
     )
+    target_entity_df.attrs["model_window_size"] = int(config["window_size"])
+    target_entity_df.attrs["model_horizon"] = int(config["horizon"])
     protocol_manifest = build_sample_manifest(
         target_entity_df,
         dataset_id=target_entity_df.attrs["protocol_dataset_id"],
@@ -585,6 +590,7 @@ def run_single_entity_experiment(
         + pd.Timedelta(days=int(config["window_size"])),
         input_window=int(config["window_size"]),
     )
+    target_entity_df.attrs["protocol_sample_manifest"] = protocol_manifest
     config = dict(config)
     config.update(
         {
@@ -593,6 +599,9 @@ def run_single_entity_experiment(
             "knn_observed_start": target_entity_df.attrs["knn_observed_start"],
             "knn_observed_end": target_entity_df.attrs["knn_observed_end"],
             "knn_representation": target_entity_df.attrs["knn_representation"],
+            "source_observation_cutoff": target_entity_df.attrs[
+                "source_observation_cutoff"
+            ],
             "target_test_excluded": True,
             "source_future_excluded": True,
             "primary_metric_space": "original_sales",
@@ -678,6 +687,10 @@ def run_single_entity_experiment(
             }
             if method not in {"SS-TL"}:
                 kwargs["number_of_sources"] = _source_count_for_method(method, config)
+            if method == "MSML-TL-RFE":
+                kwargs["random_state"] = int(
+                    config.get("random_state", config.get("seed", 42))
+                )
             try:
                 raw = runner(**kwargs)
             except AllSourcesFailedError as exc:

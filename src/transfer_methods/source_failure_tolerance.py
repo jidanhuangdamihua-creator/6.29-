@@ -7,6 +7,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
+from src.protocols.experiment_protocol import PROTOCOL_VERSION, ProtocolViolation
 from src.utils.finite_diagnostics import NonFiniteArrayError
 
 
@@ -34,6 +35,9 @@ RUNTIME_SELECTION_META_FIELDS = (
     "candidate_pool_digest_input",
     "selection_result_digest",
     "source_skip_diagnostics",
+    "cnn_provenance_validated",
+    "cnn_provenance_source_keys",
+    "cnn_provenance_sample_counts",
 )
 SOURCE_FAILURE_MARKERS = (
     "ss-tl failed for source_key",
@@ -89,6 +93,9 @@ def runtime_selection_meta(selection_result: Mapping[str, object]) -> Dict[str, 
             "candidate_pool_digest_input",
             "selection_result_digest",
             "source_skip_diagnostics",
+            "cnn_provenance_validated",
+            "cnn_provenance_source_keys",
+            "cnn_provenance_sample_counts",
         )
     else:
         required = tuple(
@@ -141,6 +148,20 @@ def should_skip_source_exception(exc: BaseException) -> bool:
     if any(_contains_marker(message, marker) for marker in SOURCE_FAILURE_MARKERS):
         return True
     return isinstance(exc, (NonFiniteArrayError, FloatingPointError))
+
+
+def enforce_formal_source_success(
+    source_df: object,
+    source_key: Tuple[Any, ...],
+    exc: BaseException,
+) -> None:
+    """Make every KNN-selected source mandatory in strict D1-D6 runs."""
+    attrs = getattr(source_df, "attrs", {})
+    if attrs.get("protocol_version") == PROTOCOL_VERSION:
+        raise ProtocolViolation(
+            "formal protocol forbids skipping a KNN-selected source: "
+            f"source_key={tuple(source_key)!r} cause={type(exc).__name__}: {exc}"
+        ) from exc
 
 
 def make_failed_source(source_key: Tuple[Any, ...], exc: BaseException) -> Dict[str, object]:

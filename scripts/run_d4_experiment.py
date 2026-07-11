@@ -24,6 +24,7 @@ from src.utils.parquet_data_loader import (
 from src.utils.d4_d6_runtime import apply_runtime_source_domain_policy, load_default_metric_protocol
 from src.utils.finite_diagnostics import validate_feature_frame_finite
 from src.utils.knn_feature_loader import resolve_knn_feature_columns
+from src.protocols.reproducibility import set_protocol_seed
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -68,6 +69,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=None, help="Override source/target epochs for lightweight checks.")
     parser.add_argument("--output-dir", type=Path, default=None, help="Optional run directory.")
     parser.add_argument("--repair-source-numeric-na", action="store_true")
+    parser.add_argument("--horizon", type=int, choices=[1, 2, 3, 4, 5], default=1)
+    parser.add_argument("--seed", type=int, choices=[42, 43, 44, 45, 46], default=42)
     return parser.parse_args()
 
 
@@ -94,6 +97,9 @@ def main() -> None:
         config["source_epochs"] = int(args.epochs)
         config["target_epochs"] = int(args.epochs)
     config["repair_source_numeric_na"] = bool(args.repair_source_numeric_na)
+    config["horizon"] = int(args.horizon)
+    config["random_state"] = int(args.seed)
+    set_protocol_seed(int(args.seed), include_frameworks=True)
     config["metric_protocol"] = load_default_metric_protocol(PROJECT_ROOT)
     config["output_filename"] = f"dataset{config['dataset_id']}_{config['info_sharing']}_results.csv"
 

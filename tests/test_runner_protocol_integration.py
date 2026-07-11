@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 
 from src.protocols.experiment_protocol import ProtocolViolation
 from src.protocols.runner_adapter import configure_protocol_frames, source_key_mask
+from src.transfer_methods.source_failure_tolerance import enforce_formal_source_success
+from src.experiment.experiment_runner import run_msml_rfe_experiment
 
 
 def _daily_rows(store, item, sales, *, group_col=None, group_value=None, periods=30):
@@ -22,6 +25,29 @@ def _daily_rows(store, item, sales, *, group_col=None, group_value=None, periods
 
 
 class RunnerProtocolIntegrationTest(unittest.TestCase):
+    def test_rfe_wrapper_forwards_formal_seed(self) -> None:
+        captured = {}
+
+        def fake_runner(**kwargs):
+            captured.update(kwargs)
+            raise RuntimeError("stop after argument capture")
+
+        with patch("src.transfer_methods.msml_tl_rfe.run_msml_tl_rfe", fake_runner):
+            with self.assertRaisesRegex(RuntimeError, "argument capture"):
+                run_msml_rfe_experiment(
+                    source_df=pd.DataFrame(),
+                    target_df=pd.DataFrame(),
+                    feature_cols=("sales",),
+                    random_state=46,
+                )
+        self.assertEqual(captured["random_state"], 46)
+
+    def test_formal_selected_source_failure_is_not_skipped(self) -> None:
+        frame = pd.DataFrame({"sales": [1.0]})
+        frame.attrs["protocol_version"] = "d1_d6_protocol_v1"
+        with self.assertRaisesRegex(ProtocolViolation, "forbids skipping"):
+            enforce_formal_source_success(frame, ("1", "1"), FloatingPointError("nan"))
+
     def test_normalized_selected_key_indexes_numeric_source_rows(self) -> None:
         frame = pd.DataFrame(
             {"entity_id": [1, 1, 2], "item_id": [3, 4, 3], "sales": [1.0, 2.0, 3.0]}

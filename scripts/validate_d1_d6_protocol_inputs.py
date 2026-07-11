@@ -22,7 +22,7 @@ from src.source_selection.source_selector import SourceSelector
 PARQUET_DIR = ROOT / "数据集" / "固化数据"
 DATASET_CONFIG = {
     1: {"group_cols": ("store_id", "item_id"), "observed_start": "2017-06-05"},
-    2: {"group_cols": ("brand_id", "item_id"), "observed_start": "2018-05-30"},
+    2: {"group_cols": ("brand_id", "item_id"), "observed_start": "2018-06-05"},
     3: {"group_cols": ("store_id",), "observed_start": "2015-01-03"},
     4: {
         "group_cols": ("store_id", "product_id"),
@@ -71,14 +71,33 @@ def validate_protocol_frames(
             group_cols=tuple(group_cols),
             weight_mode="inverse_distance",
         )
+        meta = selection["meta"]
+        ordered_top_k = [
+            {
+                "source_rank": item["source_rank"],
+                "source_key": item["source_key"],
+                "distance": item["distance"],
+                "weight": item["weight"],
+                "tie_group": item["tie_group"],
+            }
+            for item in selection["sources"]
+        ]
         return {
             "status": "passed",
             "dataset_id": target.attrs["protocol_dataset_id"],
             "scenario": target.attrs["protocol_scenario"],
             "target_key": target.attrs["protocol_target_key"],
             "candidate_count": len(target.attrs["protocol_candidate_keys"]),
-            "candidate_pool_digest": selection["meta"]["candidate_pool_digest"],
-            "selection_result_digest": selection["meta"]["selection_result_digest"],
+            "candidate_pool_digest": meta["candidate_pool_digest"],
+            "candidate_pool_digest_input": meta["candidate_pool_digest_input"],
+            "selection_result_digest": meta["selection_result_digest"],
+            "candidate_count_total": meta["candidate_source_count"],
+            "candidate_count_valid": meta["valid_source_count"],
+            "candidate_exclusions": meta["source_skip_diagnostics"],
+            "requested_k": meta["requested_k"],
+            "effective_k": meta["effective_k"],
+            "ordered_top_k": ordered_top_k,
+            "cnn_provenance_validated": meta["cnn_provenance_validated"],
             "knn_observed_start": target.attrs["knn_observed_start"],
             "knn_observed_end": target.attrs["knn_observed_end"],
             "error": "",

@@ -27,6 +27,7 @@ class BaselineProtocolTest(unittest.TestCase):
 
         self.assertEqual(manifest.horizons, (1, 2, 3, 4, 5))
         self.assertEqual(manifest.for_horizon(1)[0].label_date, "2020-02-10")
+        self.assertEqual(len(manifest.for_horizon(1)[0].input_dates), 10)
         self.assertEqual(data["sample_manifest_digest"], manifest.digest)
         self.assertEqual(data["protocol_version"], "d1_d6_protocol_v1")
 
@@ -59,6 +60,9 @@ class BaselineProtocolTest(unittest.TestCase):
         self.assertEqual(len(rows), 4 * 5 * 5)
         self.assertEqual(set(rows["seed"]), set(range(42, 47)))
         self.assertEqual(set(rows["horizon"]), set(range(1, 6)))
+        self.assertEqual(set(rows["primary_metric_space"]), {"original_sales"})
+        self.assertEqual(set(rows["rmse_metric_space"]), {"original_sales_space"})
+        self.assertEqual(set(rows["smape_metric_space"]), {"original_sales_space"})
         self.assertEqual(rows["sample_manifest_digest"].nunique(), 1)
         expected_counts = {
             horizon: len(data["sample_manifest"].for_horizon(horizon))

@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+import json
 import math
 import pandas as pd
 
 from src.constants import STRICT_PROTOCOL_FIELDS
+from src.protocols.candidate_pool import (
+    SelectionEntry,
+    build_candidate_pool_digest,
+    build_selection_result_digest,
+)
 from src.protocols.experiment_protocol import FORMAL_HORIZONS, FORMAL_SEEDS, PROTOCOL_VERSION
+from src.protocols.experiment_protocol import normalize_source_key
 
 
 def _is_missing_or_nonfinite(value: Any) -> bool:
@@ -89,6 +96,65 @@ def _as_true(value: Any) -> bool:
     return str(value).strip().lower() in {"true", "1", "yes"}
 
 
+def _is_sha256(value: Any) -> bool:
+    text = str(value).strip().lower()
+    return len(text) == 64 and all(char in "0123456789abcdef" for char in text)
+
+
+def _candidate_input_matches_digest(row: Dict[str, Any]) -> bool:
+    raw = row.get("candidate_pool_digest_input")
+    try:
+        payload = json.loads(raw) if isinstance(raw, str) else dict(raw)
+        rebuilt = build_candidate_pool_digest(**payload)
+    except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+        return False
+    return rebuilt == str(row.get("candidate_pool_digest", "")).strip().lower()
+
+
+def _json_list(value: Any) -> list[Any]:
+    parsed = json.loads(value) if isinstance(value, str) else value
+    if not isinstance(parsed, list):
+        raise ValueError("expected JSON list")
+    return parsed
+
+
+def _selection_digest_and_keys(row: Dict[str, Any]) -> tuple[str, list[tuple[str, ...]]]:
+    raw_entries = row.get("selected_sources_runtime", row.get("selected_sources"))
+    parsed = _json_list(raw_entries)
+    entries = []
+    keys = []
+    for index, item in enumerate(parsed, start=1):
+        if not isinstance(item, dict):
+            raise ValueError("selected source entry must be a mapping")
+        key = normalize_source_key(item["source_key"])
+        keys.append(key)
+        entries.append(
+            SelectionEntry(
+                rank=int(item.get("source_rank", item.get("rank", index))),
+                source_key=key,
+                distance=float(item["distance"]),
+                weight=float(item["weight"]),
+                tie_group=int(item["tie_group"]),
+                observed_start="",
+                observed_end="",
+                raw_vector=(),
+                scaled_vector=(),
+            )
+        )
+    digest = build_selection_result_digest(
+        protocol_version=str(row["protocol_version"]),
+        candidate_pool_digest=str(row["candidate_pool_digest"]),
+        k=int(row["effective_k"]),
+        weight_mode="inverse_distance",
+        weight_epsilon=1e-8,
+        entries=entries,
+    )
+    return digest, keys
+
+
+_TRANSFER_METHODS = {"SS-TL", "MSWA-TL", "MSSB-TL", "MSML-TL", "MSML-TL-RFE"}
+
+
 def classify_protocol_result(row: Dict[str, Any]) -> str:
     """Classify one row without fabricating any missing protocol evidence."""
     if any(_missing_contract_value(row.get(field)) for field in STRICT_PROTOCOL_FIELDS):
@@ -108,11 +174,48 @@ def classify_protocol_result(row: Dict[str, Any]) -> str:
             and int(row["horizon"]) in FORMAL_HORIZONS
             and int(row["seed"]) in FORMAL_SEEDS
             and str(row["primary_metric_space"]) == "original_sales"
+            and str(row.get("rmse_metric_space", ""))
+            in {"original_sales", "original_sales_space"}
+            and str(row.get("smape_metric_space", ""))
+            in {"original_sales", "original_sales_space"}
             and (end - start).days == 29
+            and _is_sha256(row["sample_manifest_digest"])
         )
     except (TypeError, ValueError):
         valid = False
     if not valid:
+        return "protocol_invalid"
+    if str(row.get("method", "")) in _TRANSFER_METHODS:
+        try:
+            effective_k = int(row.get("effective_k", -1))
+            provenance_keys = _json_list(row.get("cnn_provenance_source_keys"))
+            provenance_counts = _json_list(row.get("cnn_provenance_sample_counts"))
+            rebuilt_selection_digest, selected_keys = _selection_digest_and_keys(row)
+            normalized_provenance_keys = [normalize_source_key(key) for key in provenance_keys]
+            transfer_valid = (
+                str(row.get("selection_authority", "")) == "shared_protocol"
+                and _is_sha256(row.get("candidate_pool_digest"))
+                and _is_sha256(row.get("selection_result_digest"))
+                and rebuilt_selection_digest == str(row.get("selection_result_digest")).lower()
+                and _candidate_input_matches_digest(row)
+                and int(row.get("failed_source_count", -1)) == 0
+                and int(row.get("skipped_source_count", -1)) == 0
+                and effective_k == int(row.get("requested_k", -2))
+                and effective_k > 0
+                and _as_true(row.get("cnn_provenance_validated"))
+                and len(provenance_keys) == effective_k
+                and len(provenance_counts) == effective_k
+                and all(int(count) > 0 for count in provenance_counts)
+                and normalized_provenance_keys == selected_keys
+            )
+        except (TypeError, ValueError):
+            transfer_valid = False
+        if not transfer_valid:
+            return "protocol_invalid"
+    try:
+        if int(row.get("sample_count", 0)) <= 0:
+            return "protocol_invalid"
+    except (TypeError, ValueError):
         return "protocol_invalid"
     current = str(row.get("result_status", "") or "").strip()
     return "confirmed_baseline" if current == "confirmed_baseline" else "trial"
@@ -140,6 +243,9 @@ def validate_confirmed_baseline_group(rows: pd.DataFrame) -> pd.DataFrame:
             raise ValueError(f"confirmed baseline group mixes identity column {column}")
     if rows["sample_manifest_digest"].astype(str).nunique() != 1:
         raise ValueError("confirmed baseline group mixes sample manifests")
+    for _, horizon_rows in rows.groupby(rows["horizon"].astype(int), sort=False):
+        if horizon_rows["sample_count"].astype(int).nunique() != 1:
+            raise ValueError("confirmed baseline group mixes sample counts within a horizon")
     for metric in ("rmse", "mae", "smape", "accuracy"):
         values = pd.to_numeric(rows[metric], errors="coerce")
         if values.isna().any() or not values.map(math.isfinite).all():

@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import unittest
+import json
 
 import pandas as pd
 
 from src.constants import STRICT_PROTOCOL_FIELDS
+from src.protocols.candidate_pool import (
+    SelectionEntry,
+    build_candidate_pool_digest,
+    build_selection_result_digest,
+)
 from src.utils.result_schema import align_d1_d3_result_records
 from src.utils.result_validation import (
     classify_protocol_result,
@@ -15,6 +21,33 @@ from src.utils.result_validation import (
 
 
 def _strict_row(*, horizon: int = 1, seed: int = 42) -> dict:
+    digest_input = {
+        "protocol_version": "d1_d6_protocol_v1",
+        "dataset_id": "D1",
+        "scenario": "without",
+        "target_key": ["1", "10"],
+        "group_cols": ["store_id", "item_id"],
+        "candidate_keys": [["1", "1"]],
+        "observed_start": "2017-06-05",
+        "observed_end": "2017-07-04",
+        "feature_cols": ["sales"],
+    }
+    candidate_digest = build_candidate_pool_digest(**digest_input)
+    selected = {
+        "source_rank": 1,
+        "source_key": ["1", "1"],
+        "distance": 0.5,
+        "weight": 1.0,
+        "tie_group": 1,
+    }
+    selection_digest = build_selection_result_digest(
+        protocol_version="d1_d6_protocol_v1",
+        candidate_pool_digest=candidate_digest,
+        k=1,
+        weight_mode="inverse_distance",
+        weight_epsilon=1e-8,
+        entries=(SelectionEntry(1, ("1", "1"), 0.5, 1.0, 1, "", "", (), ()),),
+    )
     return {
         "dataset_id": "D1",
         "target_entity_key": "Store1/Item10",
@@ -27,12 +60,25 @@ def _strict_row(*, horizon: int = 1, seed: int = 42) -> dict:
         "knn_representation": "daily_sales_flattened_30d",
         "target_test_excluded": True,
         "source_future_excluded": True,
-        "candidate_pool_digest": "a" * 64,
-        "selection_result_digest": "b" * 64,
+        "candidate_pool_digest": candidate_digest,
+        "candidate_pool_digest_input": json.dumps(digest_input),
+        "selection_result_digest": selection_digest,
+        "selected_sources_runtime": json.dumps([selected]),
+        "selection_authority": "shared_protocol",
+        "requested_k": 1,
+        "effective_k": 1,
+        "failed_source_count": 0,
+        "skipped_source_count": 0,
+        "cnn_provenance_validated": True,
+        "cnn_provenance_source_keys": json.dumps([["1", "1"]]),
+        "cnn_provenance_sample_counts": json.dumps([20]),
         "horizon": horizon,
         "seed": seed,
         "primary_metric_space": "original_sales",
+        "rmse_metric_space": "original_sales_space",
+        "smape_metric_space": "original_sales_space",
         "sample_manifest_digest": "c" * 64,
+        "sample_count": 170 - horizon + 1,
         "rmse": 1.0,
         "mae": 0.5,
         "smape": 2.0,
@@ -80,6 +126,18 @@ class StrictResultContractTest(unittest.TestCase):
 
     def test_complete_row_is_trial_until_full_group_is_validated(self) -> None:
         self.assertEqual(classify_protocol_result(_strict_row()), "trial")
+
+    def test_transfer_row_rejects_skipped_source_and_digest_mismatch(self) -> None:
+        skipped = _strict_row()
+        skipped["failed_source_count"] = 1
+        skipped["effective_k"] = 0
+        self.assertEqual(classify_protocol_result(skipped), "protocol_invalid")
+
+        tampered = _strict_row()
+        tampered["candidate_pool_digest_input"] = tampered[
+            "candidate_pool_digest_input"
+        ].replace("2017-06-05", "2017-06-06")
+        self.assertEqual(classify_protocol_result(tampered), "protocol_invalid")
 
     def test_only_complete_five_seed_five_horizon_group_is_confirmed(self) -> None:
         rows = pd.DataFrame(

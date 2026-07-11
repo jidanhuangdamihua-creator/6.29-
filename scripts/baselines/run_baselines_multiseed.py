@@ -31,6 +31,7 @@ from src.evaluation.metrics import compute_original_scale_metrics
 from src.protocols.experiment_protocol import FORMAL_HORIZONS, FORMAL_SEEDS
 from src.protocols.reproducibility import set_protocol_seed
 from src.protocols.rolling_origin import validate_feature_availability
+from src.utils.result_validation import promote_complete_baseline_groups
 
 
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "baselines"
@@ -102,11 +103,11 @@ def _default_protocol_predictor(method: str, record, seed: int) -> float:
     if method == "BL3_LightGBM":
         return _predict_bl3_rolling(record, seed)
     if method == "BL4_LSTM":
-        if observed.size != 30:
-            raise ValueError(f"BL4 requires exactly 30 rolling observations, got {observed.size}")
+        if observed.size != 10:
+            raise ValueError(f"BL4 requires exactly 10 manifest observations, got {observed.size}")
         prediction = predict_bl4(
-            observed[:25],
-            observed[25:],
+            observed[:8],
+            observed[8:],
             int(record.horizon),
             seed=int(seed),
         )
@@ -140,6 +141,8 @@ def evaluate_entity_protocol(data: dict, *, predictor=_default_protocol_predicto
                         "horizon": int(horizon),
                         "seed": int(seed),
                         **metrics,
+                        "rmse_metric_space": "original_sales_space",
+                        "smape_metric_space": "original_sales_space",
                         "sample_count": int(len(samples)),
                         "sample_manifest_digest": manifest.digest,
                         "protocol_track": data["protocol_track"],
@@ -170,6 +173,7 @@ def run_dataset(dataset_id: str, seeds: tuple[int, ...] = DEFAULT_SEEDS) -> Path
         [evaluate_entity_protocol(data) for data in entity_slices],
         ignore_index=True,
     )
+    output = promote_complete_baseline_groups(output)
     expected_rows = len(entity_slices) * len(METHODS) * len(FORMAL_HORIZONS) * len(FORMAL_SEEDS)
     if len(output) != expected_rows:
         raise AssertionError(

@@ -50,6 +50,7 @@ from src.utils.result_schema import (
 )
 from src.protocols.runner_adapter import configure_protocol_frames
 from src.protocols.rolling_origin import build_sample_manifest
+from src.protocols.reproducibility import set_protocol_seed
 from src.utils.result_validation import annotate_silent_metric_failure
 from paper_reproduction_protocol import (
     MULTI_SOURCE_TL_METHODS,
@@ -83,6 +84,11 @@ INFO_SHARING_SCENARIOS = [
     "without_information_sharing",
     "with_information_sharing",
 ]
+STRICT_KNN_OBSERVED_START = {
+    "Dataset1": "2017-06-05",
+    "Dataset2": "2018-06-05",
+    "Dataset3": "2015-01-03",
+}
 FORMAL_DATASET_PATHS = {
     "Dataset1": "数据集/原始数据/Dataset 1/train.csv",
     "Dataset2": "数据集/原始数据/Dataset 2.csv",
@@ -1017,6 +1023,17 @@ def _apply_information_sharing_filter(
         source_df.attrs["source_pool_size_after_filter"] = int(len(source_df))
         return source_df
 
+    if strict_paper_mode and dataset_name == "Dataset3":
+        # D3 strict-paper without-sharing is defined by the exact Store1–9
+        # candidate list.  Do not apply the legacy region filter before the
+        # shared protocol has constructed that pool.
+        source_df.attrs["source_pool_scope_mode"] = (
+            "without_information_sharing_shared_protocol_store1_9"
+        )
+        source_df.attrs["domain_filter_used"] = {"mode": "shared_protocol_exact_pool"}
+        source_df.attrs["source_pool_size_after_filter"] = int(len(source_df))
+        return source_df
+
     domain_filter = _without_sharing_domain_filter(dataset_name)
     filtered = _apply_source_domain_filter(dataset_name, source_df, domain_filter)
     filtered.attrs["source_pool_size_before_filter"] = source_pool_size_before_filter
@@ -1093,8 +1110,10 @@ def run_experiment(
         dataset_id=dataset_name,
         scenario=information_sharing_scenario,
         group_cols=protocol_group_cols,
-        observed_start=pd.to_datetime(target_df["date"], errors="raise").min(),
+        observed_start=STRICT_KNN_OBSERVED_START[dataset_name],
     )
+    target_df.attrs["model_window_size"] = int(exp_cfg["window_size"])
+    target_df.attrs["model_horizon"] = int(exp_cfg["horizon"])
     protocol_manifest = build_sample_manifest(
         target_df,
         dataset_id=target_df.attrs["protocol_dataset_id"],
@@ -1106,6 +1125,7 @@ def run_experiment(
         + pd.Timedelta(days=int(exp_cfg["window_size"])),
         input_window=int(exp_cfg["window_size"]),
     )
+    target_df.attrs["protocol_sample_manifest"] = protocol_manifest
     strict_metric_protocol = dict(protocol.get("metric_protocol", {}) or {})
     strict_metric_protocol.update(
         {
@@ -1175,6 +1195,7 @@ def run_experiment(
             weight_mode=str(exp_cfg["weight_mode"]),
             estimator_name=str(exp_cfg.get("estimator_name", "random_forest")),
             keep_ratio=float(exp_cfg["keep_ratio"]),
+            random_state=int(exp_cfg.get("seed", 42)),
         )
     else:
         raise ValueError(f"Unsupported method: {method_name}")
@@ -1273,13 +1294,32 @@ def run_experiment(
         "knn_observed_start": target_df.attrs["knn_observed_start"],
         "knn_observed_end": target_df.attrs["knn_observed_end"],
         "knn_representation": target_df.attrs["knn_representation"],
+        "source_observation_cutoff": target_df.attrs["source_observation_cutoff"],
         "target_test_excluded": True,
         "source_future_excluded": True,
+        "selection_authority": method_meta.get(
+            "selection_authority", NOT_APPLICABLE
+        ),
         "candidate_pool_digest": method_meta.get(
             "candidate_pool_digest", NOT_APPLICABLE
         ),
+        "candidate_pool_digest_input": _stable_json_dumps(
+            method_meta.get("candidate_pool_digest_input", NOT_APPLICABLE)
+        ),
         "selection_result_digest": method_meta.get(
             "selection_result_digest", NOT_APPLICABLE
+        ),
+        "cnn_provenance_validated": method_meta.get(
+            "cnn_provenance_validated", method_name == "No-TL"
+        ),
+        "cnn_provenance_source_keys": _stable_json_dumps(
+            method_meta.get("cnn_provenance_source_keys", [])
+        ),
+        "cnn_provenance_sample_counts": _stable_json_dumps(
+            method_meta.get("cnn_provenance_sample_counts", [])
+        ),
+        "selected_sources_runtime": _stable_json_dumps(
+            method_meta.get("selected_sources_runtime", [])
         ),
         "horizon": int(exp_cfg["horizon"]),
         "seed": int(exp_cfg.get("seed", 42)),
@@ -1287,8 +1327,11 @@ def run_experiment(
         "sample_manifest_digest": protocol_manifest.digest,
         "sample_count": len(protocol_manifest.for_horizon(int(exp_cfg["horizon"]))),
         "dataset": dataset_name,
+        "dataset_id": int(dataset_name[-1]),
+        "target_entity_key": "/".join(target_df.attrs["protocol_target_key"]),
         "method": str(raw["method"]),
         "information_sharing": information_sharing_contract,
+        "scenario": information_sharing_contract,
         "source_count": int(number_of_sources),
         "experiment_scope": alignment["experiment_scope"],
         "experiment_track": alignment["experiment_track"],
@@ -1500,6 +1543,8 @@ def _parse_args() -> argparse.Namespace:
         default="MSWA-TL",
         help="Method used by --smoke for each D1-D3 information-sharing scenario.",
     )
+    parser.add_argument("--horizon", type=int, choices=[1, 2, 3, 4, 5], default=1)
+    parser.add_argument("--seed", type=int, choices=[42, 43, 44, 45, 46], default=42)
     return parser.parse_args()
 
 
@@ -1692,6 +1737,7 @@ def _build_error_row(
     strict_paper_mode: bool,
     exc: Exception,
     target_metadata: Optional[Dict[str, Any]] = None,
+    cfg: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     requested_source_count = int(source_count) if method_name in MULTI_SOURCE_TL_METHODS else (1 if method_name == "SS-TL" else 0)
     alignment = build_alignment_fields(
@@ -1701,10 +1747,34 @@ def _build_error_row(
         base_data=None,
         protocol=protocol,
     )
+    exp_cfg = dict((cfg or {}).get("single_experiment", {}) or {})
+    observed_start = pd.Timestamp(STRICT_KNN_OBSERVED_START[dataset_name])
+    observed_end = observed_start + pd.Timedelta(days=29)
     result = {
         "result_contract_version": RESULT_CONTRACT_VERSION,
         "schema_family": SCHEMA_FAMILY_D1_D3,
+        "protocol_track": "strict_paper",
+        "protocol_version": "d1_d6_protocol_v1",
+        "knn_observed_start": observed_start.strftime("%Y-%m-%d"),
+        "knn_observed_end": observed_end.strftime("%Y-%m-%d"),
+        "knn_representation": "daily_sales_flattened_30d",
+        "source_observation_cutoff": observed_end.strftime("%Y-%m-%d"),
+        "target_test_excluded": True,
+        "source_future_excluded": True,
+        "candidate_pool_digest": NOT_APPLICABLE,
+        "candidate_pool_digest_input": NOT_APPLICABLE,
+        "selection_result_digest": NOT_APPLICABLE,
+        "horizon": int(exp_cfg.get("horizon", 1)),
+        "seed": int(exp_cfg.get("seed", 42)),
+        "primary_metric_space": "original_sales",
+        "sample_manifest_digest": NOT_APPLICABLE,
         "dataset": dataset_name,
+        "dataset_id": int(dataset_name[-1]),
+        "target_entity_key": {
+            "Dataset1": "1/10",
+            "Dataset2": "1/10",
+            "Dataset3": "10",
+        }[dataset_name],
         "method": method_name,
         "information_sharing": normalize_information_sharing_contract(
             information_sharing_scenario
@@ -1849,6 +1919,9 @@ def main() -> None:
     setup_logging(log_level="WARNING" if verbose_mode == "summary" else "INFO", log_file=None)
 
     cfg = _load_config()
+    cfg.setdefault("single_experiment", {})["horizon"] = int(args.horizon)
+    cfg["single_experiment"]["seed"] = int(args.seed)
+    set_protocol_seed(int(args.seed), include_frameworks=True)
     protocol = load_paper_protocol(cfg)
     strict_paper_mode = resolve_strict_paper_mode(cfg, explicit=bool(args.strict_paper_mode))
     strict_paper_split = bool(
@@ -2007,6 +2080,7 @@ def main() -> None:
                     strict_paper_mode=strict_paper_mode,
                     exc=exc,
                     target_metadata=dataset_target_metadata,
+                    cfg=cfg,
                 )
                 error_row["training_time"] = float(time.perf_counter() - experiment_start)
                 if error_row["experiment_track"] == "paper":
