@@ -68,3 +68,12 @@ python tools/protection/codex_timeout.py --timeout 180 -- python -m compileall -
 ## 归档判定
 
 可以归档当前分支和旧产物，名称应明确为“协议改造代码 + 改造前快照”，不得写成“已确认 baseline”。正式 baseline 的生成和归档步骤以 `docs/protocol/d1_d6_protocol_v1_runbook.md` 为准。
+
+## 只读 preflight 性能修复补充（2026-07-11）
+
+- 新增不可变 `PreparedDailySequencePool`：完整 source 每次 CLI 只解析/建池一次；多 target 共享 key×30日 float64 矩阵及 key/group 索引。
+- 删除严格 KNN 路径中的 `DataFrame.apply(axis=1)` 和 candidate 循环内完整 source 扫描；距离改为 NumPy float64 批量计算。
+- 默认控制台 exclusion 与 candidate-key 诊断均限制为20项样例，完整内部诊断与 digest 不变。
+- 新旧严格协议及新增性能结构测试合计83项通过；`compileall` 与 `git diff --check` 通过。
+- 指定 D5-without 只读命令在180秒保护下约10秒完成，未返回124。
+- D4-without 的5个目标均在 store166/category20；固化 source 只有 product242、560 两个同店同 category 合法源，因此 K=3 正确失败。with-sharing 同 category 池有1076个候选，说明 category/store 过滤逻辑正常。

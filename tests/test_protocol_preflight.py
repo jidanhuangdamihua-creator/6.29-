@@ -8,7 +8,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from scripts.validate_d1_d6_protocol_inputs import DATASET_CONFIG, validate_protocol_frames
+from scripts.validate_d1_d6_protocol_inputs import (
+    DATASET_CONFIG,
+    build_preflight_reports,
+    validate_protocol_frames,
+)
 
 
 def _rows(domain, item, *, group_col=None, group_value=None, periods=35):
@@ -28,6 +32,95 @@ def _rows(domain, item, *, group_col=None, group_value=None, periods=35):
 
 
 class ProtocolPreflightTest(unittest.TestCase):
+    def test_multi_target_preflight_prepares_source_pool_once(self) -> None:
+        source = pd.concat(
+            [
+                _rows("S1", "I2", group_col="family", group_value="F1", periods=30),
+                _rows("S2", "I2", group_col="family", group_value="F1", periods=30),
+            ],
+            ignore_index=True,
+        )
+        target = pd.concat(
+            [
+                _rows("S1", "I1", group_col="family", group_value="F1"),
+                _rows("S1", "I3", group_col="family", group_value="F1"),
+            ],
+            ignore_index=True,
+        )
+        calls = []
+
+        from src.protocols.candidate_pool import prepare_daily_sequence_pool
+
+        def counting_factory(*args, **kwargs):
+            calls.append(1)
+            return prepare_daily_sequence_pool(*args, **kwargs)
+
+        reports = build_preflight_reports(
+            source,
+            target,
+            dataset_id=5,
+            scenario="with",
+            group_cols=("entity_id", "item_id"),
+            grouping_col="family",
+            observed_start="2020-01-01",
+            k=1,
+            pool_factory=counting_factory,
+        )
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(reports), 2)
+        self.assertEqual({report["status"] for report in reports}, {"passed"})
+
+    def test_preflight_exclusions_are_bounded_with_complete_counts(self) -> None:
+        frames = [_rows("S0", "VALID", group_col="family", group_value="F1", periods=30)]
+        for index in range(25):
+            incomplete = _rows(
+                f"S{index + 1}",
+                f"I{index}",
+                group_col="family",
+                group_value="F1",
+                periods=30,
+            )
+            frames.append(incomplete.iloc[1:].copy())
+        reports = build_preflight_reports(
+            pd.concat(frames, ignore_index=True),
+            _rows("T", "TARGET", group_col="family", group_value="F1"),
+            dataset_id=5,
+            scenario="with",
+            group_cols=("entity_id", "item_id"),
+            grouping_col="family",
+            observed_start="2020-01-01",
+            k=1,
+            exclusion_sample_limit=20,
+        )
+        report = reports[0]
+        self.assertEqual(report["status"], "passed")
+        self.assertEqual(report["candidate_exclusion_count"], 25)
+        self.assertEqual(report["candidate_exclusion_reason_counts"], {"missing_observed_dates": 25})
+        self.assertEqual(len(report["candidate_exclusion_samples"]), 20)
+        self.assertTrue(report["candidate_exclusions_truncated"])
+        self.assertNotIn("candidate_exclusions", report)
+
+        zero_sample_report = build_preflight_reports(
+            pd.concat(frames, ignore_index=True),
+            _rows("T", "TARGET", group_col="family", group_value="F1"),
+            dataset_id=5,
+            scenario="with",
+            group_cols=("entity_id", "item_id"),
+            grouping_col="family",
+            observed_start="2020-01-01",
+            k=1,
+            exclusion_sample_limit=0,
+        )[0]
+        self.assertEqual(
+            zero_sample_report["candidate_pool_digest"],
+            report["candidate_pool_digest"],
+        )
+        self.assertEqual(
+            zero_sample_report["selection_result_digest"],
+            report["selection_result_digest"],
+        )
+        self.assertEqual(zero_sample_report["candidate_exclusion_samples"], [])
+
     def test_d1_d3_use_physical_domain_columns_not_composite_entity_id(self) -> None:
         self.assertEqual(DATASET_CONFIG[1]["group_cols"], ("store_id", "item_id"))
         self.assertEqual(DATASET_CONFIG[2]["group_cols"], ("brand_id", "item_id"))
@@ -76,9 +169,13 @@ class ProtocolPreflightTest(unittest.TestCase):
         self.assertEqual(d1["candidate_count"], 27)
         self.assertEqual(len(d1["candidate_pool_digest"]), 64)
         self.assertEqual(d1["candidate_count_valid"], 27)
-        self.assertEqual(d1["candidate_exclusions"], [])
+        self.assertEqual(d1["candidate_exclusion_count"], 0)
+        self.assertEqual(d1["candidate_exclusion_samples"], [])
         self.assertEqual(len(d1["ordered_top_k"]), 3)
-        self.assertIn("candidate_keys", d1["candidate_pool_digest_input"])
+        digest_summary = d1["candidate_pool_digest_input_summary"]
+        self.assertEqual(digest_summary["candidate_keys_count"], 27)
+        self.assertEqual(len(digest_summary["candidate_keys_sample"]), 20)
+        self.assertTrue(digest_summary["candidate_keys_truncated"])
         self.assertTrue(d1["cnn_provenance_validated"])
 
         d5_source = pd.concat(

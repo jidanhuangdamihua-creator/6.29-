@@ -6,6 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import date, datetime
+from types import MappingProxyType
 from typing import Any, Dict, Iterable, Mapping, Sequence, Tuple
 
 import numpy as np
@@ -122,24 +123,28 @@ def rank_source_distances(
     if not np.isfinite(tie_tolerance) or tie_tolerance < 0:
         raise ProtocolViolation("tie_tolerance must be finite and non-negative")
 
-    remaining = sorted(zip(keys, values.tolist()), key=lambda item: (item[1], item[0]))
+    ordered = sorted(zip(keys, values.tolist()), key=lambda item: (item[1], item[0]))
     ranked = []
     tie_group = 1
-    while remaining:
-        anchor = float(remaining[0][1])
-        current = []
-        later = []
-        for key, raw_distance in remaining:
-            if float(raw_distance) - anchor <= tie_tolerance:
-                current.append((key, float(raw_distance)))
-            else:
-                later.append((key, float(raw_distance)))
+    start = 0
+    while start < len(ordered):
+        anchor = float(ordered[start][1])
+        stop = start + 1
+        while (
+            stop < len(ordered)
+            and float(ordered[stop][1]) - anchor <= tie_tolerance
+        ):
+            stop += 1
+        current = [
+            (key, float(raw_distance))
+            for key, raw_distance in ordered[start:stop]
+        ]
         current.sort(key=lambda item: item[0])
         ranked.extend(
             RankedDistance(key, raw_distance, tie_group)
             for key, raw_distance in current
         )
-        remaining = later
+        start = stop
         tie_group += 1
     return tuple(ranked)
 
@@ -225,9 +230,242 @@ def build_selection_result_digest(
     return _sha256_payload(payload)
 
 
-def _normalized_key_series(frame: pd.DataFrame, group_cols: Sequence[str]) -> pd.Series:
-    return frame.loc[:, list(group_cols)].apply(
-        lambda row: normalize_source_key(tuple(row.tolist())), axis=1
+def _normalize_key_column(series: pd.Series) -> np.ndarray:
+    """Normalize one key column without Python row-wise dataframe apply."""
+    if series.isna().any():
+        raise ProtocolViolation("source key components may not be null")
+    inferred = pd.api.types.infer_dtype(series, skipna=False)
+    if pd.api.types.is_bool_dtype(series) or inferred == "boolean":
+        return np.where(series.to_numpy(dtype=bool), "true", "false").astype(str)
+    if pd.api.types.is_integer_dtype(series) or inferred == "integer":
+        return np.char.mod("%d", pd.to_numeric(series, errors="raise").to_numpy(dtype=np.int64))
+    if pd.api.types.is_float_dtype(series) or inferred in {"floating", "mixed-integer-float"}:
+        values = pd.to_numeric(series, errors="raise").to_numpy(dtype=np.float64)
+        if not np.isfinite(values).all():
+            raise ProtocolViolation("source key components must be finite")
+        normalized = np.char.mod("%.17g", values)
+        normalized[values == 0.0] = "0"
+        return normalized
+    if inferred not in {"string", "unicode", "bytes", "categorical"}:
+        # This runs only on the already de-duplicated raw-key table, never on
+        # the million-row observation frame, and preserves mixed Python types
+        # exactly as normalize_source_key specifies.
+        return np.asarray(
+            [normalize_source_key((value,))[0] for value in series.to_numpy()],
+            dtype=str,
+        )
+    normalized = series.astype("string").str.strip()
+    if normalized.isna().any() or normalized.eq("").any():
+        raise ProtocolViolation("source key components may not be empty")
+    return normalized.to_numpy(dtype=str)
+
+
+class InsufficientCandidatePoolError(ProtocolViolation):
+    """Strict insufficient-K failure carrying complete internal exclusions."""
+
+    def __init__(
+        self,
+        *,
+        valid_count: int,
+        required_k: int,
+        exclusions: Sequence[Mapping[str, Any]],
+        sample_limit: int = 20,
+    ) -> None:
+        self.valid_count = int(valid_count)
+        self.required_k = int(required_k)
+        self.exclusions = tuple(dict(item) for item in exclusions)
+        samples = self.exclusions[: int(sample_limit)]
+        super().__init__(
+            f"valid candidates={self.valid_count} is below required K={self.required_k}; "
+            f"excluded_count={len(self.exclusions)} excluded_samples={samples!r}"
+        )
+
+
+@dataclass(frozen=True)
+class PreparedDailySequencePool:
+    """One immutable vectorized source observation index reusable across targets."""
+
+    group_cols: Tuple[str, ...]
+    required_dates: Tuple[str, ...]
+    source_keys: Tuple[SourceKey, ...]
+    sales_matrix: np.ndarray
+    date_presence_matrix: np.ndarray
+    key_to_index: Mapping[SourceKey, int]
+    duplicate_date_keys: frozenset[SourceKey]
+    nonfinite_sales_keys: frozenset[SourceKey]
+    metadata_by_col: Mapping[str, Mapping[SourceKey, str]]
+    keys_by_metadata_value: Mapping[str, Mapping[str, Tuple[SourceKey, ...]]]
+
+    def validate_for(
+        self,
+        *,
+        group_cols: Sequence[str],
+        required_dates: pd.DatetimeIndex,
+    ) -> None:
+        expected_dates = tuple(required_dates.strftime("%Y-%m-%d"))
+        if tuple(group_cols) != self.group_cols:
+            raise ProtocolViolation(
+                f"prepared pool group_cols mismatch: {self.group_cols!r} != {tuple(group_cols)!r}"
+            )
+        if expected_dates != self.required_dates:
+            raise ProtocolViolation("prepared pool observation dates differ from selection window")
+
+    def source_identities(self, grouping_col: str) -> Tuple[Tuple[SourceKey, str], ...]:
+        if grouping_col not in self.metadata_by_col:
+            raise ProtocolViolation(
+                f"prepared pool does not contain grouping metadata {grouping_col!r}"
+            )
+        values = self.metadata_by_col[grouping_col]
+        return tuple((key, values[key]) for key in self.source_keys)
+
+    def keys_for_metadata_value(
+        self,
+        grouping_col: str,
+        group_value: object,
+    ) -> Tuple[SourceKey, ...]:
+        if grouping_col not in self.keys_by_metadata_value:
+            raise ProtocolViolation(
+                f"prepared pool does not contain grouping index {grouping_col!r}"
+            )
+        normalized_value = str(group_value).strip()
+        return self.keys_by_metadata_value[grouping_col].get(normalized_value, ())
+
+    def missing_dates_for(self, raw_key: Sequence[object]) -> Tuple[str, ...]:
+        """Expand missing dates only for a candidate that needs diagnostics."""
+        key = normalize_source_key(raw_key)
+        index = self.key_to_index.get(key)
+        if index is None:
+            return self.required_dates
+        missing_indices = np.flatnonzero(~self.date_presence_matrix[index])
+        return tuple(self.required_dates[position] for position in missing_indices)
+
+    def selected_sales_frame(self, keys: Sequence[Sequence[object]]) -> pd.DataFrame:
+        """Materialize only selected 30-day sales rows for shared provenance checks."""
+        frames = []
+        dates = pd.to_datetime(list(self.required_dates))
+        for raw_key in keys:
+            key = normalize_source_key(raw_key)
+            index = self.key_to_index.get(key)
+            if index is None:
+                raise ProtocolViolation(f"selected source key is absent from prepared pool: {key!r}")
+            payload: Dict[str, Any] = {
+                column: key[position] for position, column in enumerate(self.group_cols)
+            }
+            payload["date"] = dates
+            payload["sales"] = self.sales_matrix[index].copy()
+            frames.append(pd.DataFrame(payload))
+        if not frames:
+            return pd.DataFrame(columns=[*self.group_cols, "date", "sales"])
+        return pd.concat(frames, ignore_index=True)
+
+
+def prepare_daily_sequence_pool(
+    source_df: pd.DataFrame,
+    *,
+    group_cols: Sequence[str],
+    observed_start: object,
+    observed_end: object | None = None,
+    metadata_cols: Sequence[str] = (),
+) -> PreparedDailySequencePool:
+    """Prepare all source keys and their aligned 30-day sales matrix exactly once."""
+    normalized_group_cols = tuple(str(column) for column in group_cols)
+    if not normalized_group_cols:
+        raise ProtocolViolation("prepared pool group_cols may not be empty")
+    required_columns = [*normalized_group_cols, "date", "sales", *metadata_cols]
+    missing = [column for column in required_columns if column not in source_df.columns]
+    if missing:
+        raise ProtocolViolation(f"source dataframe missing prepared-pool columns: {missing}")
+
+    start = pd.Timestamp(observed_start).normalize()
+    end = start + pd.Timedelta(days=29) if observed_end is None else pd.Timestamp(observed_end).normalize()
+    required_dates = pd.date_range(start, end, freq="D")
+    if len(required_dates) != 30:
+        raise ProtocolViolation("prepared source observation window must contain exactly 30 days")
+
+    parsed_dates = pd.to_datetime(source_df["date"], errors="coerce").dt.normalize()
+    if parsed_dates.isna().any():
+        raise ProtocolViolation("source dataframe contains invalid dates")
+
+    raw_key_table = source_df.loc[:, list(normalized_group_cols)].drop_duplicates().reset_index(drop=True)
+    normalized_arrays = [_normalize_key_column(raw_key_table[column]) for column in normalized_group_cols]
+    raw_key_table["__protocol_source_key__"] = list(zip(*normalized_arrays))
+    normalized_keys = tuple(sorted(set(raw_key_table["__protocol_source_key__"])))
+    key_to_index = {key: index for index, key in enumerate(normalized_keys)}
+    raw_key_table["__protocol_key_index__"] = raw_key_table["__protocol_source_key__"].map(key_to_index)
+
+    metadata_maps: Dict[str, Mapping[SourceKey, str]] = {}
+    metadata_key_indexes: Dict[str, Mapping[str, Tuple[SourceKey, ...]]] = {}
+    if metadata_cols:
+        metadata_table = source_df.loc[:, [*normalized_group_cols, *metadata_cols]].drop_duplicates()
+        metadata_table = metadata_table.merge(raw_key_table, on=list(normalized_group_cols), how="left", validate="many_to_one")
+        for column in metadata_cols:
+            normalized_values = metadata_table[column].astype("string").str.strip()
+            if normalized_values.isna().any() or normalized_values.eq("").any():
+                raise ProtocolViolation(f"source grouping metadata {column!r} contains null/empty values")
+            metadata_table[f"__meta_{column}"] = normalized_values
+            grouped = metadata_table.groupby("__protocol_source_key__", sort=False)[f"__meta_{column}"]
+            counts = grouped.nunique(dropna=False)
+            conflicts = counts[counts != 1]
+            if not conflicts.empty:
+                raise ProtocolViolation(
+                    f"source key {conflicts.index[0]!r} maps to multiple {column} values"
+                )
+            values = grouped.first().to_dict()
+            metadata_maps[str(column)] = MappingProxyType(
+                {key: str(values[key]) for key in normalized_keys}
+            )
+            keys_by_value: Dict[str, list[SourceKey]] = {}
+            for key in normalized_keys:
+                keys_by_value.setdefault(str(values[key]), []).append(key)
+            metadata_key_indexes[str(column)] = MappingProxyType(
+                {
+                    value: tuple(sorted(keys))
+                    for value, keys in keys_by_value.items()
+                }
+            )
+
+    observed_mask = parsed_dates.isin(required_dates)
+    observed = source_df.loc[observed_mask, [*normalized_group_cols, "sales"]].copy()
+    observed["date"] = parsed_dates.loc[observed_mask].to_numpy()
+    observed = observed.merge(
+        raw_key_table.loc[:, [*normalized_group_cols, "__protocol_key_index__"]],
+        on=list(normalized_group_cols),
+        how="left",
+        validate="many_to_one",
+    )
+    observed["sales"] = pd.to_numeric(observed["sales"], errors="coerce")
+
+    duplicate_rows = observed.duplicated(["__protocol_key_index__", "date"], keep=False)
+    duplicate_indices = set(observed.loc[duplicate_rows, "__protocol_key_index__"].astype(int))
+    nonfinite_rows = ~np.isfinite(observed["sales"].to_numpy(dtype=np.float64))
+    nonfinite_indices = set(observed.loc[nonfinite_rows, "__protocol_key_index__"].astype(int))
+
+    first_rows = observed.drop_duplicates(["__protocol_key_index__", "date"], keep="first")
+    presence = first_rows.assign(__protocol_date_present__=True).pivot(
+        index="__protocol_key_index__",
+        columns="date",
+        values="__protocol_date_present__",
+    )
+    presence = presence.reindex(index=range(len(normalized_keys)), columns=required_dates)
+    date_presence_matrix = presence.notna().to_numpy(dtype=bool, copy=True)
+    date_presence_matrix.setflags(write=False)
+
+    pivot = first_rows.pivot(index="__protocol_key_index__", columns="date", values="sales")
+    pivot = pivot.reindex(index=range(len(normalized_keys)), columns=required_dates)
+    sales_matrix = pivot.to_numpy(dtype=np.float64, copy=True)
+    sales_matrix.setflags(write=False)
+
+    return PreparedDailySequencePool(
+        group_cols=normalized_group_cols,
+        required_dates=tuple(required_dates.strftime("%Y-%m-%d")),
+        source_keys=normalized_keys,
+        sales_matrix=sales_matrix,
+        date_presence_matrix=date_presence_matrix,
+        key_to_index=MappingProxyType(key_to_index),
+        duplicate_date_keys=frozenset(normalized_keys[index] for index in duplicate_indices),
+        nonfinite_sales_keys=frozenset(normalized_keys[index] for index in nonfinite_indices),
+        metadata_by_col=MappingProxyType(metadata_maps),
+        keys_by_metadata_value=MappingProxyType(metadata_key_indexes),
     )
 
 
@@ -264,6 +502,7 @@ def select_daily_sequence_sources(
     *,
     target_df: pd.DataFrame,
     source_df: pd.DataFrame,
+    prepared_pool: PreparedDailySequencePool | None = None,
     protocol: ExperimentProtocol,
     scenario: object,
     target_key: Sequence[object],
@@ -288,11 +527,14 @@ def select_daily_sequence_sources(
         raise ProtocolViolation("target key may not enter candidate pool")
     if len(tuple(group_cols)) != len(normalized_target):
         raise ProtocolViolation("group_cols do not match target key arity")
-    missing_group_cols = [column for column in group_cols if column not in source_df.columns]
-    if missing_group_cols:
-        raise ProtocolViolation(f"source dataframe missing group columns: {missing_group_cols}")
-    if "sales" not in target_df.columns or "sales" not in source_df.columns:
-        raise ProtocolViolation("target and source dataframes require sales column")
+    if prepared_pool is None:
+        missing_group_cols = [column for column in group_cols if column not in source_df.columns]
+        if missing_group_cols:
+            raise ProtocolViolation(f"source dataframe missing group columns: {missing_group_cols}")
+        if "sales" not in source_df.columns:
+            raise ProtocolViolation("source dataframe requires sales column")
+    if "sales" not in target_df.columns:
+        raise ProtocolViolation("target dataframe requires sales column")
 
     window = protocol.observation_window(observed_start)
     observed_start_iso = window.knn_observed_start.isoformat()
@@ -300,27 +542,30 @@ def select_daily_sequence_sources(
     required_dates = pd.date_range(observed_start_iso, observed_end_iso, freq="D")
 
     target = _prepare_dates(target_df, role="target")
-    source = _prepare_dates(source_df, role="source")
     target_vector = _exact_observed_vector(
         target,
         required_dates,
         role="target",
     )
-    source["__protocol_source_key__"] = _normalized_key_series(source, group_cols)
+
+    pool = prepared_pool or prepare_daily_sequence_pool(
+        source_df,
+        group_cols=group_cols,
+        observed_start=observed_start_iso,
+        observed_end=observed_end_iso,
+    )
+    pool.validate_for(group_cols=group_cols, required_dates=required_dates)
 
     valid_keys = []
     raw_vectors = []
     excluded = []
     for candidate_key in normalized_candidates:
-        candidate_frame = source[source["__protocol_source_key__"] == candidate_key]
-        observed = candidate_frame[candidate_frame["date"].isin(required_dates)].sort_values("date")
-        if observed["date"].duplicated().any():
+        if candidate_key in pool.duplicate_date_keys:
             raise ProtocolViolation(
                 f"source {candidate_key!r} contains duplicate observed dates"
             )
-        actual_dates = pd.DatetimeIndex(observed["date"])
-        if not actual_dates.equals(required_dates):
-            missing = required_dates.difference(actual_dates).strftime("%Y-%m-%d").tolist()
+        missing = pool.missing_dates_for(candidate_key)
+        if missing:
             excluded.append(
                 {
                     "source_key": candidate_key,
@@ -329,17 +574,22 @@ def select_daily_sequence_sources(
                 }
             )
             continue
-        values = observed["sales"].to_numpy(dtype=np.float64)
-        if not np.isfinite(values).all():
+        if candidate_key in pool.nonfinite_sales_keys:
             raise ProtocolViolation(
                 f"source {candidate_key!r} observed sales contain non-finite values"
             )
+        pool_index = pool.key_to_index.get(candidate_key)
+        if pool_index is None:
+            raise ProtocolViolation(f"prepared pool key lookup failed for {candidate_key!r}")
+        values = pool.sales_matrix[pool_index]
         valid_keys.append(candidate_key)
         raw_vectors.append(values)
 
     if len(valid_keys) < k:
-        raise ProtocolViolation(
-            f"valid candidates={len(valid_keys)} is below required K={k}; excluded={excluded!r}"
+        raise InsufficientCandidatePoolError(
+            valid_count=len(valid_keys),
+            required_k=k,
+            exclusions=excluded,
         )
 
     source_matrix = np.vstack(raw_vectors).astype(np.float64)

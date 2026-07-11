@@ -61,7 +61,7 @@ python scripts/validate_d1_d6_protocol_inputs.py --dataset d6 --scenario with --
 
 每个目标必须返回 `status=passed`，并包含 `candidate_pool_digest`、`selection_result_digest`、`knn_observed_start` 和 `knn_observed_end`。失败时不要缩小 K、补零候选日或启用旧统计签名。
 
-preflight 还会输出规范化 `candidate_pool_digest_input`、候选总数/有效数/排除原因、ordered Top-K、distance、weight、tie group 和 CNN provenance 状态，归档时应完整保留。
+preflight 内部仍使用完整规范化 `candidate_pool_digest_input` 计算 digest；默认控制台仅输出 `candidate_pool_digest_input_summary`，其中 candidate key 最多展示20项。候选排除审计使用 `candidate_exclusion_count`、`candidate_exclusion_reason_counts`、最多20项的 `candidate_exclusion_samples` 和 `candidate_exclusions_truncated`。ordered Top-K、distance、weight、tie group 和 CNN provenance 状态继续输出。完整内部排除信息和 digest 输入不因控制台截断而改变。
 
 ## 4. 正式迁移学习矩阵
 

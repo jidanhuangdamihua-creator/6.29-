@@ -6,6 +6,7 @@ from typing import Sequence, Tuple
 
 import pandas as pd
 
+from .candidate_pool import PreparedDailySequencePool
 from .experiment_protocol import (
     EXTENDED_TRACK,
     ProtocolViolation,
@@ -118,6 +119,21 @@ def _extended_candidates(
                 f"source key {key!r} maps to multiple {grouping_col} values"
             )
         identities.append(SourceIdentity(key, next(iter(group_values))))
+    return _extended_candidates_from_identities(
+        identities,
+        scenario=scenario,
+        target_key=target_key,
+        target_group=target_group,
+    )
+
+
+def _extended_candidates_from_identities(
+    identities: Sequence[SourceIdentity],
+    *,
+    scenario: str,
+    target_key: Tuple[str, ...],
+    target_group: str,
+) -> Tuple[Tuple[str, ...], ...]:
     target_identity = SourceIdentity(target_key, target_group)
     all_identities = tuple(identities) + (target_identity,)
     candidates = []
@@ -145,6 +161,7 @@ def configure_protocol_frames(
     group_cols: Sequence[str],
     observed_start: object,
     grouping_col: str | None = None,
+    prepared_pool: PreparedDailySequencePool | None = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Attach strict metadata and clip source history before any fitted transform."""
 
@@ -159,17 +176,49 @@ def configure_protocol_frames(
     if "date" not in source_df.columns or "date" not in target_df.columns:
         raise ProtocolViolation("protocol frames require date columns")
     target_key = _unique_key(target_df, normalized_group_cols, role="target")
-    available = _available_keys(source_df, normalized_group_cols)
+    available = (
+        prepared_pool.source_keys
+        if prepared_pool is not None
+        else _available_keys(source_df, normalized_group_cols)
+    )
     if protocol.track == EXTENDED_TRACK:
         expected_group_col = grouping_col or protocol.source_pool_rule.grouping_field
-        candidates = _extended_candidates(
-            source_df,
-            target_df,
-            scenario=normalized_scenario,
-            target_key=target_key,
-            group_cols=normalized_group_cols,
-            grouping_col=str(expected_group_col),
-        )
+        if prepared_pool is None:
+            candidates = _extended_candidates(
+                source_df,
+                target_df,
+                scenario=normalized_scenario,
+                target_key=target_key,
+                group_cols=normalized_group_cols,
+                grouping_col=str(expected_group_col),
+            )
+        else:
+            if str(expected_group_col) not in target_df.columns:
+                raise ProtocolViolation(
+                    f"extended target requires grouping column {expected_group_col!r}"
+                )
+            target_groups = {
+                str(value).strip()
+                for value in target_df[str(expected_group_col)].dropna().unique()
+            }
+            if len(target_groups) != 1:
+                raise ProtocolViolation(
+                    f"extended target must contain exactly one {expected_group_col}, "
+                    f"got {sorted(target_groups)!r}"
+                )
+            target_group = next(iter(target_groups))
+            identities = tuple(
+                SourceIdentity(key, target_group)
+                for key in prepared_pool.keys_for_metadata_value(
+                    str(expected_group_col), target_group
+                )
+            )
+            candidates = _extended_candidates_from_identities(
+                identities,
+                scenario=normalized_scenario,
+                target_key=target_key,
+                target_group=target_group,
+            )
     else:
         candidates = _strict_raw_candidates(
             protocol.dataset_id,
@@ -180,13 +229,20 @@ def configure_protocol_frames(
 
     window = protocol.observation_window(observed_start)
     cutoff = pd.Timestamp(window.source_observation_cutoff).normalize()
-    source = source_df.copy()
-    source_dates = pd.to_datetime(source["date"], errors="coerce").dt.normalize()
-    if source_dates.isna().any():
-        raise ProtocolViolation("source frame contains invalid dates")
-    source = source.loc[source_dates <= cutoff].copy()
-    if source.empty:
-        raise ProtocolViolation("source frame is empty at source_observation_cutoff")
+    if prepared_pool is None:
+        source = source_df.copy()
+        source_dates = pd.to_datetime(source["date"], errors="coerce").dt.normalize()
+        if source_dates.isna().any():
+            raise ProtocolViolation("source frame contains invalid dates")
+        source = source.loc[source_dates <= cutoff].copy()
+        if source.empty:
+            raise ProtocolViolation("source frame is empty at source_observation_cutoff")
+    else:
+        prepared_pool.validate_for(
+            group_cols=normalized_group_cols,
+            required_dates=pd.date_range(window.knn_observed_start, window.knn_observed_end),
+        )
+        source = source_df.iloc[0:0].copy()
     target = target_df.copy()
     target_dates = pd.to_datetime(target["date"], errors="coerce").dt.normalize()
     if target_dates.isna().any():
@@ -219,4 +275,6 @@ def configure_protocol_frames(
     }
     source.attrs = {**source_df.attrs, **metadata}
     target.attrs = {**target_df.attrs, **metadata}
+    if prepared_pool is not None:
+        source.attrs["prepared_daily_sequence_pool"] = prepared_pool
     return source, target

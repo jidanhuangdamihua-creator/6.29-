@@ -105,9 +105,11 @@ class SourceSelector:
                 f"selector group_cols differ from protocol: {tuple(group_cols)!r} != {configured_group_cols!r}"
             )
         protocol = get_experiment_protocol(target_df.attrs["protocol_dataset_id"])
+        prepared_pool = source_df.attrs.get("prepared_daily_sequence_pool")
         result = select_daily_sequence_sources(
             target_df=target_df,
             source_df=source_df,
+            prepared_pool=prepared_pool,
             protocol=protocol,
             scenario=target_df.attrs["protocol_scenario"],
             target_key=target_df.attrs["protocol_target_key"],
@@ -117,9 +119,18 @@ class SourceSelector:
             feature_cols=("sales",),
             k=k,
         )
+        provenance_source_df = source_df
+        if prepared_pool is not None:
+            if tuple(model_feature_cols) != ("sales",):
+                raise ProtocolViolation(
+                    "prepared-pool source provenance currently supports sales-only preflight"
+                )
+            provenance_source_df = prepared_pool.selected_sales_frame(
+                result.ordered_source_keys
+            )
         source_slices = extract_selected_source_slices(
             result,
-            source_df,
+            provenance_source_df,
             training_start=result.observed_start,
             training_end=result.source_observation_cutoff,
             model_feature_cols=model_feature_cols,
@@ -136,7 +147,7 @@ class SourceSelector:
         for provenance in tensor_provenance:
             validate_cnn_tensor_provenance(
                 provenance,
-                source_df,
+                provenance_source_df,
                 group_cols=configured_group_cols,
             )
         sources = [
