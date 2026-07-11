@@ -845,7 +845,14 @@ def _project_modeling_frames(
     feature_cols: Sequence[str],
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Drop non-modeling baggage before normalize_features scans whole frames."""
-    identity_cols = ["date", "entity_id", "item_id", "region_id"]
+    identity_cols = [
+        "date",
+        "entity_id",
+        "item_id",
+        "store_id",
+        "brand_id",
+        "region_id",
+    ]
     keep_cols = list(
         dict.fromkeys(
             [
@@ -1075,11 +1082,11 @@ def run_experiment(
     source_df.attrs["method"] = method_name
     target_df.attrs["method"] = method_name
     source_df, target_df = _project_modeling_frames(source_df, target_df, feature_cols)
-    protocol_group_cols = (
-        ("entity_id",)
-        if dataset_name == "Dataset3"
-        else ("entity_id", "item_id")
-    )
+    protocol_group_cols = {
+        "Dataset1": ("store_id", "item_id"),
+        "Dataset2": ("brand_id", "item_id"),
+        "Dataset3": ("store_id",),
+    }[dataset_name]
     source_df, target_df = configure_protocol_frames(
         source_df,
         target_df,

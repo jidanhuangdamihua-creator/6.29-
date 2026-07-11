@@ -333,21 +333,21 @@ Commit: `feat: isolate legacy results from strict baselines`
 - Consumes: exact candidate-pool rules and observation windows.
 - Produces: generation configuration capable of writing full required pools and a read-only preflight report/exit code.
 
-- [ ] **Step 1: Write failing generation/static preflight tests**
+- [x] **Step 1: Write failing generation/static preflight tests**
 
 Inspect configuration and synthetic frames rather than regenerating data. Assert D1 produces Store1–3 × Item1–10 coverage, D2 produces Brand1–3 × Item1–10 coverage, D3 covers Store1–30, D4–D6 preserve cross-store same-group candidates, dates are calendarized only under explicit zero-demand semantics, and existing incomplete D1/D2 fixtures fail with exact missing keys.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_protocol_preprocessing_contract tests.test_protocol_preflight -v`
 
 Expected: D1/D2 current generation filters omit required stores/brands/items.
 
-- [ ] **Step 3: Modify generation logic and add read-only preflight**
+- [x] **Step 3: Modify generation logic and add read-only preflight**
 
 Generation scripts declare protocol version, key fields, explicit calendarization semantics, and full required pool filters. Preflight loads metadata/schema/key/date coverage only, calls production candidate/digest rules, reports missing/duplicate/future/insufficient-K issues, and never trains or rewrites data.
 
-- [ ] **Step 4: Verify GREEN without regeneration and commit**
+- [x] **Step 4: Verify GREEN without regeneration and commit**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_protocol_preprocessing_contract tests.test_protocol_preflight -v`
 
