@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""Run BL1-BL4 target-only baselines for D1-D6, with BL4 expanded across multiple seeds.
-
-This is a standalone variant of run_baselines.py. It does not modify or overwrite
-the original script or its output (`{dataset}_baselines.csv`); results are written
-to a separate `{dataset}_baselines_multiseed.csv` file.
-
-Differences from run_baselines.py:
-  - BL4_LSTM is run once per seed (default: 42,43,44,45,46) instead of a single
-    seed=42 result plus a seed=43 variance check.
-  - Output rows include a `seed` column. BL1/BL2/BL3 rows use seed=42 as a fixed
-    placeholder (these methods are deterministic / unaffected by the LSTM seed).
-  - Output file name is suffixed with `_multiseed` to avoid touching the original
-    baseline CSVs already integrated into the Excel dashboard.
-"""
+"""Run BL1-BL4 on the shared five-horizon rolling-origin sample manifest."""
 
 from __future__ import annotations
 
@@ -36,122 +23,159 @@ for import_path in (PROJECT_ROOT, BASELINE_DIR):
         sys.path.insert(0, str(import_path))
 
 from baseline_data_loader import load_baseline_data
-from baseline_metrics import compute_metrics
 from bl1_historical_mean import predict_bl1
 from bl2_moving_average import predict_bl2
 from bl3_lightgbm import predict_bl3
 from bl4_lstm import predict_bl4
+from src.evaluation.metrics import compute_original_scale_metrics
+from src.protocols.experiment_protocol import FORMAL_HORIZONS, FORMAL_SEEDS
+from src.protocols.reproducibility import set_protocol_seed
+from src.protocols.rolling_origin import validate_feature_availability
 
 
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "baselines"
-OUTPUT_COLUMNS = ["dataset_id", "entity_key", "method", "seed", "smape", "rmse", "mae"]
-DEFAULT_SEEDS = (42, 43, 44, 45, 46)
-FIXED_METHOD_SEED_PLACEHOLDER = 42  # BL1-BL3 are deterministic; seed column is a placeholder
+DEFAULT_SEEDS = FORMAL_SEEDS
+METHODS = ("BL1_HistoricalMean", "BL2_MovingAverage", "BL3_LightGBM", "BL4_LSTM")
+STRICT_FORECAST_FEATURE_ALLOWLIST = {
+    **{f"lag_{lag}": "known_at_origin" for lag in range(1, 8)},
+    "day_of_week": "known_in_advance",
+    "day_of_month": "known_in_advance",
+    "month": "known_in_advance",
+    "year": "known_in_advance",
+}
 
+def _predict_bl3_rolling(record, seed: int) -> float:
+    history = [float(value) for value in record.input_sales]
+    history_dates = [pd.Timestamp(value) for value in record.input_dates]
+    if len(history) < 8:
+        raise ValueError("BL3 requires at least eight legal historical sales values")
 
-def _result_row(
-    dataset_id: str, entity_key: str, method: str, seed: int, metrics: dict
-) -> dict:
-    smape = float(metrics["smape"])
-    if not 0.0 <= smape <= 200.0:
-        print(
-            f"WARNING: {dataset_id}/{entity_key}/{method}/seed={seed} sMAPE={smape:.6f} "
-            "is outside [0, 200]"
+    feature_rows = []
+    for index in range(7, len(history)):
+        current_date = history_dates[index]
+        row = {f"lag_{lag}": history[index - lag] for lag in range(1, 8)}
+        row.update(
+            {
+                "day_of_week": current_date.dayofweek,
+                "day_of_month": current_date.day,
+                "month": current_date.month,
+                "year": current_date.year,
+                "sales": history[index],
+            }
         )
-    return {
-        "dataset_id": dataset_id,
-        "entity_key": entity_key,
-        "method": method,
-        "seed": seed,
-        "smape": smape,
-        "rmse": float(metrics["rmse"]),
-        "mae": float(metrics["mae"]),
-    }
+        feature_rows.append(row)
+    train_features = pd.DataFrame(feature_rows)
+    model_columns = tuple(column for column in train_features.columns if column != "sales")
+    validate_feature_availability(
+        model_columns,
+        allowlist=STRICT_FORECAST_FEATURE_ALLOWLIST,
+    )
+
+    for step in range(1, int(record.horizon) + 1):
+        forecast_date = pd.Timestamp(record.forecast_origin) + pd.Timedelta(days=step)
+        test_row = {f"lag_{lag}": history[-lag] for lag in range(1, 8)}
+        test_row.update(
+            {
+                "day_of_week": forecast_date.dayofweek,
+                "day_of_month": forecast_date.day,
+                "month": forecast_date.month,
+                "year": forecast_date.year,
+            }
+        )
+        prediction = float(
+            predict_bl3(
+                train_features,
+                pd.DataFrame([test_row]),
+                random_state=int(seed),
+            )[0]
+        )
+        history.append(prediction)
+    return history[-1]
+
+
+def _default_protocol_predictor(method: str, record, seed: int) -> float:
+    observed = np.asarray(record.input_sales, dtype=float)
+    if method == "BL1_HistoricalMean":
+        return float(predict_bl1(observed, 1)[0])
+    if method == "BL2_MovingAverage":
+        return float(predict_bl2(observed, 1)[0])
+    if method == "BL3_LightGBM":
+        return _predict_bl3_rolling(record, seed)
+    if method == "BL4_LSTM":
+        if observed.size != 30:
+            raise ValueError(f"BL4 requires exactly 30 rolling observations, got {observed.size}")
+        prediction = predict_bl4(
+            observed[:25],
+            observed[25:],
+            int(record.horizon),
+            seed=int(seed),
+        )
+        return float(prediction[-1])
+    raise ValueError(f"unsupported baseline method: {method!r}")
+
+
+def evaluate_entity_protocol(data: dict, *, predictor=_default_protocol_predictor) -> pd.DataFrame:
+    """Evaluate every method/seed/horizon on one immutable sample manifest."""
+    manifest = data["sample_manifest"]
+    rows = []
+    for method in METHODS:
+        for horizon in FORMAL_HORIZONS:
+            samples = manifest.for_horizon(horizon)
+            if not samples:
+                raise AssertionError(f"manifest contains no samples for horizon={horizon}")
+            truth = np.asarray([sample.label for sample in samples], dtype=float)
+            for seed in FORMAL_SEEDS:
+                set_protocol_seed(seed, include_frameworks=False)
+                predictions = np.asarray(
+                    [predictor(method, sample, seed) for sample in samples],
+                    dtype=float,
+                )
+                metrics = compute_original_scale_metrics(truth, predictions)
+                rows.append(
+                    {
+                        "dataset_id": str(data["dataset_id"]).upper(),
+                        "target_entity_key": str(data["entity_key"]),
+                        "scenario": "without",
+                        "method": method,
+                        "horizon": int(horizon),
+                        "seed": int(seed),
+                        **metrics,
+                        "sample_count": int(len(samples)),
+                        "sample_manifest_digest": manifest.digest,
+                        "protocol_track": data["protocol_track"],
+                        "protocol_version": data["protocol_version"],
+                        "knn_observed_start": data["knn_observed_start"],
+                        "knn_observed_end": data["knn_observed_end"],
+                        "knn_representation": "not_applicable_target_only",
+                        "target_test_excluded": True,
+                        "source_future_excluded": True,
+                        "candidate_pool_digest": "not_applicable_target_only",
+                        "selection_result_digest": "not_applicable_target_only",
+                        "result_status": "trial",
+                    }
+                )
+    return pd.DataFrame(rows)
 
 
 def run_dataset(dataset_id: str, seeds: tuple[int, ...] = DEFAULT_SEEDS) -> Path:
-    """Run BL1-BL3 once and BL4 across all `seeds` for one dataset; write result CSV."""
+    """Run strict rolling-origin BL1-BL4 and write protocol-auditable rows."""
     normalized_id = str(dataset_id).strip().lower()
     if normalized_id not in {f"d{number}" for number in range(1, 7)}:
         raise ValueError(f"dataset_id must be d1 through d6, got {dataset_id!r}")
 
+    if tuple(seeds) != FORMAL_SEEDS:
+        raise ValueError(f"formal baseline seeds must be exactly {FORMAL_SEEDS}")
     entity_slices = load_baseline_data(normalized_id)
-    rows = []
-    for data in entity_slices:
-        entity_key = str(data["entity_key"])
-        truth = data["test_sales"]
-        test_len = int(data["test_len"])
-
-        # BL1-BL3: deterministic, run once per entity.
-        fixed_predictions = [
-            (
-                "BL1_HistoricalMean",
-                predict_bl1(data["observed_sales"], test_len),
-            ),
-            (
-                "BL2_MovingAverage",
-                predict_bl2(data["observed_sales"], test_len),
-            ),
-            (
-                "BL3_LightGBM",
-                predict_bl3(
-                    data["feature_df"],
-                    data["test_feature_df"],
-                    random_state=42,
-                ),
-            ),
-        ]
-        for method, prediction in fixed_predictions:
-            rows.append(
-                _result_row(
-                    normalized_id,
-                    entity_key,
-                    method,
-                    FIXED_METHOD_SEED_PLACEHOLDER,
-                    compute_metrics(truth, prediction),
-                )
-            )
-
-        # BL4: run once per seed.
-        seed_smapes = []
-        for seed in seeds:
-            lstm_prediction = predict_bl4(
-                data["train_sales"],
-                data["val_sales"],
-                test_len,
-                seed=seed,
-            )
-            metrics = compute_metrics(truth, lstm_prediction)
-            seed_smapes.append(float(metrics["smape"]))
-            rows.append(
-                _result_row(
-                    normalized_id,
-                    entity_key,
-                    "BL4_LSTM",
-                    seed,
-                    metrics,
-                )
-            )
-
-        if len(seed_smapes) > 1:
-            smape_array = np.asarray(seed_smapes, dtype=float)
-            print(
-                f"[BL4 variance] dataset={normalized_id} entity={entity_key} "
-                f"seeds={list(seeds)} "
-                f"smapes={[f'{value:.6f}' for value in seed_smapes]} "
-                f"mean={smape_array.mean():.6f} "
-                f"std={smape_array.std(ddof=0):.6f} "
-                f"min={smape_array.min():.6f} "
-                f"max={smape_array.max():.6f}"
-            )
-
-    output = pd.DataFrame(rows, columns=OUTPUT_COLUMNS)
-    expected_rows = len(entity_slices) * (3 + len(seeds))
+    output = pd.concat(
+        [evaluate_entity_protocol(data) for data in entity_slices],
+        ignore_index=True,
+    )
+    expected_rows = len(entity_slices) * len(METHODS) * len(FORMAL_HORIZONS) * len(FORMAL_SEEDS)
     if len(output) != expected_rows:
         raise AssertionError(
             f"{normalized_id} expected {expected_rows} baseline rows, got {len(output)}"
         )
-    numeric_metrics = output[["smape", "rmse", "mae"]].to_numpy(dtype=float)
+    numeric_metrics = output[["smape", "rmse", "mae", "accuracy"]].to_numpy(dtype=float)
     if not np.isfinite(numeric_metrics).all() or (numeric_metrics < 0.0).any():
         raise AssertionError(f"{normalized_id} output metrics must be finite and non-negative")
 

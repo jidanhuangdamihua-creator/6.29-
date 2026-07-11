@@ -7,6 +7,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from src.protocols.experiment_protocol import get_experiment_protocol
+from src.protocols.rolling_origin import build_sample_manifest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -146,6 +149,7 @@ def _build_entity_slice(
     window: pd.DataFrame,
     dataset_id: str,
     entity_key: str,
+    entity_values: tuple[str, ...] | None = None,
 ) -> dict:
     if window["date"].duplicated().any():
         raise AssertionError(f"{dataset_id}/{entity_key} contains duplicate target dates")
@@ -177,6 +181,19 @@ def _build_entity_slice(
         .reset_index(drop=True)
     )
 
+    protocol = get_experiment_protocol(dataset_id)
+    scenario = "without"
+    target_key = tuple(entity_values) if entity_values is not None else tuple(entity_key.split("_"))
+    manifest = build_sample_manifest(
+        window,
+        dataset_id=protocol.dataset_id,
+        track=protocol.track,
+        scenario=scenario,
+        target_key=target_key,
+        observed_end=observed_df["date"].max(),
+        input_window=30,
+    )
+
     return {
         "entity_key": entity_key,
         "observed_sales": observed_sales,
@@ -187,6 +204,14 @@ def _build_entity_slice(
         "train_sales": observed_sales[:25].copy(),
         "val_sales": observed_sales[25:].copy(),
         "dataset_id": dataset_id,
+        "target_window": window.copy(),
+        "sample_manifest": manifest,
+        "sample_manifest_digest": manifest.digest,
+        "protocol_version": protocol.protocol_version,
+        "protocol_track": protocol.track,
+        "primary_metric_space": protocol.primary_metric_space,
+        "knn_observed_start": observed_df["date"].min().strftime("%Y-%m-%d"),
+        "knn_observed_end": observed_df["date"].max().strftime("%Y-%m-%d"),
     }
 
 
@@ -221,5 +246,12 @@ def load_baseline_data(dataset_id: str) -> list[dict]:
         entity_key = "_".join(entity_values)
         entity = _filter_entity(target, normalized_id, entity_values)
         window = _prepare_configured_window(entity, normalized_id, windows)
-        slices.append(_build_entity_slice(window, normalized_id, entity_key))
+        slices.append(
+            _build_entity_slice(
+                window,
+                normalized_id,
+                entity_key,
+                entity_values=tuple(entity_values),
+            )
+        )
     return slices

@@ -12,6 +12,30 @@ from src.constants import MIXED_METRIC_PROTOCOL_NOTE, MIXED_METRIC_SPACE
 SUPPORTED_METRIC_SPACES = {"normalized_minmax_space", "original_sales_space"}
 
 
+def compute_original_scale_metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    eps: float = 1e-8,
+) -> dict:
+    """Compute the four primary metrics directly in original sales units."""
+    true = np.asarray(y_true, dtype=np.float64).reshape(-1)
+    predicted = np.asarray(y_pred, dtype=np.float64).reshape(-1)
+    if true.size == 0 or true.shape != predicted.shape:
+        raise ValueError(
+            f"original-scale metric arrays must have the same non-empty shape: {true.shape}, {predicted.shape}"
+        )
+    if not np.isfinite(true).all() or not np.isfinite(predicted).all():
+        raise ValueError("original-scale metric arrays must be finite")
+    rmse = _compute_rmse(true, predicted)
+    return {
+        "rmse": rmse,
+        "mae": _compute_mae(true, predicted),
+        "smape": smape(true, predicted, epsilon=eps),
+        "accuracy": float(1.0 / (rmse + eps)),
+        "primary_metric_space": "original_sales",
+    }
+
+
 def _compute_rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.sqrt(np.mean((y_pred - y_true) ** 2)))
 

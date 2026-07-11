@@ -216,25 +216,25 @@ Commit: `feat: enforce KNN to CNN source provenance`
 - Produces: `SampleRecord`, `SampleManifest`, `build_sample_manifest`, `assert_same_sample_manifest`, `validate_feature_availability`, `set_protocol_seed`, `compute_original_scale_metrics`, `aggregate_protocol_results`.
 - Consumed by: CNN adapters, all baseline methods, result validation.
 
-- [ ] **Step 1: Write failing manifest/fairness tests**
+- [x] **Step 1: Write failing manifest/fairness tests**
 
 Assert horizons `(1,2,3,4,5)`, every label date is after its input end, stable sample keys/digest, CNN and baseline ordered key equality, rejection of future `sales`, `transactions`, `stock`, and `customers`, acceptance only of explicitly allowed calendar/planned features, and failure when a method independently drops a sample.
 
-- [ ] **Step 2: Write failing metric/seed/final-baseline tests**
+- [x] **Step 2: Write failing metric/seed/final-baseline tests**
 
 Assert original-scale RMSE/MAE/sMAPE/accuracy against hand-calculated values, per-horizon and horizon-mean aggregation by five seeds, consistent Python/NumPy seed reset, and rejection of a final-baseline group missing any seed or horizon.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_rolling_origin_protocol tests.test_baseline_protocol -v`
 
 Expected: missing manifest and protocol metric APIs.
 
-- [ ] **Step 4: Implement shared manifest and baseline adapters**
+- [x] **Step 4: Implement shared manifest and baseline adapters**
 
 The loader returns the protocol `SampleManifest` plus legal observed rows; BL1–BL4 receive the same manifest and emit one row per `target × method × horizon × seed`. Deterministic methods still emit all five seed rows with identical predictions so result cardinality is uniform. No method may build or shorten its own test slice.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run: `python tools/protection/codex_timeout.py --timeout 180 -- python -m unittest tests.test_rolling_origin_protocol tests.test_baseline_protocol -v`
 
