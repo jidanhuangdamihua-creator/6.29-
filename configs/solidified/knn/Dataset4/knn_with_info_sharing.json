@@ -10,8 +10,8 @@
     "end": "2024-12-30"
   },
   "domain_filter": {
-    "column": "second_category_id",
-    "value": 20
+    "column": "first_category_id",
+    "value": 15
   },
   "group_cols": [
     "store_id",
