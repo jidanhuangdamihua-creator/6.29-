@@ -113,27 +113,44 @@ def test_regenerate_without_filter_matches_runtime_policy(
     )
     source_df.attrs["protocol_version"] = "runtime_knn_windowed_stats_v1"
 
-    expected = apply_source_domain_policy(
-        source_df,
-        domain_filter,
-        information_sharing="without",
-        entity_group_cols=("dept_id", "second_category_id"),
-    ).frame
     actual = _filter_source_for_scenario(
         source_df,
         dataset_id=dataset_id,
         scenario="without",
         old_payload={"domain_filter": domain_filter},
     )
+    if dataset_id == 4:
+        runtime_config = {
+            "dataset_id": 4,
+            "info_sharing": "without",
+            "entity_col": "entity_id",
+        }
+        expected = apply_runtime_source_domain_policy(
+            source_df,
+            {"domain_filter": domain_filter},
+            runtime_config,
+        )
 
-    assert actual.frame["entity_id"].tolist() == expected["entity_id"].tolist()
-    assert actual.frame.attrs == expected.attrs
-    assert actual.diagnostics == apply_source_domain_policy(
-        source_df,
-        domain_filter,
-        information_sharing="without",
-        entity_group_cols=("dept_id", "second_category_id"),
-    ).diagnostics
+        assert actual.frame["entity_id"].tolist() == ["a", "b", "c", "d"]
+        assert actual.frame.attrs == expected.attrs
+        assert actual.diagnostics["domain_filter_scope"] == "target_only"
+        assert actual.diagnostics["domain_filter_applied_to_source"] is False
+        assert actual.diagnostics["source_pool_policy"] == (
+            "without_information_sharing_same_store"
+        )
+    else:
+        expected = apply_source_domain_policy(
+            source_df,
+            domain_filter,
+            information_sharing="without",
+            entity_group_cols=("dept_id", "second_category_id"),
+        )
+
+        assert actual.frame["entity_id"].tolist() == expected.frame["entity_id"].tolist()
+        assert actual.frame.attrs == expected.frame.attrs
+        assert actual.diagnostics == expected.diagnostics
+        assert actual.diagnostics["domain_filter_scope"] == "source_pool"
+        assert actual.diagnostics["domain_filter_applied_to_source"] is True
 
 
 @pytest.mark.parametrize(

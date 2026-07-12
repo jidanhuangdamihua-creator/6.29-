@@ -35,6 +35,9 @@ def _shared_selection() -> dict[str, object]:
             "candidate_pool_digest_input": {"dataset_id": "D4"},
             "selection_result_digest": "b" * 64,
             "source_skip_diagnostics": [],
+            "cnn_provenance_validated": True,
+            "cnn_provenance_source_keys": [("S1", "I1")],
+            "cnn_provenance_sample_counts": [20],
         },
     }
 
