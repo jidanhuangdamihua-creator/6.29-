@@ -21,7 +21,11 @@ from src.utils.parquet_data_loader import (
     read_dataset_windows,
     load_knn_results,
 )
-from src.utils.d4_d6_runtime import apply_runtime_source_domain_policy, load_default_metric_protocol
+from src.utils.d4_d6_runtime import (
+    apply_runtime_source_domain_policy,
+    load_default_metric_protocol,
+    validate_runtime_target_domain,
+)
 from src.utils.finite_diagnostics import validate_feature_frame_finite
 from src.utils.knn_feature_loader import resolve_knn_feature_columns
 from src.protocols.reproducibility import set_protocol_seed
@@ -181,6 +185,7 @@ def main() -> None:
 
     source_df = apply_runtime_source_domain_policy(source_df, knn_data, config)
     target_entity_keys = list(knn_data["results"].keys())
+    validate_runtime_target_domain(target_df, target_entity_keys, knn_data, config)
     if config["smoke"]:
         target_entity_keys = target_entity_keys[: int(config["smoke_target_limit"])]
         selected_source_entities = {

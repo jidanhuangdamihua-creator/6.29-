@@ -98,6 +98,7 @@ class SourcePoolRule:
     grouping_field: Optional[str] = None
     require_same_group: bool = True
     excluded_candidate_key_fields: Tuple[str, ...] = ()
+    domain_filter_scope: str = "source_pool"
 
     def candidate_exclusion_positions(self) -> Tuple[int, ...]:
         positions = []
@@ -165,6 +166,7 @@ _PROTOCOLS = {
             "category",
             require_same_group=False,
             excluded_candidate_key_fields=("item",),
+            domain_filter_scope="target_only",
         ),
     ),
     "D5": ExperimentProtocol(

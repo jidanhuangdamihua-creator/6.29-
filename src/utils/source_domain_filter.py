@@ -6,6 +6,11 @@ from typing import Any, Dict, Mapping, Sequence
 import pandas as pd
 
 
+DOMAIN_FILTER_SCOPES = frozenset(
+    {"target_only", "source_pool", "target_and_source", "metadata_only"}
+)
+
+
 @dataclass(frozen=True)
 class SourceDomainPolicyResult:
     frame: pd.DataFrame
@@ -32,7 +37,7 @@ def _is_without_information_sharing(information_sharing: str) -> bool:
     }
 
 
-def _apply_filter(source_df: pd.DataFrame, normalized_filter: Dict[str, Any]) -> pd.DataFrame:
+def domain_filter_mask(source_df: pd.DataFrame, normalized_filter: Mapping[str, Any]) -> pd.Series:
     missing = [column for column in normalized_filter if column not in source_df.columns]
     if missing:
         raise ValueError(f"source_domain_filter missing columns: {missing}")
@@ -43,7 +48,27 @@ def _apply_filter(source_df: pd.DataFrame, normalized_filter: Dict[str, Any]) ->
             mask &= source_df[column].isin(list(allowed))
         else:
             mask &= source_df[column] == allowed
-    return source_df.loc[mask].copy()
+    return mask
+
+
+def _apply_filter(source_df: pd.DataFrame, normalized_filter: Dict[str, Any]) -> pd.DataFrame:
+    return source_df.loc[domain_filter_mask(source_df, normalized_filter)].copy()
+
+
+def _normalize_scope(domain_filter_scope: object) -> str:
+    scope = str(domain_filter_scope).strip().lower()
+    if scope not in DOMAIN_FILTER_SCOPES:
+        raise ValueError(
+            f"unsupported domain_filter_scope {domain_filter_scope!r}; "
+            f"expected one of {sorted(DOMAIN_FILTER_SCOPES)!r}"
+        )
+    return scope
+
+
+def _domain_filter_details(normalized_filter: Mapping[str, Any]) -> tuple[object, object]:
+    if len(normalized_filter) != 1:
+        return None, None
+    return next(iter(normalized_filter.items()))
 
 
 def _source_entity_count(
@@ -76,15 +101,26 @@ def apply_source_domain_policy(
     knn_json_domain_filter: Mapping[str, Any] | None,
     information_sharing: str,
     entity_group_cols: Sequence[str] | None = None,
+    domain_filter_scope: str = "source_pool",
+    source_pool_policy: str | None = None,
 ) -> SourceDomainPolicyResult:
-    """Apply without-mode source filtering while keeping with-mode full source pool."""
+    """Apply source filtering only when the explicit scope includes the source pool."""
     before = int(len(source_df))
     entities_before = _source_entity_count(source_df, entity_group_cols)
     raw_filter = dict(knn_json_domain_filter or {})
+    normalized = normalize_domain_filter(raw_filter)
+    scope = _normalize_scope(domain_filter_scope)
+    filter_column, filter_value = _domain_filter_details(normalized)
     diagnostics: Dict[str, Any] = {
         "knn_json_domain_filter": raw_filter,
         "source_domain_filter": None,
         "source_domain_filter_applied": False,
+        "domain_filter_applied_to_source": False,
+        "domain_filter_scope": scope,
+        "domain_filter_column": filter_column,
+        "domain_filter_value": filter_value,
+        "target_domain_validation_passed": None,
+        "source_pool_policy": source_pool_policy or "",
         "source_domain_filter_reason": "with_information_sharing_all_source_pool",
         "source_pool_size_before_filter": before,
         "source_pool_size_after_filter": before,
@@ -97,12 +133,17 @@ def apply_source_domain_policy(
         "source_domain_filter_error": "",
     }
 
+    if scope not in {"source_pool", "target_and_source"}:
+        diagnostics["source_domain_filter_reason"] = f"domain_filter_{scope}"
+        frame = source_df.copy()
+        frame.attrs.update(source_df.attrs)
+        return SourceDomainPolicyResult(frame=frame, diagnostics=diagnostics)
+
     if not _is_without_information_sharing(information_sharing):
         frame = source_df.copy()
         frame.attrs.update(source_df.attrs)
         return SourceDomainPolicyResult(frame=frame, diagnostics=diagnostics)
 
-    normalized = normalize_domain_filter(raw_filter)
     diagnostics["source_domain_filter"] = normalized
     diagnostics["source_domain_filter_reason"] = "without_information_sharing_same_domain_protocol"
     if not normalized:
@@ -118,6 +159,7 @@ def apply_source_domain_policy(
     after = int(len(frame))
     entities_after = _source_entity_count(frame, entity_group_cols)
     diagnostics["source_domain_filter_applied"] = True
+    diagnostics["domain_filter_applied_to_source"] = True
     diagnostics["source_pool_size_after_filter"] = after
     diagnostics["source_pool_rows_after_filter"] = after
     diagnostics["excluded_source_row_count"] = before - after

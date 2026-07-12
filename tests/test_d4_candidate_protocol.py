@@ -7,11 +7,16 @@ import pandas as pd
 
 from src.protocols.candidate_pool import prepare_daily_sequence_pool
 from src.protocols.experiment_protocol import (
+    ProtocolViolation,
     SourceIdentity,
     build_candidate_keys,
     get_experiment_protocol,
 )
 from src.protocols.runner_adapter import configure_protocol_frames
+from src.utils.d4_d6_runtime import (
+    apply_runtime_source_domain_policy,
+    validate_runtime_target_domain,
+)
 
 
 DATES = pd.date_range("2020-01-01", periods=35, freq="D")
@@ -28,11 +33,13 @@ def _rows(
     product_id: int,
     second_category_id: int,
     dates: pd.DatetimeIndex,
+    first_category_id: int = 15,
 ) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "store_id": store_id,
             "product_id": product_id,
+            "first_category_id": first_category_id,
             "second_category_id": second_category_id,
             "date": dates,
             "sales": np.full(len(dates), float(product_id)),
@@ -45,10 +52,10 @@ def _d4_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
     source = pd.concat(
         [
             _rows(166, 258, 20, OBSERVED_DATES),
-            _rows(166, 259, 30, OBSERVED_DATES),
+            _rows(166, 259, 30, OBSERVED_DATES, first_category_id=99),
             _rows(166, 261, 20, OBSERVED_DATES),
-            _rows(167, 260, 40, OBSERVED_DATES),
-            _rows(168, 258, 50, OBSERVED_DATES),
+            _rows(167, 260, 40, OBSERVED_DATES, first_category_id=99),
+            _rows(168, 258, 50, OBSERVED_DATES, first_category_id=99),
         ],
         ignore_index=True,
     )
@@ -83,6 +90,91 @@ def _candidate_keys(
 
 
 class Dataset4CandidateProtocolTest(unittest.TestCase):
+    def test_d4_without_domain_filter_keeps_all_source_categories(self) -> None:
+        source, _ = _d4_frames()
+        config = {"dataset_id": 4, "info_sharing": "without"}
+
+        after = apply_runtime_source_domain_policy(
+            source,
+            {
+                "domain_filter": {"column": "first_category_id", "value": 15},
+                "group_cols": ["store_id", "product_id"],
+            },
+            config,
+        )
+
+        self.assertEqual(len(after), len(source))
+        self.assertEqual(
+            config["source_pool_entities_after_filter"],
+            config["source_pool_entities_before_filter"],
+        )
+        self.assertIn(99, after["first_category_id"].unique())
+        self.assertFalse(config["source_domain_filter_applied"])
+        self.assertFalse(config["domain_filter_applied_to_source"])
+        self.assertEqual(config["domain_filter_scope"], "target_only")
+        self.assertEqual(config["domain_filter_column"], "first_category_id")
+        self.assertEqual(config["domain_filter_value"], 15)
+        self.assertEqual(config["source_domain_filter_reason"], "domain_filter_target_only")
+        self.assertEqual(
+            config["source_pool_policy"], "without_information_sharing_same_store"
+        )
+
+    def test_d4_with_domain_filter_keeps_all_source_categories(self) -> None:
+        source, _ = _d4_frames()
+        config = {"dataset_id": 4, "info_sharing": "with"}
+
+        after = apply_runtime_source_domain_policy(
+            source,
+            {
+                "domain_filter": {"column": "first_category_id", "value": 15},
+                "group_cols": ["store_id", "product_id"],
+            },
+            config,
+        )
+
+        self.assertEqual(len(after), len(source))
+        self.assertEqual(
+            config["source_pool_entities_after_filter"],
+            config["source_pool_entities_before_filter"],
+        )
+        self.assertIn(99, after["first_category_id"].unique())
+        self.assertFalse(config["source_domain_filter_applied"])
+        self.assertFalse(config["domain_filter_applied_to_source"])
+        self.assertEqual(config["domain_filter_scope"], "target_only")
+        self.assertEqual(config["source_domain_filter_reason"], "domain_filter_target_only")
+        self.assertEqual(
+            config["source_pool_policy"], "with_information_sharing_cross_store"
+        )
+
+    def test_d4_target_domain_validation_rejects_nonmatching_json_target(self) -> None:
+        _, target = _d4_frames()
+        config = {"dataset_id": 4, "entity_col": "entity_id"}
+        target = target.assign(entity_id="166_258")
+        knn_data = {"domain_filter": {"column": "first_category_id", "value": 15}}
+
+        validate_runtime_target_domain(target, ["166_258"], knn_data, config)
+        self.assertTrue(config["target_domain_validation_passed"])
+
+        invalid = target.assign(first_category_id=99)
+        with self.assertRaisesRegex(ProtocolViolation, "target domain validation failed"):
+            validate_runtime_target_domain(invalid, ["166_258"], knn_data, config)
+
+    def test_d5_source_domain_filter_remains_enabled(self) -> None:
+        source, _ = _d4_frames()
+        config = {"dataset_id": 5, "info_sharing": "without"}
+
+        after = apply_runtime_source_domain_policy(
+            source,
+            {
+                "domain_filter": {"column": "first_category_id", "value": 15},
+                "group_cols": ["store_id", "product_id"],
+            },
+            config,
+        )
+
+        self.assertLess(len(after), len(source))
+        self.assertTrue(config["domain_filter_applied_to_source"])
+
     def test_shared_d4_protocol_uses_product_not_second_category_for_eligibility(
         self,
     ) -> None:
@@ -148,6 +240,14 @@ class Dataset4CandidateProtocolTest(unittest.TestCase):
         self.assertNotIn(TARGET_KEY, candidate_keys)
         self.assertNotIn(CROSS_STORE_DIFFERENT_CATEGORY_KEY, candidate_keys)
         self.assertNotIn(CROSS_STORE_SAME_PRODUCT_KEY, candidate_keys)
+        source, target = _d4_frames()
+        candidate = source[(source["store_id"] == 166) & (source["product_id"] == 259)]
+        self.assertNotEqual(
+            candidate["first_category_id"].iloc[0], target["first_category_id"].iloc[0]
+        )
+        self.assertNotEqual(
+            candidate["second_category_id"].iloc[0], target["second_category_id"].iloc[0]
+        )
 
     def test_with_allows_cross_store_different_second_category_but_not_same_product(
         self,
@@ -157,6 +257,15 @@ class Dataset4CandidateProtocolTest(unittest.TestCase):
         self.assertIn(CROSS_STORE_DIFFERENT_CATEGORY_KEY, candidate_keys)
         self.assertNotIn(TARGET_KEY, candidate_keys)
         self.assertNotIn(CROSS_STORE_SAME_PRODUCT_KEY, candidate_keys)
+        source, target = _d4_frames()
+        candidate = source[(source["store_id"] == 167) & (source["product_id"] == 260)]
+        self.assertNotEqual(candidate["store_id"].iloc[0], target["store_id"].iloc[0])
+        self.assertNotEqual(
+            candidate["first_category_id"].iloc[0], target["first_category_id"].iloc[0]
+        )
+        self.assertNotEqual(
+            candidate["second_category_id"].iloc[0], target["second_category_id"].iloc[0]
+        )
 
     def test_prepared_pool_does_not_restore_second_category_restriction(
         self,
