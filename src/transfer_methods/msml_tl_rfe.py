@@ -747,6 +747,9 @@ def run_msml_tl_rfe(
     # 必要的非特征列
     required_cols = ["date", "entity_id", "item_id", "sales"]
     required_cols = [c for c in required_cols if c in target_train_df.columns]
+    source_required_cols = list(
+        dict.fromkeys(required_cols + list(resolved_group_cols))
+    )
 
     target_train_df_rfe = apply_selected_features_to_df(
         target_train_df, selected_feature_cols, required_cols=required_cols
@@ -761,7 +764,7 @@ def run_msml_tl_rfe(
     selected_source_sequences_rfe: Dict[Tuple, pd.DataFrame] = {}
     for source_key, source_seq_df in selected_source_sequences.items():
         selected_source_sequences_rfe[source_key] = apply_selected_features_to_df(
-            source_seq_df, selected_feature_cols, required_cols=required_cols
+            source_seq_df, selected_feature_cols, required_cols=source_required_cols
         )
 
     logger.info("[run_msml_tl_rfe] Step 6: Applied RFE features to all targets and sources")

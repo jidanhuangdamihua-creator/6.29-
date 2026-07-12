@@ -809,7 +809,7 @@ def run_ss_tl_experiment(
         "model_weight_nan_count": ss_raw.get("model_weight_nan_count"),
         "model_weight_inf_count": ss_raw.get("model_weight_inf_count"),
         "meta": {
-            "source_key": tuple(first_key),
+            "source_key": tuple(source_key),
             "source_selection_policy": "knn_top1",
             "source_distance": float(selected[0].get("distance", 0.0)),
             "source_weight": float(selected[0].get("weight", 1.0)),
