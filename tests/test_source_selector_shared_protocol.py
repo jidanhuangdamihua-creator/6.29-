@@ -44,14 +44,15 @@ class SourceSelectorSharedProtocolTest(unittest.TestCase):
             ignore_index=True,
         )
 
-    def test_strict_frames_use_shared_daily_selection_and_ignore_model_ids(self) -> None:
+    def test_d4_formal_selection_uses_cross_group_candidates_and_ignores_model_ids(
+        self,
+    ) -> None:
         source, target = configure_protocol_frames(
             self.source,
             self.target,
             dataset_id="D4",
             scenario="with",
             group_cols=("store_id", "item_id"),
-            grouping_col="second_category_id",
             observed_start="2020-01-01",
         )
         selection = SourceSelector().select_top_k_sources(
@@ -65,8 +66,18 @@ class SourceSelectorSharedProtocolTest(unittest.TestCase):
 
         self.assertEqual(
             [tuple(row["source_key"]) for row in selection["sources"]],
-            [("T1", "I1"), ("S2", "I2")],
+            [("S3", "I3"), ("T1", "I1")],
         )
+        selected_keys = [tuple(row["source_key"]) for row in selection["sources"]]
+        self.assertIn(("S3", "I3"), selected_keys)
+        self.assertEqual(
+            self.source.loc[
+                (self.source["store_id"] == "S3") & (self.source["item_id"] == "I3"),
+                "second_category_id",
+            ].iloc[0],
+            30,
+        )
+        self.assertEqual(self.target["second_category_id"].iloc[0], 20)
         self.assertEqual(selection["meta"]["protocol_version"], "d1_d6_protocol_v1")
         self.assertEqual(selection["meta"]["representation"], "daily_sales_flattened_30d")
         self.assertEqual(selection["meta"]["feature_cols"], ["sales"])
@@ -76,17 +87,16 @@ class SourceSelectorSharedProtocolTest(unittest.TestCase):
         self.assertTrue(selection["meta"]["cnn_provenance_validated"])
         self.assertEqual(
             selection["meta"]["cnn_provenance_source_keys"],
-            [("T1", "I1"), ("S2", "I2")],
+            [("S3", "I3"), ("T1", "I1")],
         )
 
-    def test_formal_selection_rejects_raw_distance_and_k_shrink(self) -> None:
+    def test_formal_selection_rejects_raw_distance(self) -> None:
         source, target = configure_protocol_frames(
             self.source,
             self.target,
             dataset_id="D4",
             scenario="with",
             group_cols=("store_id", "item_id"),
-            grouping_col="second_category_id",
             observed_start="2020-01-01",
         )
         selector = SourceSelector()
@@ -99,8 +109,71 @@ class SourceSelectorSharedProtocolTest(unittest.TestCase):
                 group_cols=("store_id", "item_id"),
                 weight_mode="raw_distance",
             )
+
+    def test_d4_formal_selection_supports_required_k_three_across_groups(self) -> None:
+        source, target = configure_protocol_frames(
+            self.source,
+            self.target,
+            dataset_id="D4",
+            scenario="with",
+            group_cols=("store_id", "item_id"),
+            observed_start="2020-01-01",
+        )
+        selection = SourceSelector().select_top_k_sources(
+            target,
+            source,
+            feature_cols=("sales",),
+            k=3,
+            group_cols=("store_id", "item_id"),
+        )
+
+        selected_keys = [tuple(row["source_key"]) for row in selection["sources"]]
+        self.assertEqual(len(selected_keys), 3)
+        self.assertIn(("S3", "I3"), selected_keys)
+
+    def test_d5_formal_selection_fails_fast_when_two_same_group_candidates_remain(
+        self,
+    ) -> None:
+        dates = pd.date_range("2020-01-01", periods=35, freq="D")
+        target = pd.DataFrame(
+            {
+                "store_id": "T1",
+                "item_id": "I0",
+                "family": "F1",
+                "date": dates,
+                "sales": np.r_[np.zeros(30), np.full(5, 9999.0)],
+            }
+        )
+        source = pd.concat(
+            [
+                pd.DataFrame(
+                    {
+                        "store_id": store,
+                        "item_id": item,
+                        "family": family,
+                        "date": dates,
+                        "sales": np.full(35, value),
+                    }
+                )
+                for store, item, family, value in (
+                    ("T1", "I1", "F1", 1.0),
+                    ("S2", "I2", "F1", 2.0),
+                    ("S3", "I3", "F2", 0.0),
+                )
+            ],
+            ignore_index=True,
+        )
+        source, target = configure_protocol_frames(
+            source,
+            target,
+            dataset_id="D5",
+            scenario="with",
+            group_cols=("store_id", "item_id"),
+            grouping_col="family",
+            observed_start="2020-01-01",
+        )
         with self.assertRaisesRegex(ProtocolViolation, "required K=3"):
-            selector.select_top_k_sources(
+            SourceSelector().select_top_k_sources(
                 target,
                 source,
                 feature_cols=("sales",),
