@@ -163,8 +163,19 @@ class SourceSelector:
             for entry in result.entries
         ]
         excluded = [dict(item) for item in result.excluded_candidates]
+        eligible_candidate_keys = list(target_df.attrs["protocol_candidate_keys"])
+        excluded_candidate_keys = {
+            tuple(item["source_key"])
+            for item in excluded
+        }
+        valid_30d_candidate_keys = [
+            key
+            for key in eligible_candidate_keys
+            if tuple(key) not in excluded_candidate_keys
+        ]
         meta = {
             "selection_authority": "shared_protocol",
+            "selection_path": "shared_protocol",
             "protocol_track": protocol.track,
             "protocol_version": protocol.protocol_version,
             "weight_mode": protocol.weight_mode,
@@ -179,6 +190,8 @@ class SourceSelector:
             "scaler_fit_scope": "target_and_candidate_legal_observed_values",
             "knn_observed_start": result.observed_start,
             "knn_observed_end": result.observed_end,
+            "protocol_observed_start": target_df.attrs["protocol_observed_start"],
+            "protocol_observed_days": target_df.attrs["protocol_observed_days"],
             "target_observed_start": result.observed_start,
             "target_observed_end": result.observed_end,
             "source_observation_cutoff": result.source_observation_cutoff,
@@ -192,6 +205,12 @@ class SourceSelector:
             "source_skip_diagnostics": excluded,
             "candidate_source_count": len(target_df.attrs["protocol_candidate_keys"]),
             "valid_source_count": len(target_df.attrs["protocol_candidate_keys"]) - len(excluded),
+            "eligible_candidate_keys": eligible_candidate_keys,
+            "valid_30d_candidate_keys": valid_30d_candidate_keys,
+            "eligible_candidate_count": len(eligible_candidate_keys),
+            "valid_30d_candidate_count": len(valid_30d_candidate_keys),
+            "selected_count": len(sources),
+            "observed_days": len(result.entries[0].raw_vector),
             "skipped_source_count": len(excluded),
             "requested_k": int(k),
             "effective_k": int(k),

@@ -22,7 +22,13 @@ from src.constants import (
     SOLIDIFIED_KNN_ROOT,
     SOURCE_HISTORY_DAYS,
 )
+from src.protocols.experiment_protocol import PROTOCOL_VERSION, get_experiment_protocol
+from src.protocols.runner_adapter import configure_protocol_frames
 from src.source_selection.source_selector import SourceSelector
+from src.utils.d4_d6_runtime import (
+    apply_runtime_source_domain_policy,
+    validate_runtime_target_domain,
+)
 from src.utils.parquet_data_loader import (
     load_parquet_source_target,
     read_dataset_windows,
@@ -183,12 +189,103 @@ def _filter_source_for_scenario(
 ) -> SourceDomainPolicyResult:
     if int(dataset_id) not in {4, 5, 6}:
         raise ValueError(f"regeneration only supports D4-D6: dataset_id={dataset_id}")
+    if int(dataset_id) == 4:
+        runtime_config: Dict[str, Any] = {
+            "dataset_id": 4,
+            "info_sharing": str(scenario),
+            "entity_col": "entity_id",
+        }
+        frame = apply_runtime_source_domain_policy(source_df, old_payload, runtime_config)
+        diagnostics = {
+            key: value
+            for key, value in runtime_config.items()
+            if key not in {"dataset_id", "info_sharing", "entity_col"}
+        }
+        diagnostics["source_pool_entity_count"] = diagnostics.get(
+            "source_pool_entities_after_filter"
+        )
+        return SourceDomainPolicyResult(frame=frame, diagnostics=diagnostics)
     return apply_source_domain_policy(
         source_df,
         old_payload.get("domain_filter"),
         information_sharing=scenario,
         entity_group_cols=old_payload.get("group_cols"),
     )
+
+
+def _select_d4_shared_protocol(
+    *,
+    source_df: pd.DataFrame,
+    target_entity_df: pd.DataFrame,
+    scenario: str,
+    feature_cols: Sequence[str],
+    k: int,
+    group_cols: Sequence[str],
+) -> Dict[str, Any]:
+    """Select a Dataset4 target through the formal shared-protocol path."""
+    observed_start = target_entity_df.attrs.get(
+        "knn_observed_start",
+        target_entity_df.attrs.get(
+            "target_observed_start",
+            pd.to_datetime(target_entity_df["date"], errors="raise").min(),
+        ),
+    )
+    configured_source, configured_target = configure_protocol_frames(
+        source_df,
+        target_entity_df,
+        dataset_id=4,
+        scenario=scenario,
+        group_cols=group_cols,
+        grouping_col=None,
+        observed_start=observed_start,
+    )
+    selected = SourceSelector().select_top_k_sources(
+        target_df=configured_target,
+        source_df=configured_source,
+        feature_cols=feature_cols,
+        k=k,
+        group_cols=tuple(group_cols),
+    )
+    metadata = selected.get("meta", {})
+    if not isinstance(metadata, dict) or metadata.get("selection_path") != "shared_protocol":
+        raise ValueError("Dataset4 regeneration did not use the shared protocol selector path")
+    return selected
+
+
+def _prepare_d4_runtime_source_pool(
+    *,
+    source_df: pd.DataFrame,
+    target_df: pd.DataFrame,
+    target_entity_keys: Sequence[str],
+    scenario: str,
+    old_payload: Mapping[str, Any],
+) -> SourceDomainPolicyResult:
+    """Apply the formal D4 source policy and validate JSON-selected targets."""
+    runtime_config: Dict[str, Any] = {
+        "dataset_id": 4,
+        "info_sharing": str(scenario),
+        "entity_col": "entity_id",
+    }
+    configured_source = apply_runtime_source_domain_policy(
+        source_df,
+        dict(old_payload),
+        runtime_config,
+    )
+    validate_runtime_target_domain(
+        target_df,
+        [str(key) for key in target_entity_keys],
+        dict(old_payload),
+        runtime_config,
+    )
+    diagnostics = {
+        key: value
+        for key, value in runtime_config.items()
+        if key not in {"dataset_id", "info_sharing", "entity_col"}
+    }
+    diagnostics["source_pool_entity_count"] = diagnostics.get(
+        "source_pool_entities_after_filter"
+    )
+    return SourceDomainPolicyResult(frame=configured_source, diagnostics=diagnostics)
 
 
 def _build_regenerated_payload(
@@ -208,10 +305,20 @@ def _build_regenerated_payload(
     if not feature_cols:
         raise ValueError("KNN payload requires non-empty feature_cols")
     for target_key, metadata in selection_metadata.items():
-        if metadata.get("selection_authority") != "runtime":
-            raise ValueError(f"selection_metadata[{target_key!r}] is not runtime authoritative")
-        if metadata.get("protocol_version") != D4_D6_RUNTIME_KNN_PROTOCOL_VERSION:
-            raise ValueError(f"selection_metadata[{target_key!r}] has invalid protocol_version")
+        authority = metadata.get("selection_authority")
+        version = metadata.get("protocol_version")
+        valid_runtime_metadata = (
+            authority == "runtime"
+            and version == D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
+        )
+        valid_shared_metadata = (
+            authority == "shared_protocol"
+            and version == PROTOCOL_VERSION
+        )
+        if not (valid_runtime_metadata or valid_shared_metadata):
+            raise ValueError(
+                f"selection_metadata[{target_key!r}] has unsupported selection authority/version"
+            )
 
     stable_keys = (
         "dataset_id",
@@ -279,12 +386,21 @@ def regenerate_dataset_scenario(
         windows=windows,
         source_history_days=SOURCE_HISTORY_DAYS,
     )
-    source_domain_policy = _filter_source_for_scenario(
-        source_df,
-        dataset_id=dataset_id,
-        scenario=scenario,
-        old_payload=old_payload,
-    )
+    if int(dataset_id) == 4:
+        source_domain_policy = _prepare_d4_runtime_source_pool(
+            source_df=source_df,
+            target_df=target_df,
+            target_entity_keys=[str(key) for key in old_payload.get("results", {})],
+            scenario=scenario,
+            old_payload=old_payload,
+        )
+    else:
+        source_domain_policy = _filter_source_for_scenario(
+            source_df,
+            dataset_id=dataset_id,
+            scenario=scenario,
+            old_payload=old_payload,
+        )
     source_df = source_domain_policy.frame
 
     existing_feature_info = old_payload.get("feature_info", {})
@@ -317,17 +433,50 @@ def regenerate_dataset_scenario(
         target_entity_df = target_df[target_df["entity_id"].astype(str) == str(target_entity_id)].copy()
         if target_entity_df.empty:
             raise ValueError(f"KNN target entity missing from runtime target frame: {target_entity_id}")
-        selected = selector.select_top_k_sources(
-            target_df=target_entity_df,
-            source_df=source_df,
-            feature_cols=feature_cols,
-            k=k,
-            group_cols=group_cols,
-        )
+        if int(dataset_id) == 4:
+            selected = _select_d4_shared_protocol(
+                source_df=source_df,
+                target_entity_df=target_entity_df,
+                scenario=scenario,
+                feature_cols=feature_cols,
+                k=k,
+                group_cols=group_cols,
+            )
+        else:
+            selected = selector.select_top_k_sources(
+                target_df=target_entity_df,
+                source_df=source_df,
+                feature_cols=feature_cols,
+                k=k,
+                group_cols=group_cols,
+            )
         new_rows = [_result_row(row, group_cols) for row in selected.get("sources", [])]
         selected_meta = selected.get("meta", {})
         if not isinstance(selected_meta, dict):
             raise ValueError(f"Runtime selector returned invalid metadata for target={target_entity_id}")
+        if int(dataset_id) == 4:
+            rule = get_experiment_protocol(4).source_pool_rule
+            selected_meta = {
+                **selected_meta,
+                "source_pool_policy": source_domain_policy.diagnostics.get(
+                    "source_pool_policy", ""
+                ),
+                "domain_filter_scope": source_domain_policy.diagnostics.get(
+                    "domain_filter_scope", ""
+                ),
+                "domain_filter_applied_to_source": source_domain_policy.diagnostics.get(
+                    "domain_filter_applied_to_source", False
+                ),
+                "source_pool_entity_count": source_domain_policy.diagnostics.get(
+                    "source_pool_entity_count"
+                ),
+                "require_same_group": rule.require_same_group,
+                "excluded_candidate_key_fields": [
+                    group_cols[position]
+                    for position in rule.candidate_exclusion_positions()
+                ],
+                "target_domain_filter": copy.deepcopy(old_payload.get("domain_filter")),
+            }
         new_selection_metadata[str(target_entity_id)] = copy.deepcopy(selected_meta)
         new_results[str(target_entity_id)] = new_rows
 

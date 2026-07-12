@@ -269,14 +269,26 @@ class InsufficientCandidatePoolError(ProtocolViolation):
         valid_count: int,
         required_k: int,
         exclusions: Sequence[Mapping[str, Any]],
+        eligible_count: int | None = None,
+        target_key: Sequence[object] | None = None,
+        scenario: str | None = None,
         sample_limit: int = 20,
     ) -> None:
         self.valid_count = int(valid_count)
         self.required_k = int(required_k)
+        self.eligible_count = (
+            int(eligible_count) if eligible_count is not None else self.valid_count + len(exclusions)
+        )
+        self.target_key = (
+            normalize_source_key(target_key) if target_key is not None else None
+        )
+        self.scenario = str(scenario) if scenario is not None else None
         self.exclusions = tuple(dict(item) for item in exclusions)
         samples = self.exclusions[: int(sample_limit)]
         super().__init__(
-            f"valid candidates={self.valid_count} is below required K={self.required_k}; "
+            f"scenario={self.scenario!r} target_key={self.target_key!r} "
+            f"eligible candidates={self.eligible_count} valid candidates={self.valid_count} "
+            f"is below required K={self.required_k}; "
             f"excluded_count={len(self.exclusions)} excluded_samples={samples!r}"
         )
 
@@ -590,6 +602,9 @@ def select_daily_sequence_sources(
             valid_count=len(valid_keys),
             required_k=k,
             exclusions=excluded,
+            eligible_count=len(normalized_candidates),
+            target_key=normalized_target,
+            scenario=normalized_scenario,
         )
 
     source_matrix = np.vstack(raw_vectors).astype(np.float64)

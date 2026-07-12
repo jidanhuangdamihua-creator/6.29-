@@ -128,7 +128,17 @@ def test_d4_d6_regenerated_payload_schema_group_cols_and_domain_diagnostics_pari
 
         entities_before = diagnostics["source_pool_entities_before_filter"]
         entities_after = diagnostics["source_pool_entities_after_filter"]
-        if scenario == "with":
+        if dataset_id == 4:
+            assert diagnostics["domain_filter_scope"] == "target_only"
+            assert diagnostics["domain_filter_applied_to_source"] is False
+            assert diagnostics["source_pool_policy"] == (
+                "without_information_sharing_same_store"
+                if scenario == "without"
+                else "with_information_sharing_cross_store"
+            )
+            assert diagnostics["source_pool_entity_count"] == entities_after
+            assert entities_before == entities_after
+        elif scenario == "with":
             assert diagnostics["source_domain_filter_applied"] is False
             assert diagnostics["source_pool_rows_before_filter"] == diagnostics[
                 "source_pool_rows_after_filter"

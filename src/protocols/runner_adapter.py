@@ -293,6 +293,8 @@ def configure_protocol_frames(
         "protocol_target_key": target_key,
         "protocol_candidate_keys": candidates,
         "protocol_group_cols": normalized_group_cols,
+        "protocol_observed_start": window.knn_observed_start.isoformat(),
+        "protocol_observed_days": 30,
         "knn_observed_start": window.knn_observed_start.isoformat(),
         "knn_observed_end": window.knn_observed_end.isoformat(),
         "source_observation_cutoff": window.source_observation_cutoff.isoformat(),
