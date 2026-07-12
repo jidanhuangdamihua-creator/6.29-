@@ -96,6 +96,19 @@ class SourcePoolRule:
     key_fields: Tuple[str, ...]
     target_key: Optional[SourceKey]
     grouping_field: Optional[str] = None
+    require_same_group: bool = True
+    excluded_candidate_key_fields: Tuple[str, ...] = ()
+
+    def candidate_exclusion_positions(self) -> Tuple[int, ...]:
+        positions = []
+        for field in self.excluded_candidate_key_fields:
+            try:
+                positions.append(self.key_fields.index(field))
+            except ValueError as exc:
+                raise ProtocolViolation(
+                    f"candidate exclusion field {field!r} is not a source key field"
+                ) from exc
+        return tuple(positions)
 
 
 @dataclass(frozen=True)
@@ -146,7 +159,13 @@ _PROTOCOLS = {
     "D4": ExperimentProtocol(
         "D4",
         EXTENDED_TRACK,
-        SourcePoolRule(("store", "item"), None, "category"),
+        SourcePoolRule(
+            ("store", "item"),
+            None,
+            "category",
+            require_same_group=False,
+            excluded_candidate_key_fields=("item",),
+        ),
     ),
     "D5": ExperimentProtocol(
         "D5",
@@ -246,17 +265,24 @@ def build_candidate_keys(
         raise ProtocolViolation(
             f"extended target key missing from available identities: {normalized_target!r}"
         )
-    if target_identity.group_value is None:
+    rule = protocol.source_pool_rule
+    if rule.require_same_group and target_identity.group_value is None:
         raise ProtocolViolation(
-            f"extended target {normalized_target!r} has no {protocol.source_pool_rule.grouping_field}"
+            f"extended target {normalized_target!r} has no {rule.grouping_field}"
         )
 
     target_store = normalized_target[0]
+    exclusion_positions = rule.candidate_exclusion_positions()
     candidates = []
     for identity in identities:
         if identity.key == normalized_target:
             continue
-        if identity.group_value != target_identity.group_value:
+        if any(
+            identity.key[position] == normalized_target[position]
+            for position in exclusion_positions
+        ):
+            continue
+        if rule.require_same_group and identity.group_value != target_identity.group_value:
             continue
         if normalized_scenario == "without" and identity.key[0] != target_store:
             continue

@@ -97,8 +97,21 @@ def _extended_candidates(
     scenario: str,
     target_key: Tuple[str, ...],
     group_cols: Sequence[str],
-    grouping_col: str,
+    grouping_col: str | None,
+    require_same_group: bool,
+    candidate_exclusion_positions: Sequence[int],
 ) -> Tuple[Tuple[str, ...], ...]:
+    if not require_same_group:
+        return _extended_candidates_from_identities(
+            tuple(SourceIdentity(key) for key in _available_keys(source_df, group_cols)),
+            scenario=scenario,
+            target_key=target_key,
+            target_group=None,
+            require_same_group=False,
+            candidate_exclusion_positions=candidate_exclusion_positions,
+        )
+    if grouping_col is None:
+        raise ProtocolViolation("extended protocol requires a grouping column")
     if grouping_col not in source_df.columns or grouping_col not in target_df.columns:
         raise ProtocolViolation(f"extended protocol requires grouping column {grouping_col!r}")
     target_groups = {
@@ -124,6 +137,8 @@ def _extended_candidates(
         scenario=scenario,
         target_key=target_key,
         target_group=target_group,
+        require_same_group=True,
+        candidate_exclusion_positions=candidate_exclusion_positions,
     )
 
 
@@ -132,14 +147,23 @@ def _extended_candidates_from_identities(
     *,
     scenario: str,
     target_key: Tuple[str, ...],
-    target_group: str,
+    target_group: str | None,
+    require_same_group: bool,
+    candidate_exclusion_positions: Sequence[int],
 ) -> Tuple[Tuple[str, ...], ...]:
     target_identity = SourceIdentity(target_key, target_group)
     all_identities = tuple(identities) + (target_identity,)
     candidates = []
     target_store = target_key[0]
     for identity in all_identities:
-        if identity.key == target_key or identity.group_value != target_group:
+        if identity.key == target_key:
+            continue
+        if any(
+            identity.key[position] == target_key[position]
+            for position in candidate_exclusion_positions
+        ):
+            continue
+        if require_same_group and identity.group_value != target_group:
             continue
         if scenario == "without" and identity.key[0] != target_store:
             continue
@@ -182,7 +206,9 @@ def configure_protocol_frames(
         else _available_keys(source_df, normalized_group_cols)
     )
     if protocol.track == EXTENDED_TRACK:
-        expected_group_col = grouping_col or protocol.source_pool_rule.grouping_field
+        rule = protocol.source_pool_rule
+        expected_group_col = grouping_col or rule.grouping_field
+        exclusion_positions = rule.candidate_exclusion_positions()
         if prepared_pool is None:
             candidates = _extended_candidates(
                 source_df,
@@ -190,34 +216,42 @@ def configure_protocol_frames(
                 scenario=normalized_scenario,
                 target_key=target_key,
                 group_cols=normalized_group_cols,
-                grouping_col=str(expected_group_col),
+                grouping_col=expected_group_col,
+                require_same_group=rule.require_same_group,
+                candidate_exclusion_positions=exclusion_positions,
             )
         else:
-            if str(expected_group_col) not in target_df.columns:
-                raise ProtocolViolation(
-                    f"extended target requires grouping column {expected_group_col!r}"
+            if rule.require_same_group:
+                if expected_group_col is None or expected_group_col not in target_df.columns:
+                    raise ProtocolViolation(
+                        f"extended target requires grouping column {expected_group_col!r}"
+                    )
+                target_groups = {
+                    str(value).strip()
+                    for value in target_df[expected_group_col].dropna().unique()
+                }
+                if len(target_groups) != 1:
+                    raise ProtocolViolation(
+                        f"extended target must contain exactly one {expected_group_col}, "
+                        f"got {sorted(target_groups)!r}"
+                    )
+                target_group = next(iter(target_groups))
+                identities = tuple(
+                    SourceIdentity(key, target_group)
+                    for key in prepared_pool.keys_for_metadata_value(
+                        expected_group_col, target_group
+                    )
                 )
-            target_groups = {
-                str(value).strip()
-                for value in target_df[str(expected_group_col)].dropna().unique()
-            }
-            if len(target_groups) != 1:
-                raise ProtocolViolation(
-                    f"extended target must contain exactly one {expected_group_col}, "
-                    f"got {sorted(target_groups)!r}"
-                )
-            target_group = next(iter(target_groups))
-            identities = tuple(
-                SourceIdentity(key, target_group)
-                for key in prepared_pool.keys_for_metadata_value(
-                    str(expected_group_col), target_group
-                )
-            )
+            else:
+                target_group = None
+                identities = tuple(SourceIdentity(key) for key in prepared_pool.source_keys)
             candidates = _extended_candidates_from_identities(
                 identities,
                 scenario=normalized_scenario,
                 target_key=target_key,
                 target_group=target_group,
+                require_same_group=rule.require_same_group,
+                candidate_exclusion_positions=exclusion_positions,
             )
     else:
         candidates = _strict_raw_candidates(

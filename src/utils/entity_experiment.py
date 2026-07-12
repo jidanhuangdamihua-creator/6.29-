@@ -558,7 +558,7 @@ def run_single_entity_experiment(
     source_df.attrs["information_sharing_scenario"] = scenario
     target_entity_df.attrs["information_sharing_scenario"] = scenario
     dataset_id = int(config.get("dataset_id", 0))
-    grouping_cols = {4: "second_category_id", 5: "family", 6: "dept_id"}
+    grouping_cols = {4: None, 5: "family", 6: "dept_id"}
     if dataset_id not in grouping_cols:
         raise ValueError(f"D4-D6 entity runner received unsupported dataset_id={dataset_id}")
     observed_start = target_entity_df.attrs.get(
