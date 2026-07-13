@@ -6,6 +6,8 @@ import pytest
 from scripts import aggregate_d1_d6_results as aggregate
 from src.constants import RESULT_CONTRACT_VERSION
 from src.evaluation.metric_contract import METRIC_CONTRACT_VERSION, SMAPE_DEFINITION_ID
+from src.evaluation.metric_contract import MetricProtocolError
+from src.protocols.experiment_protocol import FORMAL_SEEDS
 
 
 def _formal_row(**overrides):
@@ -36,9 +38,39 @@ def _formal_row(**overrides):
         "smape_range_max": 200.0,
         "sales_value_policy": "clip_negative_to_zero_v1",
         "target_negative_count": 0,
+        "metric_target_key": "target-a",
+        "metric_horizon": 1,
+        "metric_date_start": "2024-01-02",
+        "metric_date_end": "2024-01-03",
+        "metric_index_digest": "digest-target-a-42",
     }
     row.update(overrides)
+    row["metric_target_key"] = overrides.get(
+        "metric_target_key", row["target_entity_key"]
+    )
+    row["metric_horizon"] = overrides.get("metric_horizon", row["horizon"])
     return row
+
+
+def _formal_seed_rows(
+    *,
+    dataset: str = "D1",
+    target: str = "target-a",
+    method: str = "Method-A",
+    smapes=(10.0, 11.0, 12.0, 13.0, 14.0),
+):
+    return [
+        _formal_row(
+            dataset=dataset,
+            dataset_id=int(dataset[1:]),
+            target_entity_key=target,
+            method=method,
+            seed=seed,
+            smape=smape,
+            metric_index_digest=f"{dataset}-{target}-{method}-{seed}",
+        )
+        for seed, smape in zip(FORMAL_SEEDS, smapes)
+    ]
 
 
 def _write_result(path, *, dataset_id: int, mode: str, method: str = "No-TL") -> None:
@@ -363,3 +395,67 @@ def test_written_formal_summaries_preserve_horizon_and_sharing_dimensions(tmp_pa
     assert dataset_summary.groupby(["horizon", "sharing_scenario"]).ngroups == 4
     assert {"horizon", "information_sharing"}.issubset(best_by_target.columns)
     assert best_by_target.groupby(["horizon", "information_sharing"]).ngroups == 4
+
+
+@pytest.mark.parametrize("mutation", ["missing", "extra", "duplicate"])
+def test_formal_aggregation_rejects_invalid_seed_matrix(mutation) -> None:
+    rows = _formal_seed_rows()
+    if mutation == "missing":
+        rows.pop()
+    elif mutation == "extra":
+        rows.append(
+            _formal_row(
+                dataset="D1",
+                dataset_id=1,
+                target_entity_key="target-a",
+                method="Method-A",
+                seed=99,
+                smape=15.0,
+                metric_index_digest="D1-target-a-Method-A-99",
+            )
+        )
+    else:
+        rows.append(dict(rows[0]))
+
+    with pytest.raises(MetricProtocolError, match="formal_seed|duplicate_formal"):
+        aggregate.aggregate_formal_smape(
+            pd.DataFrame(rows),
+            expected_seeds=FORMAL_SEEDS,
+        )
+
+
+def test_formal_aggregation_uses_seed_then_target_then_dataset_macro() -> None:
+    rows = []
+    rows.extend(_formal_seed_rows(dataset="D1", target="t1", smapes=(1, 2, 3, 4, 5)))
+    rows.extend(_formal_seed_rows(dataset="D1", target="t2", smapes=(3, 4, 5, 6, 7)))
+    rows.extend(_formal_seed_rows(dataset="D2", target="t1", smapes=(5, 6, 7, 8, 9)))
+    rows.extend(_formal_seed_rows(dataset="D2", target="t2", smapes=(7, 8, 9, 10, 11)))
+
+    result = aggregate.aggregate_formal_smape(
+        pd.DataFrame(rows),
+        expected_seeds=FORMAL_SEEDS,
+    )
+
+    assert result["seed_mean"].sort_values(["dataset", "target"])["smape"].tolist() == [3.0, 5.0, 7.0, 9.0]
+    assert result["dataset_macro"].sort_values("dataset")["smape"].tolist() == [4.0, 8.0]
+    assert result["cross_dataset_macro"]["smape"].tolist() == [6.0]
+
+
+def test_best_method_outputs_preserve_seed_rows_but_choose_by_seed_mean(tmp_path) -> None:
+    rows = []
+    rows.extend(_formal_seed_rows(method="Method-A", smapes=(0, 100, 100, 100, 100)))
+    rows.extend(_formal_seed_rows(method="Method-B", smapes=(20, 20, 20, 20, 20)))
+    output = tmp_path / "formal.csv"
+
+    paths = aggregate._write_best_method_outputs(
+        output,
+        rows,
+        expected_seeds=FORMAL_SEEDS,
+    )
+
+    best_by_target = pd.read_csv(paths[0])
+    seed_detail = pd.read_csv(paths[2])
+    assert len(seed_detail) == len(rows)
+    assert {"seed", "seed_rank"}.issubset(seed_detail.columns)
+    assert best_by_target.loc[0, "best_method"] == "Method-B"
+    assert best_by_target.loc[0, "candidate_method_count"] == 2
