@@ -17,7 +17,15 @@
     "store_id",
     "product_id"
   ],
-  "source_pool_size": 573621,
+  "selection_authority": "runtime",
+  "protocol_version": "runtime_knn_windowed_stats_v1",
+  "results_semantics": "json_top_k_diagnostic_not_training_authority",
+  "training_selection_authority": "runtime_source_selector",
+  "json_results_used_for": [
+    "target_list",
+    "smoke_or_source_limit_candidate_pool",
+    "diagnostics"
+  ],
   "feature_cols": [
     "sales",
     "stock_hour6_22_cnt",
@@ -153,952 +161,6299 @@
     "include_sales_in_knn": true,
     "knn_feature_mode": "paper_available_features_no_ids"
   },
+  "source_pool_size": 3007705,
+  "source_domain_policy_diagnostics": {
+    "knn_json_domain_filter": {
+      "column": "first_category_id",
+      "value": 15
+    },
+    "source_domain_filter": null,
+    "source_domain_filter_applied": false,
+    "domain_filter_applied_to_source": false,
+    "domain_filter_scope": "target_only",
+    "domain_filter_column": "first_category_id",
+    "domain_filter_value": 15,
+    "target_domain_validation_passed": true,
+    "source_pool_policy": "without_information_sharing_same_store",
+    "source_domain_filter_reason": "domain_filter_target_only",
+    "source_pool_size_before_filter": 3007705,
+    "source_pool_size_after_filter": 3007705,
+    "source_pool_rows_before_filter": 3007705,
+    "source_pool_rows_after_filter": 3007705,
+    "excluded_source_row_count": 0,
+    "source_pool_entities_before_filter": 15982,
+    "source_pool_entities_after_filter": 15982,
+    "excluded_source_entity_count": 0,
+    "source_domain_filter_error": "",
+    "target_domain_validation_target_count": 5,
+    "source_pool_entity_count": 15982
+  },
   "results": {
     "166_258": [
       {
-        "source_entity": "180_432",
-        "source_store_id": 180,
-        "source_product_id": 432,
-        "distance": 10.389430204298982,
-        "weight": 0.34352377319367566
+        "source_entity": "166_184",
+        "distance": 0.3943636632290917,
+        "weight": 0.3348976837346105,
+        "source_store_id": "166",
+        "source_product_id": "184"
       },
       {
-        "source_entity": "268_247",
-        "source_store_id": 268,
-        "source_product_id": 247,
-        "distance": 10.85232223719882,
-        "weight": 0.32887120261007663
+        "source_entity": "166_560",
+        "distance": 0.39522872821337834,
+        "weight": 0.3341646695797514,
+        "source_store_id": "166",
+        "source_product_id": "560"
       },
       {
-        "source_entity": "383_432",
-        "source_store_id": 383,
-        "source_product_id": 432,
-        "distance": 10.894265965635316,
-        "weight": 0.3276050241962476
+        "source_entity": "166_530",
+        "distance": 0.39908266323527564,
+        "weight": 0.33093764668563813,
+        "source_store_id": "166",
+        "source_product_id": "530"
       }
     ],
     "166_432": [
       {
-        "source_entity": "383_261",
-        "source_store_id": 383,
-        "source_product_id": 261,
-        "distance": 9.981224220004279,
-        "weight": 0.35307606131971614
+        "source_entity": "166_506",
+        "distance": 0.5941755336301565,
+        "weight": 0.3581976533886098,
+        "source_store_id": "166",
+        "source_product_id": "506"
       },
       {
-        "source_entity": "193_247",
-        "source_store_id": 193,
-        "source_product_id": 247,
-        "distance": 10.629288651175111,
-        "weight": 0.33154912342828596
+        "source_entity": "166_242",
+        "distance": 0.6419397406070102,
+        "weight": 0.3315455776464568,
+        "source_store_id": "166",
+        "source_product_id": "242"
       },
       {
-        "source_entity": "329_261",
-        "source_store_id": 329,
-        "source_product_id": 261,
-        "distance": 11.174422194458199,
-        "weight": 0.31537481525199784
+        "source_entity": "166_510",
+        "distance": 0.6859875548781698,
+        "weight": 0.3102567689649335,
+        "source_store_id": "166",
+        "source_product_id": "510"
       }
     ],
     "166_433": [
       {
-        "source_entity": "329_261",
-        "source_store_id": 329,
-        "source_product_id": 261,
-        "distance": 14.326431843972875,
-        "weight": 0.3629774604797274
+        "source_entity": "166_184",
+        "distance": 0.4208339432960117,
+        "weight": 0.3532992866334921,
+        "source_store_id": "166",
+        "source_product_id": "184"
       },
       {
-        "source_entity": "268_247",
-        "source_store_id": 268,
-        "source_product_id": 247,
-        "distance": 16.2983038976453,
-        "weight": 0.319062147911699
+        "source_entity": "166_530",
+        "distance": 0.44036730721577544,
+        "weight": 0.33762799753320805,
+        "source_store_id": "166",
+        "source_product_id": "530"
       },
       {
-        "source_entity": "193_247",
-        "source_store_id": 193,
-        "source_product_id": 247,
-        "distance": 16.35477872763799,
-        "weight": 0.3179603916085736
+        "source_entity": "166_560",
+        "distance": 0.4810529198575318,
+        "weight": 0.3090727158332999,
+        "source_store_id": "166",
+        "source_product_id": "560"
       }
     ],
     "166_313": [
       {
-        "source_entity": "383_242",
-        "source_store_id": 383,
-        "source_product_id": 242,
-        "distance": 10.919714187193728,
-        "weight": 0.3584610949889452
+        "source_entity": "166_506",
+        "distance": 0.705263722270509,
+        "weight": 0.3443671901034923,
+        "source_store_id": "166",
+        "source_product_id": "506"
       },
       {
-        "source_entity": "268_247",
-        "source_store_id": 268,
-        "source_product_id": 247,
-        "distance": 11.36291313616363,
-        "weight": 0.34447968207993795
+        "source_entity": "166_548",
+        "distance": 0.7273585055998667,
+        "weight": 0.3339064361728102,
+        "source_store_id": "166",
+        "source_product_id": "548"
       },
       {
-        "source_entity": "166_242",
-        "source_store_id": 166,
-        "source_product_id": 242,
-        "distance": 13.17680921164149,
-        "weight": 0.29705922293111675
+        "source_entity": "166_510",
+        "distance": 0.7548951729870074,
+        "weight": 0.3217263737236974,
+        "source_store_id": "166",
+        "source_product_id": "510"
       }
     ],
     "166_311": [
       {
-        "source_entity": "383_242",
-        "source_store_id": 383,
-        "source_product_id": 242,
-        "distance": 12.656717541685127,
-        "weight": 0.3497428313311798
+        "source_entity": "166_506",
+        "distance": 0.44525355569941677,
+        "weight": 0.3662111903785728,
+        "source_store_id": "166",
+        "source_product_id": "506"
       },
       {
-        "source_entity": "577_433",
-        "source_store_id": 577,
-        "source_product_id": 433,
-        "distance": 13.208963930225565,
-        "weight": 0.3351206235339153
+        "source_entity": "166_548",
+        "distance": 0.47248313888939697,
+        "weight": 0.3451061454749517,
+        "source_store_id": "166",
+        "source_product_id": "548"
       },
       {
-        "source_entity": "174_247",
-        "source_store_id": 174,
-        "source_product_id": 247,
-        "distance": 14.046597568806476,
-        "weight": 0.31513654513490497
+        "source_entity": "166_510",
+        "distance": 0.5648307144121653,
+        "weight": 0.28868266414647537,
+        "source_store_id": "166",
+        "source_product_id": "510"
       }
     ]
   },
   "selection_metadata": {
     "166_258": {
+      "selection_authority": "shared_protocol",
+      "selection_path": "shared_protocol",
+      "protocol_track": "extended",
+      "protocol_version": "d1_d6_protocol_v1",
       "weight_mode": "inverse_distance",
       "distance_metric": "euclidean",
-      "knn_representation": "paper_observed_sequence",
-      "target_signature_dim": 195,
-      "feature_cols": [
-        "sales",
-        "stock_hour6_22_cnt",
-        "activity_flag",
-        "discount",
-        "holiday_flag",
-        "precpt",
-        "avg_temperature",
-        "avg_humidity",
-        "avg_wind_level",
-        "year",
-        "month",
-        "week",
-        "day"
-      ],
-      "signature_static_feature_cols": [],
-      "signature_component_breakdown": {
-        "time_series_sequence": [
-          "sales",
-          "stock_hour6_22_cnt",
-          "activity_flag",
-          "discount",
-          "holiday_flag",
-          "precpt",
-          "avg_temperature",
-          "avg_humidity",
-          "avg_wind_level",
-          "year",
-          "month",
-          "week",
-          "day"
-        ],
-        "static_metadata": []
-      },
-      "observed_window_rows": 15,
-      "observed_window_unique_dates": 15,
-      "source_window_alignment": "target_observed_dates",
-      "date_coverage_filter": {
-        "before_count": 732,
-        "after_count": 732,
-        "filtered_count": 0,
-        "required_dates": 15,
-        "filtered_entities": []
-      },
-      "trainable_window_filter": {
-        "before_count": 732,
-        "after_count": 727,
-        "filtered_count": 5,
-        "target_train_start": "2024-12-16",
-        "window_size": 10,
-        "horizon": 1,
-        "required_pre_target_rows": 14,
-        "required_source_train_rows": 11,
-        "source_train_ratio": 0.8,
-        "filtered_entities": [
-          {
-            "source_key": [
-              775,
-              242
-            ],
-            "source_key_display": "entity=775|item=242",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              775,
-              261
-            ],
-            "source_key_display": "entity=775|item=261",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              775,
-              432
-            ],
-            "source_key_display": "entity=775|item=432",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              796,
-              261
-            ],
-            "source_key_display": "entity=796|item=261",
-            "pre_target_rows": 9,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              803,
-              261
-            ],
-            "source_key_display": "entity=803|item=261",
-            "pre_target_rows": 7,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          }
-        ],
-        "enabled": true
-      },
-      "target_window_source": "provided_target_df",
-      "target_test_data_excluded": false,
-      "truncation_reason": "no_truncation",
-      "target_group_count": 1,
-      "target_series_mode": "single_group",
-      "target_series_key": [
-        166,
-        258
-      ],
-      "include_sales_in_knn": true,
-      "contains_sales": true,
-      "knn_feature_mode": "paper_available_features_no_ids",
-      "requested_feature_cols": [
-        "sales",
-        "stock_hour6_22_cnt",
-        "activity_flag",
-        "discount",
-        "holiday_flag",
-        "precpt",
-        "avg_temperature",
-        "avg_humidity",
-        "avg_wind_level",
-        "year",
-        "month",
-        "week",
-        "day"
-      ],
-      "missing_in_source": [],
-      "missing_in_target": [],
-      "excluded_by_rule": [
-        "city_id",
+      "group_cols": [
         "store_id",
-        "management_group_id",
-        "first_category_id",
-        "second_category_id",
-        "third_category_id",
-        "product_id",
-        "hours_sale_sum_leakage_risk",
-        "hours_sale_max_leakage_risk",
-        "hours_sale_nonzero_hours_leakage_risk",
-        "hours_stock_sum_leakage_risk",
-        "hours_stock_max_leakage_risk",
-        "hours_stock_nonzero_hours_leakage_risk"
+        "product_id"
       ],
-      "adaptive_selection_info": {
-        "adaptive_selection_used": false
+      "target_signature_dim": 30,
+      "feature_cols": [
+        "sales"
+      ],
+      "requested_feature_cols": [
+        "sales"
+      ],
+      "representation": "daily_sales_flattened_30d",
+      "knn_representation": "daily_sales_flattened_30d",
+      "scaling": "global_minmax_legal_observed_values",
+      "scaler_fit_scope": "target_and_candidate_legal_observed_values",
+      "knn_observed_start": "2024-12-16",
+      "knn_observed_end": "2025-01-14",
+      "protocol_observed_start": "2024-12-16",
+      "protocol_observed_days": 30,
+      "target_observed_start": "2024-12-16",
+      "target_observed_end": "2025-01-14",
+      "source_observation_cutoff": "2025-01-14",
+      "target_test_excluded": true,
+      "source_future_excluded": true,
+      "source_alignment_mode": "exact_knn_observed_dates",
+      "candidate_pool_digest": "7940a1c51eee067b1bcd5868aee2cf70c53be1aaa9e54dec49c826873658206a",
+      "candidate_pool_digest_input": {
+        "protocol_version": "d1_d6_protocol_v1",
+        "dataset_id": "D4",
+        "scenario": "without",
+        "target_key": [
+          "166",
+          "258"
+        ],
+        "group_cols": [
+          "store_id",
+          "product_id"
+        ],
+        "candidate_keys": [
+          [
+            "166",
+            "12"
+          ],
+          [
+            "166",
+            "133"
+          ],
+          [
+            "166",
+            "143"
+          ],
+          [
+            "166",
+            "150"
+          ],
+          [
+            "166",
+            "166"
+          ],
+          [
+            "166",
+            "167"
+          ],
+          [
+            "166",
+            "184"
+          ],
+          [
+            "166",
+            "189"
+          ],
+          [
+            "166",
+            "205"
+          ],
+          [
+            "166",
+            "227"
+          ],
+          [
+            "166",
+            "229"
+          ],
+          [
+            "166",
+            "230"
+          ],
+          [
+            "166",
+            "236"
+          ],
+          [
+            "166",
+            "242"
+          ],
+          [
+            "166",
+            "244"
+          ],
+          [
+            "166",
+            "246"
+          ],
+          [
+            "166",
+            "266"
+          ],
+          [
+            "166",
+            "269"
+          ],
+          [
+            "166",
+            "277"
+          ],
+          [
+            "166",
+            "291"
+          ],
+          [
+            "166",
+            "297"
+          ],
+          [
+            "166",
+            "307"
+          ],
+          [
+            "166",
+            "336"
+          ],
+          [
+            "166",
+            "338"
+          ],
+          [
+            "166",
+            "357"
+          ],
+          [
+            "166",
+            "375"
+          ],
+          [
+            "166",
+            "394"
+          ],
+          [
+            "166",
+            "413"
+          ],
+          [
+            "166",
+            "417"
+          ],
+          [
+            "166",
+            "427"
+          ],
+          [
+            "166",
+            "441"
+          ],
+          [
+            "166",
+            "470"
+          ],
+          [
+            "166",
+            "474"
+          ],
+          [
+            "166",
+            "492"
+          ],
+          [
+            "166",
+            "506"
+          ],
+          [
+            "166",
+            "510"
+          ],
+          [
+            "166",
+            "518"
+          ],
+          [
+            "166",
+            "529"
+          ],
+          [
+            "166",
+            "530"
+          ],
+          [
+            "166",
+            "542"
+          ],
+          [
+            "166",
+            "548"
+          ],
+          [
+            "166",
+            "555"
+          ],
+          [
+            "166",
+            "560"
+          ],
+          [
+            "166",
+            "6"
+          ],
+          [
+            "166",
+            "7"
+          ],
+          [
+            "166",
+            "72"
+          ],
+          [
+            "166",
+            "83"
+          ],
+          [
+            "166",
+            "90"
+          ],
+          [
+            "166",
+            "99"
+          ]
+        ],
+        "observed_start": "2024-12-16",
+        "observed_end": "2025-01-14",
+        "feature_cols": [
+          "sales"
+        ]
+      },
+      "selection_result_digest": "426aedd61c0748c02bed086b862c25a3df8a54101b5ae1171c393350f73664c4",
+      "selected_sources_runtime": [
+        {
+          "source_rank": 1,
+          "source_key": [
+            "166",
+            "184"
+          ],
+          "distance": 0.3943636632290917,
+          "weight": 0.3348976837346105,
+          "tie_group": 1,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        },
+        {
+          "source_rank": 2,
+          "source_key": [
+            "166",
+            "560"
+          ],
+          "distance": 0.39522872821337834,
+          "weight": 0.3341646695797514,
+          "tie_group": 2,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        },
+        {
+          "source_rank": 3,
+          "source_key": [
+            "166",
+            "530"
+          ],
+          "distance": 0.39908266323527564,
+          "weight": 0.33093764668563813,
+          "tie_group": 3,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        }
+      ],
+      "source_skip_diagnostics": [
+        {
+          "source_key": [
+            "166",
+            "12"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "143"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "166"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "189"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "291"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "336"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "338"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "375"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "427"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "470"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "474"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "518"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "529"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "542"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "555"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        }
+      ],
+      "candidate_source_count": 49,
+      "valid_source_count": 34,
+      "eligible_candidate_keys": [
+        [
+          "166",
+          "12"
+        ],
+        [
+          "166",
+          "133"
+        ],
+        [
+          "166",
+          "143"
+        ],
+        [
+          "166",
+          "150"
+        ],
+        [
+          "166",
+          "166"
+        ],
+        [
+          "166",
+          "167"
+        ],
+        [
+          "166",
+          "184"
+        ],
+        [
+          "166",
+          "189"
+        ],
+        [
+          "166",
+          "205"
+        ],
+        [
+          "166",
+          "227"
+        ],
+        [
+          "166",
+          "229"
+        ],
+        [
+          "166",
+          "230"
+        ],
+        [
+          "166",
+          "236"
+        ],
+        [
+          "166",
+          "242"
+        ],
+        [
+          "166",
+          "244"
+        ],
+        [
+          "166",
+          "246"
+        ],
+        [
+          "166",
+          "266"
+        ],
+        [
+          "166",
+          "269"
+        ],
+        [
+          "166",
+          "277"
+        ],
+        [
+          "166",
+          "291"
+        ],
+        [
+          "166",
+          "297"
+        ],
+        [
+          "166",
+          "307"
+        ],
+        [
+          "166",
+          "336"
+        ],
+        [
+          "166",
+          "338"
+        ],
+        [
+          "166",
+          "357"
+        ],
+        [
+          "166",
+          "375"
+        ],
+        [
+          "166",
+          "394"
+        ],
+        [
+          "166",
+          "413"
+        ],
+        [
+          "166",
+          "417"
+        ],
+        [
+          "166",
+          "427"
+        ],
+        [
+          "166",
+          "441"
+        ],
+        [
+          "166",
+          "470"
+        ],
+        [
+          "166",
+          "474"
+        ],
+        [
+          "166",
+          "492"
+        ],
+        [
+          "166",
+          "506"
+        ],
+        [
+          "166",
+          "510"
+        ],
+        [
+          "166",
+          "518"
+        ],
+        [
+          "166",
+          "529"
+        ],
+        [
+          "166",
+          "530"
+        ],
+        [
+          "166",
+          "542"
+        ],
+        [
+          "166",
+          "548"
+        ],
+        [
+          "166",
+          "555"
+        ],
+        [
+          "166",
+          "560"
+        ],
+        [
+          "166",
+          "6"
+        ],
+        [
+          "166",
+          "7"
+        ],
+        [
+          "166",
+          "72"
+        ],
+        [
+          "166",
+          "83"
+        ],
+        [
+          "166",
+          "90"
+        ],
+        [
+          "166",
+          "99"
+        ]
+      ],
+      "valid_30d_candidate_keys": [
+        [
+          "166",
+          "133"
+        ],
+        [
+          "166",
+          "150"
+        ],
+        [
+          "166",
+          "167"
+        ],
+        [
+          "166",
+          "184"
+        ],
+        [
+          "166",
+          "205"
+        ],
+        [
+          "166",
+          "227"
+        ],
+        [
+          "166",
+          "229"
+        ],
+        [
+          "166",
+          "230"
+        ],
+        [
+          "166",
+          "236"
+        ],
+        [
+          "166",
+          "242"
+        ],
+        [
+          "166",
+          "244"
+        ],
+        [
+          "166",
+          "246"
+        ],
+        [
+          "166",
+          "266"
+        ],
+        [
+          "166",
+          "269"
+        ],
+        [
+          "166",
+          "277"
+        ],
+        [
+          "166",
+          "297"
+        ],
+        [
+          "166",
+          "307"
+        ],
+        [
+          "166",
+          "357"
+        ],
+        [
+          "166",
+          "394"
+        ],
+        [
+          "166",
+          "413"
+        ],
+        [
+          "166",
+          "417"
+        ],
+        [
+          "166",
+          "441"
+        ],
+        [
+          "166",
+          "492"
+        ],
+        [
+          "166",
+          "506"
+        ],
+        [
+          "166",
+          "510"
+        ],
+        [
+          "166",
+          "530"
+        ],
+        [
+          "166",
+          "548"
+        ],
+        [
+          "166",
+          "560"
+        ],
+        [
+          "166",
+          "6"
+        ],
+        [
+          "166",
+          "7"
+        ],
+        [
+          "166",
+          "72"
+        ],
+        [
+          "166",
+          "83"
+        ],
+        [
+          "166",
+          "90"
+        ],
+        [
+          "166",
+          "99"
+        ]
+      ],
+      "eligible_candidate_count": 49,
+      "valid_30d_candidate_count": 34,
+      "selected_count": 3,
+      "observed_days": 30,
+      "skipped_source_count": 15,
+      "requested_k": 3,
+      "effective_k": 3,
+      "scaler_min": 0.0,
+      "scaler_max": 4.9,
+      "cnn_provenance_validated": true,
+      "cnn_provenance_source_keys": [
+        [
+          "166",
+          "184"
+        ],
+        [
+          "166",
+          "560"
+        ],
+        [
+          "166",
+          "530"
+        ]
+      ],
+      "cnn_provenance_sample_counts": [
+        20,
+        20,
+        20
+      ],
+      "source_pool_policy": "without_information_sharing_same_store",
+      "domain_filter_scope": "target_only",
+      "domain_filter_applied_to_source": false,
+      "source_pool_entity_count": 15982,
+      "require_same_group": false,
+      "excluded_candidate_key_fields": [
+        "product_id"
+      ],
+      "target_domain_filter": {
+        "column": "first_category_id",
+        "value": 15
       }
     },
     "166_432": {
+      "selection_authority": "shared_protocol",
+      "selection_path": "shared_protocol",
+      "protocol_track": "extended",
+      "protocol_version": "d1_d6_protocol_v1",
       "weight_mode": "inverse_distance",
       "distance_metric": "euclidean",
-      "knn_representation": "paper_observed_sequence",
-      "target_signature_dim": 195,
-      "feature_cols": [
-        "sales",
-        "stock_hour6_22_cnt",
-        "activity_flag",
-        "discount",
-        "holiday_flag",
-        "precpt",
-        "avg_temperature",
-        "avg_humidity",
-        "avg_wind_level",
-        "year",
-        "month",
-        "week",
-        "day"
-      ],
-      "signature_static_feature_cols": [],
-      "signature_component_breakdown": {
-        "time_series_sequence": [
-          "sales",
-          "stock_hour6_22_cnt",
-          "activity_flag",
-          "discount",
-          "holiday_flag",
-          "precpt",
-          "avg_temperature",
-          "avg_humidity",
-          "avg_wind_level",
-          "year",
-          "month",
-          "week",
-          "day"
-        ],
-        "static_metadata": []
-      },
-      "observed_window_rows": 15,
-      "observed_window_unique_dates": 15,
-      "source_window_alignment": "target_observed_dates",
-      "date_coverage_filter": {
-        "before_count": 732,
-        "after_count": 732,
-        "filtered_count": 0,
-        "required_dates": 15,
-        "filtered_entities": []
-      },
-      "trainable_window_filter": {
-        "before_count": 732,
-        "after_count": 727,
-        "filtered_count": 5,
-        "target_train_start": "2024-12-16",
-        "window_size": 10,
-        "horizon": 1,
-        "required_pre_target_rows": 14,
-        "required_source_train_rows": 11,
-        "source_train_ratio": 0.8,
-        "filtered_entities": [
-          {
-            "source_key": [
-              775,
-              242
-            ],
-            "source_key_display": "entity=775|item=242",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              775,
-              261
-            ],
-            "source_key_display": "entity=775|item=261",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              775,
-              432
-            ],
-            "source_key_display": "entity=775|item=432",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              796,
-              261
-            ],
-            "source_key_display": "entity=796|item=261",
-            "pre_target_rows": 9,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              803,
-              261
-            ],
-            "source_key_display": "entity=803|item=261",
-            "pre_target_rows": 7,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          }
-        ],
-        "enabled": true
-      },
-      "target_window_source": "provided_target_df",
-      "target_test_data_excluded": false,
-      "truncation_reason": "no_truncation",
-      "target_group_count": 1,
-      "target_series_mode": "single_group",
-      "target_series_key": [
-        166,
-        432
-      ],
-      "include_sales_in_knn": true,
-      "contains_sales": true,
-      "knn_feature_mode": "paper_available_features_no_ids",
-      "requested_feature_cols": [
-        "sales",
-        "stock_hour6_22_cnt",
-        "activity_flag",
-        "discount",
-        "holiday_flag",
-        "precpt",
-        "avg_temperature",
-        "avg_humidity",
-        "avg_wind_level",
-        "year",
-        "month",
-        "week",
-        "day"
-      ],
-      "missing_in_source": [],
-      "missing_in_target": [],
-      "excluded_by_rule": [
-        "city_id",
+      "group_cols": [
         "store_id",
-        "management_group_id",
-        "first_category_id",
-        "second_category_id",
-        "third_category_id",
-        "product_id",
-        "hours_sale_sum_leakage_risk",
-        "hours_sale_max_leakage_risk",
-        "hours_sale_nonzero_hours_leakage_risk",
-        "hours_stock_sum_leakage_risk",
-        "hours_stock_max_leakage_risk",
-        "hours_stock_nonzero_hours_leakage_risk"
+        "product_id"
       ],
-      "adaptive_selection_info": {
-        "adaptive_selection_used": false
+      "target_signature_dim": 30,
+      "feature_cols": [
+        "sales"
+      ],
+      "requested_feature_cols": [
+        "sales"
+      ],
+      "representation": "daily_sales_flattened_30d",
+      "knn_representation": "daily_sales_flattened_30d",
+      "scaling": "global_minmax_legal_observed_values",
+      "scaler_fit_scope": "target_and_candidate_legal_observed_values",
+      "knn_observed_start": "2024-12-16",
+      "knn_observed_end": "2025-01-14",
+      "protocol_observed_start": "2024-12-16",
+      "protocol_observed_days": 30,
+      "target_observed_start": "2024-12-16",
+      "target_observed_end": "2025-01-14",
+      "source_observation_cutoff": "2025-01-14",
+      "target_test_excluded": true,
+      "source_future_excluded": true,
+      "source_alignment_mode": "exact_knn_observed_dates",
+      "candidate_pool_digest": "286d273987e7ff2ac98e0e53b44539c5a8a2901d786ac5afceb1d024f6abee91",
+      "candidate_pool_digest_input": {
+        "protocol_version": "d1_d6_protocol_v1",
+        "dataset_id": "D4",
+        "scenario": "without",
+        "target_key": [
+          "166",
+          "432"
+        ],
+        "group_cols": [
+          "store_id",
+          "product_id"
+        ],
+        "candidate_keys": [
+          [
+            "166",
+            "12"
+          ],
+          [
+            "166",
+            "133"
+          ],
+          [
+            "166",
+            "143"
+          ],
+          [
+            "166",
+            "150"
+          ],
+          [
+            "166",
+            "166"
+          ],
+          [
+            "166",
+            "167"
+          ],
+          [
+            "166",
+            "184"
+          ],
+          [
+            "166",
+            "189"
+          ],
+          [
+            "166",
+            "205"
+          ],
+          [
+            "166",
+            "227"
+          ],
+          [
+            "166",
+            "229"
+          ],
+          [
+            "166",
+            "230"
+          ],
+          [
+            "166",
+            "236"
+          ],
+          [
+            "166",
+            "242"
+          ],
+          [
+            "166",
+            "244"
+          ],
+          [
+            "166",
+            "246"
+          ],
+          [
+            "166",
+            "266"
+          ],
+          [
+            "166",
+            "269"
+          ],
+          [
+            "166",
+            "277"
+          ],
+          [
+            "166",
+            "291"
+          ],
+          [
+            "166",
+            "297"
+          ],
+          [
+            "166",
+            "307"
+          ],
+          [
+            "166",
+            "336"
+          ],
+          [
+            "166",
+            "338"
+          ],
+          [
+            "166",
+            "357"
+          ],
+          [
+            "166",
+            "375"
+          ],
+          [
+            "166",
+            "394"
+          ],
+          [
+            "166",
+            "413"
+          ],
+          [
+            "166",
+            "417"
+          ],
+          [
+            "166",
+            "427"
+          ],
+          [
+            "166",
+            "441"
+          ],
+          [
+            "166",
+            "470"
+          ],
+          [
+            "166",
+            "474"
+          ],
+          [
+            "166",
+            "492"
+          ],
+          [
+            "166",
+            "506"
+          ],
+          [
+            "166",
+            "510"
+          ],
+          [
+            "166",
+            "518"
+          ],
+          [
+            "166",
+            "529"
+          ],
+          [
+            "166",
+            "530"
+          ],
+          [
+            "166",
+            "542"
+          ],
+          [
+            "166",
+            "548"
+          ],
+          [
+            "166",
+            "555"
+          ],
+          [
+            "166",
+            "560"
+          ],
+          [
+            "166",
+            "6"
+          ],
+          [
+            "166",
+            "7"
+          ],
+          [
+            "166",
+            "72"
+          ],
+          [
+            "166",
+            "83"
+          ],
+          [
+            "166",
+            "90"
+          ],
+          [
+            "166",
+            "99"
+          ]
+        ],
+        "observed_start": "2024-12-16",
+        "observed_end": "2025-01-14",
+        "feature_cols": [
+          "sales"
+        ]
+      },
+      "selection_result_digest": "a642de6ede6a27949ab7293ad74702af7fe7e94584898b293442827fbd63b616",
+      "selected_sources_runtime": [
+        {
+          "source_rank": 1,
+          "source_key": [
+            "166",
+            "506"
+          ],
+          "distance": 0.5941755336301565,
+          "weight": 0.3581976533886098,
+          "tie_group": 1,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        },
+        {
+          "source_rank": 2,
+          "source_key": [
+            "166",
+            "242"
+          ],
+          "distance": 0.6419397406070102,
+          "weight": 0.3315455776464568,
+          "tie_group": 2,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        },
+        {
+          "source_rank": 3,
+          "source_key": [
+            "166",
+            "510"
+          ],
+          "distance": 0.6859875548781698,
+          "weight": 0.3102567689649335,
+          "tie_group": 3,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        }
+      ],
+      "source_skip_diagnostics": [
+        {
+          "source_key": [
+            "166",
+            "12"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "143"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "166"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "189"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "291"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "336"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "338"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "375"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "427"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "470"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "474"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "518"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "529"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "542"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "555"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        }
+      ],
+      "candidate_source_count": 49,
+      "valid_source_count": 34,
+      "eligible_candidate_keys": [
+        [
+          "166",
+          "12"
+        ],
+        [
+          "166",
+          "133"
+        ],
+        [
+          "166",
+          "143"
+        ],
+        [
+          "166",
+          "150"
+        ],
+        [
+          "166",
+          "166"
+        ],
+        [
+          "166",
+          "167"
+        ],
+        [
+          "166",
+          "184"
+        ],
+        [
+          "166",
+          "189"
+        ],
+        [
+          "166",
+          "205"
+        ],
+        [
+          "166",
+          "227"
+        ],
+        [
+          "166",
+          "229"
+        ],
+        [
+          "166",
+          "230"
+        ],
+        [
+          "166",
+          "236"
+        ],
+        [
+          "166",
+          "242"
+        ],
+        [
+          "166",
+          "244"
+        ],
+        [
+          "166",
+          "246"
+        ],
+        [
+          "166",
+          "266"
+        ],
+        [
+          "166",
+          "269"
+        ],
+        [
+          "166",
+          "277"
+        ],
+        [
+          "166",
+          "291"
+        ],
+        [
+          "166",
+          "297"
+        ],
+        [
+          "166",
+          "307"
+        ],
+        [
+          "166",
+          "336"
+        ],
+        [
+          "166",
+          "338"
+        ],
+        [
+          "166",
+          "357"
+        ],
+        [
+          "166",
+          "375"
+        ],
+        [
+          "166",
+          "394"
+        ],
+        [
+          "166",
+          "413"
+        ],
+        [
+          "166",
+          "417"
+        ],
+        [
+          "166",
+          "427"
+        ],
+        [
+          "166",
+          "441"
+        ],
+        [
+          "166",
+          "470"
+        ],
+        [
+          "166",
+          "474"
+        ],
+        [
+          "166",
+          "492"
+        ],
+        [
+          "166",
+          "506"
+        ],
+        [
+          "166",
+          "510"
+        ],
+        [
+          "166",
+          "518"
+        ],
+        [
+          "166",
+          "529"
+        ],
+        [
+          "166",
+          "530"
+        ],
+        [
+          "166",
+          "542"
+        ],
+        [
+          "166",
+          "548"
+        ],
+        [
+          "166",
+          "555"
+        ],
+        [
+          "166",
+          "560"
+        ],
+        [
+          "166",
+          "6"
+        ],
+        [
+          "166",
+          "7"
+        ],
+        [
+          "166",
+          "72"
+        ],
+        [
+          "166",
+          "83"
+        ],
+        [
+          "166",
+          "90"
+        ],
+        [
+          "166",
+          "99"
+        ]
+      ],
+      "valid_30d_candidate_keys": [
+        [
+          "166",
+          "133"
+        ],
+        [
+          "166",
+          "150"
+        ],
+        [
+          "166",
+          "167"
+        ],
+        [
+          "166",
+          "184"
+        ],
+        [
+          "166",
+          "205"
+        ],
+        [
+          "166",
+          "227"
+        ],
+        [
+          "166",
+          "229"
+        ],
+        [
+          "166",
+          "230"
+        ],
+        [
+          "166",
+          "236"
+        ],
+        [
+          "166",
+          "242"
+        ],
+        [
+          "166",
+          "244"
+        ],
+        [
+          "166",
+          "246"
+        ],
+        [
+          "166",
+          "266"
+        ],
+        [
+          "166",
+          "269"
+        ],
+        [
+          "166",
+          "277"
+        ],
+        [
+          "166",
+          "297"
+        ],
+        [
+          "166",
+          "307"
+        ],
+        [
+          "166",
+          "357"
+        ],
+        [
+          "166",
+          "394"
+        ],
+        [
+          "166",
+          "413"
+        ],
+        [
+          "166",
+          "417"
+        ],
+        [
+          "166",
+          "441"
+        ],
+        [
+          "166",
+          "492"
+        ],
+        [
+          "166",
+          "506"
+        ],
+        [
+          "166",
+          "510"
+        ],
+        [
+          "166",
+          "530"
+        ],
+        [
+          "166",
+          "548"
+        ],
+        [
+          "166",
+          "560"
+        ],
+        [
+          "166",
+          "6"
+        ],
+        [
+          "166",
+          "7"
+        ],
+        [
+          "166",
+          "72"
+        ],
+        [
+          "166",
+          "83"
+        ],
+        [
+          "166",
+          "90"
+        ],
+        [
+          "166",
+          "99"
+        ]
+      ],
+      "eligible_candidate_count": 49,
+      "valid_30d_candidate_count": 34,
+      "selected_count": 3,
+      "observed_days": 30,
+      "skipped_source_count": 15,
+      "requested_k": 3,
+      "effective_k": 3,
+      "scaler_min": 0.0,
+      "scaler_max": 4.9,
+      "cnn_provenance_validated": true,
+      "cnn_provenance_source_keys": [
+        [
+          "166",
+          "506"
+        ],
+        [
+          "166",
+          "242"
+        ],
+        [
+          "166",
+          "510"
+        ]
+      ],
+      "cnn_provenance_sample_counts": [
+        20,
+        20,
+        20
+      ],
+      "source_pool_policy": "without_information_sharing_same_store",
+      "domain_filter_scope": "target_only",
+      "domain_filter_applied_to_source": false,
+      "source_pool_entity_count": 15982,
+      "require_same_group": false,
+      "excluded_candidate_key_fields": [
+        "product_id"
+      ],
+      "target_domain_filter": {
+        "column": "first_category_id",
+        "value": 15
       }
     },
     "166_433": {
+      "selection_authority": "shared_protocol",
+      "selection_path": "shared_protocol",
+      "protocol_track": "extended",
+      "protocol_version": "d1_d6_protocol_v1",
       "weight_mode": "inverse_distance",
       "distance_metric": "euclidean",
-      "knn_representation": "paper_observed_sequence",
-      "target_signature_dim": 195,
-      "feature_cols": [
-        "sales",
-        "stock_hour6_22_cnt",
-        "activity_flag",
-        "discount",
-        "holiday_flag",
-        "precpt",
-        "avg_temperature",
-        "avg_humidity",
-        "avg_wind_level",
-        "year",
-        "month",
-        "week",
-        "day"
-      ],
-      "signature_static_feature_cols": [],
-      "signature_component_breakdown": {
-        "time_series_sequence": [
-          "sales",
-          "stock_hour6_22_cnt",
-          "activity_flag",
-          "discount",
-          "holiday_flag",
-          "precpt",
-          "avg_temperature",
-          "avg_humidity",
-          "avg_wind_level",
-          "year",
-          "month",
-          "week",
-          "day"
-        ],
-        "static_metadata": []
-      },
-      "observed_window_rows": 15,
-      "observed_window_unique_dates": 15,
-      "source_window_alignment": "target_observed_dates",
-      "date_coverage_filter": {
-        "before_count": 732,
-        "after_count": 732,
-        "filtered_count": 0,
-        "required_dates": 15,
-        "filtered_entities": []
-      },
-      "trainable_window_filter": {
-        "before_count": 732,
-        "after_count": 727,
-        "filtered_count": 5,
-        "target_train_start": "2024-12-16",
-        "window_size": 10,
-        "horizon": 1,
-        "required_pre_target_rows": 14,
-        "required_source_train_rows": 11,
-        "source_train_ratio": 0.8,
-        "filtered_entities": [
-          {
-            "source_key": [
-              775,
-              242
-            ],
-            "source_key_display": "entity=775|item=242",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              775,
-              261
-            ],
-            "source_key_display": "entity=775|item=261",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              775,
-              432
-            ],
-            "source_key_display": "entity=775|item=432",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              796,
-              261
-            ],
-            "source_key_display": "entity=796|item=261",
-            "pre_target_rows": 9,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              803,
-              261
-            ],
-            "source_key_display": "entity=803|item=261",
-            "pre_target_rows": 7,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          }
-        ],
-        "enabled": true
-      },
-      "target_window_source": "provided_target_df",
-      "target_test_data_excluded": false,
-      "truncation_reason": "no_truncation",
-      "target_group_count": 1,
-      "target_series_mode": "single_group",
-      "target_series_key": [
-        166,
-        433
-      ],
-      "include_sales_in_knn": true,
-      "contains_sales": true,
-      "knn_feature_mode": "paper_available_features_no_ids",
-      "requested_feature_cols": [
-        "sales",
-        "stock_hour6_22_cnt",
-        "activity_flag",
-        "discount",
-        "holiday_flag",
-        "precpt",
-        "avg_temperature",
-        "avg_humidity",
-        "avg_wind_level",
-        "year",
-        "month",
-        "week",
-        "day"
-      ],
-      "missing_in_source": [],
-      "missing_in_target": [],
-      "excluded_by_rule": [
-        "city_id",
+      "group_cols": [
         "store_id",
-        "management_group_id",
-        "first_category_id",
-        "second_category_id",
-        "third_category_id",
-        "product_id",
-        "hours_sale_sum_leakage_risk",
-        "hours_sale_max_leakage_risk",
-        "hours_sale_nonzero_hours_leakage_risk",
-        "hours_stock_sum_leakage_risk",
-        "hours_stock_max_leakage_risk",
-        "hours_stock_nonzero_hours_leakage_risk"
+        "product_id"
       ],
-      "adaptive_selection_info": {
-        "adaptive_selection_used": false
+      "target_signature_dim": 30,
+      "feature_cols": [
+        "sales"
+      ],
+      "requested_feature_cols": [
+        "sales"
+      ],
+      "representation": "daily_sales_flattened_30d",
+      "knn_representation": "daily_sales_flattened_30d",
+      "scaling": "global_minmax_legal_observed_values",
+      "scaler_fit_scope": "target_and_candidate_legal_observed_values",
+      "knn_observed_start": "2024-12-16",
+      "knn_observed_end": "2025-01-14",
+      "protocol_observed_start": "2024-12-16",
+      "protocol_observed_days": 30,
+      "target_observed_start": "2024-12-16",
+      "target_observed_end": "2025-01-14",
+      "source_observation_cutoff": "2025-01-14",
+      "target_test_excluded": true,
+      "source_future_excluded": true,
+      "source_alignment_mode": "exact_knn_observed_dates",
+      "candidate_pool_digest": "6be3acdca16cea9ad34356ed69866a10d2fa9810b3585fe0fb405c069e12b559",
+      "candidate_pool_digest_input": {
+        "protocol_version": "d1_d6_protocol_v1",
+        "dataset_id": "D4",
+        "scenario": "without",
+        "target_key": [
+          "166",
+          "433"
+        ],
+        "group_cols": [
+          "store_id",
+          "product_id"
+        ],
+        "candidate_keys": [
+          [
+            "166",
+            "12"
+          ],
+          [
+            "166",
+            "133"
+          ],
+          [
+            "166",
+            "143"
+          ],
+          [
+            "166",
+            "150"
+          ],
+          [
+            "166",
+            "166"
+          ],
+          [
+            "166",
+            "167"
+          ],
+          [
+            "166",
+            "184"
+          ],
+          [
+            "166",
+            "189"
+          ],
+          [
+            "166",
+            "205"
+          ],
+          [
+            "166",
+            "227"
+          ],
+          [
+            "166",
+            "229"
+          ],
+          [
+            "166",
+            "230"
+          ],
+          [
+            "166",
+            "236"
+          ],
+          [
+            "166",
+            "242"
+          ],
+          [
+            "166",
+            "244"
+          ],
+          [
+            "166",
+            "246"
+          ],
+          [
+            "166",
+            "266"
+          ],
+          [
+            "166",
+            "269"
+          ],
+          [
+            "166",
+            "277"
+          ],
+          [
+            "166",
+            "291"
+          ],
+          [
+            "166",
+            "297"
+          ],
+          [
+            "166",
+            "307"
+          ],
+          [
+            "166",
+            "336"
+          ],
+          [
+            "166",
+            "338"
+          ],
+          [
+            "166",
+            "357"
+          ],
+          [
+            "166",
+            "375"
+          ],
+          [
+            "166",
+            "394"
+          ],
+          [
+            "166",
+            "413"
+          ],
+          [
+            "166",
+            "417"
+          ],
+          [
+            "166",
+            "427"
+          ],
+          [
+            "166",
+            "441"
+          ],
+          [
+            "166",
+            "470"
+          ],
+          [
+            "166",
+            "474"
+          ],
+          [
+            "166",
+            "492"
+          ],
+          [
+            "166",
+            "506"
+          ],
+          [
+            "166",
+            "510"
+          ],
+          [
+            "166",
+            "518"
+          ],
+          [
+            "166",
+            "529"
+          ],
+          [
+            "166",
+            "530"
+          ],
+          [
+            "166",
+            "542"
+          ],
+          [
+            "166",
+            "548"
+          ],
+          [
+            "166",
+            "555"
+          ],
+          [
+            "166",
+            "560"
+          ],
+          [
+            "166",
+            "6"
+          ],
+          [
+            "166",
+            "7"
+          ],
+          [
+            "166",
+            "72"
+          ],
+          [
+            "166",
+            "83"
+          ],
+          [
+            "166",
+            "90"
+          ],
+          [
+            "166",
+            "99"
+          ]
+        ],
+        "observed_start": "2024-12-16",
+        "observed_end": "2025-01-14",
+        "feature_cols": [
+          "sales"
+        ]
+      },
+      "selection_result_digest": "c1a6f28286b81bd21c4f2cdd6e246c234cffac020fe6d103c8062cf67537dde3",
+      "selected_sources_runtime": [
+        {
+          "source_rank": 1,
+          "source_key": [
+            "166",
+            "184"
+          ],
+          "distance": 0.4208339432960117,
+          "weight": 0.3532992866334921,
+          "tie_group": 1,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        },
+        {
+          "source_rank": 2,
+          "source_key": [
+            "166",
+            "530"
+          ],
+          "distance": 0.44036730721577544,
+          "weight": 0.33762799753320805,
+          "tie_group": 2,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        },
+        {
+          "source_rank": 3,
+          "source_key": [
+            "166",
+            "560"
+          ],
+          "distance": 0.4810529198575318,
+          "weight": 0.3090727158332999,
+          "tie_group": 3,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        }
+      ],
+      "source_skip_diagnostics": [
+        {
+          "source_key": [
+            "166",
+            "12"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "143"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "166"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "189"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "291"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "336"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "338"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "375"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "427"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "470"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "474"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "518"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "529"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "542"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "555"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        }
+      ],
+      "candidate_source_count": 49,
+      "valid_source_count": 34,
+      "eligible_candidate_keys": [
+        [
+          "166",
+          "12"
+        ],
+        [
+          "166",
+          "133"
+        ],
+        [
+          "166",
+          "143"
+        ],
+        [
+          "166",
+          "150"
+        ],
+        [
+          "166",
+          "166"
+        ],
+        [
+          "166",
+          "167"
+        ],
+        [
+          "166",
+          "184"
+        ],
+        [
+          "166",
+          "189"
+        ],
+        [
+          "166",
+          "205"
+        ],
+        [
+          "166",
+          "227"
+        ],
+        [
+          "166",
+          "229"
+        ],
+        [
+          "166",
+          "230"
+        ],
+        [
+          "166",
+          "236"
+        ],
+        [
+          "166",
+          "242"
+        ],
+        [
+          "166",
+          "244"
+        ],
+        [
+          "166",
+          "246"
+        ],
+        [
+          "166",
+          "266"
+        ],
+        [
+          "166",
+          "269"
+        ],
+        [
+          "166",
+          "277"
+        ],
+        [
+          "166",
+          "291"
+        ],
+        [
+          "166",
+          "297"
+        ],
+        [
+          "166",
+          "307"
+        ],
+        [
+          "166",
+          "336"
+        ],
+        [
+          "166",
+          "338"
+        ],
+        [
+          "166",
+          "357"
+        ],
+        [
+          "166",
+          "375"
+        ],
+        [
+          "166",
+          "394"
+        ],
+        [
+          "166",
+          "413"
+        ],
+        [
+          "166",
+          "417"
+        ],
+        [
+          "166",
+          "427"
+        ],
+        [
+          "166",
+          "441"
+        ],
+        [
+          "166",
+          "470"
+        ],
+        [
+          "166",
+          "474"
+        ],
+        [
+          "166",
+          "492"
+        ],
+        [
+          "166",
+          "506"
+        ],
+        [
+          "166",
+          "510"
+        ],
+        [
+          "166",
+          "518"
+        ],
+        [
+          "166",
+          "529"
+        ],
+        [
+          "166",
+          "530"
+        ],
+        [
+          "166",
+          "542"
+        ],
+        [
+          "166",
+          "548"
+        ],
+        [
+          "166",
+          "555"
+        ],
+        [
+          "166",
+          "560"
+        ],
+        [
+          "166",
+          "6"
+        ],
+        [
+          "166",
+          "7"
+        ],
+        [
+          "166",
+          "72"
+        ],
+        [
+          "166",
+          "83"
+        ],
+        [
+          "166",
+          "90"
+        ],
+        [
+          "166",
+          "99"
+        ]
+      ],
+      "valid_30d_candidate_keys": [
+        [
+          "166",
+          "133"
+        ],
+        [
+          "166",
+          "150"
+        ],
+        [
+          "166",
+          "167"
+        ],
+        [
+          "166",
+          "184"
+        ],
+        [
+          "166",
+          "205"
+        ],
+        [
+          "166",
+          "227"
+        ],
+        [
+          "166",
+          "229"
+        ],
+        [
+          "166",
+          "230"
+        ],
+        [
+          "166",
+          "236"
+        ],
+        [
+          "166",
+          "242"
+        ],
+        [
+          "166",
+          "244"
+        ],
+        [
+          "166",
+          "246"
+        ],
+        [
+          "166",
+          "266"
+        ],
+        [
+          "166",
+          "269"
+        ],
+        [
+          "166",
+          "277"
+        ],
+        [
+          "166",
+          "297"
+        ],
+        [
+          "166",
+          "307"
+        ],
+        [
+          "166",
+          "357"
+        ],
+        [
+          "166",
+          "394"
+        ],
+        [
+          "166",
+          "413"
+        ],
+        [
+          "166",
+          "417"
+        ],
+        [
+          "166",
+          "441"
+        ],
+        [
+          "166",
+          "492"
+        ],
+        [
+          "166",
+          "506"
+        ],
+        [
+          "166",
+          "510"
+        ],
+        [
+          "166",
+          "530"
+        ],
+        [
+          "166",
+          "548"
+        ],
+        [
+          "166",
+          "560"
+        ],
+        [
+          "166",
+          "6"
+        ],
+        [
+          "166",
+          "7"
+        ],
+        [
+          "166",
+          "72"
+        ],
+        [
+          "166",
+          "83"
+        ],
+        [
+          "166",
+          "90"
+        ],
+        [
+          "166",
+          "99"
+        ]
+      ],
+      "eligible_candidate_count": 49,
+      "valid_30d_candidate_count": 34,
+      "selected_count": 3,
+      "observed_days": 30,
+      "skipped_source_count": 15,
+      "requested_k": 3,
+      "effective_k": 3,
+      "scaler_min": 0.0,
+      "scaler_max": 4.9,
+      "cnn_provenance_validated": true,
+      "cnn_provenance_source_keys": [
+        [
+          "166",
+          "184"
+        ],
+        [
+          "166",
+          "530"
+        ],
+        [
+          "166",
+          "560"
+        ]
+      ],
+      "cnn_provenance_sample_counts": [
+        20,
+        20,
+        20
+      ],
+      "source_pool_policy": "without_information_sharing_same_store",
+      "domain_filter_scope": "target_only",
+      "domain_filter_applied_to_source": false,
+      "source_pool_entity_count": 15982,
+      "require_same_group": false,
+      "excluded_candidate_key_fields": [
+        "product_id"
+      ],
+      "target_domain_filter": {
+        "column": "first_category_id",
+        "value": 15
       }
     },
     "166_313": {
+      "selection_authority": "shared_protocol",
+      "selection_path": "shared_protocol",
+      "protocol_track": "extended",
+      "protocol_version": "d1_d6_protocol_v1",
       "weight_mode": "inverse_distance",
       "distance_metric": "euclidean",
-      "knn_representation": "paper_observed_sequence",
-      "target_signature_dim": 195,
-      "feature_cols": [
-        "sales",
-        "stock_hour6_22_cnt",
-        "activity_flag",
-        "discount",
-        "holiday_flag",
-        "precpt",
-        "avg_temperature",
-        "avg_humidity",
-        "avg_wind_level",
-        "year",
-        "month",
-        "week",
-        "day"
-      ],
-      "signature_static_feature_cols": [],
-      "signature_component_breakdown": {
-        "time_series_sequence": [
-          "sales",
-          "stock_hour6_22_cnt",
-          "activity_flag",
-          "discount",
-          "holiday_flag",
-          "precpt",
-          "avg_temperature",
-          "avg_humidity",
-          "avg_wind_level",
-          "year",
-          "month",
-          "week",
-          "day"
-        ],
-        "static_metadata": []
-      },
-      "observed_window_rows": 15,
-      "observed_window_unique_dates": 15,
-      "source_window_alignment": "target_observed_dates",
-      "date_coverage_filter": {
-        "before_count": 732,
-        "after_count": 732,
-        "filtered_count": 0,
-        "required_dates": 15,
-        "filtered_entities": []
-      },
-      "trainable_window_filter": {
-        "before_count": 732,
-        "after_count": 727,
-        "filtered_count": 5,
-        "target_train_start": "2024-12-16",
-        "window_size": 10,
-        "horizon": 1,
-        "required_pre_target_rows": 14,
-        "required_source_train_rows": 11,
-        "source_train_ratio": 0.8,
-        "filtered_entities": [
-          {
-            "source_key": [
-              775,
-              242
-            ],
-            "source_key_display": "entity=775|item=242",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              775,
-              261
-            ],
-            "source_key_display": "entity=775|item=261",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              775,
-              432
-            ],
-            "source_key_display": "entity=775|item=432",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              796,
-              261
-            ],
-            "source_key_display": "entity=796|item=261",
-            "pre_target_rows": 9,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              803,
-              261
-            ],
-            "source_key_display": "entity=803|item=261",
-            "pre_target_rows": 7,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          }
-        ],
-        "enabled": true
-      },
-      "target_window_source": "provided_target_df",
-      "target_test_data_excluded": false,
-      "truncation_reason": "no_truncation",
-      "target_group_count": 1,
-      "target_series_mode": "single_group",
-      "target_series_key": [
-        166,
-        313
-      ],
-      "include_sales_in_knn": true,
-      "contains_sales": true,
-      "knn_feature_mode": "paper_available_features_no_ids",
-      "requested_feature_cols": [
-        "sales",
-        "stock_hour6_22_cnt",
-        "activity_flag",
-        "discount",
-        "holiday_flag",
-        "precpt",
-        "avg_temperature",
-        "avg_humidity",
-        "avg_wind_level",
-        "year",
-        "month",
-        "week",
-        "day"
-      ],
-      "missing_in_source": [],
-      "missing_in_target": [],
-      "excluded_by_rule": [
-        "city_id",
+      "group_cols": [
         "store_id",
-        "management_group_id",
-        "first_category_id",
-        "second_category_id",
-        "third_category_id",
-        "product_id",
-        "hours_sale_sum_leakage_risk",
-        "hours_sale_max_leakage_risk",
-        "hours_sale_nonzero_hours_leakage_risk",
-        "hours_stock_sum_leakage_risk",
-        "hours_stock_max_leakage_risk",
-        "hours_stock_nonzero_hours_leakage_risk"
+        "product_id"
       ],
-      "adaptive_selection_info": {
-        "adaptive_selection_used": false
+      "target_signature_dim": 30,
+      "feature_cols": [
+        "sales"
+      ],
+      "requested_feature_cols": [
+        "sales"
+      ],
+      "representation": "daily_sales_flattened_30d",
+      "knn_representation": "daily_sales_flattened_30d",
+      "scaling": "global_minmax_legal_observed_values",
+      "scaler_fit_scope": "target_and_candidate_legal_observed_values",
+      "knn_observed_start": "2024-12-16",
+      "knn_observed_end": "2025-01-14",
+      "protocol_observed_start": "2024-12-16",
+      "protocol_observed_days": 30,
+      "target_observed_start": "2024-12-16",
+      "target_observed_end": "2025-01-14",
+      "source_observation_cutoff": "2025-01-14",
+      "target_test_excluded": true,
+      "source_future_excluded": true,
+      "source_alignment_mode": "exact_knn_observed_dates",
+      "candidate_pool_digest": "762c2bda76dec4510af014ce0475a862a5f4748e9df95db5225660f387e359bb",
+      "candidate_pool_digest_input": {
+        "protocol_version": "d1_d6_protocol_v1",
+        "dataset_id": "D4",
+        "scenario": "without",
+        "target_key": [
+          "166",
+          "313"
+        ],
+        "group_cols": [
+          "store_id",
+          "product_id"
+        ],
+        "candidate_keys": [
+          [
+            "166",
+            "12"
+          ],
+          [
+            "166",
+            "133"
+          ],
+          [
+            "166",
+            "143"
+          ],
+          [
+            "166",
+            "150"
+          ],
+          [
+            "166",
+            "166"
+          ],
+          [
+            "166",
+            "167"
+          ],
+          [
+            "166",
+            "184"
+          ],
+          [
+            "166",
+            "189"
+          ],
+          [
+            "166",
+            "205"
+          ],
+          [
+            "166",
+            "227"
+          ],
+          [
+            "166",
+            "229"
+          ],
+          [
+            "166",
+            "230"
+          ],
+          [
+            "166",
+            "236"
+          ],
+          [
+            "166",
+            "242"
+          ],
+          [
+            "166",
+            "244"
+          ],
+          [
+            "166",
+            "246"
+          ],
+          [
+            "166",
+            "266"
+          ],
+          [
+            "166",
+            "269"
+          ],
+          [
+            "166",
+            "277"
+          ],
+          [
+            "166",
+            "291"
+          ],
+          [
+            "166",
+            "297"
+          ],
+          [
+            "166",
+            "307"
+          ],
+          [
+            "166",
+            "336"
+          ],
+          [
+            "166",
+            "338"
+          ],
+          [
+            "166",
+            "357"
+          ],
+          [
+            "166",
+            "375"
+          ],
+          [
+            "166",
+            "394"
+          ],
+          [
+            "166",
+            "413"
+          ],
+          [
+            "166",
+            "417"
+          ],
+          [
+            "166",
+            "427"
+          ],
+          [
+            "166",
+            "441"
+          ],
+          [
+            "166",
+            "470"
+          ],
+          [
+            "166",
+            "474"
+          ],
+          [
+            "166",
+            "492"
+          ],
+          [
+            "166",
+            "506"
+          ],
+          [
+            "166",
+            "510"
+          ],
+          [
+            "166",
+            "518"
+          ],
+          [
+            "166",
+            "529"
+          ],
+          [
+            "166",
+            "530"
+          ],
+          [
+            "166",
+            "542"
+          ],
+          [
+            "166",
+            "548"
+          ],
+          [
+            "166",
+            "555"
+          ],
+          [
+            "166",
+            "560"
+          ],
+          [
+            "166",
+            "6"
+          ],
+          [
+            "166",
+            "7"
+          ],
+          [
+            "166",
+            "72"
+          ],
+          [
+            "166",
+            "83"
+          ],
+          [
+            "166",
+            "90"
+          ],
+          [
+            "166",
+            "99"
+          ]
+        ],
+        "observed_start": "2024-12-16",
+        "observed_end": "2025-01-14",
+        "feature_cols": [
+          "sales"
+        ]
+      },
+      "selection_result_digest": "bc52c3509cad07c69c2afb03b3ec66f662ae5211e8904e88ae01fb4328c023d8",
+      "selected_sources_runtime": [
+        {
+          "source_rank": 1,
+          "source_key": [
+            "166",
+            "506"
+          ],
+          "distance": 0.705263722270509,
+          "weight": 0.3443671901034923,
+          "tie_group": 1,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        },
+        {
+          "source_rank": 2,
+          "source_key": [
+            "166",
+            "548"
+          ],
+          "distance": 0.7273585055998667,
+          "weight": 0.3339064361728102,
+          "tie_group": 2,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        },
+        {
+          "source_rank": 3,
+          "source_key": [
+            "166",
+            "510"
+          ],
+          "distance": 0.7548951729870074,
+          "weight": 0.3217263737236974,
+          "tie_group": 3,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        }
+      ],
+      "source_skip_diagnostics": [
+        {
+          "source_key": [
+            "166",
+            "12"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "143"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "166"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "189"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "291"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "336"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "338"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "375"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "427"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "470"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "474"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "518"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "529"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "542"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "555"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        }
+      ],
+      "candidate_source_count": 49,
+      "valid_source_count": 34,
+      "eligible_candidate_keys": [
+        [
+          "166",
+          "12"
+        ],
+        [
+          "166",
+          "133"
+        ],
+        [
+          "166",
+          "143"
+        ],
+        [
+          "166",
+          "150"
+        ],
+        [
+          "166",
+          "166"
+        ],
+        [
+          "166",
+          "167"
+        ],
+        [
+          "166",
+          "184"
+        ],
+        [
+          "166",
+          "189"
+        ],
+        [
+          "166",
+          "205"
+        ],
+        [
+          "166",
+          "227"
+        ],
+        [
+          "166",
+          "229"
+        ],
+        [
+          "166",
+          "230"
+        ],
+        [
+          "166",
+          "236"
+        ],
+        [
+          "166",
+          "242"
+        ],
+        [
+          "166",
+          "244"
+        ],
+        [
+          "166",
+          "246"
+        ],
+        [
+          "166",
+          "266"
+        ],
+        [
+          "166",
+          "269"
+        ],
+        [
+          "166",
+          "277"
+        ],
+        [
+          "166",
+          "291"
+        ],
+        [
+          "166",
+          "297"
+        ],
+        [
+          "166",
+          "307"
+        ],
+        [
+          "166",
+          "336"
+        ],
+        [
+          "166",
+          "338"
+        ],
+        [
+          "166",
+          "357"
+        ],
+        [
+          "166",
+          "375"
+        ],
+        [
+          "166",
+          "394"
+        ],
+        [
+          "166",
+          "413"
+        ],
+        [
+          "166",
+          "417"
+        ],
+        [
+          "166",
+          "427"
+        ],
+        [
+          "166",
+          "441"
+        ],
+        [
+          "166",
+          "470"
+        ],
+        [
+          "166",
+          "474"
+        ],
+        [
+          "166",
+          "492"
+        ],
+        [
+          "166",
+          "506"
+        ],
+        [
+          "166",
+          "510"
+        ],
+        [
+          "166",
+          "518"
+        ],
+        [
+          "166",
+          "529"
+        ],
+        [
+          "166",
+          "530"
+        ],
+        [
+          "166",
+          "542"
+        ],
+        [
+          "166",
+          "548"
+        ],
+        [
+          "166",
+          "555"
+        ],
+        [
+          "166",
+          "560"
+        ],
+        [
+          "166",
+          "6"
+        ],
+        [
+          "166",
+          "7"
+        ],
+        [
+          "166",
+          "72"
+        ],
+        [
+          "166",
+          "83"
+        ],
+        [
+          "166",
+          "90"
+        ],
+        [
+          "166",
+          "99"
+        ]
+      ],
+      "valid_30d_candidate_keys": [
+        [
+          "166",
+          "133"
+        ],
+        [
+          "166",
+          "150"
+        ],
+        [
+          "166",
+          "167"
+        ],
+        [
+          "166",
+          "184"
+        ],
+        [
+          "166",
+          "205"
+        ],
+        [
+          "166",
+          "227"
+        ],
+        [
+          "166",
+          "229"
+        ],
+        [
+          "166",
+          "230"
+        ],
+        [
+          "166",
+          "236"
+        ],
+        [
+          "166",
+          "242"
+        ],
+        [
+          "166",
+          "244"
+        ],
+        [
+          "166",
+          "246"
+        ],
+        [
+          "166",
+          "266"
+        ],
+        [
+          "166",
+          "269"
+        ],
+        [
+          "166",
+          "277"
+        ],
+        [
+          "166",
+          "297"
+        ],
+        [
+          "166",
+          "307"
+        ],
+        [
+          "166",
+          "357"
+        ],
+        [
+          "166",
+          "394"
+        ],
+        [
+          "166",
+          "413"
+        ],
+        [
+          "166",
+          "417"
+        ],
+        [
+          "166",
+          "441"
+        ],
+        [
+          "166",
+          "492"
+        ],
+        [
+          "166",
+          "506"
+        ],
+        [
+          "166",
+          "510"
+        ],
+        [
+          "166",
+          "530"
+        ],
+        [
+          "166",
+          "548"
+        ],
+        [
+          "166",
+          "560"
+        ],
+        [
+          "166",
+          "6"
+        ],
+        [
+          "166",
+          "7"
+        ],
+        [
+          "166",
+          "72"
+        ],
+        [
+          "166",
+          "83"
+        ],
+        [
+          "166",
+          "90"
+        ],
+        [
+          "166",
+          "99"
+        ]
+      ],
+      "eligible_candidate_count": 49,
+      "valid_30d_candidate_count": 34,
+      "selected_count": 3,
+      "observed_days": 30,
+      "skipped_source_count": 15,
+      "requested_k": 3,
+      "effective_k": 3,
+      "scaler_min": 0.0,
+      "scaler_max": 4.9,
+      "cnn_provenance_validated": true,
+      "cnn_provenance_source_keys": [
+        [
+          "166",
+          "506"
+        ],
+        [
+          "166",
+          "548"
+        ],
+        [
+          "166",
+          "510"
+        ]
+      ],
+      "cnn_provenance_sample_counts": [
+        20,
+        20,
+        20
+      ],
+      "source_pool_policy": "without_information_sharing_same_store",
+      "domain_filter_scope": "target_only",
+      "domain_filter_applied_to_source": false,
+      "source_pool_entity_count": 15982,
+      "require_same_group": false,
+      "excluded_candidate_key_fields": [
+        "product_id"
+      ],
+      "target_domain_filter": {
+        "column": "first_category_id",
+        "value": 15
       }
     },
     "166_311": {
+      "selection_authority": "shared_protocol",
+      "selection_path": "shared_protocol",
+      "protocol_track": "extended",
+      "protocol_version": "d1_d6_protocol_v1",
       "weight_mode": "inverse_distance",
       "distance_metric": "euclidean",
-      "knn_representation": "paper_observed_sequence",
-      "target_signature_dim": 195,
-      "feature_cols": [
-        "sales",
-        "stock_hour6_22_cnt",
-        "activity_flag",
-        "discount",
-        "holiday_flag",
-        "precpt",
-        "avg_temperature",
-        "avg_humidity",
-        "avg_wind_level",
-        "year",
-        "month",
-        "week",
-        "day"
-      ],
-      "signature_static_feature_cols": [],
-      "signature_component_breakdown": {
-        "time_series_sequence": [
-          "sales",
-          "stock_hour6_22_cnt",
-          "activity_flag",
-          "discount",
-          "holiday_flag",
-          "precpt",
-          "avg_temperature",
-          "avg_humidity",
-          "avg_wind_level",
-          "year",
-          "month",
-          "week",
-          "day"
-        ],
-        "static_metadata": []
-      },
-      "observed_window_rows": 15,
-      "observed_window_unique_dates": 15,
-      "source_window_alignment": "target_observed_dates",
-      "date_coverage_filter": {
-        "before_count": 732,
-        "after_count": 732,
-        "filtered_count": 0,
-        "required_dates": 15,
-        "filtered_entities": []
-      },
-      "trainable_window_filter": {
-        "before_count": 732,
-        "after_count": 727,
-        "filtered_count": 5,
-        "target_train_start": "2024-12-16",
-        "window_size": 10,
-        "horizon": 1,
-        "required_pre_target_rows": 14,
-        "required_source_train_rows": 11,
-        "source_train_ratio": 0.8,
-        "filtered_entities": [
-          {
-            "source_key": [
-              775,
-              242
-            ],
-            "source_key_display": "entity=775|item=242",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              775,
-              261
-            ],
-            "source_key_display": "entity=775|item=261",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              775,
-              432
-            ],
-            "source_key_display": "entity=775|item=432",
-            "pre_target_rows": 12,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              796,
-              261
-            ],
-            "source_key_display": "entity=796|item=261",
-            "pre_target_rows": 9,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          },
-          {
-            "source_key": [
-              803,
-              261
-            ],
-            "source_key_display": "entity=803|item=261",
-            "pre_target_rows": 7,
-            "required_pre_target_rows": 14,
-            "required_source_train_rows": 11,
-            "source_train_ratio": 0.8
-          }
-        ],
-        "enabled": true
-      },
-      "target_window_source": "provided_target_df",
-      "target_test_data_excluded": false,
-      "truncation_reason": "no_truncation",
-      "target_group_count": 1,
-      "target_series_mode": "single_group",
-      "target_series_key": [
-        166,
-        311
-      ],
-      "include_sales_in_knn": true,
-      "contains_sales": true,
-      "knn_feature_mode": "paper_available_features_no_ids",
-      "requested_feature_cols": [
-        "sales",
-        "stock_hour6_22_cnt",
-        "activity_flag",
-        "discount",
-        "holiday_flag",
-        "precpt",
-        "avg_temperature",
-        "avg_humidity",
-        "avg_wind_level",
-        "year",
-        "month",
-        "week",
-        "day"
-      ],
-      "missing_in_source": [],
-      "missing_in_target": [],
-      "excluded_by_rule": [
-        "city_id",
+      "group_cols": [
         "store_id",
-        "management_group_id",
-        "first_category_id",
-        "second_category_id",
-        "third_category_id",
-        "product_id",
-        "hours_sale_sum_leakage_risk",
-        "hours_sale_max_leakage_risk",
-        "hours_sale_nonzero_hours_leakage_risk",
-        "hours_stock_sum_leakage_risk",
-        "hours_stock_max_leakage_risk",
-        "hours_stock_nonzero_hours_leakage_risk"
+        "product_id"
       ],
-      "adaptive_selection_info": {
-        "adaptive_selection_used": false
+      "target_signature_dim": 30,
+      "feature_cols": [
+        "sales"
+      ],
+      "requested_feature_cols": [
+        "sales"
+      ],
+      "representation": "daily_sales_flattened_30d",
+      "knn_representation": "daily_sales_flattened_30d",
+      "scaling": "global_minmax_legal_observed_values",
+      "scaler_fit_scope": "target_and_candidate_legal_observed_values",
+      "knn_observed_start": "2024-12-16",
+      "knn_observed_end": "2025-01-14",
+      "protocol_observed_start": "2024-12-16",
+      "protocol_observed_days": 30,
+      "target_observed_start": "2024-12-16",
+      "target_observed_end": "2025-01-14",
+      "source_observation_cutoff": "2025-01-14",
+      "target_test_excluded": true,
+      "source_future_excluded": true,
+      "source_alignment_mode": "exact_knn_observed_dates",
+      "candidate_pool_digest": "db984d919608e4e6a7d149c7248d35f4215d7774d2615b3654134855f1edfdfc",
+      "candidate_pool_digest_input": {
+        "protocol_version": "d1_d6_protocol_v1",
+        "dataset_id": "D4",
+        "scenario": "without",
+        "target_key": [
+          "166",
+          "311"
+        ],
+        "group_cols": [
+          "store_id",
+          "product_id"
+        ],
+        "candidate_keys": [
+          [
+            "166",
+            "12"
+          ],
+          [
+            "166",
+            "133"
+          ],
+          [
+            "166",
+            "143"
+          ],
+          [
+            "166",
+            "150"
+          ],
+          [
+            "166",
+            "166"
+          ],
+          [
+            "166",
+            "167"
+          ],
+          [
+            "166",
+            "184"
+          ],
+          [
+            "166",
+            "189"
+          ],
+          [
+            "166",
+            "205"
+          ],
+          [
+            "166",
+            "227"
+          ],
+          [
+            "166",
+            "229"
+          ],
+          [
+            "166",
+            "230"
+          ],
+          [
+            "166",
+            "236"
+          ],
+          [
+            "166",
+            "242"
+          ],
+          [
+            "166",
+            "244"
+          ],
+          [
+            "166",
+            "246"
+          ],
+          [
+            "166",
+            "266"
+          ],
+          [
+            "166",
+            "269"
+          ],
+          [
+            "166",
+            "277"
+          ],
+          [
+            "166",
+            "291"
+          ],
+          [
+            "166",
+            "297"
+          ],
+          [
+            "166",
+            "307"
+          ],
+          [
+            "166",
+            "336"
+          ],
+          [
+            "166",
+            "338"
+          ],
+          [
+            "166",
+            "357"
+          ],
+          [
+            "166",
+            "375"
+          ],
+          [
+            "166",
+            "394"
+          ],
+          [
+            "166",
+            "413"
+          ],
+          [
+            "166",
+            "417"
+          ],
+          [
+            "166",
+            "427"
+          ],
+          [
+            "166",
+            "441"
+          ],
+          [
+            "166",
+            "470"
+          ],
+          [
+            "166",
+            "474"
+          ],
+          [
+            "166",
+            "492"
+          ],
+          [
+            "166",
+            "506"
+          ],
+          [
+            "166",
+            "510"
+          ],
+          [
+            "166",
+            "518"
+          ],
+          [
+            "166",
+            "529"
+          ],
+          [
+            "166",
+            "530"
+          ],
+          [
+            "166",
+            "542"
+          ],
+          [
+            "166",
+            "548"
+          ],
+          [
+            "166",
+            "555"
+          ],
+          [
+            "166",
+            "560"
+          ],
+          [
+            "166",
+            "6"
+          ],
+          [
+            "166",
+            "7"
+          ],
+          [
+            "166",
+            "72"
+          ],
+          [
+            "166",
+            "83"
+          ],
+          [
+            "166",
+            "90"
+          ],
+          [
+            "166",
+            "99"
+          ]
+        ],
+        "observed_start": "2024-12-16",
+        "observed_end": "2025-01-14",
+        "feature_cols": [
+          "sales"
+        ]
+      },
+      "selection_result_digest": "3bf294c1df9296cd4c1786cfac18f2580b7241946f84ada8ac07fa8e185aa68b",
+      "selected_sources_runtime": [
+        {
+          "source_rank": 1,
+          "source_key": [
+            "166",
+            "506"
+          ],
+          "distance": 0.44525355569941677,
+          "weight": 0.3662111903785728,
+          "tie_group": 1,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        },
+        {
+          "source_rank": 2,
+          "source_key": [
+            "166",
+            "548"
+          ],
+          "distance": 0.47248313888939697,
+          "weight": 0.3451061454749517,
+          "tie_group": 2,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        },
+        {
+          "source_rank": 3,
+          "source_key": [
+            "166",
+            "510"
+          ],
+          "distance": 0.5648307144121653,
+          "weight": 0.28868266414647537,
+          "tie_group": 3,
+          "date_start": "2024-12-16",
+          "date_end": "2025-01-14"
+        }
+      ],
+      "source_skip_diagnostics": [
+        {
+          "source_key": [
+            "166",
+            "12"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "143"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "166"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "189"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "291"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "336"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "338"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "375"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "427"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "470"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "474"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "518"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "529"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "542"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        },
+        {
+          "source_key": [
+            "166",
+            "555"
+          ],
+          "reason": "missing_observed_dates",
+          "missing_dates": [
+            "2024-12-16",
+            "2024-12-17",
+            "2024-12-18",
+            "2024-12-19",
+            "2024-12-20",
+            "2024-12-21",
+            "2024-12-22",
+            "2024-12-23",
+            "2024-12-24",
+            "2024-12-25",
+            "2024-12-26",
+            "2024-12-27",
+            "2024-12-28",
+            "2024-12-29",
+            "2024-12-30",
+            "2024-12-31",
+            "2025-01-01",
+            "2025-01-02",
+            "2025-01-03",
+            "2025-01-04",
+            "2025-01-05",
+            "2025-01-06",
+            "2025-01-07",
+            "2025-01-08",
+            "2025-01-09",
+            "2025-01-10",
+            "2025-01-11",
+            "2025-01-12",
+            "2025-01-13",
+            "2025-01-14"
+          ]
+        }
+      ],
+      "candidate_source_count": 49,
+      "valid_source_count": 34,
+      "eligible_candidate_keys": [
+        [
+          "166",
+          "12"
+        ],
+        [
+          "166",
+          "133"
+        ],
+        [
+          "166",
+          "143"
+        ],
+        [
+          "166",
+          "150"
+        ],
+        [
+          "166",
+          "166"
+        ],
+        [
+          "166",
+          "167"
+        ],
+        [
+          "166",
+          "184"
+        ],
+        [
+          "166",
+          "189"
+        ],
+        [
+          "166",
+          "205"
+        ],
+        [
+          "166",
+          "227"
+        ],
+        [
+          "166",
+          "229"
+        ],
+        [
+          "166",
+          "230"
+        ],
+        [
+          "166",
+          "236"
+        ],
+        [
+          "166",
+          "242"
+        ],
+        [
+          "166",
+          "244"
+        ],
+        [
+          "166",
+          "246"
+        ],
+        [
+          "166",
+          "266"
+        ],
+        [
+          "166",
+          "269"
+        ],
+        [
+          "166",
+          "277"
+        ],
+        [
+          "166",
+          "291"
+        ],
+        [
+          "166",
+          "297"
+        ],
+        [
+          "166",
+          "307"
+        ],
+        [
+          "166",
+          "336"
+        ],
+        [
+          "166",
+          "338"
+        ],
+        [
+          "166",
+          "357"
+        ],
+        [
+          "166",
+          "375"
+        ],
+        [
+          "166",
+          "394"
+        ],
+        [
+          "166",
+          "413"
+        ],
+        [
+          "166",
+          "417"
+        ],
+        [
+          "166",
+          "427"
+        ],
+        [
+          "166",
+          "441"
+        ],
+        [
+          "166",
+          "470"
+        ],
+        [
+          "166",
+          "474"
+        ],
+        [
+          "166",
+          "492"
+        ],
+        [
+          "166",
+          "506"
+        ],
+        [
+          "166",
+          "510"
+        ],
+        [
+          "166",
+          "518"
+        ],
+        [
+          "166",
+          "529"
+        ],
+        [
+          "166",
+          "530"
+        ],
+        [
+          "166",
+          "542"
+        ],
+        [
+          "166",
+          "548"
+        ],
+        [
+          "166",
+          "555"
+        ],
+        [
+          "166",
+          "560"
+        ],
+        [
+          "166",
+          "6"
+        ],
+        [
+          "166",
+          "7"
+        ],
+        [
+          "166",
+          "72"
+        ],
+        [
+          "166",
+          "83"
+        ],
+        [
+          "166",
+          "90"
+        ],
+        [
+          "166",
+          "99"
+        ]
+      ],
+      "valid_30d_candidate_keys": [
+        [
+          "166",
+          "133"
+        ],
+        [
+          "166",
+          "150"
+        ],
+        [
+          "166",
+          "167"
+        ],
+        [
+          "166",
+          "184"
+        ],
+        [
+          "166",
+          "205"
+        ],
+        [
+          "166",
+          "227"
+        ],
+        [
+          "166",
+          "229"
+        ],
+        [
+          "166",
+          "230"
+        ],
+        [
+          "166",
+          "236"
+        ],
+        [
+          "166",
+          "242"
+        ],
+        [
+          "166",
+          "244"
+        ],
+        [
+          "166",
+          "246"
+        ],
+        [
+          "166",
+          "266"
+        ],
+        [
+          "166",
+          "269"
+        ],
+        [
+          "166",
+          "277"
+        ],
+        [
+          "166",
+          "297"
+        ],
+        [
+          "166",
+          "307"
+        ],
+        [
+          "166",
+          "357"
+        ],
+        [
+          "166",
+          "394"
+        ],
+        [
+          "166",
+          "413"
+        ],
+        [
+          "166",
+          "417"
+        ],
+        [
+          "166",
+          "441"
+        ],
+        [
+          "166",
+          "492"
+        ],
+        [
+          "166",
+          "506"
+        ],
+        [
+          "166",
+          "510"
+        ],
+        [
+          "166",
+          "530"
+        ],
+        [
+          "166",
+          "548"
+        ],
+        [
+          "166",
+          "560"
+        ],
+        [
+          "166",
+          "6"
+        ],
+        [
+          "166",
+          "7"
+        ],
+        [
+          "166",
+          "72"
+        ],
+        [
+          "166",
+          "83"
+        ],
+        [
+          "166",
+          "90"
+        ],
+        [
+          "166",
+          "99"
+        ]
+      ],
+      "eligible_candidate_count": 49,
+      "valid_30d_candidate_count": 34,
+      "selected_count": 3,
+      "observed_days": 30,
+      "skipped_source_count": 15,
+      "requested_k": 3,
+      "effective_k": 3,
+      "scaler_min": 0.0,
+      "scaler_max": 4.9,
+      "cnn_provenance_validated": true,
+      "cnn_provenance_source_keys": [
+        [
+          "166",
+          "506"
+        ],
+        [
+          "166",
+          "548"
+        ],
+        [
+          "166",
+          "510"
+        ]
+      ],
+      "cnn_provenance_sample_counts": [
+        20,
+        20,
+        20
+      ],
+      "source_pool_policy": "without_information_sharing_same_store",
+      "domain_filter_scope": "target_only",
+      "domain_filter_applied_to_source": false,
+      "source_pool_entity_count": 15982,
+      "require_same_group": false,
+      "excluded_candidate_key_fields": [
+        "product_id"
+      ],
+      "target_domain_filter": {
+        "column": "first_category_id",
+        "value": 15
       }
     }
   }
