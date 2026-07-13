@@ -3,8 +3,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from src.evaluation import metric_contract
 from src.evaluation.metric_contract import (
     METRIC_CONTRACT_VERSION,
+    METRIC_IDENTITY_FIELDS,
     SMAPE_DEFINITION_ID,
     MetricProtocolError,
     compute_metric_index_digest,
@@ -22,6 +24,15 @@ STRICT_PROTOCOL = {
     "current_metric_space": "normalized_minmax_space",
     "paper_metric_space": "original_sales_space",
     "strict_paper_metrics": True,
+}
+
+IDENTITY = {
+    "metric_target_key": "target/item",
+    "metric_horizon": 1,
+    "metric_sample_count": 2,
+    "metric_date_start": "2024-01-02",
+    "metric_date_end": "2024-01-03",
+    "metric_index_digest": "digest-123",
 }
 
 
@@ -47,6 +58,7 @@ def _valid_row(**overrides):
         "smape_range_max": 200.0,
         "sales_value_policy": "clip_negative_to_zero_v1",
         "target_negative_count": 0,
+        **IDENTITY,
     }
     row.update(overrides)
     return row
@@ -119,6 +131,7 @@ def test_strict_original_input_uses_not_required_and_remains_formally_comparable
         sales_scaler=None,
         feature_columns=None,
     )
+    result.update(IDENTITY)
 
     assert result["inverse_transform_status"] == "not_required"
     assert result["inverse_transform_applied"] is False
@@ -169,6 +182,68 @@ def test_metric_index_digest_is_order_sensitive_and_deterministic():
 
     assert first == second
     assert first != reversed_digest
+
+
+@pytest.mark.parametrize("field", METRIC_IDENTITY_FIELDS)
+def test_formal_smape_rejects_missing_metric_identity_field(field):
+    row = _valid_row()
+    row.pop(field)
+
+    decision = is_formally_comparable_smape_row(row)
+
+    assert decision["eligible"] is False
+    assert f"missing:{field}" in decision["failure_reasons"]
+
+
+def test_shared_metric_identity_is_derived_from_orchestration_manifest():
+    class Record:
+        def __init__(self, sample_key, label_date, target_key=("target", "item")):
+            self.sample_key = sample_key
+            self.label_date = label_date
+            self.target_key = target_key
+
+    class Manifest:
+        def for_horizon(self, horizon):
+            assert horizon == 1
+            return (
+                Record("manifest-key-a", "2024-01-02"),
+                Record("manifest-key-b", "2024-01-03"),
+            )
+
+    builder = getattr(metric_contract, "build_metric_identity_from_manifest", None)
+    assert callable(builder)
+    identity = builder(Manifest(), horizon=1)
+
+    assert set(identity) == set(METRIC_IDENTITY_FIELDS)
+    assert identity["metric_target_key"] == "target/item"
+    assert identity["metric_horizon"] == 1
+    assert identity["metric_sample_count"] == 2
+    assert identity["metric_date_start"] == "2024-01-02"
+    assert identity["metric_date_end"] == "2024-01-03"
+    assert identity["metric_index_digest"]
+
+
+@pytest.mark.parametrize("mode", ["empty", "multiple_targets"])
+def test_shared_metric_identity_rejects_invalid_manifest(mode):
+    class Record:
+        def __init__(self, target_key):
+            self.sample_key = str(target_key)
+            self.label_date = "2024-01-02"
+            self.target_key = target_key
+
+    class Manifest:
+        def for_horizon(self, horizon):
+            assert horizon == 1
+            if mode == "empty":
+                return ()
+            return (Record(("target-a",)), Record(("target-b",)))
+
+    builder = getattr(metric_contract, "build_metric_identity_from_manifest", None)
+    assert callable(builder)
+    with pytest.raises(MetricProtocolError) as exc_info:
+        builder(Manifest(), horizon=1)
+
+    assert exc_info.value.status == "metric_identity_mismatch"
 
 
 def test_not_required_legacy_inverse_boolean_does_not_control_eligibility():

@@ -68,6 +68,38 @@ def compute_metric_index_digest(values: Sequence[Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def build_metric_identity_from_manifest(
+    manifest: Any,
+    *,
+    horizon: int,
+) -> dict[str, Any]:
+    """Build the orchestration-owned metric identity for one manifest horizon."""
+    records = tuple(manifest.for_horizon(int(horizon)))
+    if not records:
+        raise MetricProtocolError(
+            "metric_identity_mismatch",
+            detail=f"manifest has no samples for horizon={horizon}",
+        )
+    target_keys = {tuple(record.target_key) for record in records}
+    if len(target_keys) != 1:
+        raise MetricProtocolError(
+            "metric_identity_mismatch",
+            detail=f"manifest has multiple target keys: {sorted(target_keys)}",
+        )
+    label_dates = [str(record.label_date) for record in records]
+    sample_keys = [str(record.sample_key) for record in records]
+    return {
+        "metric_target_key": "/".join(
+            str(value) for value in next(iter(target_keys))
+        ),
+        "metric_horizon": int(horizon),
+        "metric_sample_count": len(records),
+        "metric_date_start": label_dates[0],
+        "metric_date_end": label_dates[-1],
+        "metric_index_digest": compute_metric_index_digest(sample_keys),
+    }
+
+
 def validate_metric_identity(
     payload: Mapping[str, Any],
     expected: Mapping[str, Any],
@@ -138,7 +170,7 @@ def is_formally_comparable_smape_row(row: Mapping[str, Any]) -> dict[str, Any]:
         "paper_metric_status",
         "paper_metric_error",
         "smape",
-        "metric_sample_count",
+        *METRIC_IDENTITY_FIELDS,
         "metric_contract_version",
         "smape_definition_id",
         "smape_unit",
@@ -184,6 +216,12 @@ def is_formally_comparable_smape_row(row: Mapping[str, Any]) -> dict[str, Any]:
         reasons.append("invalid:smape")
     if not _finite_number(row["metric_sample_count"]) or int(float(row["metric_sample_count"])) <= 0:
         reasons.append("invalid:metric_sample_count")
+    if (
+        not _finite_number(row["metric_horizon"])
+        or int(float(row["metric_horizon"])) <= 0
+        or float(row["metric_horizon"]) != int(float(row["metric_horizon"]))
+    ):
+        reasons.append("invalid:metric_horizon")
     if not _finite_number(row["smape_epsilon"]) or float(row["smape_epsilon"]) != SMAPE_EPSILON:
         reasons.append("invalid:smape_epsilon")
     if not _finite_number(row["smape_range_min"]) or float(row["smape_range_min"]) != SMAPE_RANGE[0]:
