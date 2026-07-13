@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import inspect
 from pathlib import Path
 from typing import Any, Callable, Dict
 
@@ -8,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.experiment import experiment_runner
 from src.experiment.experiment_runner import (
     run_msml_experiment,
     run_msml_rfe_experiment,
@@ -147,3 +149,12 @@ def test_ss_tl_wrapper_does_not_forward_metric_protocol_to_bottom_evaluator() ->
 
     assert len(calls) == 1
     assert {kw.arg for kw in calls[0].keywords} == {"model", "X_test", "y_test"}
+
+
+def test_single_source_wrappers_accept_expected_metric_identity() -> None:
+    assert "expected_metric_identity" in inspect.signature(
+        experiment_runner.run_no_tl_experiment
+    ).parameters
+    assert "expected_metric_identity" in inspect.signature(
+        experiment_runner.run_ss_tl_experiment
+    ).parameters

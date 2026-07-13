@@ -173,7 +173,10 @@ def test_entity_loop_passes_same_solidified_model_features_to_all_tl_methods(mon
 
     def fake_no_tl_runner(**kwargs):
         captured["No-TL"] = list(kwargs["feature_cols"])
-        return _strict_metric_result()
+        assert kwargs["expected_metric_identity"]
+        return _strict_metric_result(
+            expected_metric_identity=kwargs["expected_metric_identity"]
+        )
 
     def fake_tl_runner(**kwargs):
         method = kwargs.pop("_method")

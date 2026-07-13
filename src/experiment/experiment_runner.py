@@ -197,6 +197,7 @@ def run_no_tl_experiment(
     batch_size: int = 16,
     metric_protocol: Optional[Dict[str, Any]] = None,
     feature_cols: Optional[Sequence[str]] = None,
+    expected_metric_identity: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """运行 No-TL，并返回统一结构。"""
     try:
@@ -213,8 +214,14 @@ def run_no_tl_experiment(
         batch_size=batch_size,
         metric_protocol=metric_protocol,
         feature_cols=feature_cols,
+        expected_metric_identity=expected_metric_identity,
     )
-    return _extract_method_metrics(raw, method_name="No-TL")
+    return _extract_method_metrics(
+        raw,
+        method_name="No-TL",
+        metric_protocol=metric_protocol,
+        expected_metric_identity=expected_metric_identity,
+    )
 
 
 def _get_logger() -> logging.Logger:
@@ -667,6 +674,7 @@ def run_ss_tl_experiment(
     target_epochs: int = 3,
     batch_size: int = 16,
     metric_protocol: Optional[Dict[str, Any]] = None,
+    expected_metric_identity: Optional[Dict[str, Any]] = None,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
 ) -> Dict[str, Any]:
     """运行 SS-TL，并返回统一结构。"""
@@ -677,7 +685,6 @@ def run_ss_tl_experiment(
             fine_tune_target_model,
             train_source_model,
         )
-        from src.evaluation.metrics import compute_metrics_with_protocol
         from src.utils.finite_diagnostics import validate_finite_array
     except ModuleNotFoundError as exc:
         raise RuntimeError(f"SS-TL dependency missing: {exc}") from exc
@@ -830,13 +837,20 @@ def run_ss_tl_experiment(
             },
         )
     )
+    strict_payload = {
+        **ss_raw,
+        "y_true": np.asarray(y_target_test).reshape(-1),
+        "y_pred": np.asarray(y_pred).reshape(-1),
+        "sales_scaler": tgt_scaler,
+        "feature_columns": list(tgt_feature_columns),
+        **dict(expected_metric_identity or {}),
+    }
     ss_raw.update(
-        compute_metrics_with_protocol(
-            y_true=y_target_test,
-            y_pred=y_pred.flatten(),
-            metric_protocol=metric_protocol,
-            sales_scaler=tgt_scaler,
-            feature_columns=tgt_feature_columns,
+        _extract_method_metrics(
+            strict_payload,
+            method_name="SS-TL",
+            metric_protocol=metric_protocol or {},
+            expected_metric_identity=expected_metric_identity,
         )
     )
     ss_raw.setdefault(
