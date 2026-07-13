@@ -599,8 +599,8 @@ def _write_best_method_outputs(
     md_lines = [
         "# D1-D6 Best Method Summary by Dataset",
         "",
-        "Best method per target entity is chosen by lowest sMAPE within each "
-        "`(dataset_id, target_entity_key, information_sharing)` group.",
+        "Best method per target entity is chosen by lowest complete-seed mean sMAPE "
+        "within each `(dataset_id, target_entity_key, horizon, information_sharing)` group.",
         "",
     ]
     for dataset_id in sorted(wins_by_dataset):
