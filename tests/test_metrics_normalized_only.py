@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 
 from src.evaluation.metrics import compute_metrics_with_protocol
+from src.experiment.experiment_runner import results_to_dataframe
 
 
 def test_metrics_ignore_inverse_transform_and_use_normalized_values():
@@ -57,3 +58,27 @@ def test_non_strict_missing_inverse_keeps_normalized_diagnostic_but_not_paper_al
     assert result["paper_metric_status"] == "missing_scaler"
     assert result["smape_paper"] is None
     assert result["original_scale_smape"] is None
+
+
+def test_non_strict_missing_inverse_serializes_without_fabricating_paper_metrics():
+    result = compute_metrics_with_protocol(
+        y_true=np.array([0.2, 0.8]),
+        y_pred=np.array([0.1, 0.6]),
+        metric_protocol={
+            "current_metric_space": "normalized_minmax_space",
+            "paper_metric_space": "original_sales_space",
+            "strict_paper_metrics": False,
+        },
+        sales_scaler=None,
+        feature_columns=None,
+    )
+    result.update({"method": "No-TL", "protocol": {}})
+
+    frame = results_to_dataframe(
+        {"meta": {"dataset_name": "Dataset1", "strict_paper_mode": False}, "results": [result]}
+    )
+
+    assert np.isfinite(frame.loc[0, "smape"])
+    assert frame.loc[0, "smape_metric_space"] == "normalized_minmax_space"
+    assert np.isnan(frame.loc[0, "smape_paper"])
+    assert np.isnan(frame.loc[0, "original_scale_smape"])

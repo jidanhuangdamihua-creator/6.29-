@@ -296,6 +296,15 @@ def _coalesce_metric(*values: Any) -> Any:
     return None
 
 
+def _float_or_nan(value: Any) -> float:
+    if value is None:
+        return float("nan")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float("nan")
+
+
 def _summarize_metric_space(rmse_metric_space: Any, smape_metric_space: Any, fallback: Any) -> str:
     rmse_space = str(rmse_metric_space or "").strip()
     smape_space = str(smape_metric_space or "").strip()
@@ -847,11 +856,11 @@ def run_ss_tl_experiment(
         "mae_current": float(ss_raw.get("mae_current", float("nan"))),
         "mape_current": float(ss_raw.get("mape_current", float("nan"))),
         "smape_current": float(ss_raw.get("smape_current", float("nan"))),
-        "rmse_paper": float(ss_raw.get("rmse_paper", float("nan"))),
-        "accuracy_paper": float(ss_raw.get("accuracy_paper", float("nan"))),
-        "mae_paper": float(ss_raw.get("mae_paper", float("nan"))),
-        "mape_paper": float(ss_raw.get("mape_paper", float("nan"))),
-        "smape_paper": float(ss_raw.get("smape_paper", float("nan"))),
+        "rmse_paper": _float_or_nan(ss_raw.get("rmse_paper")),
+        "accuracy_paper": _float_or_nan(ss_raw.get("accuracy_paper")),
+        "mae_paper": _float_or_nan(ss_raw.get("mae_paper")),
+        "mape_paper": _float_or_nan(ss_raw.get("mape_paper")),
+        "smape_paper": _float_or_nan(ss_raw.get("smape_paper")),
         "normalized_rmse": ss_raw.get("normalized_rmse"),
         "normalized_accuracy": ss_raw.get("normalized_accuracy"),
         "normalized_mae": ss_raw.get("normalized_mae"),
@@ -1471,21 +1480,21 @@ def results_to_dataframe(experiment_results: Dict[str, Any]) -> pd.DataFrame:
                 "mae_current": float(one.get("mae_current", np.nan)),
                 "mape_current": float(one.get("mape_current", np.nan)),
                 "smape_current": float(one.get("smape_current", np.nan)),
-                "rmse_paper": float(one.get("rmse_paper", np.nan)),
-                "accuracy_paper": float(one.get("accuracy_paper", np.nan)),
-                "mae_paper": float(one.get("mae_paper", np.nan)),
-                "mape_paper": float(one.get("mape_paper", np.nan)),
-                "smape_paper": float(one.get("smape_paper", np.nan)),
+                "rmse_paper": _float_or_nan(one.get("rmse_paper")),
+                "accuracy_paper": _float_or_nan(one.get("accuracy_paper")),
+                "mae_paper": _float_or_nan(one.get("mae_paper")),
+                "mape_paper": _float_or_nan(one.get("mape_paper")),
+                "smape_paper": _float_or_nan(one.get("smape_paper")),
                 "normalized_rmse": one.get("normalized_rmse", np.nan),
                 "normalized_accuracy": one.get("normalized_accuracy", np.nan),
                 "normalized_mae": one.get("normalized_mae", np.nan),
                 "normalized_mape": one.get("normalized_mape", np.nan),
                 "normalized_smape": one.get("normalized_smape", np.nan),
-                "original_scale_rmse": one.get("original_scale_rmse", np.nan),
-                "original_scale_accuracy": one.get("original_scale_accuracy", np.nan),
-                "original_scale_mae": one.get("original_scale_mae", np.nan),
-                "original_scale_mape": one.get("original_scale_mape", np.nan),
-                "original_scale_smape": one.get("original_scale_smape", np.nan),
+                "original_scale_rmse": _float_or_nan(one.get("original_scale_rmse")),
+                "original_scale_accuracy": _float_or_nan(one.get("original_scale_accuracy")),
+                "original_scale_mae": _float_or_nan(one.get("original_scale_mae")),
+                "original_scale_mape": _float_or_nan(one.get("original_scale_mape")),
+                "original_scale_smape": _float_or_nan(one.get("original_scale_smape")),
                 "prediction_shape": str(one.get("prediction_shape", "N/A")),
                 "include_sales_in_knn": include_sales_in_knn,
                 "alignment_notes": protocol.get("alignment_notes", ""),
