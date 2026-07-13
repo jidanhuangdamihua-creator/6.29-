@@ -1,4 +1,4 @@
-"""Statistical significance tests for benchmark results."""
+"""Formal original-sales-space sMAPE statistical comparisons."""
 
 from __future__ import annotations
 
@@ -8,160 +8,172 @@ import numpy as np
 import pandas as pd
 from scipy.stats import friedmanchisquare, rankdata, wilcoxon
 
-
-PIVOT_INDEX = "dataset"
-PIVOT_COLUMNS = "method"
-PIVOT_VALUES = "rmse"
+from src.evaluation.metric_contract import build_formal_smape_aggregates
 
 
-def _to_method_dataset_rmse_table(results_dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Convert long-form results into dataset x method RMSE pivot table.
-
-    Expected long-form columns: dataset, method, rmse.
-    If duplicates exist, RMSE is aggregated by min to represent best run per
-    method-dataset pair in matrix settings.
-    """
-    required = {"dataset", "method", "rmse"}
-    missing = required.difference(results_dataframe.columns)
-    if missing:
-        raise ValueError(f"results_dataframe missing columns: {sorted(missing)}")
-
-    df = results_dataframe.copy()
-    df["rmse"] = pd.to_numeric(df["rmse"], errors="coerce")
-    df = df.dropna(subset=["dataset", "method", "rmse"])
-
-    pivot = (
-        df.groupby(["dataset", "method"], as_index=False)["rmse"]
-        .min()
-        .pivot(index=PIVOT_INDEX, columns=PIVOT_COLUMNS, values=PIVOT_VALUES)
-        .sort_index()
-    )
-    return pivot
+def _dataset_macro(results_dataframe: pd.DataFrame) -> pd.DataFrame:
+    return build_formal_smape_aggregates(results_dataframe)["dataset_macro"]
 
 
-def run_friedman_test(results_dataframe: pd.DataFrame) -> Dict[str, float]:
-    """Run Friedman test across methods using dataset-level RMSE blocks."""
-    pivot = _to_method_dataset_rmse_table(results_dataframe)
-    pivot = pivot.dropna(axis=0, how="any")
+def _holm_adjust(values: pd.Series) -> pd.Series:
+    valid = values.dropna().sort_values()
+    adjusted = pd.Series(np.nan, index=values.index, dtype=float)
+    running = 0.0
+    count = len(valid)
+    for rank, (index, value) in enumerate(valid.items()):
+        running = max(running, min(1.0, float(value) * (count - rank)))
+        adjusted.loc[index] = running
+    return adjusted
 
-    if pivot.shape[0] < 2 or pivot.shape[1] < 3:
-        return {"statistic": float("nan"), "p_value": float("nan")}
 
-    samples = [pivot[col].to_numpy(dtype=float) for col in pivot.columns]
-    statistic, p_value = friedmanchisquare(*samples)
-    return {"statistic": float(statistic), "p_value": float(p_value)}
+def _rank_biserial(first: np.ndarray, second: np.ndarray) -> float:
+    differences = np.asarray(first, dtype=float) - np.asarray(second, dtype=float)
+    differences = differences[~np.isclose(differences, 0.0)]
+    if differences.size == 0:
+        return 0.0
+    ranks = rankdata(np.abs(differences), method="average")
+    denominator = float(ranks.sum())
+    return float((ranks[differences > 0].sum() - ranks[differences < 0].sum()) / denominator)
+
+
+def compare_methods_smape(
+    results_dataframe: pd.DataFrame,
+    *,
+    anchor: str = "MSML-TL-RFE",
+) -> pd.DataFrame:
+    """Compare methods within fixed horizon/scenario using complete dataset blocks."""
+    dataset_macro = _dataset_macro(results_dataframe)
+    output: List[Dict[str, object]] = []
+    if dataset_macro.empty:
+        return pd.DataFrame(
+            columns=[
+                "horizon",
+                "sharing_scenario",
+                "method_a",
+                "method_b",
+                "n_datasets",
+                "statistic",
+                "p_value",
+                "p_value_holm",
+                "effect_size_rank_biserial",
+                "status",
+            ]
+        )
+
+    for (horizon, scenario), group in dataset_macro.groupby(
+        ["horizon", "sharing_scenario"], dropna=False
+    ):
+        pivot = group.pivot(index="dataset", columns="method", values="smape").sort_index()
+        methods = sorted(str(method) for method in pivot.columns if str(method) != anchor)
+        if anchor not in pivot.columns:
+            for method in methods:
+                output.append(
+                    {
+                        "horizon": horizon,
+                        "sharing_scenario": scenario,
+                        "method_a": anchor,
+                        "method_b": method,
+                        "n_datasets": 0,
+                        "statistic": np.nan,
+                        "p_value": np.nan,
+                        "p_value_holm": np.nan,
+                        "effect_size_rank_biserial": np.nan,
+                        "status": "anchor_missing",
+                    }
+                )
+            continue
+        complete = pivot.dropna(axis=0, how="any")
+        for method in methods:
+            n_datasets = int(len(complete))
+            base = {
+                "horizon": horizon,
+                "sharing_scenario": scenario,
+                "method_a": anchor,
+                "method_b": method,
+                "n_datasets": n_datasets,
+                "p_value_holm": np.nan,
+            }
+            if n_datasets < 2:
+                output.append(
+                    {
+                        **base,
+                        "statistic": np.nan,
+                        "p_value": np.nan,
+                        "effect_size_rank_biserial": np.nan,
+                        "status": "descriptive_insufficient_datasets",
+                    }
+                )
+                continue
+            first = complete[anchor].to_numpy(dtype=float)
+            second = complete[method].to_numpy(dtype=float)
+            effect = _rank_biserial(first, second)
+            if np.allclose(first, second):
+                output.append(
+                    {
+                        **base,
+                        "statistic": np.nan,
+                        "p_value": np.nan,
+                        "effect_size_rank_biserial": effect,
+                        "status": "descriptive_identical",
+                    }
+                )
+                continue
+            statistic, p_value = wilcoxon(first, second)
+            output.append(
+                {
+                    **base,
+                    "statistic": float(statistic),
+                    "p_value": float(p_value),
+                    "effect_size_rank_biserial": effect,
+                    "status": "ok",
+                }
+            )
+
+    result = pd.DataFrame(output)
+    if not result.empty:
+        for _, indices in result.groupby(["horizon", "sharing_scenario"]).groups.items():
+            result.loc[indices, "p_value_holm"] = _holm_adjust(
+                result.loc[indices, "p_value"]
+            )
+    return result
 
 
 def run_pairwise_wilcoxon_tests(results_dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Run Wilcoxon signed-rank tests for MSML-TL-RFE vs baselines.
+    return compare_methods_smape(results_dataframe)
 
-    Comparisons:
-    - No-TL
-    - SS-TL
-    - MSWA-TL
-    - MSSB-TL
-    - MSML-TL
-    """
-    pivot = _to_method_dataset_rmse_table(results_dataframe)
 
-    anchor = "MSML-TL-RFE"
-    baselines = ["No-TL", "SS-TL", "MSWA-TL", "MSSB-TL", "MSML-TL"]
-
-    rows: List[Dict[str, object]] = []
-    if anchor not in pivot.columns:
-        for b in baselines:
-            rows.append(
-                {
-                    "method_a": anchor,
-                    "method_b": b,
-                    "n_datasets": 0,
-                    "statistic": np.nan,
-                    "p_value": np.nan,
-                    "status": "anchor_missing",
-                }
-            )
-        return pd.DataFrame(rows)
-
-    for b in baselines:
-        if b not in pivot.columns:
-            rows.append(
-                {
-                    "method_a": anchor,
-                    "method_b": b,
-                    "n_datasets": 0,
-                    "statistic": np.nan,
-                    "p_value": np.nan,
-                    "status": "baseline_missing",
-                }
-            )
-            continue
-
-        pair_df = pivot[[anchor, b]].dropna(how="any")
-        n = int(len(pair_df))
-        if n == 0:
-            rows.append(
-                {
-                    "method_a": anchor,
-                    "method_b": b,
-                    "n_datasets": 0,
-                    "statistic": np.nan,
-                    "p_value": np.nan,
-                    "status": "no_overlap",
-                }
-            )
-            continue
-
-        if n < 2 or np.allclose(pair_df[anchor].values, pair_df[b].values):
-            rows.append(
-                {
-                    "method_a": anchor,
-                    "method_b": b,
-                    "n_datasets": n,
-                    "statistic": np.nan,
-                    "p_value": np.nan,
-                    "status": "insufficient_or_identical",
-                }
-            )
-            continue
-
-        statistic, p_value = wilcoxon(pair_df[anchor].to_numpy(), pair_df[b].to_numpy())
-        rows.append(
-            {
-                "method_a": anchor,
-                "method_b": b,
-                "n_datasets": n,
-                "statistic": float(statistic),
-                "p_value": float(p_value),
-                "status": "ok",
-            }
-        )
-
-    return pd.DataFrame(rows)
+def run_friedman_test(results_dataframe: pd.DataFrame) -> Dict[str, float]:
+    dataset_macro = _dataset_macro(results_dataframe)
+    if dataset_macro.empty:
+        return {"statistic": float("nan"), "p_value": float("nan")}
+    values = []
+    for _, group in dataset_macro.groupby(["horizon", "sharing_scenario"]):
+        pivot = group.pivot(index="dataset", columns="method", values="smape").dropna(how="any")
+        if pivot.shape[0] >= 2 and pivot.shape[1] >= 3:
+            values.append(friedmanchisquare(*(pivot[column] for column in pivot.columns)))
+    if not values:
+        return {"statistic": float("nan"), "p_value": float("nan")}
+    statistic, p_value = values[0]
+    return {"statistic": float(statistic), "p_value": float(p_value)}
 
 
 def compute_average_rank(results_dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Compute average rank across datasets (lower RMSE gets better rank)."""
-    pivot = _to_method_dataset_rmse_table(results_dataframe)
-
-    if pivot.empty:
-        return pd.DataFrame(columns=["method", "average_rank"])
-
-    rank_rows: List[pd.Series] = []
-    for _, row in pivot.iterrows():
-        values = row.to_numpy(dtype=float)
-        mask = ~np.isnan(values)
-        if not np.any(mask):
-            continue
-
-        ranked = np.full_like(values, np.nan, dtype=float)
-        ranked[mask] = rankdata(values[mask], method="average")
-        rank_rows.append(pd.Series(ranked, index=pivot.columns))
-
-    if not rank_rows:
-        return pd.DataFrame(columns=["method", "average_rank"])
-
-    rank_df = pd.DataFrame(rank_rows)
-    avg_rank = rank_df.mean(axis=0, skipna=True).sort_values(ascending=True)
-    out = avg_rank.reset_index()
-    out.columns = ["method", "average_rank"]
-    return out
+    dataset_macro = _dataset_macro(results_dataframe)
+    if dataset_macro.empty:
+        return pd.DataFrame(columns=["method", "horizon", "sharing_scenario", "average_rank"])
+    rows = []
+    for (horizon, scenario), group in dataset_macro.groupby(["horizon", "sharing_scenario"]):
+        pivot = group.pivot(index="dataset", columns="method", values="smape")
+        ranks = pivot.rank(axis=1, method="average", ascending=True)
+        for method, average_rank in ranks.mean(axis=0, skipna=True).items():
+            rows.append(
+                {
+                    "method": method,
+                    "horizon": horizon,
+                    "sharing_scenario": scenario,
+                    "average_rank": float(average_rank),
+                }
+            )
+    return pd.DataFrame(rows).sort_values(
+        ["horizon", "sharing_scenario", "average_rank"]
+    ).reset_index(drop=True)

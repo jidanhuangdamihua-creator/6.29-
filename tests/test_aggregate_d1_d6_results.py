@@ -5,6 +5,40 @@ import pytest
 
 from scripts import aggregate_d1_d6_results as aggregate
 from src.constants import RESULT_CONTRACT_VERSION
+from src.evaluation.metric_contract import METRIC_CONTRACT_VERSION, SMAPE_DEFINITION_ID
+
+
+def _formal_row(**overrides):
+    row = {
+        "dataset": "D1",
+        "dataset_id": 1,
+        "target_entity_key": "target-a",
+        "method": "No-TL",
+        "horizon": 1,
+        "seed": 42,
+        "information_sharing": "without",
+        "smape": 20.0,
+        "strict_paper_metrics": True,
+        "paper_metric_space_requested": "original_sales_space",
+        "paper_metric_space_actual": "original_sales_space",
+        "primary_metric_space_actual": "original_sales_space",
+        "smape_metric_space": "original_sales_space",
+        "inverse_transform_status": "applied",
+        "paper_metric_computed_valid": True,
+        "paper_metric_status": "valid",
+        "paper_metric_error": "",
+        "metric_sample_count": 2,
+        "metric_contract_version": METRIC_CONTRACT_VERSION,
+        "smape_definition_id": SMAPE_DEFINITION_ID,
+        "smape_unit": "percent",
+        "smape_epsilon": 1e-8,
+        "smape_range_min": 0.0,
+        "smape_range_max": 200.0,
+        "sales_value_policy": "clip_negative_to_zero_v1",
+        "target_negative_count": 0,
+    }
+    row.update(overrides)
+    return row
 
 
 def _write_result(path, *, dataset_id: int, mode: str, method: str = "No-TL") -> None:
@@ -269,3 +303,63 @@ def test_csv_cache_reloads_when_source_size_changes(tmp_path) -> None:
     second_rows = aggregate._read_source(source, dataset_hint=5, csv_cache=csv_cache)
 
     assert [row["method"] for row in second_rows] == ["longer-method-name"]
+
+
+def test_formal_aggregation_excludes_numeric_non_strict_and_legacy_rows() -> None:
+    frame = pd.DataFrame(
+        [
+            _formal_row(smape=20.0),
+            _formal_row(method="SS-TL", smape=1.0, strict_paper_metrics=False),
+            {"dataset": "D1", "method": "MSWA-TL", "smape": 0.5},
+        ]
+    )
+
+    result = aggregate.aggregate_formal_smape(frame)
+
+    assert result["eligible_rows"]["method"].tolist() == ["No-TL"]
+    assert result["cross_dataset_macro"]["smape"].tolist() == [20.0]
+    assert result["exclusion_reason_counts"]["invalid:strict_paper_metrics"] == 1
+    assert result["exclusion_reason_counts"]["missing:metric_contract_version"] == 1
+
+
+def test_formal_aggregation_keeps_horizon_and_sharing_scenario_separate() -> None:
+    rows = []
+    for horizon in (1, 5):
+        for sharing in ("without", "with"):
+            rows.append(
+                _formal_row(
+                    horizon=horizon,
+                    information_sharing=sharing,
+                    smape=10.0 + horizon,
+                )
+            )
+
+    result = aggregate.aggregate_formal_smape(pd.DataFrame(rows))
+    output = result["cross_dataset_macro"]
+
+    assert output.groupby(["horizon", "sharing_scenario"]).ngroups == 4
+    assert len(output) == 4
+
+
+def test_written_formal_summaries_preserve_horizon_and_sharing_dimensions(tmp_path) -> None:
+    rows = []
+    for horizon in (1, 5):
+        for sharing in ("without", "with"):
+            rows.append(
+                _formal_row(
+                    horizon=horizon,
+                    information_sharing=sharing,
+                    smape=10.0 + horizon,
+                )
+            )
+    output = tmp_path / "formal.csv"
+
+    metric_paths = aggregate._write_metric_summaries(output, rows)
+    best_paths = aggregate._write_best_method_outputs(output, rows)
+
+    dataset_summary = pd.read_csv(metric_paths[0])
+    best_by_target = pd.read_csv(best_paths[0])
+    assert {"horizon", "sharing_scenario"}.issubset(dataset_summary.columns)
+    assert dataset_summary.groupby(["horizon", "sharing_scenario"]).ngroups == 4
+    assert {"horizon", "information_sharing"}.issubset(best_by_target.columns)
+    assert best_by_target.groupby(["horizon", "information_sharing"]).ngroups == 4
