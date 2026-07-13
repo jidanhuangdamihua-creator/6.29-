@@ -257,8 +257,9 @@ def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_invers
     source_df = pd.DataFrame(
         {
             "date": dates,
-            "entity_id": ["source"] * len(dates),
+            "entity_id": ["target"] * len(dates),
             "item_id": [1] * len(dates),
+            "family": ["F1"] * len(dates),
             "sales": np.arange(1.0, 9.0),
         }
     )
@@ -267,6 +268,7 @@ def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_invers
             "date": dates,
             "entity_id": ["target"] * len(dates),
             "item_id": [2] * len(dates),
+            "family": ["F1"] * len(dates),
             "sales": np.arange(2.0, 10.0),
         }
     )
@@ -312,14 +314,23 @@ def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_invers
         enabled_methods=["No-TL", "MSWA-TL"],
     )
 
-    assert received_protocols == {"No-TL": metric_protocol, "MSWA-TL": metric_protocol}
+    assert received_protocols == {
+        "No-TL": metric_protocol,
+        "MSWA-TL": metric_protocol,
+    }
     for row in rows:
-        assert row["metric_protocol"] == json.dumps(metric_protocol, ensure_ascii=False, sort_keys=True)
+        assert row["metric_protocol"] == json.dumps(
+            metric_protocol,
+            ensure_ascii=False,
+            sort_keys=True,
+        )
         assert row["metric_space_used"] == "normalized_minmax_space"
         assert row["paper_metric_aligned"] == "no_paper_reference"
         assert row["inverse_transform_applied"] is False
-        assert row["metric_protocol_note"] == "inverse transform not available for solidified parquet path"
-
+        assert (
+            row["metric_protocol_note"]
+            == "inverse transform not available for solidified parquet path"
+        )
 
 def test_d4_d6_entity_row_does_not_fabricate_paper_or_scale_metrics() -> None:
     row = _row_from_result(

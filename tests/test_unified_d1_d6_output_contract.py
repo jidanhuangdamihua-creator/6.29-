@@ -35,23 +35,22 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
             {"mode": "shared_protocol_exact_pool"},
         )
 
-    def test_compat_results_copy_can_be_disabled_by_environment(self):
+    def test_compat_results_copy_is_opt_in_by_environment(self):
         self.assertTrue(
             hasattr(run_full_paper_experiments, "_should_sync_latest_results_copy")
         )
 
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("RFE_DISABLE_COMPAT_RESULTS_COPY", None)
-            self.assertTrue(
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(
                 run_full_paper_experiments._should_sync_latest_results_copy()
             )
 
         with patch.dict(
             os.environ,
-            {"RFE_DISABLE_COMPAT_RESULTS_COPY": "1"},
-            clear=False,
+            {"RFE_ENABLE_COMPAT_RESULTS_COPY": "1"},
+            clear=True,
         ):
-            self.assertFalse(
+            self.assertTrue(
                 run_full_paper_experiments._should_sync_latest_results_copy()
             )
 
@@ -103,22 +102,45 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, text)
 
-    def test_unified_runner_passes_one_output_dir_to_d1_and_d4_tasks(self):
+    def test_unified_runner_passes_isolated_output_dirs_to_d1_and_d4_tasks(self):
         run_dir = Path("outputs/runs/20990101_010203")
 
         tasks = build_tasks(["d1", "d4"], smoke=True, run_dir=run_dir)
 
-        self.assertEqual(["D1", "D4-without", "D4-with"], [task.label for task in tasks])
+        self.assertEqual(
+            ["D1-without", "D1-with", "D4-without", "D4-with"],
+            [task.label for task in tasks],
+        )
+
+        expected_dirs = {
+            "D1-without": run_dir / "d1_without",
+            "D1-with": run_dir / "d1_with",
+            "D4-without": run_dir / "d4_without",
+            "D4-with": run_dir / "d4_with",
+        }
+
         for task in tasks:
             self.assertIn("--output-dir", task.cmd)
             output_arg_index = task.cmd.index("--output-dir") + 1
-            self.assertEqual(str(run_dir), task.cmd[output_arg_index])
+            self.assertEqual(
+                str(expected_dirs[task.label]),
+                task.cmd[output_arg_index],
+            )
 
-        d4_without = tasks[1]
-        d4_with = tasks[2]
-        self.assertEqual("dataset4_without_results.csv", d4_without.result_filename)
-        self.assertEqual("dataset4_with_results.csv", d4_with.result_filename)
-        self.assertNotIn("_D4_300d", " ".join(d4_without.cmd + d4_with.cmd))
+        d4_without = tasks[2]
+        d4_with = tasks[3]
+        self.assertEqual(
+            "dataset4_without_results.csv",
+            d4_without.result_filename,
+        )
+        self.assertEqual(
+            "dataset4_with_results.csv",
+            d4_with.result_filename,
+        )
+        self.assertNotIn(
+            "_D4_300d",
+            " ".join(d4_without.cmd + d4_with.cmd),
+        )
 
     def test_unified_runner_can_build_single_mode_tasks(self):
         run_dir = Path("outputs/runs/20990101_010203")
@@ -449,17 +471,44 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
         self.assertEqual(run_dataset_df.to_dict("records"), compat_dataset_df.to_dict("records"))
 
 
-    def test_full_paper_runner_resolves_explicit_output_dir_without_new_timestamp(self):
+    def test_full_paper_runner_reserves_explicit_output_dir_without_new_timestamp(self):
         output_dir = Path("outputs/runs/20990101_010203")
         protocol = {"outputs": {"paper_results_csv": "paper_results.csv"}}
 
-        paths = _resolve_output_paths(protocol=protocol, output_dir=output_dir)
-        expected_run_dir = ROOT / output_dir
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_root = Path(tmp)
 
-        self.assertEqual("20990101_010203", paths["run_id"])
-        self.assertEqual(expected_run_dir, paths["run_dir"])
-        self.assertEqual(expected_run_dir / "results", paths["results_dir"])
-        self.assertEqual(expected_run_dir / "results" / "paper_results.csv", paths["paper_csv"])
+            with patch.object(
+                run_full_paper_experiments,
+                "ROOT",
+                fake_root,
+            ):
+                paths = _resolve_output_paths(
+                    protocol=protocol,
+                    output_dir=output_dir,
+                )
+                expected_run_dir = fake_root / output_dir
+
+                self.assertEqual("20990101_010203", paths["run_id"])
+                self.assertEqual(expected_run_dir, paths["run_dir"])
+                self.assertEqual(
+                    expected_run_dir / "results",
+                    paths["results_dir"],
+                )
+                self.assertEqual(
+                    expected_run_dir / "results" / "paper_results.csv",
+                    paths["paper_csv"],
+                )
+
+                with self.assertRaisesRegex(
+                    FileExistsError,
+                    "will not be reused",
+                ):
+                    _resolve_output_paths(
+                        protocol=protocol,
+                        output_dir=output_dir,
+                    )
+
 
 
 if __name__ == "__main__":
