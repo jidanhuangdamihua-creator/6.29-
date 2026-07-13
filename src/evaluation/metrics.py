@@ -7,6 +7,13 @@ import logging
 import numpy as np
 
 from src.constants import MIXED_METRIC_PROTOCOL_NOTE, MIXED_METRIC_SPACE
+from src.evaluation.metric_contract import (
+    ORIGINAL_SALES_SPACE,
+    SMAPE_CONTRACT_FIELDS,
+    SMAPE_EPSILON,
+    SMAPE_RANGE,
+    MetricProtocolError,
+)
 
 
 SUPPORTED_METRIC_SPACES = {"normalized_minmax_space", "original_sales_space"}
@@ -122,10 +129,7 @@ def compute_metrics_with_protocol(
     feature_columns: object | None = None,
     eps: float = 1e-8,
 ) -> dict:
-    """Compute current-space and paper-space metrics in one place.
-
-    The input arrays are assumed to be in current metric space.
-    """
+    """Compute metrics while preserving a fail-closed strict paper contract."""
     protocol = dict(metric_protocol or {})
     current_space = validate_metric_space(protocol.get("current_metric_space", "normalized_minmax_space"))
     paper_space = validate_metric_space(protocol.get("paper_metric_space", "original_sales_space"))
@@ -134,13 +138,21 @@ def compute_metrics_with_protocol(
     strict_paper_metrics = bool(protocol.get("strict_paper_metrics", False))
     metric_protocol_note = str(protocol.get("metric_protocol_note", "") or "")
 
+    if y_true is None:
+        raise MetricProtocolError("missing_y_true", missing_fields=("y_true",))
+    if y_pred is None:
+        raise MetricProtocolError("missing_y_pred", missing_fields=("y_pred",))
     y_true_arr = np.asarray(y_true, dtype=np.float64).reshape(-1)
     y_pred_arr = np.asarray(y_pred, dtype=np.float64).reshape(-1)
+    if y_true_arr.size == 0 or y_pred_arr.size == 0:
+        raise MetricProtocolError("empty_input", detail=f"shapes={y_true_arr.shape},{y_pred_arr.shape}")
     if y_true_arr.shape[0] != y_pred_arr.shape[0]:
-        raise ValueError(
-            "y_true and y_pred size mismatch: "
-            f"y_true={y_true_arr.shape[0]} y_pred={y_pred_arr.shape[0]}"
+        raise MetricProtocolError(
+            "length_mismatch",
+            detail=f"y_true={y_true_arr.shape[0]} y_pred={y_pred_arr.shape[0]}",
         )
+    if not np.isfinite(y_true_arr).all() or not np.isfinite(y_pred_arr).all():
+        raise MetricProtocolError("nonfinite_input")
 
     rmse_current = _compute_rmse(y_true_arr, y_pred_arr)
     mae_current = _compute_mae(y_true_arr, y_pred_arr)
@@ -152,63 +164,130 @@ def compute_metrics_with_protocol(
         definition=current_accuracy_definition,
     )
 
-    y_true_paper = y_true_arr
-    y_pred_paper = y_pred_arr
-    inverse_transform_applied = False
-    inverse_transform_available = current_space == paper_space
+    y_true_paper = None
+    y_pred_paper = None
+    inverse_transform_status = "not_required" if current_space == paper_space else "unavailable"
+    inverse_transform_attempted = False
+    paper_metric_status = "valid" if current_space == paper_space else "unavailable"
+    paper_metric_error = ""
     notes = []
 
     if current_space == "normalized_minmax_space" and paper_space == "original_sales_space":
-        inverse_params = _extract_sales_inverse_params(sales_scaler=sales_scaler, feature_columns=feature_columns)
-        if inverse_params is None:
-            message = (
-                "paper metric requires inverse-transform to original sales space, "
-                "but scaler/feature_columns are missing."
-            )
-            if strict_paper_metrics:
-                raise ValueError(message)
-            notes.append(f"FALLBACK_CURRENT_SPACE: {message}")
-            warning = "WARNING: sMAPE is computed on normalized scale because original-scale inverse transform is unavailable."
-            notes.append(warning)
-            logging.getLogger("experiment").warning(warning)
+        if sales_scaler is None:
+            paper_metric_status = "missing_scaler"
+            paper_metric_error = "sales_scaler is required for original-sales metrics"
+        elif feature_columns is None:
+            paper_metric_status = "missing_feature_columns"
+            paper_metric_error = "feature_columns is required for original-sales metrics"
+        elif "sales" not in [str(column) for column in list(feature_columns)]:
+            paper_metric_status = "missing_sales_feature"
+            paper_metric_error = "feature_columns must include sales"
         else:
-            sales_min, sales_max = inverse_params
-            y_true_paper = _inverse_minmax(y_true_arr, sales_min, sales_max)
-            y_pred_paper = _inverse_minmax(y_pred_arr, sales_min, sales_max)
-            inverse_transform_applied = True
-            inverse_transform_available = True
-
-    rmse_paper = _compute_rmse(y_true_paper, y_pred_paper)
-    mae_paper = _compute_mae(y_true_paper, y_pred_paper)
-    mape_paper = _compute_mape(y_true_paper, y_pred_paper, eps=eps)
-    smape_paper = smape(y_true_paper, y_pred_paper, epsilon=eps)
-    accuracy_paper = _compute_accuracy_from_rmse(
-        rmse=rmse_paper,
-        eps=eps,
-        definition=paper_accuracy_definition,
-    )
-
-    use_paper_metric = strict_paper_metrics
-    metric_space_used = paper_space if use_paper_metric else current_space
-    rmse_final = rmse_paper if use_paper_metric else rmse_current
-    accuracy_final = accuracy_paper if use_paper_metric else accuracy_current
-    mae_final = mae_paper if use_paper_metric else mae_current
-    mape_final = mape_paper if use_paper_metric else mape_current
-    original_scale_available = paper_space == "original_sales_space" and inverse_transform_available
-    original_scale_smape = float(smape_paper) if original_scale_available else None
-    smape_final = float(original_scale_smape) if original_scale_smape is not None else float(smape_current)
-    if use_paper_metric:
-        rmse_metric_space = paper_space
-        smape_metric_space = paper_space
+            inverse_params = _extract_sales_inverse_params(
+                sales_scaler=sales_scaler,
+                feature_columns=feature_columns,
+            )
+            if inverse_params is None:
+                paper_metric_status = "inverse_transform_failed"
+                paper_metric_error = "sales scaler does not expose valid sales min/max parameters"
+            else:
+                inverse_transform_attempted = True
+                try:
+                    sales_min, sales_max = inverse_params
+                    y_true_paper = _inverse_minmax(y_true_arr, sales_min, sales_max)
+                    y_pred_paper = _inverse_minmax(y_pred_arr, sales_min, sales_max)
+                    if not np.isfinite(y_true_paper).all() or not np.isfinite(y_pred_paper).all():
+                        raise ValueError("inverse transform produced non-finite values")
+                    inverse_transform_status = "applied"
+                    paper_metric_status = "valid"
+                except Exception as exc:  # the typed boundary records the original cause
+                    inverse_transform_status = "failed"
+                    paper_metric_status = "inverse_transform_failed"
+                    paper_metric_error = str(exc)
+    elif current_space == paper_space:
+        y_true_paper = y_true_arr
+        y_pred_paper = y_pred_arr
     else:
-        rmse_metric_space = current_space
-        smape_metric_space = paper_space if original_scale_smape is not None else current_space
+        paper_metric_status = "inverse_transform_failed"
+        paper_metric_error = f"unsupported metric-space conversion: {current_space} -> {paper_space}"
+        inverse_transform_status = "failed"
 
-    # metric_space_used is a summary diagnostic only. When it is mixed_metric_space,
-    # downstream consumers must read rmse_metric_space and smape_metric_space.
+    if paper_metric_status != "valid":
+        if strict_paper_metrics:
+            missing = {
+                "missing_scaler": ("sales_scaler",),
+                "missing_feature_columns": ("feature_columns",),
+                "missing_sales_feature": ("sales",),
+            }.get(paper_metric_status, ())
+            raise MetricProtocolError(
+                paper_metric_status,
+                missing_fields=missing,
+                detail=paper_metric_error,
+            )
+        message = f"FALLBACK_CURRENT_SPACE: {paper_metric_error}"
+        notes.append(message)
+        logging.getLogger("experiment").warning(message)
+
+    paper_metric_computed_valid = y_true_paper is not None and y_pred_paper is not None
+    if paper_metric_computed_valid:
+        target_negative_count = int(np.count_nonzero(y_true_paper < 0))
+        if strict_paper_metrics and paper_space == ORIGINAL_SALES_SPACE and target_negative_count:
+            raise MetricProtocolError(
+                "negative_target",
+                detail=f"target_negative_count={target_negative_count}",
+            )
+        rmse_paper = _compute_rmse(y_true_paper, y_pred_paper)
+        mae_paper = _compute_mae(y_true_paper, y_pred_paper)
+        mape_paper = _compute_mape(y_true_paper, y_pred_paper, eps=eps)
+        smape_paper = smape(y_true_paper, y_pred_paper, epsilon=eps)
+        accuracy_paper = _compute_accuracy_from_rmse(
+            rmse=rmse_paper,
+            eps=eps,
+            definition=paper_accuracy_definition,
+        )
+        if strict_paper_metrics and (
+            not np.isfinite(smape_paper) or not SMAPE_RANGE[0] <= smape_paper <= SMAPE_RANGE[1]
+        ):
+            raise MetricProtocolError("metric_computation_failed", detail=f"smape={smape_paper}")
+    else:
+        target_negative_count = int(np.count_nonzero(y_true_arr < 0))
+        rmse_paper = accuracy_paper = mae_paper = mape_paper = smape_paper = None
+
+    use_paper_metric = strict_paper_metrics and paper_metric_computed_valid
+    paper_actual_space = paper_space if paper_metric_computed_valid else "unavailable"
+    original_scale_available = paper_metric_computed_valid and paper_actual_space == ORIGINAL_SALES_SPACE
+    original_scale_smape = float(smape_paper) if original_scale_available else None
+    if use_paper_metric:
+        rmse_final = float(rmse_paper)
+        accuracy_final = float(accuracy_paper)
+        mae_final = float(mae_paper)
+        mape_final = float(mape_paper)
+        smape_final = float(smape_paper)
+        rmse_metric_space = paper_actual_space
+        smape_metric_space = paper_actual_space
+    else:
+        rmse_final = rmse_current
+        accuracy_final = accuracy_current
+        mae_final = mae_current
+        mape_final = mape_current
+        if original_scale_available:
+            smape_final = float(smape_paper)
+            smape_metric_space = paper_actual_space
+        else:
+            smape_final = float(smape_current)
+            smape_metric_space = current_space
+        rmse_metric_space = current_space
+
     metric_space_used = rmse_metric_space if rmse_metric_space == smape_metric_space else MIXED_METRIC_SPACE
     if metric_space_used == MIXED_METRIC_SPACE and not metric_protocol_note:
         metric_protocol_note = MIXED_METRIC_PROTOCOL_NOTE
+
+    audit_true = y_true_paper if paper_metric_computed_valid else y_true_arr
+    audit_pred = y_pred_paper if paper_metric_computed_valid else y_pred_arr
+    sample_count = int(audit_true.size)
+    target_zero_count = int(np.count_nonzero(audit_true == 0))
+    prediction_zero_count = int(np.count_nonzero(audit_pred == 0))
+    prediction_negative_count = int(np.count_nonzero(audit_pred < 0))
 
     return {
         "rmse": float(rmse_final),
@@ -225,11 +304,11 @@ def compute_metrics_with_protocol(
         "mae_current": float(mae_current),
         "mape_current": float(mape_current),
         "smape_current": float(smape_current),
-        "rmse_paper": float(rmse_paper),
-        "accuracy_paper": float(accuracy_paper),
-        "mae_paper": float(mae_paper),
-        "mape_paper": float(mape_paper),
-        "smape_paper": float(smape_paper),
+        "rmse_paper": float(rmse_paper) if rmse_paper is not None else None,
+        "accuracy_paper": float(accuracy_paper) if accuracy_paper is not None else None,
+        "mae_paper": float(mae_paper) if mae_paper is not None else None,
+        "mape_paper": float(mape_paper) if mape_paper is not None else None,
+        "smape_paper": float(smape_paper) if smape_paper is not None else None,
         "normalized_rmse": float(rmse_current) if current_space == "normalized_minmax_space" else None,
         "normalized_accuracy": float(accuracy_current) if current_space == "normalized_minmax_space" else None,
         "normalized_mae": float(mae_current) if current_space == "normalized_minmax_space" else None,
@@ -242,10 +321,29 @@ def compute_metrics_with_protocol(
         "original_scale_smape": original_scale_smape,
         "metric_space_current": current_space,
         "metric_space_paper": paper_space,
+        "current_metric_space_actual": current_space,
+        "paper_metric_space_requested": paper_space,
+        "paper_metric_space_actual": paper_actual_space,
+        "primary_metric_space_actual": smape_metric_space,
         "paper_metric_aligned": bool(use_paper_metric),
-        "inverse_transform_applied": bool(inverse_transform_applied),
-        "inverse_transform_available": bool(inverse_transform_available),
+        "inverse_transform_attempted": bool(inverse_transform_attempted),
+        "inverse_transform_status": inverse_transform_status,
+        "inverse_transform_applied": inverse_transform_status == "applied",
+        "inverse_transform_available": inverse_transform_status in {"applied", "not_required"},
         "strict_paper_metrics": bool(strict_paper_metrics),
+        "paper_metric_computed_valid": bool(paper_metric_computed_valid),
+        "paper_metric_status": paper_metric_status,
+        "paper_metric_error": paper_metric_error,
+        "metric_sample_count": sample_count,
+        "target_zero_count": target_zero_count,
+        "target_zero_rate": float(target_zero_count / sample_count),
+        "target_negative_count": int(np.count_nonzero(audit_true < 0)),
+        "target_negative_rate": float(np.count_nonzero(audit_true < 0) / sample_count),
+        "prediction_zero_count": prediction_zero_count,
+        "prediction_zero_rate": float(prediction_zero_count / sample_count),
+        "prediction_negative_count": prediction_negative_count,
+        "prediction_negative_rate": float(prediction_negative_count / sample_count),
+        **SMAPE_CONTRACT_FIELDS,
         "metric_protocol_note": metric_protocol_note,
         "metric_notes": " | ".join(notes),
     }

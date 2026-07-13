@@ -334,6 +334,7 @@ def run_mssb_tl(
     target_epochs: int = 3,
     batch_size: int = 16,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
+    metric_identity: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
     """
     Run MSSB-TL: top-k source selection + per-source SS-TL + val-based model switching.
@@ -495,6 +496,7 @@ def run_mssb_tl(
         "sales_scaler": best_source_result.get("sales_scaler"),
         "feature_columns": best_source_result.get("feature_columns"),
         "prediction_shape": tuple(best_source_result["prediction_shape"]),
+        **dict(metric_identity or {}),
     }
     public_individual_results = []
     for item in individual_results:

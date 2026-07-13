@@ -46,8 +46,10 @@ class _FakeSelector:
 
 
 def _multi_source_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
+    source_dates = list(pd.date_range("2024-01-01", periods=2, freq="D")) * 2
     source_df = pd.DataFrame(
         {
+            "date": source_dates,
             "entity_id": ["bad", "bad", "good", "good"],
             "item_id": ["item", "item", "item", "item"],
             "sales": [1.0, 2.0, 3.0, 4.0],
@@ -55,6 +57,7 @@ def _multi_source_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
     )
     target_df = pd.DataFrame(
         {
+            "date": pd.date_range("2024-01-01", periods=3, freq="D"),
             "entity_id": ["target", "target", "target"],
             "item_id": ["item", "item", "item"],
             "sales": [10.0, 20.0, 30.0],
@@ -183,21 +186,28 @@ def test_mswa_all_sources_failed_raises_typed_error(monkeypatch) -> None:
 
 
 def test_entity_loop_writes_error_row_for_all_sources_failed(monkeypatch) -> None:
-    dates = pd.date_range("2024-01-01", periods=3, freq="D")
+    dates = pd.date_range("2024-01-01", periods=40, freq="D")
     source_df = pd.DataFrame(
         {
             "date": list(dates) * 2,
-            "entity_id": ["bad"] * 3 + ["also_bad"] * 3,
-            "item_id": ["item"] * 6,
-            "sales": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            "entity_id": ["target"] * (len(dates) * 2),
+            "item_id": ["bad"] * len(dates) + ["also_bad"] * len(dates),
+            "family": ["F1"] * (len(dates) * 2),
+            "sales": np.concatenate(
+                [
+                    np.arange(1.0, len(dates) + 1.0),
+                    np.arange(2.0, len(dates) + 2.0),
+                ]
+            ),
         }
     )
     target_df = pd.DataFrame(
         {
             "date": dates,
-            "entity_id": ["target"] * 3,
-            "item_id": ["item"] * 3,
-            "sales": [10.0, 11.0, 12.0],
+            "entity_id": ["target"] * len(dates),
+            "item_id": ["item"] * len(dates),
+            "family": ["F1"] * len(dates),
+            "sales": np.arange(10.0, len(dates) + 10.0),
         }
     )
     failed_sources = [

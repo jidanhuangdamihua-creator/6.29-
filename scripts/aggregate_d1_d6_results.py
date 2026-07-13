@@ -21,6 +21,10 @@ from src.constants import (
     SCHEMA_FAMILY_D4_D6,
     preferred_columns_with_extras,
 )
+from src.evaluation.metric_contract import (
+    build_formal_smape_aggregates,
+    filter_formally_comparable_smape_rows,
+)
 from src.utils.result_validation import (
     annotate_silent_metric_failure,
     classify_protocol_result,
@@ -69,6 +73,11 @@ PREFERRED_COLUMNS = [
 ]
 
 _CsvDataFrameCache = Dict[Path, Tuple[int, int, pd.DataFrame]]
+
+
+def aggregate_formal_smape(frame: pd.DataFrame) -> Dict[str, Any]:
+    """Public formal aggregation entry point shared with tests and reports."""
+    return build_formal_smape_aggregates(frame)
 
 
 def _read_csv_dataframe(path: Path, csv_cache: Optional[_CsvDataFrameCache] = None) -> pd.DataFrame:
@@ -446,75 +455,71 @@ def _build_audit_rows(
 
 
 def _write_metric_summaries(output: Path, all_rows: Sequence[Dict[str, str]]) -> List[Path]:
-    dataset_method_rows: List[Dict[str, Any]] = []
-    method_values: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: {"smape": [], "rmse": []})
-    dataset_method_groups: Dict[Tuple[int, str], List[Dict[str, str]]] = defaultdict(list)
-
-    for row in all_rows:
-        dataset_id = int(row["dataset_id"])
-        method = row.get("method", "")
-        key = (dataset_id, method)
-        dataset_method_groups[key].append(row)
-        for metric in ("smape", "rmse"):
-            parsed = _parse_float(row.get(metric))
-            if parsed is not None:
-                method_values[method][metric].append(parsed)
-
-    for (dataset_id, method), group in sorted(dataset_method_groups.items()):
-        mean_smape, smape_n = _mean_metric(group, "smape")
-        mean_rmse, rmse_n = _mean_metric(group, "rmse")
-        dataset_method_rows.append(
-            {
-                "dataset_id": dataset_id,
-                "method": method,
-                "row_count": len(group),
-                "smape_valid_count": smape_n,
-                "rmse_valid_count": rmse_n,
-                "mean_smape": "" if mean_smape is None else mean_smape,
-                "mean_rmse": "" if mean_rmse is None else mean_rmse,
-            }
-        )
+    aggregates = aggregate_formal_smape(pd.DataFrame(all_rows))
+    dataset_method_rows = aggregates["dataset_macro"].rename(
+        columns={"dataset": "dataset_id", "smape": "mean_smape"}
+    ).to_dict(orient="records")
+    for row in dataset_method_rows:
+        row.update({"row_count": 1, "smape_valid_count": 1, "rmse_valid_count": 0, "mean_rmse": ""})
 
     dataset_method_path = output.with_name(f"{output.stem}_dataset_method_metrics.csv")
     _write_csv(
         dataset_method_path,
         dataset_method_rows,
-        ["dataset_id", "method", "row_count", "smape_valid_count", "rmse_valid_count", "mean_smape", "mean_rmse"],
+        [
+            "dataset_id",
+            "method",
+            "horizon",
+            "sharing_scenario",
+            "row_count",
+            "smape_valid_count",
+            "rmse_valid_count",
+            "mean_smape",
+            "mean_rmse",
+        ],
     )
 
-    method_mean_rows: List[Dict[str, Any]] = []
-    for method in sorted(method_values):
-        smape_vals = method_values[method]["smape"]
-        rmse_vals = method_values[method]["rmse"]
-        method_mean_rows.append(
-            {
-                "method": method,
-                "row_count": len(smape_vals) + len(rmse_vals),
-                "smape_valid_count": len(smape_vals),
-                "rmse_valid_count": len(rmse_vals),
-                "mean_smape": "" if not smape_vals else statistics.fmean(smape_vals),
-                "mean_rmse": "" if not rmse_vals else statistics.fmean(rmse_vals),
-            }
-        )
+    method_mean_rows = aggregates["cross_dataset_macro"].rename(
+        columns={"smape": "mean_smape"}
+    ).to_dict(orient="records")
+    for row in method_mean_rows:
+        row.update({"row_count": 1, "smape_valid_count": 1, "rmse_valid_count": 0, "mean_rmse": ""})
 
     method_mean_path = output.with_name(f"{output.stem}_method_mean_metrics.csv")
     _write_csv(
         method_mean_path,
         method_mean_rows,
-        ["method", "row_count", "smape_valid_count", "rmse_valid_count", "mean_smape", "mean_rmse"],
+        [
+            "method",
+            "horizon",
+            "sharing_scenario",
+            "rank",
+            "row_count",
+            "smape_valid_count",
+            "rmse_valid_count",
+            "mean_smape",
+            "mean_rmse",
+        ],
     )
     return [dataset_method_path, method_mean_path]
 
 
 def _write_best_method_outputs(output: Path, all_rows: Sequence[Dict[str, str]]) -> List[Path]:
+    eligible_frame, _ = filter_formally_comparable_smape_rows(pd.DataFrame(all_rows))
+    all_rows = eligible_frame.to_dict(orient="records")
     best_by_target_rows: List[Dict[str, Any]] = []
     wins_by_dataset: Dict[int, Counter] = defaultdict(Counter)
-    target_groups: Dict[Tuple[int, str, str], List[Dict[str, str]]] = defaultdict(list)
+    target_groups: Dict[Tuple[int, str, int, str], List[Dict[str, str]]] = defaultdict(list)
     for row in all_rows:
-        key = (int(row["dataset_id"]), _target_key(row), row.get("information_sharing") or row.get("scenario", ""))
+        key = (
+            int(row["dataset_id"]),
+            _target_key(row),
+            int(row.get("horizon", 0)),
+            row.get("information_sharing") or row.get("scenario", ""),
+        )
         target_groups[key].append(row)
 
-    for (dataset_id, target, scenario), group in sorted(target_groups.items()):
+    for (dataset_id, target, horizon, scenario), group in sorted(target_groups.items()):
         ranked = []
         for row in group:
             smape = _parse_float(row.get("smape"))
@@ -529,6 +534,7 @@ def _write_best_method_outputs(output: Path, all_rows: Sequence[Dict[str, str]])
             {
                 "dataset_id": dataset_id,
                 "target_entity_key": target,
+                "horizon": horizon,
                 "information_sharing": scenario,
                 "best_method": method,
                 "best_smape": best_smape,
@@ -545,6 +551,7 @@ def _write_best_method_outputs(output: Path, all_rows: Sequence[Dict[str, str]])
         [
             "dataset_id",
             "target_entity_key",
+            "horizon",
             "information_sharing",
             "best_method",
             "best_smape",

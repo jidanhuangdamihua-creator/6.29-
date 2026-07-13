@@ -58,6 +58,44 @@ from src.utils.source_fillna import fill_source_numeric_na
 
 LOGGER_NAME = "experiment"
 DEFAULT_METHODS = ["No-TL", "SS-TL", "MSWA-TL", "MSSB-TL", "MSML-TL", "MSML-TL-RFE"]
+METRIC_AUDIT_FIELDS = (
+    "current_metric_space_actual",
+    "paper_metric_space_requested",
+    "paper_metric_space_actual",
+    "primary_metric_space_actual",
+    "inverse_transform_attempted",
+    "inverse_transform_status",
+    "inverse_transform_available",
+    "strict_paper_metrics",
+    "paper_metric_computed_valid",
+    "paper_metric_status",
+    "paper_metric_error",
+    "metric_contract_version",
+    "smape_definition_id",
+    "smape_unit",
+    "smape_epsilon",
+    "smape_range_min",
+    "smape_range_max",
+    "sales_value_policy",
+    "metric_sample_count",
+    "target_zero_count",
+    "target_zero_rate",
+    "target_negative_count",
+    "target_negative_rate",
+    "prediction_zero_count",
+    "prediction_zero_rate",
+    "prediction_negative_count",
+    "prediction_negative_rate",
+    "metric_target_key",
+    "metric_horizon",
+    "metric_date_start",
+    "metric_date_end",
+    "metric_index_digest",
+)
+
+
+def _metric_audit_values(raw: Dict[str, Any]) -> Dict[str, Any]:
+    return {field: raw[field] for field in METRIC_AUDIT_FIELDS if field in raw}
 
 
 def _get_nested(config: Any, key: str, default: Any = None) -> Any:
@@ -258,6 +296,15 @@ def _coalesce_metric(*values: Any) -> Any:
     return None
 
 
+def _float_or_nan(value: Any) -> float:
+    if value is None:
+        return float("nan")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float("nan")
+
+
 def _summarize_metric_space(rmse_metric_space: Any, smape_metric_space: Any, fallback: Any) -> str:
     rmse_space = str(rmse_metric_space or "").strip()
     smape_space = str(smape_metric_space or "").strip()
@@ -270,6 +317,7 @@ def _extract_method_metrics(
     raw_result: Dict[str, Any],
     method_name: str,
     metric_protocol: Optional[Dict[str, Any]] = None,
+    expected_metric_identity: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     从不同模块返回结构中统一抽取结果字段。
@@ -282,6 +330,8 @@ def _extract_method_metrics(
     if not isinstance(raw_result, dict):
         raise ValueError(f"{method_name} raw_result must be a dict, got {type(raw_result)}")
 
+    strict_paper_metrics = bool((metric_protocol or {}).get("strict_paper_metrics", False))
+
     candidates: List[Dict[str, Any]] = []
     for key in ("fused_result", "final_result"):
         value = raw_result.get(key)
@@ -291,20 +341,44 @@ def _extract_method_metrics(
 
     selected: Optional[Dict[str, Any]] = None
     for c in candidates:
-        if "rmse" in c and "accuracy" in c:
+        if strict_paper_metrics or ("rmse" in c and "accuracy" in c):
             selected = c
             break
 
     if selected is None:
         raise ValueError(f"Cannot extract rmse/accuracy from method={method_name} result.")
 
-    if (
-        metric_protocol is not None
-        and "y_true" in selected
-        and "y_pred" in selected
-        and selected.get("sales_scaler") is not None
-        and selected.get("feature_columns") is not None
-    ):
+    if strict_paper_metrics:
+        from src.evaluation.metric_contract import MetricProtocolError, validate_metric_identity
+
+        required_statuses = {
+            "y_true": "missing_y_true",
+            "y_pred": "missing_y_pred",
+            "sales_scaler": "missing_scaler",
+            "feature_columns": "missing_feature_columns",
+        }
+        for field, status in required_statuses.items():
+            if field not in selected or selected.get(field) is None:
+                raise MetricProtocolError(status, missing_fields=(field,))
+        feature_columns = [str(value) for value in list(selected["feature_columns"])]
+        if "sales" not in feature_columns:
+            raise MetricProtocolError("missing_sales_feature", missing_fields=("sales",))
+        if expected_metric_identity is not None:
+            validate_metric_identity(selected, expected_metric_identity)
+            expected_count = int(expected_metric_identity["metric_sample_count"])
+            actual_true_count = int(np.asarray(selected["y_true"]).reshape(-1).size)
+            actual_pred_count = int(np.asarray(selected["y_pred"]).reshape(-1).size)
+            if actual_true_count != expected_count or actual_pred_count != expected_count:
+                raise MetricProtocolError(
+                    "metric_identity_mismatch",
+                    missing_fields=("metric_sample_count",),
+                    detail=(
+                        f"metric_sample_count expected={expected_count} "
+                        f"y_true={actual_true_count} y_pred={actual_pred_count}"
+                    ),
+                )
+
+    if metric_protocol is not None and "y_true" in selected and "y_pred" in selected:
         from src.evaluation.metrics import compute_metrics_with_protocol
 
         metric_result = compute_metrics_with_protocol(
@@ -324,6 +398,13 @@ def _extract_method_metrics(
             "normalized_smape": selected.get("normalized_smape", selected.get("smape")),
             **metric_result,
         }
+    elif strict_paper_metrics:
+        from src.evaluation.metric_contract import MetricProtocolError
+
+        raise MetricProtocolError(
+            "metric_computation_failed",
+            detail=f"strict recomputation was not completed for method={method_name}",
+        )
 
     prediction_shape = selected.get("prediction_shape")
     if prediction_shape is None:
@@ -358,11 +439,11 @@ def _extract_method_metrics(
         "mae_current": float(selected.get("mae_current", float("nan"))),
         "mape_current": float(selected.get("mape_current", float("nan"))),
         "smape_current": float(selected.get("smape_current", float("nan"))),
-        "rmse_paper": float(selected.get("rmse_paper", float("nan"))),
-        "accuracy_paper": float(selected.get("accuracy_paper", float("nan"))),
-        "mae_paper": float(selected.get("mae_paper", float("nan"))),
-        "mape_paper": float(selected.get("mape_paper", float("nan"))),
-        "smape_paper": float(selected.get("smape_paper", float("nan"))),
+        "rmse_paper": selected.get("rmse_paper"),
+        "accuracy_paper": selected.get("accuracy_paper"),
+        "mae_paper": selected.get("mae_paper"),
+        "mape_paper": selected.get("mape_paper"),
+        "smape_paper": selected.get("smape_paper"),
         "normalized_rmse": selected.get("normalized_rmse"),
         "normalized_accuracy": selected.get("normalized_accuracy"),
         "normalized_mae": selected.get("normalized_mae"),
@@ -397,6 +478,7 @@ def _extract_method_metrics(
         "metric_notes": str(selected.get("metric_notes", "")),
         "meta": method_meta,
     }
+    result.update(_metric_audit_values(selected))
     for source_diagnostic_key in (
         "failed_source_count",
         "failed_source_keys",
@@ -448,12 +530,23 @@ def _extract_method_metrics(
     result["normalized_accuracy"] = _coalesce_metric(result.get("normalized_accuracy"), result.get("accuracy_current"))
     result["normalized_mae"] = _coalesce_metric(result.get("normalized_mae"), result.get("mae_current"))
     result["normalized_smape"] = _coalesce_metric(result.get("normalized_smape"), result.get("smape_current"))
-    smape_value = _coalesce_metric(
-        result.get("original_scale_smape"),
-        result.get("smape"),
-        result.get("normalized_smape"),
-    )
-    result["smape"] = float(smape_value) if smape_value is not None else float("nan")
+    if strict_paper_metrics:
+        if not bool(result.get("paper_metric_computed_valid", False)):
+            from src.evaluation.metric_contract import MetricProtocolError
+
+            raise MetricProtocolError(
+                "metric_computation_failed",
+                detail=f"strict paper metric invalid for method={method_name}",
+            )
+        result["smape"] = float(result["smape_paper"])
+        result["rmse"] = float(result["rmse_paper"])
+    else:
+        smape_value = _coalesce_metric(
+            result.get("original_scale_smape"),
+            result.get("smape"),
+            result.get("normalized_smape"),
+        )
+        result["smape"] = float(smape_value) if smape_value is not None else float("nan")
     fallback_metric_space = result.get("metric_space_used", result.get("metric_space", "normalized_minmax_space"))
     if "rmse_metric_space" in selected or "smape_metric_space" in selected:
         result["metric_space_used"] = _summarize_metric_space(
@@ -763,11 +856,11 @@ def run_ss_tl_experiment(
         "mae_current": float(ss_raw.get("mae_current", float("nan"))),
         "mape_current": float(ss_raw.get("mape_current", float("nan"))),
         "smape_current": float(ss_raw.get("smape_current", float("nan"))),
-        "rmse_paper": float(ss_raw.get("rmse_paper", float("nan"))),
-        "accuracy_paper": float(ss_raw.get("accuracy_paper", float("nan"))),
-        "mae_paper": float(ss_raw.get("mae_paper", float("nan"))),
-        "mape_paper": float(ss_raw.get("mape_paper", float("nan"))),
-        "smape_paper": float(ss_raw.get("smape_paper", float("nan"))),
+        "rmse_paper": _float_or_nan(ss_raw.get("rmse_paper")),
+        "accuracy_paper": _float_or_nan(ss_raw.get("accuracy_paper")),
+        "mae_paper": _float_or_nan(ss_raw.get("mae_paper")),
+        "mape_paper": _float_or_nan(ss_raw.get("mape_paper")),
+        "smape_paper": _float_or_nan(ss_raw.get("smape_paper")),
         "normalized_rmse": ss_raw.get("normalized_rmse"),
         "normalized_accuracy": ss_raw.get("normalized_accuracy"),
         "normalized_mae": ss_raw.get("normalized_mae"),
@@ -822,6 +915,7 @@ def run_ss_tl_experiment(
             "window_size": int(window_size),
         },
     }
+    result.update(_metric_audit_values(ss_raw))
 
     logger.info(
         "[run_ss_tl_experiment] Finished. rmse=%.4f accuracy=%.4f",
@@ -846,6 +940,7 @@ def run_mswa_experiment(
     target_epochs: int = 3,
     batch_size: int = 16,
     metric_protocol: Optional[Dict[str, Any]] = None,
+    expected_metric_identity: Optional[Dict[str, Any]] = None,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
 ) -> Dict[str, Any]:
     """运行 MSWA-TL，并返回统一结构。"""
@@ -868,8 +963,14 @@ def run_mswa_experiment(
         source_epochs=source_epochs,
         target_epochs=target_epochs,
         batch_size=batch_size,
+        metric_identity=expected_metric_identity,
     )
-    return _extract_method_metrics(raw, method_name="MSWA-TL", metric_protocol=metric_protocol)
+    return _extract_method_metrics(
+        raw,
+        method_name="MSWA-TL",
+        metric_protocol=metric_protocol,
+        expected_metric_identity=expected_metric_identity,
+    )
 
 
 def run_mssb_experiment(
@@ -887,6 +988,7 @@ def run_mssb_experiment(
     target_epochs: int = 3,
     batch_size: int = 16,
     metric_protocol: Optional[Dict[str, Any]] = None,
+    expected_metric_identity: Optional[Dict[str, Any]] = None,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
 ) -> Dict[str, Any]:
     """运行 MSSB-TL，并返回统一结构。"""
@@ -909,8 +1011,14 @@ def run_mssb_experiment(
         source_epochs=source_epochs,
         target_epochs=target_epochs,
         batch_size=batch_size,
+        metric_identity=expected_metric_identity,
     )
-    return _extract_method_metrics(raw, method_name="MSSB-TL", metric_protocol=metric_protocol)
+    return _extract_method_metrics(
+        raw,
+        method_name="MSSB-TL",
+        metric_protocol=metric_protocol,
+        expected_metric_identity=expected_metric_identity,
+    )
 
 
 def run_msml_experiment(
@@ -928,6 +1036,7 @@ def run_msml_experiment(
     target_epochs: int = 3,
     batch_size: int = 16,
     metric_protocol: Optional[Dict[str, Any]] = None,
+    expected_metric_identity: Optional[Dict[str, Any]] = None,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
 ) -> Dict[str, Any]:
     """运行 MSML-TL，并返回统一结构。"""
@@ -950,8 +1059,14 @@ def run_msml_experiment(
         source_epochs=source_epochs,
         target_epochs=target_epochs,
         batch_size=batch_size,
+        metric_identity=expected_metric_identity,
     )
-    return _extract_method_metrics(raw, method_name="MSML-TL", metric_protocol=metric_protocol)
+    return _extract_method_metrics(
+        raw,
+        method_name="MSML-TL",
+        metric_protocol=metric_protocol,
+        expected_metric_identity=expected_metric_identity,
+    )
 
 
 def run_msml_rfe_experiment(
@@ -972,6 +1087,7 @@ def run_msml_rfe_experiment(
     batch_size: int = 16,
     random_state: int = 42,
     metric_protocol: Optional[Dict[str, Any]] = None,
+    expected_metric_identity: Optional[Dict[str, Any]] = None,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
 ) -> Dict[str, Any]:
     """运行 MSML-TL-RFE，并返回统一结构。"""
@@ -997,8 +1113,14 @@ def run_msml_rfe_experiment(
         target_epochs=target_epochs,
         batch_size=batch_size,
         random_state=int(random_state),
+        metric_identity=expected_metric_identity,
     )
-    return _extract_method_metrics(raw, method_name="MSML-TL-RFE", metric_protocol=metric_protocol)
+    return _extract_method_metrics(
+        raw,
+        method_name="MSML-TL-RFE",
+        metric_protocol=metric_protocol,
+        expected_metric_identity=expected_metric_identity,
+    )
 
 
 def run_all_experiments(
@@ -1358,24 +1480,25 @@ def results_to_dataframe(experiment_results: Dict[str, Any]) -> pd.DataFrame:
                 "mae_current": float(one.get("mae_current", np.nan)),
                 "mape_current": float(one.get("mape_current", np.nan)),
                 "smape_current": float(one.get("smape_current", np.nan)),
-                "rmse_paper": float(one.get("rmse_paper", np.nan)),
-                "accuracy_paper": float(one.get("accuracy_paper", np.nan)),
-                "mae_paper": float(one.get("mae_paper", np.nan)),
-                "mape_paper": float(one.get("mape_paper", np.nan)),
-                "smape_paper": float(one.get("smape_paper", np.nan)),
+                "rmse_paper": _float_or_nan(one.get("rmse_paper")),
+                "accuracy_paper": _float_or_nan(one.get("accuracy_paper")),
+                "mae_paper": _float_or_nan(one.get("mae_paper")),
+                "mape_paper": _float_or_nan(one.get("mape_paper")),
+                "smape_paper": _float_or_nan(one.get("smape_paper")),
                 "normalized_rmse": one.get("normalized_rmse", np.nan),
                 "normalized_accuracy": one.get("normalized_accuracy", np.nan),
                 "normalized_mae": one.get("normalized_mae", np.nan),
                 "normalized_mape": one.get("normalized_mape", np.nan),
                 "normalized_smape": one.get("normalized_smape", np.nan),
-                "original_scale_rmse": one.get("original_scale_rmse", np.nan),
-                "original_scale_accuracy": one.get("original_scale_accuracy", np.nan),
-                "original_scale_mae": one.get("original_scale_mae", np.nan),
-                "original_scale_mape": one.get("original_scale_mape", np.nan),
-                "original_scale_smape": one.get("original_scale_smape", np.nan),
+                "original_scale_rmse": _float_or_nan(one.get("original_scale_rmse")),
+                "original_scale_accuracy": _float_or_nan(one.get("original_scale_accuracy")),
+                "original_scale_mae": _float_or_nan(one.get("original_scale_mae")),
+                "original_scale_mape": _float_or_nan(one.get("original_scale_mape")),
+                "original_scale_smape": _float_or_nan(one.get("original_scale_smape")),
                 "prediction_shape": str(one.get("prediction_shape", "N/A")),
                 "include_sales_in_knn": include_sales_in_knn,
                 "alignment_notes": protocol.get("alignment_notes", ""),
+                **_metric_audit_values(one),
             }
         )
 
@@ -1440,6 +1563,7 @@ def results_to_dataframe(experiment_results: Dict[str, Any]) -> pd.DataFrame:
             "original_scale_mae",
             "original_scale_mape",
             "original_scale_smape",
+            *METRIC_AUDIT_FIELDS,
             "prediction_shape",
             "alignment_notes",
         ],

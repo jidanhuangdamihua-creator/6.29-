@@ -12,7 +12,7 @@ This module implements output-level multi-source transfer fusion:
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -340,6 +340,7 @@ def run_mswa_tl(
     target_epochs: int = 3,
     batch_size: int = 16,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
+    metric_identity: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
     """
     Run MSWA-TL: top-k source selection + per-source SS-TL + weighted output fusion.
@@ -506,6 +507,7 @@ def run_mswa_tl(
     fused_result = evaluate_fused_predictions(y_true=y_test_reference, y_pred=fused_pred)
     fused_result["sales_scaler"] = target_scaler_reference
     fused_result["feature_columns"] = target_feature_columns_reference
+    fused_result.update(dict(metric_identity or {}))
 
     result = {
         "meta": {

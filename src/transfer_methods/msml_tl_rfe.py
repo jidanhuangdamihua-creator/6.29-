@@ -581,6 +581,7 @@ def run_msml_tl_rfe(
     batch_size: int = 16,
     random_state: int = 42,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
+    metric_identity: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
     """
     运行 MSML-TL-RFE 完整流程。
@@ -948,6 +949,7 @@ def run_msml_tl_rfe(
             "prediction_shape": eval_result["prediction_shape"],
             "sales_scaler": target_scaler,
             "feature_columns": target_feature_columns,
+            **dict(metric_identity or {}),
             **{
                 key: value
                 for key, value in eval_result.items()

@@ -25,6 +25,10 @@ from src.experiment.experiment_runner import (
     run_no_tl_experiment,
     run_ss_tl_experiment,
 )
+from src.evaluation.metric_contract import (
+    MetricProtocolError,
+    compute_metric_index_digest,
+)
 from src.transfer_methods.source_failure_tolerance import (
     AllSourcesFailedError,
     RUNTIME_SELECTION_META_FIELDS,
@@ -59,6 +63,37 @@ METRIC_STATUS_COLUMNS = (
     "paper_metric_aligned",
     "inverse_transform_applied",
     "inverse_transform_available",
+    "inverse_transform_attempted",
+    "inverse_transform_status",
+    "strict_paper_metrics",
+    "current_metric_space_actual",
+    "paper_metric_space_requested",
+    "paper_metric_space_actual",
+    "primary_metric_space_actual",
+    "paper_metric_computed_valid",
+    "paper_metric_status",
+    "paper_metric_error",
+    "metric_contract_version",
+    "smape_definition_id",
+    "smape_unit",
+    "smape_epsilon",
+    "smape_range_min",
+    "smape_range_max",
+    "sales_value_policy",
+    "metric_sample_count",
+    "target_zero_count",
+    "target_zero_rate",
+    "target_negative_count",
+    "target_negative_rate",
+    "prediction_zero_count",
+    "prediction_zero_rate",
+    "prediction_negative_count",
+    "prediction_negative_rate",
+    "metric_target_key",
+    "metric_horizon",
+    "metric_date_start",
+    "metric_date_end",
+    "metric_index_digest",
     "metric_notes",
     "metric_protocol_note",
     "metric_protocol_error",
@@ -174,6 +209,32 @@ def _method_runner(method: str):
         "MSML-TL": run_msml_experiment,
         "MSML-TL-RFE": run_msml_rfe_experiment,
     }[method]
+
+
+def _metric_identity_from_manifest(manifest: Any, *, horizon: int) -> Dict[str, Any]:
+    """Build expected metric identity solely from the orchestration manifest."""
+    records = tuple(manifest.for_horizon(int(horizon)))
+    if not records:
+        raise MetricProtocolError(
+            "metric_identity_mismatch",
+            detail=f"manifest has no samples for horizon={horizon}",
+        )
+    target_keys = {tuple(record.target_key) for record in records}
+    if len(target_keys) != 1:
+        raise MetricProtocolError(
+            "metric_identity_mismatch",
+            detail=f"manifest has multiple target keys: {sorted(target_keys)}",
+        )
+    label_dates = [str(record.label_date) for record in records]
+    sample_keys = [str(record.sample_key) for record in records]
+    return {
+        "metric_target_key": "/".join(str(value) for value in next(iter(target_keys))),
+        "metric_horizon": int(horizon),
+        "metric_sample_count": len(records),
+        "metric_date_start": label_dates[0],
+        "metric_date_end": label_dates[-1],
+        "metric_index_digest": compute_metric_index_digest(sample_keys),
+    }
 
 
 def _is_numeric_or_bool(series: pd.Series) -> bool:
@@ -318,6 +379,60 @@ def _row_from_result(
     config: Dict[str, Any],
     elapsed: float,
 ) -> Dict[str, Any]:
+    raw = dict(raw)
+    configured_protocol = dict(config.get("metric_protocol", {}) or {})
+    if bool(configured_protocol.get("strict_paper_metrics", False)) and not bool(
+        raw.get("paper_metric_computed_valid", False)
+    ):
+        status = str(raw.get("paper_metric_status", "metric_computation_failed"))
+        if status in {"", "not_requested", "valid"}:
+            status = "metric_computation_failed"
+        detail = str(
+            raw.get("paper_metric_error")
+            or raw.get("metric_protocol_error")
+            or "strict metric result did not provide a valid original-sales computation"
+        )
+        for field in (
+            "rmse",
+            "accuracy",
+            "mae",
+            "mape",
+            "smape",
+            "rmse_paper",
+            "accuracy_paper",
+            "mae_paper",
+            "mape_paper",
+            "smape_paper",
+            "original_scale_rmse",
+            "original_scale_accuracy",
+            "original_scale_mae",
+            "original_scale_mape",
+            "original_scale_smape",
+        ):
+            raw[field] = np.nan
+        raw.update(
+            {
+                "strict_paper_metrics": True,
+                "paper_metric_computed_valid": False,
+                "paper_metric_status": status,
+                "paper_metric_error": detail,
+                "metric_protocol_error": detail,
+                "paper_metric_space_requested": configured_protocol.get(
+                    "paper_metric_space", "original_sales_space"
+                ),
+                "paper_metric_space_actual": "unavailable",
+                "primary_metric_space_actual": "unavailable",
+                "rmse_metric_space": "unavailable",
+                "smape_metric_space": "unavailable",
+                "paper_metric_aligned": False,
+                "inverse_transform_status": str(
+                    raw.get("inverse_transform_status", "unavailable")
+                ),
+                "inverse_transform_applied": False,
+                "inverse_transform_available": False,
+                "error": str(raw.get("error") or f"metric_protocol_error: {detail}"),
+            }
+        )
     requested_k = _source_count_for_method(method, config)
     source_meta = _selection_meta(raw, method, requested_k)
     split_days = _target_split_days(config)
@@ -397,8 +512,10 @@ def _row_from_result(
     )
     row["rmse_metric_space"] = str(raw.get("rmse_metric_space", row["metric_space_used"]))
     row["smape_metric_space"] = str(raw.get("smape_metric_space", row["metric_space_used"]))
-    row["paper_metric_aligned"] = (
-        NO_PAPER_REFERENCE if _d4_d6_has_no_paper_reference(config) else bool(raw.get("paper_metric_aligned", False))
+    row["paper_metric_aligned"] = bool(raw.get("paper_metric_aligned", False))
+    row["paper_reference_available"] = not _d4_d6_has_no_paper_reference(config)
+    row["paper_reference_status"] = (
+        NO_PAPER_REFERENCE if _d4_d6_has_no_paper_reference(config) else "available"
     )
     row["inverse_transform_applied"] = bool(raw.get("inverse_transform_applied", False))
     row["inverse_transform_available"] = bool(raw.get("inverse_transform_available", False))
@@ -434,25 +551,6 @@ def _row_from_result(
     for key in METRIC_STATUS_COLUMNS:
         if key in raw:
             row[key] = raw[key]
-    if _d4_d6_has_no_paper_reference(config):
-        row["paper_metric_aligned"] = NO_PAPER_REFERENCE
-        for key in (
-            "rmse_paper",
-            "accuracy_paper",
-            "mae_paper",
-            "mape_paper",
-            "smape_paper",
-        ):
-            row[key] = ""
-        for key in (
-            "original_scale_rmse",
-            "original_scale_accuracy",
-            "original_scale_mae",
-            "original_scale_mape",
-            "original_scale_smape",
-        ):
-            if key not in raw:
-                row[key] = ""
     _blank_if_missing(
         row,
         (
@@ -527,6 +625,42 @@ def _row_from_nonfinite_error(
         "prediction_shape": prediction_shape,
         "error": f"non_finite_prediction: {exc}",
         **diagnostics,
+    }
+    return _row_from_result(raw, method, entity_key, config, elapsed)
+
+
+def _row_from_metric_protocol_error(
+    exc: MetricProtocolError,
+    method: str,
+    entity_key: str,
+    config: Dict[str, Any],
+    elapsed: float,
+) -> Dict[str, Any]:
+    """Serialize a strict metric failure at method/entity granularity."""
+    raw = {
+        "rmse": np.nan,
+        "accuracy": np.nan,
+        "mae": np.nan,
+        "mape": np.nan,
+        "smape": np.nan,
+        "training_time": elapsed,
+        "prediction_shape": "N/A",
+        "error": f"metric_protocol_error: {exc}",
+        "metric_protocol_error": str(exc),
+        "strict_paper_metrics": True,
+        "paper_metric_computed_valid": False,
+        "paper_metric_status": exc.status,
+        "paper_metric_error": str(exc),
+        "paper_metric_space_requested": "original_sales_space",
+        "paper_metric_space_actual": "unavailable",
+        "primary_metric_space_actual": "unavailable",
+        "rmse_metric_space": "unavailable",
+        "smape_metric_space": "unavailable",
+        "paper_metric_aligned": False,
+        "inverse_transform_status": "unavailable",
+        "inverse_transform_attempted": False,
+        "inverse_transform_available": False,
+        "inverse_transform_applied": False,
     }
     return _row_from_result(raw, method, entity_key, config, elapsed)
 
@@ -626,6 +760,10 @@ def run_single_entity_experiment(
         }
     )
     config["metric_protocol"] = metric_protocol
+    expected_metric_identity = _metric_identity_from_manifest(
+        protocol_manifest,
+        horizon=int(config["horizon"]),
+    )
     model_feature_cols = _resolve_model_feature_cols(source_df, target_entity_df, feature_cols, config)
     source_model_df = _build_model_dataframe(
         source_df,
@@ -668,16 +806,28 @@ def run_single_entity_experiment(
         t0 = time.perf_counter()
         runner = _method_runner(method)
         if method == "No-TL":
-            raw = runner(
-                target_df=target_model_df,
-                horizon=int(config["horizon"]),
-                window_size=int(config["window_size"]),
-                learning_rate=float(config["learning_rate"]),
-                target_epochs=int(config["target_epochs"]),
-                batch_size=int(config["batch_size"]),
-                metric_protocol=metric_protocol,
-                feature_cols=list(model_feature_cols),
-            )
+            try:
+                raw = runner(
+                    target_df=target_model_df,
+                    horizon=int(config["horizon"]),
+                    window_size=int(config["window_size"]),
+                    learning_rate=float(config["learning_rate"]),
+                    target_epochs=int(config["target_epochs"]),
+                    batch_size=int(config["batch_size"]),
+                    metric_protocol=metric_protocol,
+                    feature_cols=list(model_feature_cols),
+                )
+            except MetricProtocolError as exc:
+                rows.append(
+                    _row_from_metric_protocol_error(
+                        exc,
+                        method,
+                        entity_key,
+                        config,
+                        time.perf_counter() - t0,
+                    )
+                )
+                continue
         else:
             kwargs = {
                 "source_df": source_model_df,
@@ -694,6 +844,7 @@ def run_single_entity_experiment(
             }
             if method not in {"SS-TL"}:
                 kwargs["number_of_sources"] = _source_count_for_method(method, config)
+                kwargs["expected_metric_identity"] = expected_metric_identity
             if method == "MSML-TL-RFE":
                 kwargs["random_state"] = int(
                     config.get("random_state", config.get("seed", 42))
@@ -711,6 +862,17 @@ def run_single_entity_experiment(
             except NonFiniteArrayError as exc:
                 rows.append(
                     _row_from_nonfinite_error(
+                        exc,
+                        method,
+                        entity_key,
+                        config,
+                        time.perf_counter() - t0,
+                    )
+                )
+                continue
+            except MetricProtocolError as exc:
+                rows.append(
+                    _row_from_metric_protocol_error(
                         exc,
                         method,
                         entity_key,

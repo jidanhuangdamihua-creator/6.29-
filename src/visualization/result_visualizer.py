@@ -18,6 +18,8 @@ from typing import Any, Dict, Optional, Sequence
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from src.evaluation.metric_contract import filter_formally_comparable_smape_rows
+
 try:
     from src.utils.environment import setup_logging
 except ImportError:
@@ -79,6 +81,12 @@ def _primary_smape_column(results_df: pd.DataFrame) -> Optional[str]:
     print(SMAPE_MISSING_MESSAGE)
     _get_logger().warning(SMAPE_MISSING_MESSAGE)
     return None
+
+
+def filter_formally_comparable_results(results_df: pd.DataFrame) -> pd.DataFrame:
+    """Return only rows eligible for formal original-sales sMAPE reporting."""
+    eligible, _ = filter_formally_comparable_smape_rows(results_df)
+    return eligible.reset_index(drop=True)
 
 
 def sort_results_by_rmse(results_df: pd.DataFrame) -> pd.DataFrame:
@@ -317,6 +325,7 @@ def run_result_visualization(
     logger.info("[run_result_visualization] Start. csv_path=%s output_dir=%s", csv_path, output_dir)
 
     results_df = load_results_csv(csv_path)
+    results_df = filter_formally_comparable_results(results_df)
     if "error" in results_df.columns:
         results_df = results_df[results_df["error"].fillna("").astype(str).str.strip().eq("")].copy()
 
