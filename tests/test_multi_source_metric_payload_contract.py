@@ -134,6 +134,23 @@ def test_strict_extractor_checks_manifest_sample_count_against_prediction_arrays
     assert "metric_sample_count" in str(exc_info.value)
 
 
+def test_strict_extractor_does_not_require_or_trust_internal_rmse_and_accuracy():
+    raw = _payload()
+    del raw["fused_result"]["rmse"]
+    del raw["fused_result"]["accuracy"]
+
+    result = _extract_method_metrics(
+        raw,
+        method_name="MSWA-TL",
+        metric_protocol=STRICT_PROTOCOL,
+        expected_metric_identity=IDENTITY,
+    )
+
+    assert np.isfinite(result["rmse"])
+    assert np.isfinite(result["smape"])
+    assert result["paper_metric_computed_valid"] is True
+
+
 def test_d4_d6_row_preserves_computed_paper_metrics_and_reference_semantics():
     extracted = _extract_method_metrics(
         _payload(),

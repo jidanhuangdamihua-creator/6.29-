@@ -283,6 +283,8 @@ def _extract_method_metrics(
     if not isinstance(raw_result, dict):
         raise ValueError(f"{method_name} raw_result must be a dict, got {type(raw_result)}")
 
+    strict_paper_metrics = bool((metric_protocol or {}).get("strict_paper_metrics", False))
+
     candidates: List[Dict[str, Any]] = []
     for key in ("fused_result", "final_result"):
         value = raw_result.get(key)
@@ -292,14 +294,13 @@ def _extract_method_metrics(
 
     selected: Optional[Dict[str, Any]] = None
     for c in candidates:
-        if "rmse" in c and "accuracy" in c:
+        if strict_paper_metrics or ("rmse" in c and "accuracy" in c):
             selected = c
             break
 
     if selected is None:
         raise ValueError(f"Cannot extract rmse/accuracy from method={method_name} result.")
 
-    strict_paper_metrics = bool((metric_protocol or {}).get("strict_paper_metrics", False))
     if strict_paper_metrics:
         from src.evaluation.metric_contract import MetricProtocolError, validate_metric_identity
 
