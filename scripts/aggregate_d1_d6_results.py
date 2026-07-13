@@ -23,8 +23,8 @@ from src.constants import (
 )
 from src.evaluation.metric_contract import (
     build_formal_smape_aggregates,
-    filter_formally_comparable_smape_rows,
 )
+from src.protocols.experiment_protocol import FORMAL_SEEDS
 from src.utils.result_validation import (
     annotate_silent_metric_failure,
     classify_protocol_result,
@@ -75,9 +75,13 @@ PREFERRED_COLUMNS = [
 _CsvDataFrameCache = Dict[Path, Tuple[int, int, pd.DataFrame]]
 
 
-def aggregate_formal_smape(frame: pd.DataFrame) -> Dict[str, Any]:
+def aggregate_formal_smape(
+    frame: pd.DataFrame,
+    *,
+    expected_seeds: Sequence[int] | None = None,
+) -> Dict[str, Any]:
     """Public formal aggregation entry point shared with tests and reports."""
-    return build_formal_smape_aggregates(frame)
+    return build_formal_smape_aggregates(frame, expected_seeds=expected_seeds)
 
 
 def _read_csv_dataframe(path: Path, csv_cache: Optional[_CsvDataFrameCache] = None) -> pd.DataFrame:
@@ -454,8 +458,16 @@ def _build_audit_rows(
     return audit_rows
 
 
-def _write_metric_summaries(output: Path, all_rows: Sequence[Dict[str, str]]) -> List[Path]:
-    aggregates = aggregate_formal_smape(pd.DataFrame(all_rows))
+def _write_metric_summaries(
+    output: Path,
+    all_rows: Sequence[Dict[str, str]],
+    *,
+    expected_seeds: Sequence[int] | None = None,
+) -> List[Path]:
+    aggregates = aggregate_formal_smape(
+        pd.DataFrame(all_rows),
+        expected_seeds=expected_seeds,
+    )
     dataset_method_rows = aggregates["dataset_macro"].rename(
         columns={"dataset": "dataset_id", "smape": "mean_smape"}
     ).to_dict(orient="records")
@@ -504,32 +516,56 @@ def _write_metric_summaries(output: Path, all_rows: Sequence[Dict[str, str]]) ->
     return [dataset_method_path, method_mean_path]
 
 
-def _write_best_method_outputs(output: Path, all_rows: Sequence[Dict[str, str]]) -> List[Path]:
-    eligible_frame, _ = filter_formally_comparable_smape_rows(pd.DataFrame(all_rows))
-    all_rows = eligible_frame.to_dict(orient="records")
+def _write_best_method_outputs(
+    output: Path,
+    all_rows: Sequence[Dict[str, str]],
+    *,
+    expected_seeds: Sequence[int] | None = None,
+) -> List[Path]:
+    aggregates = aggregate_formal_smape(
+        pd.DataFrame(all_rows),
+        expected_seeds=expected_seeds,
+    )
+    seed_detail = aggregates["eligible_rows"].copy()
+    detail_columns = [
+        "dataset",
+        "target",
+        "method",
+        "horizon",
+        "sharing_scenario",
+        "seed",
+        "smape",
+        "seed_rank",
+    ]
+    if seed_detail.empty:
+        seed_detail = pd.DataFrame(columns=detail_columns)
+    else:
+        seed_detail["seed_rank"] = seed_detail.groupby(
+            ["dataset", "target", "horizon", "sharing_scenario", "seed"],
+            dropna=False,
+        )["smape"].rank(method="average", ascending=True)
+    seed_detail_path = output.with_name(
+        f"{output.stem}_method_results_by_target_seed.csv"
+    )
+    _write_csv(
+        seed_detail_path,
+        seed_detail.to_dict(orient="records"),
+        list(seed_detail.columns),
+    )
     best_by_target_rows: List[Dict[str, Any]] = []
     wins_by_dataset: Dict[int, Counter] = defaultdict(Counter)
-    target_groups: Dict[Tuple[int, str, int, str], List[Dict[str, str]]] = defaultdict(list)
-    for row in all_rows:
-        key = (
-            int(row["dataset_id"]),
-            _target_key(row),
-            int(row.get("horizon", 0)),
-            row.get("information_sharing") or row.get("scenario", ""),
-        )
-        target_groups[key].append(row)
-
-    for (dataset_id, target, horizon, scenario), group in sorted(target_groups.items()):
-        ranked = []
-        for row in group:
-            smape = _parse_float(row.get("smape"))
-            if smape is not None:
-                ranked.append((smape, row))
-        if not ranked:
-            continue
-        ranked.sort(key=lambda item: item[0])
-        best_smape, best_row = ranked[0]
-        method = best_row.get("method", "")
+    target_group = ["dataset", "target", "horizon", "sharing_scenario"]
+    for key, group in aggregates["seed_mean"].groupby(
+        target_group,
+        dropna=False,
+        sort=True,
+    ):
+        dataset, target, horizon, scenario = key
+        ranked = group.sort_values(["smape", "method"], kind="stable")
+        best_row = ranked.iloc[0]
+        best_smape = float(best_row["smape"])
+        method = str(best_row["method"])
+        dataset_id = _dataset_id_from_row({"dataset": str(dataset)}, fallback=0)
         best_by_target_rows.append(
             {
                 "dataset_id": dataset_id,
@@ -538,8 +574,8 @@ def _write_best_method_outputs(output: Path, all_rows: Sequence[Dict[str, str]])
                 "information_sharing": scenario,
                 "best_method": method,
                 "best_smape": best_smape,
-                "best_rmse": _parse_float(best_row.get("rmse")) or "",
-                "candidate_method_count": len(ranked),
+                "best_rmse": "",
+                "candidate_method_count": int(ranked["method"].nunique()),
             }
         )
         wins_by_dataset[dataset_id][method] += 1
@@ -583,7 +619,7 @@ def _write_best_method_outputs(output: Path, all_rows: Sequence[Dict[str, str]])
 
     best_dataset_md_path = output.with_name(f"{output.stem}_best_method_by_dataset.md")
     best_dataset_md_path.write_text("\n".join(md_lines).rstrip() + "\n", encoding="utf-8")
-    return [best_target_path, best_dataset_md_path]
+    return [best_target_path, best_dataset_md_path, seed_detail_path]
 
 
 def aggregate(
@@ -636,8 +672,18 @@ def aggregate(
     _write_csv(audit_path, audit_rows, sorted({key for row in audit_rows for key in row}))
 
     baseline_rows = confirmed_baseline_rows(promoted_frame).to_dict(orient="records")
-    extra_paths = _write_metric_summaries(output, baseline_rows)
-    extra_paths.extend(_write_best_method_outputs(output, baseline_rows))
+    extra_paths = _write_metric_summaries(
+        output,
+        baseline_rows,
+        expected_seeds=FORMAL_SEEDS,
+    )
+    extra_paths.extend(
+        _write_best_method_outputs(
+            output,
+            baseline_rows,
+            expected_seeds=FORMAL_SEEDS,
+        )
+    )
 
     row_counts = Counter(int(row["dataset_id"]) for row in all_rows)
     smape_nan, smape_inf, rmse_nan, rmse_inf = _metric_stats(all_rows)

@@ -246,7 +246,26 @@ def filter_formally_comparable_smape_rows(frame: Any) -> tuple[Any, dict[str, in
     return frame.loc[eligible_indices].copy(), dict(sorted(exclusion_reasons.items()))
 
 
-def build_formal_smape_aggregates(frame: Any) -> dict[str, Any]:
+def _canonical_sharing_scenario(value: Any) -> str:
+    text = str(value).strip().lower().replace("-", "_").replace(" ", "_")
+    if text in {"with", "with_information_sharing", "info_sharing"}:
+        return "with"
+    if text in {
+        "without",
+        "without_information_sharing",
+        "no_information",
+        "no_info",
+        "none",
+    }:
+        return "without"
+    return text
+
+
+def build_formal_smape_aggregates(
+    frame: Any,
+    *,
+    expected_seeds: Sequence[int] | None = None,
+) -> dict[str, Any]:
     """Build the fixed-scenario, fixed-horizon formal sMAPE aggregation hierarchy."""
     import pandas as pd
 
@@ -282,29 +301,81 @@ def build_formal_smape_aggregates(frame: Any) -> dict[str, Any]:
     elif "target_entity_id" in work.columns:
         work["target"] = work["target_entity_id"]
     else:
-        work["target"] = "GLOBAL"
+        raise MetricProtocolError(
+            "missing_formal_group_field",
+            missing_fields=("target_entity_key",),
+        )
     if "information_sharing" in work.columns:
         work["sharing_scenario"] = work["information_sharing"]
     else:
         work["sharing_scenario"] = work.get("scenario")
-    for field in ("dataset", "target", "method", "horizon", "sharing_scenario"):
+    for field in ("dataset", "target", "method", "horizon", "sharing_scenario", "seed"):
         if field not in work.columns:
-            reasons[f"missing:formal_group_field:{field}"] = len(work)
-            work = work.iloc[0:0]
-            break
+            raise MetricProtocolError(
+                "missing_formal_group_field",
+                missing_fields=(field,),
+            )
         missing = work[field].isna() | work[field].astype(str).str.strip().eq("")
         if missing.any():
-            reasons[f"missing:formal_group_field:{field}"] = int(missing.sum())
-            work = work.loc[~missing].copy()
+            raise MetricProtocolError(
+                "missing_formal_group_field",
+                missing_fields=(field,),
+                detail=f"missing_rows={int(missing.sum())}",
+            )
+    work["sharing_scenario"] = work["sharing_scenario"].map(
+        _canonical_sharing_scenario
+    )
     work["smape"] = pd.to_numeric(work["smape"], errors="coerce")
     work["horizon"] = pd.to_numeric(work["horizon"], errors="coerce")
-    invalid_numeric = work["smape"].isna() | work["horizon"].isna()
+    work["seed"] = pd.to_numeric(work["seed"], errors="coerce")
+    invalid_numeric = work[["smape", "horizon", "seed"]].isna().any(axis=1)
     if invalid_numeric.any():
-        reasons["invalid:formal_numeric_field"] = int(invalid_numeric.sum())
-        work = work.loc[~invalid_numeric].copy()
+        raise MetricProtocolError(
+            "invalid_formal_numeric_field",
+            detail=f"invalid_rows={int(invalid_numeric.sum())}",
+        )
+    non_integral = (
+        work["horizon"].ne(work["horizon"].astype(int))
+        | work["seed"].ne(work["seed"].astype(int))
+    )
+    if non_integral.any():
+        raise MetricProtocolError(
+            "invalid_formal_numeric_field",
+            detail=f"non_integral_rows={int(non_integral.sum())}",
+        )
     work["horizon"] = work["horizon"].astype(int)
+    work["seed"] = work["seed"].astype(int)
 
     group = ["dataset", "target", "method", "horizon", "sharing_scenario"]
+    full_key = [*group, "seed"]
+    duplicated = work.duplicated(full_key, keep=False)
+    if duplicated.any():
+        duplicate_keys = work.loc[duplicated, full_key].to_dict(orient="records")
+        raise MetricProtocolError(
+            "duplicate_formal_seed_row",
+            detail=f"duplicate_keys={duplicate_keys}",
+        )
+    if expected_seeds is not None:
+        normalized_expected = tuple(int(seed) for seed in expected_seeds)
+        if not normalized_expected or len(set(normalized_expected)) != len(
+            normalized_expected
+        ):
+            raise MetricProtocolError(
+                "invalid_expected_formal_seeds",
+                detail=f"expected_seeds={normalized_expected}",
+            )
+        expected_set = set(normalized_expected)
+        for key, seed_group in work.groupby(group, dropna=False, sort=True):
+            actual_set = set(int(seed) for seed in seed_group["seed"])
+            if actual_set != expected_set:
+                raise MetricProtocolError(
+                    "formal_seed_set_mismatch",
+                    detail=(
+                        f"group={key}; "
+                        f"missing={sorted(expected_set - actual_set)}; "
+                        f"unexpected={sorted(actual_set - expected_set)}"
+                    ),
+                )
     seed_mean = work.groupby(group, as_index=False, dropna=False)["smape"].mean()
     dataset_group = ["dataset", "method", "horizon", "sharing_scenario"]
     dataset_macro = seed_mean.groupby(dataset_group, as_index=False, dropna=False)["smape"].mean()
