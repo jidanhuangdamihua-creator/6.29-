@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import inspect
+
 import numpy as np
 import pandas as pd
 import pytest
 
+from scripts import run_full_paper_experiments as d1_d3_runner
 from src.experiment import run_no_tl_experiment as no_tl_module
 from src.evaluation.metric_contract import MetricProtocolError
 from src.experiment import experiment_runner
@@ -244,6 +247,30 @@ def test_d1_d3_dataframe_serialization_preserves_strict_metric_contract_fields()
     ):
         assert field in frame.columns
         assert frame.loc[0, field] == extracted[field]
+
+
+def test_d1_d3_formal_runner_builds_and_forwards_expected_metric_identity():
+    source = inspect.getsource(d1_d3_runner.run_experiment)
+
+    assert "build_metric_identity_from_manifest(" in source
+    assert '"expected_metric_identity": expected_metric_identity' in source
+    assert "expected_metric_identity=expected_metric_identity" in source
+
+
+def test_d1_d3_result_builder_copies_complete_metric_audit_and_identity():
+    extracted = _extract_method_metrics(
+        _payload(),
+        method_name="MSWA-TL",
+        metric_protocol=STRICT_PROTOCOL,
+        expected_metric_identity=IDENTITY,
+    )
+    builder = getattr(d1_d3_runner, "_strict_metric_result_fields", None)
+
+    assert callable(builder)
+    fields = builder(extracted)
+    for field in experiment_runner.METRIC_AUDIT_FIELDS:
+        assert field in fields
+        assert fields[field] == extracted[field]
 
 
 @pytest.mark.parametrize(

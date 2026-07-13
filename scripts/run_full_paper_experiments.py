@@ -51,6 +51,11 @@ from src.utils.result_schema import (
 from src.protocols.runner_adapter import configure_protocol_frames
 from src.protocols.rolling_origin import build_sample_manifest
 from src.protocols.reproducibility import set_protocol_seed
+from src.evaluation.metric_contract import (
+    MetricProtocolError,
+    build_metric_identity_from_manifest,
+)
+from src.experiment.experiment_runner import METRIC_AUDIT_FIELDS
 from src.utils.result_validation import annotate_silent_metric_failure
 from paper_reproduction_protocol import (
     MULTI_SOURCE_TL_METHODS,
@@ -123,6 +128,17 @@ DIAGNOSTIC_COLUMNS = [
     "model_weight_nan_count",
     "model_weight_inf_count",
 ]
+
+
+def _strict_metric_result_fields(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Copy the complete strict audit payload without synthesizing missing fields."""
+    missing = [field for field in METRIC_AUDIT_FIELDS if field not in raw]
+    if missing:
+        raise MetricProtocolError(
+            "missing_metric_audit_fields",
+            missing_fields=missing,
+        )
+    return {field: raw[field] for field in METRIC_AUDIT_FIELDS}
 
 
 def _should_sync_latest_results_copy() -> bool:
@@ -1127,6 +1143,10 @@ def run_experiment(
         input_window=int(exp_cfg["window_size"]),
     )
     target_df.attrs["protocol_sample_manifest"] = protocol_manifest
+    expected_metric_identity = build_metric_identity_from_manifest(
+        protocol_manifest,
+        horizon=int(exp_cfg["horizon"]),
+    )
     strict_metric_protocol = dict(protocol.get("metric_protocol", {}) or {})
     strict_metric_protocol.update(
         {
@@ -1147,6 +1167,7 @@ def run_experiment(
         "batch_size": int(exp_cfg["batch_size"]),
         "metric_protocol": strict_metric_protocol,
         "group_cols": protocol_group_cols,
+        "expected_metric_identity": expected_metric_identity,
     }
 
     number_of_sources = int(source_count) if method_name in MULTI_SOURCE_TL_METHODS else (1 if method_name == "SS-TL" else 0)
@@ -1168,6 +1189,7 @@ def run_experiment(
             batch_size=int(exp_cfg["batch_size"]),
             metric_protocol=strict_metric_protocol,
             feature_cols=feature_cols,
+            expected_metric_identity=expected_metric_identity,
         )
     elif method_name == "SS-TL":
         raw = run_ss_tl_experiment(**common_kwargs)
@@ -1415,6 +1437,7 @@ def run_experiment(
         "original_scale_mape": raw.get("original_scale_mape", np.nan),
         "original_scale_smape": raw.get("original_scale_smape", np.nan),
         "prediction_shape": str(raw["prediction_shape"]),
+        **_strict_metric_result_fields(raw),
         **{column: raw.get(column, np.nan) for column in DIAGNOSTIC_COLUMNS},
         **_source_domain_contract_fields(source_df),
         "source_identifier": _source_identifier_from_meta(method_name, method_meta),
