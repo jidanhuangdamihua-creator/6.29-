@@ -5,7 +5,7 @@ import pytest
 
 from src.evaluation.metric_contract import MetricProtocolError
 from src.experiment import experiment_runner
-from src.experiment.experiment_runner import _extract_method_metrics
+from src.experiment.experiment_runner import _extract_method_metrics, results_to_dataframe
 from src.transfer_methods import msml_tl, msml_tl_rfe, mssb_tl, mswa_tl
 from src.utils.entity_experiment import _row_from_result
 from src.utils.entity_experiment import (
@@ -180,6 +180,43 @@ def test_d4_d6_row_preserves_computed_paper_metrics_and_reference_semantics():
     assert row["paper_reference_available"] is False
     assert row["paper_reference_status"] == "no_paper_reference"
     assert row["inverse_transform_status"] == "applied"
+
+
+def test_d1_d3_dataframe_serialization_preserves_strict_metric_contract_fields():
+    extracted = _extract_method_metrics(
+        _payload(),
+        method_name="MSWA-TL",
+        metric_protocol=STRICT_PROTOCOL,
+        expected_metric_identity=IDENTITY,
+    )
+    extracted["protocol"] = {}
+
+    frame = results_to_dataframe(
+        {
+            "meta": {
+                "dataset_name": "Dataset1",
+                "strict_paper_mode": True,
+            },
+            "results": [extracted],
+        }
+    )
+
+    for field in (
+        "metric_contract_version",
+        "smape_definition_id",
+        "paper_metric_space_requested",
+        "paper_metric_space_actual",
+        "primary_metric_space_actual",
+        "inverse_transform_status",
+        "paper_metric_computed_valid",
+        "paper_metric_status",
+        "paper_metric_error",
+        "metric_sample_count",
+        "target_negative_count",
+        "metric_index_digest",
+    ):
+        assert field in frame.columns
+        assert frame.loc[0, field] == extracted[field]
 
 
 @pytest.mark.parametrize(

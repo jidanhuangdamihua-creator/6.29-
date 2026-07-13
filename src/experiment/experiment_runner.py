@@ -58,6 +58,44 @@ from src.utils.source_fillna import fill_source_numeric_na
 
 LOGGER_NAME = "experiment"
 DEFAULT_METHODS = ["No-TL", "SS-TL", "MSWA-TL", "MSSB-TL", "MSML-TL", "MSML-TL-RFE"]
+METRIC_AUDIT_FIELDS = (
+    "current_metric_space_actual",
+    "paper_metric_space_requested",
+    "paper_metric_space_actual",
+    "primary_metric_space_actual",
+    "inverse_transform_attempted",
+    "inverse_transform_status",
+    "inverse_transform_available",
+    "strict_paper_metrics",
+    "paper_metric_computed_valid",
+    "paper_metric_status",
+    "paper_metric_error",
+    "metric_contract_version",
+    "smape_definition_id",
+    "smape_unit",
+    "smape_epsilon",
+    "smape_range_min",
+    "smape_range_max",
+    "sales_value_policy",
+    "metric_sample_count",
+    "target_zero_count",
+    "target_zero_rate",
+    "target_negative_count",
+    "target_negative_rate",
+    "prediction_zero_count",
+    "prediction_zero_rate",
+    "prediction_negative_count",
+    "prediction_negative_rate",
+    "metric_target_key",
+    "metric_horizon",
+    "metric_date_start",
+    "metric_date_end",
+    "metric_index_digest",
+)
+
+
+def _metric_audit_values(raw: Dict[str, Any]) -> Dict[str, Any]:
+    return {field: raw[field] for field in METRIC_AUDIT_FIELDS if field in raw}
 
 
 def _get_nested(config: Any, key: str, default: Any = None) -> Any:
@@ -431,41 +469,7 @@ def _extract_method_metrics(
         "metric_notes": str(selected.get("metric_notes", "")),
         "meta": method_meta,
     }
-    for metric_contract_key in (
-        "current_metric_space_actual",
-        "paper_metric_space_requested",
-        "paper_metric_space_actual",
-        "primary_metric_space_actual",
-        "inverse_transform_attempted",
-        "inverse_transform_status",
-        "strict_paper_metrics",
-        "paper_metric_computed_valid",
-        "paper_metric_status",
-        "paper_metric_error",
-        "metric_contract_version",
-        "smape_definition_id",
-        "smape_unit",
-        "smape_epsilon",
-        "smape_range_min",
-        "smape_range_max",
-        "sales_value_policy",
-        "metric_sample_count",
-        "target_zero_count",
-        "target_zero_rate",
-        "target_negative_count",
-        "target_negative_rate",
-        "prediction_zero_count",
-        "prediction_zero_rate",
-        "prediction_negative_count",
-        "prediction_negative_rate",
-        "metric_target_key",
-        "metric_horizon",
-        "metric_date_start",
-        "metric_date_end",
-        "metric_index_digest",
-    ):
-        if metric_contract_key in selected:
-            result[metric_contract_key] = selected[metric_contract_key]
+    result.update(_metric_audit_values(selected))
     for source_diagnostic_key in (
         "failed_source_count",
         "failed_source_keys",
@@ -902,6 +906,7 @@ def run_ss_tl_experiment(
             "window_size": int(window_size),
         },
     }
+    result.update(_metric_audit_values(ss_raw))
 
     logger.info(
         "[run_ss_tl_experiment] Finished. rmse=%.4f accuracy=%.4f",
@@ -1484,6 +1489,7 @@ def results_to_dataframe(experiment_results: Dict[str, Any]) -> pd.DataFrame:
                 "prediction_shape": str(one.get("prediction_shape", "N/A")),
                 "include_sales_in_knn": include_sales_in_knn,
                 "alignment_notes": protocol.get("alignment_notes", ""),
+                **_metric_audit_values(one),
             }
         )
 
@@ -1548,6 +1554,7 @@ def results_to_dataframe(experiment_results: Dict[str, Any]) -> pd.DataFrame:
             "original_scale_mae",
             "original_scale_mape",
             "original_scale_smape",
+            *METRIC_AUDIT_FIELDS,
             "prediction_shape",
             "alignment_notes",
         ],
