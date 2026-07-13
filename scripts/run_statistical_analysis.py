@@ -62,7 +62,7 @@ def main() -> None:
     wilcoxon_df = run_pairwise_wilcoxon_tests(df)
     avg_rank_df = compute_average_rank(df)
 
-    friedman_df = pd.DataFrame([friedman], columns=["statistic", "p_value"])
+    friedman_df = friedman
 
     friedman_path = OUTPUT_DIR / "friedman_test_results.csv"
     wilcoxon_path = OUTPUT_DIR / "wilcoxon_pairwise_results.csv"
