@@ -441,6 +441,24 @@ def test_formal_aggregation_uses_seed_then_target_then_dataset_macro() -> None:
     assert result["cross_dataset_macro"]["smape"].tolist() == [6.0]
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("metric_target_key", "different-target"),
+        ("metric_horizon", 5),
+    ],
+)
+def test_formal_aggregation_rejects_group_identity_mismatch(field, value) -> None:
+    rows = _formal_seed_rows()
+    rows[0][field] = value
+
+    with pytest.raises(MetricProtocolError, match="formal_metric_identity_mismatch"):
+        aggregate.aggregate_formal_smape(
+            pd.DataFrame(rows),
+            expected_seeds=FORMAL_SEEDS,
+        )
+
+
 def test_best_method_outputs_preserve_seed_rows_but_choose_by_seed_mean(tmp_path) -> None:
     rows = []
     rows.extend(_formal_seed_rows(method="Method-A", smapes=(0, 100, 100, 100, 100)))

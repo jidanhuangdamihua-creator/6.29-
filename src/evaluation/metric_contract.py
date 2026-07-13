@@ -345,6 +345,26 @@ def build_formal_smape_aggregates(
         )
     work["horizon"] = work["horizon"].astype(int)
     work["seed"] = work["seed"].astype(int)
+    metric_horizon = pd.to_numeric(work["metric_horizon"], errors="coerce")
+    horizon_mismatch = metric_horizon.isna() | metric_horizon.ne(work["horizon"])
+    target_mismatch = (
+        work["metric_target_key"]
+        .astype(str)
+        .str.replace("/", "_", regex=False)
+        .ne(work["target"].astype(str).str.replace("/", "_", regex=False))
+    )
+    identity_mismatch = horizon_mismatch | target_mismatch
+    if identity_mismatch.any():
+        mismatch_fields = []
+        if horizon_mismatch.any():
+            mismatch_fields.append("metric_horizon")
+        if target_mismatch.any():
+            mismatch_fields.append("metric_target_key")
+        raise MetricProtocolError(
+            "formal_metric_identity_mismatch",
+            missing_fields=tuple(mismatch_fields),
+            detail=f"mismatch_rows={int(identity_mismatch.sum())}",
+        )
 
     group = ["dataset", "target", "method", "horizon", "sharing_scenario"]
     full_key = [*group, "seed"]
