@@ -75,6 +75,7 @@ from src.utils.console_reporter import (
 )
 from src.utils.progress_tracker import ExperimentProgressTracker
 from src.utils.runtime_control import set_verbose_mode
+from src.utils.run_utils import reserve_new_output_dir
 
 
 DATASETS = list_dataset_names()
@@ -91,17 +92,17 @@ STRICT_KNN_OBSERVED_START = {
 }
 FORMAL_DATASET_PATHS = {
     "Dataset1": "数据集/原始数据/Dataset 1/train.csv",
-    "Dataset2": "数据集/原始数据/Dataset 2.csv",
+    "Dataset2": "数据集/原始数据/Dataset 2/hierarchical_sales_data.csv",
     "Dataset3": "数据集/原始数据/Dataset 3.csv",
 }
 SOLIDIFIED_DATASET_PATHS = {
     "Dataset1": {
-        "source": "数据集/固化数据/dataset1-source.parquet",
-        "target": "数据集/固化数据/dataset1-target.parquet",
+        "source": "数据集/派生数据/d1d2_protocol_v1/dataset1-source.parquet",
+        "target": "数据集/派生数据/d1d2_protocol_v1/dataset1-target.parquet",
     },
     "Dataset2": {
-        "source": "数据集/固化数据/dataset2-source.parquet",
-        "target": "数据集/固化数据/dataset2-target.parquet",
+        "source": "数据集/派生数据/d1d2_protocol_v1/dataset2-source.parquet",
+        "target": "数据集/派生数据/d1d2_protocol_v1/dataset2-target.parquet",
     },
     "Dataset3": {
         "source": "数据集/固化数据/dataset3-source.parquet",
@@ -112,7 +113,6 @@ FORMAL_LR = 1e-4
 FORMAL_EPOCHS = 50
 FORMAL_CLIPNORM = None
 FORMAL_DROPOUT = 0.1
-DISABLE_COMPAT_RESULTS_COPY_ENV = "RFE_DISABLE_COMPAT_RESULTS_COPY"
 DIAGNOSTIC_COLUMNS = [
     "y_pred_nan_count",
     "y_pred_inf_count",
@@ -126,7 +126,7 @@ DIAGNOSTIC_COLUMNS = [
 
 
 def _should_sync_latest_results_copy() -> bool:
-    return os.environ.get(DISABLE_COMPAT_RESULTS_COPY_ENV) != "1"
+    return os.environ.get("RFE_ENABLE_COMPAT_RESULTS_COPY") == "1"
 
 
 def _print_run_paths(output_paths: Dict[str, Path]) -> None:
@@ -147,6 +147,7 @@ def _resolve_output_paths(
     run_dir = Path(output_dir)
     if not run_dir.is_absolute():
         run_dir = ROOT / run_dir
+    reserve_new_output_dir(run_dir)
 
     outputs = protocol.get("outputs", {})
     if not isinstance(outputs, dict):
@@ -1529,8 +1530,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--info-sharing",
         choices=["without", "with"],
-        default=None,
-        help="Limit D1-D3 execution to one information-sharing scenario.",
+        required=True,
+        help="Required D1-D3 information-sharing scenario; one mode per isolated run directory.",
     )
     parser.add_argument(
         "--smoke",

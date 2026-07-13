@@ -581,12 +581,15 @@ def _write_best_method_outputs(output: Path, all_rows: Sequence[Dict[str, str]])
 
 def aggregate(
     *,
-    run_dir: Path = PROJECT_ROOT / "outputs" / "runs",
-    output: Path = OUTPUT_DIR / "d1_d6_all_results.csv",
+    run_dir: Path,
+    output: Path | None = None,
     strict: bool = False,
     allow_missing: bool = False,
     legacy_fallback: bool = False,
 ) -> Dict[str, Any]:
+    run_dir = Path(run_dir)
+    if output is None:
+        output = run_dir / "aggregate" / "d1_d6_all_results.csv"
     csv_cache: _CsvDataFrameCache = {}
     selected, discovery_audit = discover_source_csvs(
         run_dir,
@@ -662,8 +665,8 @@ def aggregate(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Aggregate D1-D6 result CSVs from a run directory.")
-    parser.add_argument("--run-dir", type=Path, default=PROJECT_ROOT / "outputs" / "runs")
-    parser.add_argument("--output", type=Path, default=OUTPUT_DIR / "d1_d6_all_results.csv")
+    parser.add_argument("--run-dir", type=Path, required=True)
+    parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--allow-missing", action="store_true")
     parser.add_argument("--legacy-fallback", action="store_true")

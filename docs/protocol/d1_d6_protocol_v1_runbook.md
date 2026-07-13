@@ -7,32 +7,22 @@
 - D1–D3 属于 `strict_paper`；D4–D6 属于 `extended`。
 - KNN 只使用从 `knn_observed_start` 开始的连续30个日历日销量序列。
 - 30日 KNN 序列只用于选源；CNN 与 BL1–BL4 的评估输入窗口统一为10日，并逐日期消费同一 `sample_manifest`。两者角色不同，不得混成同一特征表示。
-- 当前固化 D1-with 缺少 Store2–3 × Item1–9。
-- 当前固化 D2-with 缺少 Brand2–3 × Item1–9。
-- 因此，在 D1/D2 完成数据再生成前，with-sharing preflight 返回失败是正确行为。
-- 工作区当前没有 D2 原始数据文件。不得用不完整的 `dataset2-source.parquet` 反向补造 Brand2/3；必须提供覆盖 Brand1–3 × Item1–10 的原始表。
+- 历史 `数据集/固化数据/dataset1-*.parquet` 与 `dataset2-*.parquet` 分别缺少 Store2–3、Brand2–3 的 with-sharing 候选；它们不得再被正式 D1/D2 入口读取。
+- D2 原始宽表位于 `数据集/原始数据/Dataset 2/hierarchical_sales_data.csv`，格式为 `DATE` 加 `QTY_B<brand>_<item>`（可选对应 `PROMO_B<brand>_<item>`）。
+- D1/D2 正式入口仅读取新的 `数据集/派生数据/d1d2_protocol_v1`；目录不存在时必须先在服务器执行下列再生步骤，不能从旧 parquet、旧 JSON 或旧 KNN 选择结果补造候选池。
 
 ## 2. 数据再生成
 
-先备份现有 `数据集/固化数据`。D1 可从仓库原始 CSV 生成：
+在服务器环境执行一次下列命令。它只创建新的派生目录，并在同名 parquet 已存在时拒绝覆盖：
 
 ```bash
-python scripts/regenerate_d1_d2_parquets.py \
-  --dataset d1 \
-  --d1-input "数据集/原始数据/Dataset 1/train.csv" \
-  --output-dir "数据集/固化数据"
+python tools/protection/codex_timeout.py --timeout 180 -- \
+  .venv/bin/python scripts/regenerate_d1_d2_parquets.py \
+  --dataset all \
+  --output-dir "数据集/派生数据/d1d2_protocol_v1"
 ```
 
-D2 需要显式提供完整原始表：
-
-```bash
-python scripts/regenerate_d1_d2_parquets.py \
-  --dataset d2 \
-  --d2-input "/absolute/path/to/complete_dataset2_raw.csv" \
-  --output-dir "数据集/固化数据"
-```
-
-D2 输入至少包含可映射到 `date, brand_id, item_id, sales` 的字段；`promo` 缺失时生成器只允许将其作为已声明的零值协变量，不影响 KNN，因为 KNN 仅使用 `sales`。
+D2 也支持已规范化的长表；`promo` 缺失时仅作为声明为零的协变量，不影响只使用 `sales` 的 KNN。
 
 生成器应得到：
 
@@ -65,29 +55,39 @@ preflight 内部仍使用完整规范化 `candidate_pool_digest_input` 计算 di
 
 ## 4. 正式迁移学习矩阵
 
-以下入口为每个任务创建25个隔离 cell：horizon 1–5 × seed 42–46。cell 全部成功后才合并，并由代码判断哪些方法组可晋升为 `confirmed_baseline`。
+正式入口与职责如下。`scripts/run_all_d1_d6.py` 是已删除的历史名称，不能恢复或在测试中引用。
+
+| 入口 | 用途 | 正式性 |
+| --- | --- | --- |
+| `scripts/run_unified_d1_d6.py` | 完整 D1–D6 编排；为每个 dataset×mode 建立同一 run root 下的独立子目录 | 正式全量入口 |
+| `scripts/parallel_runner.sh` | 按数据集并行启动统一入口 | 正式并行入口 |
+| `scripts/parallel_mode_runner.sh` | 按 dataset×mode 并行启动统一入口 | 正式并行入口 |
+| `scripts/run_full_paper_experiments.py` | D1–D3 单数据集×单 mode 子入口 | 正式单数据集入口 |
+| `scripts/run_d4_experiment.py`、`run_d5_experiment.py`、`run_d6_experiment.py` | D4–D6 单数据集×单 mode 子入口 | 正式单数据集入口 |
+| `scripts/aggregate_d1_d6_results.py --run-dir <本轮run-root>` | 仅汇总指定 run root | 正式汇总入口 |
+| `run_main_experiment.py`、`scripts/run_full_experiment_matrix.py`、`scripts/run_dataset1_formal_full.py` | 旧的单任务/参数矩阵脚本，不覆盖 D1–D6 协议入口 | 非正式/历史兼容 |
+
+统一入口为每个任务创建25个隔离 cell：horizon 1–5 × seed 42–46。cell 全部成功后才合并，并由代码判断哪些方法组可晋升为 `confirmed_baseline`。
 
 先用 `--dry-run` 检查命令，不训练：
 
 ```bash
-python scripts/run_strict_protocol_baseline.py \
-  --dataset d1 --scenario without \
-  --output-dir "outputs/protocol_v1/d1_without" \
+python scripts/run_unified_d1_d6.py \
+  --only d1 --info-sharing without \
   --dry-run
 ```
 
 正式运行示例：
 
 ```bash
-python scripts/run_strict_protocol_baseline.py \
-  --dataset d1 --scenario without \
-  --output-dir "outputs/protocol_v1/d1_without"
+python scripts/run_unified_d1_d6.py \
+  --only d1 --info-sharing without
 ```
 
 对 `d1` 至 `d6` 和 `without/with` 分别执行。输出位于：
 
 ```text
-outputs/protocol_v1/<dataset>_<scenario>/results/dataset<id>_<scenario>_results.csv
+outputs/runs/<run-id>_unified/<dataset>_<scenario>/results/dataset<id>_<scenario>_results.csv
 ```
 
 ## 5. BL1–BL4 target-only baseline
@@ -141,8 +141,7 @@ sample_manifest_digest
 
 ```bash
 python scripts/aggregate_d1_d6_results.py \
-  --run-dir "outputs/protocol_v1" \
-  --output "outputs/final_summary/d1_d6_protocol_v1_all_results.csv" \
+  --run-dir "outputs/runs/<run-id>_unified" \
   --strict
 ```
 

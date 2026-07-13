@@ -33,8 +33,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.utils.run_utils import create_run_dir, reserve_new_output_dir
+
+
 RUNS_DIR = PROJECT_ROOT / "outputs" / "runs"
 UNIFIED_RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
 UNIFIED_RUN_DIR = RUNS_DIR / UNIFIED_RUN_ID
@@ -194,12 +199,13 @@ def build_tasks(
         raise ValueError("--info-sharing must be one of: without, with")
     tasks: List[Task] = []
     for dataset_token in expand_only_tokens(only):
-        if dataset_token in D1_D3_DATASET_ARGS:
-            tasks.append(_build_d1_d3_task(dataset_token, run_dir, info_sharing=info_sharing))
-            continue
         scenarios = (info_sharing,) if info_sharing is not None else D4_D6_SCENARIOS
         for scenario in scenarios:
-            tasks.append(_build_d4_d6_task(dataset_token, scenario, smoke=smoke, run_dir=run_dir))
+            task_run_dir = run_dir / f"{dataset_token}_{scenario}"
+            if dataset_token in D1_D3_DATASET_ARGS:
+                tasks.append(_build_d1_d3_task(dataset_token, task_run_dir, info_sharing=scenario))
+            else:
+                tasks.append(_build_d4_d6_task(dataset_token, scenario, smoke=smoke, run_dir=task_run_dir))
     return tasks
 
 
@@ -390,11 +396,20 @@ def print_result_summary(tasks: Sequence[Task]) -> None:
 
 def main() -> None:
     args = _parse_args()
+    if args.dry_run:
+        run_dir = UNIFIED_RUN_DIR if args.output_dir is None else Path(args.output_dir)
+    elif args.output_dir is None:
+        run_dir = create_run_dir(PROJECT_ROOT, "unified")
+    else:
+        run_dir = Path(args.output_dir)
+        if not run_dir.is_absolute():
+            run_dir = PROJECT_ROOT / run_dir
+        reserve_new_output_dir(run_dir)
     try:
         tasks = build_tasks(
             only=args.only,
             smoke=bool(args.smoke),
-            run_dir=args.output_dir,
+            run_dir=run_dir,
             info_sharing=args.info_sharing,
         )
     except ValueError as exc:
