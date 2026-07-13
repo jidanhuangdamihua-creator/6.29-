@@ -253,14 +253,14 @@ def test_source_failure_diagnostics_propagate_to_extracted_metrics_and_entity_ro
 
 
 def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_inverse_transform(monkeypatch) -> None:
-    dates = pd.date_range("2024-01-01", periods=8, freq="D")
+    dates = pd.date_range("2024-01-01", periods=40, freq="D")
     source_df = pd.DataFrame(
         {
             "date": dates,
             "entity_id": ["target"] * len(dates),
             "item_id": [1] * len(dates),
             "family": ["F1"] * len(dates),
-            "sales": np.arange(1.0, 9.0),
+            "sales": np.arange(1.0, len(dates) + 1.0),
         }
     )
     target_df = pd.DataFrame(
@@ -269,7 +269,7 @@ def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_invers
             "entity_id": ["target"] * len(dates),
             "item_id": [2] * len(dates),
             "family": ["F1"] * len(dates),
-            "sales": np.arange(2.0, 10.0),
+            "sales": np.arange(2.0, len(dates) + 2.0),
         }
     )
     metric_protocol = {
