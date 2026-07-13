@@ -6,7 +6,7 @@ samples or transferred weights.
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
@@ -31,6 +31,7 @@ def run_no_tl_experiment(
     batch_size: int = 16,
     metric_protocol: dict | None = None,
     feature_cols: Sequence[str] | None = None,
+    expected_metric_identity: dict[str, Any] | None = None,
 ):
     """Run No-TL baseline on target data only.
 
@@ -81,41 +82,11 @@ def run_no_tl_experiment(
 
     return {
         "method": "No-TL",
-        "rmse": float(metric_result["rmse"]),
-        "accuracy": float(metric_result["accuracy"]),
-        "mae": float(metric_result.get("mae", float("nan"))),
-        "mape": float(metric_result.get("mape", float("nan"))),
-        "smape": float(metric_result["smape"]),
-        "rmse_current": float(metric_result.get("rmse_current", float("nan"))),
-        "accuracy_current": float(metric_result.get("accuracy_current", float("nan"))),
-        "mae_current": float(metric_result.get("mae_current", float("nan"))),
-        "mape_current": float(metric_result.get("mape_current", float("nan"))),
-        "smape_current": float(metric_result.get("smape_current", float("nan"))),
-        "rmse_paper": float(metric_result.get("rmse_paper", float("nan"))),
-        "accuracy_paper": float(metric_result.get("accuracy_paper", float("nan"))),
-        "mae_paper": float(metric_result.get("mae_paper", float("nan"))),
-        "mape_paper": float(metric_result.get("mape_paper", float("nan"))),
-        "smape_paper": float(metric_result.get("smape_paper", float("nan"))),
-        "normalized_rmse": metric_result.get("normalized_rmse"),
-        "normalized_accuracy": metric_result.get("normalized_accuracy"),
-        "normalized_mae": metric_result.get("normalized_mae"),
-        "normalized_mape": metric_result.get("normalized_mape"),
-        "normalized_smape": metric_result.get("normalized_smape"),
-        "original_scale_rmse": metric_result.get("original_scale_rmse"),
-        "original_scale_accuracy": metric_result.get("original_scale_accuracy"),
-        "original_scale_mae": metric_result.get("original_scale_mae"),
-        "original_scale_mape": metric_result.get("original_scale_mape"),
-        "original_scale_smape": metric_result.get("original_scale_smape"),
-        "metric_space": str(metric_result.get("metric_space", metric_result["metric_space_current"])),
-        "metric_space_used": str(metric_result.get("metric_space_used", metric_result.get("metric_space", ""))),
-        "rmse_metric_space": str(metric_result.get("rmse_metric_space", metric_result.get("metric_space_used", ""))),
-        "smape_metric_space": str(metric_result.get("smape_metric_space", metric_result.get("metric_space_used", ""))),
-        "metric_space_current": str(metric_result["metric_space_current"]),
-        "metric_space_paper": str(metric_result["metric_space_paper"]),
-        "paper_metric_aligned": bool(metric_result["paper_metric_aligned"]),
-        "inverse_transform_applied": bool(metric_result["inverse_transform_applied"]),
-        "inverse_transform_available": bool(metric_result.get("inverse_transform_available", False)),
-        "metric_protocol_note": str(metric_result.get("metric_protocol_note", "")),
-        "metric_notes": str(metric_result["metric_notes"]),
+        "y_true": np.asarray(y_test).reshape(-1),
+        "y_pred": np.asarray(y_pred).reshape(-1),
+        "sales_scaler": tgt_scaler,
+        "feature_columns": list(tgt_feature_columns),
         "prediction_shape": tuple(y_pred.shape),
+        **metric_result,
+        **dict(expected_metric_identity or {}),
     }

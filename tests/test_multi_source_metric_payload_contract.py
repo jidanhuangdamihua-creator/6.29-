@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
+from src.experiment import run_no_tl_experiment as no_tl_module
 from src.evaluation.metric_contract import MetricProtocolError
 from src.experiment import experiment_runner
 from src.experiment.experiment_runner import _extract_method_metrics, results_to_dataframe
@@ -74,6 +76,31 @@ def test_four_multisource_methods_cannot_passthrough_internal_strict_metrics(met
     assert result["paper_metric_status"] == "valid"
     for field, expected in IDENTITY.items():
         assert result[field] == expected
+
+
+def test_no_tl_wrapper_uses_strict_extractor_and_expected_identity(monkeypatch):
+    received = {}
+
+    def fake_bottom_runner(**kwargs):
+        received.update(kwargs["expected_metric_identity"])
+        return {
+            "method": "No-TL",
+            **_payload()["fused_result"],
+        }
+
+    monkeypatch.setattr(no_tl_module, "run_no_tl_experiment", fake_bottom_runner)
+
+    result = experiment_runner.run_no_tl_experiment(
+        target_df=pd.DataFrame(),
+        feature_cols=["sales"],
+        metric_protocol=STRICT_PROTOCOL,
+        expected_metric_identity=IDENTITY,
+    )
+
+    assert received == IDENTITY
+    assert result["paper_metric_computed_valid"] is True
+    assert result["smape_metric_space"] == "original_sales_space"
+    assert {field: result[field] for field in IDENTITY} == IDENTITY
 
 
 @pytest.mark.parametrize(

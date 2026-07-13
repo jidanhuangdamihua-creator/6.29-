@@ -795,6 +795,7 @@ def run_single_entity_experiment(
                     batch_size=int(config["batch_size"]),
                     metric_protocol=metric_protocol,
                     feature_cols=list(model_feature_cols),
+                    expected_metric_identity=expected_metric_identity,
                 )
             except MetricProtocolError as exc:
                 rows.append(
@@ -820,10 +821,10 @@ def run_single_entity_experiment(
                 "batch_size": int(config["batch_size"]),
                 "metric_protocol": metric_protocol,
                 "group_cols": source_selection_group_cols,
+                "expected_metric_identity": expected_metric_identity,
             }
             if method not in {"SS-TL"}:
                 kwargs["number_of_sources"] = _source_count_for_method(method, config)
-                kwargs["expected_metric_identity"] = expected_metric_identity
             if method == "MSML-TL-RFE":
                 kwargs["random_state"] = int(
                     config.get("random_state", config.get("seed", 42))
