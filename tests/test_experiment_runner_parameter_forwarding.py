@@ -71,6 +71,7 @@ def test_multi_source_wrappers_translate_number_of_sources_to_k(
             target_df: pd.DataFrame,
             feature_cols: list[str],
             k: int,
+            group_cols: tuple[str, ...],
             horizon: int,
             window_size: int,
             weight_mode: str,
@@ -81,8 +82,9 @@ def test_multi_source_wrappers_translate_number_of_sources_to_k(
             target_epochs: int,
             batch_size: int,
             random_state: int = 42,
+            metric_identity: dict[str, Any] | None = None,
         ) -> Dict[str, Any]:
-            received["k"] = k
+            received.update(k=k, group_cols=group_cols, metric_identity=metric_identity)
             return _result()
 
     else:
@@ -92,6 +94,7 @@ def test_multi_source_wrappers_translate_number_of_sources_to_k(
             target_df: pd.DataFrame,
             feature_cols: list[str],
             k: int,
+            group_cols: tuple[str, ...],
             horizon: int,
             window_size: int,
             weight_mode: str,
@@ -99,8 +102,9 @@ def test_multi_source_wrappers_translate_number_of_sources_to_k(
             source_epochs: int,
             target_epochs: int,
             batch_size: int,
+            metric_identity: dict[str, Any] | None = None,
         ) -> Dict[str, Any]:
-            received["k"] = k
+            received.update(k=k, group_cols=group_cols, metric_identity=metric_identity)
             return _result()
 
     module = __import__(module_path, fromlist=[function_name])
@@ -113,7 +117,8 @@ def test_multi_source_wrappers_translate_number_of_sources_to_k(
         "k": 3,
         "number_of_sources": 7,
         "include_sales_in_knn": False,
-        "metric_protocol": {"strict_paper_metrics": True},
+        "metric_protocol": {"strict_paper_metrics": False},
+        "group_cols": ("entity_id", "item_id"),
     }
     if is_rfe:
         kwargs.update(estimator_name="random_forest", keep_ratio=0.5)
@@ -121,6 +126,8 @@ def test_multi_source_wrappers_translate_number_of_sources_to_k(
     result = wrapper(**kwargs)
 
     assert received["k"] == 7
+    assert received["group_cols"] == ("entity_id", "item_id")
+    assert received["metric_identity"] is None
     assert result["rmse"] == 1.0
     assert np.isnan(result["smape"])
 
