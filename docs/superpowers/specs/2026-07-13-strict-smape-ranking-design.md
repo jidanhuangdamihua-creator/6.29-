@@ -2,7 +2,7 @@
 
 ## 目标
 
-将原始销量空间的 sMAPE（百分比，越低越好）设为 D1–D6 正式跨数据集、跨方法排名和统计检验的唯一主指标。RMSE 保留为诊断指标，不参与正式排名。
+将原始销量空间、合同版本 `smape_original_v1` 的 sMAPE（百分比，越低越好）设为 D1–D6 正式跨数据集、跨方法排名和统计检验的唯一主指标。RMSE 保留为诊断指标，不参与正式排名。
 
 ## 范围与非目标
 
@@ -16,14 +16,17 @@
 
 `mean(2 * abs(y_true - y_pred) / (abs(y_true) + abs(y_pred) + 1e-8)) * 100`
 
-输入必须有限，输出单位为百分比。双零点的贡献为 0；只有一方为零的点趋近 200%。负值使用绝对值计算，但结果必须保留数据质量审计信息，不能把负销量解释为正常业务销量。
+每一行写入 `metric_contract_version=smape_original_v1`、`smape_definition_id=smape_2abs_eps1e-8_pct_v1`、`smape_unit=percent`、`smape_epsilon=1e-8` 和 `smape_range=[0,200]`。输入必须有限，输出单位为百分比。双零点的贡献为 0；只有一方为零的点因 epsilon 而略小于 200%，不应误记为严格等于 200%。
+
+本轮数据政策将负销量视为允许的净销量/退货观测：它可进入正式比较，使用 canonical 公式的绝对值计算，但必须披露真实值和预测值的负值计数/比例。不得裁剪、删除或以 sMAPE 的绝对值操作掩盖负值；若后续数据所有者确认负值是清洗错误，应先在数据协议层修复并生成新合同版本，而非在指标层静默排除。
 
 正式可比结果必须同时满足：
 
 - `strict_paper_metrics=True`
 - `paper_metric_space_requested=original_sales_space`
 - `paper_metric_space_actual=original_sales_space`
-- `inverse_transform_applied=True`
+- `inverse_transform_status in {applied, not_required}`
+- `primary_metric_space_actual=original_sales_space`
 - `paper_metric_computed_valid=True`
 - `paper_metric_status=valid`
 - `smape_metric_space=original_sales_space`
@@ -33,9 +36,11 @@
 
 ### 字段单一真源
 
-`compute_metrics_with_protocol()` 在一次计算中构造唯一的 `computed_metric_space` 事实：它只能是实际成功计算出的 `original_sales_space`、实际 current space，或未计算。`paper_metric_space_requested` 只从输入 protocol 读取；`paper_metric_space_actual`、`rmse_metric_space`、`smape_metric_space`、`original_scale_*` 和严格主指标全部从 `computed_metric_space` 派生，调用方和 CSV 层不得独立赋值或覆盖。
+`compute_metrics_with_protocol()` 是字段派生的唯一真源，但不以一个模糊字段代表全部指标。它分别派生 `current_metric_space_actual`、`paper_metric_space_requested`、`paper_metric_space_actual`、`primary_metric_space_actual`、`rmse_metric_space` 与 `smape_metric_space`，调用方和 CSV 层不得独立赋值或覆盖。`primary_metric_space_actual` 只表示最终主指标的实际空间。
 
-严格且有效时，`paper_metric_space_requested`、`paper_metric_space_actual`、`rmse_metric_space`、`smape_metric_space` 必须全部为 `original_sales_space`。无效记录保留 requested 值以说明请求，但 actual 和各 metric-space 字段为空、主指标为 NaN，并以 `paper_metric_status=invalid` 和 `paper_metric_error` 说明原因；不得伪称已经在 original space 计算。
+严格且有效时，`paper_metric_space_requested`、`paper_metric_space_actual`、`primary_metric_space_actual`、`rmse_metric_space`、`smape_metric_space` 必须全部为 `original_sales_space`。`inverse_transform_status=applied` 表示 normalized 输入已成功反归一化；`not_required` 只允许真实 original-space 输入；`unavailable` 与 `failed` 不可正式准入。兼容字段 `inverse_transform_applied` 仅从 status 派生（status 为 `applied` 时 true）。
+
+无效记录保留 requested 值以说明请求，paper/original 主指标为 NaN 或 null，并以具体的 `paper_metric_status` 与 `paper_metric_error` 说明原因；不得伪称已经在 original space 计算。若 current-space 计算已经成功，必须继续保留 `smape_current`、`normalized_smape` 和 `current_metric_space_actual=normalized_minmax_space`，但这些诊断值不改变无效状态且不得进入正式排名。
 
 ## 计算与严格失败语义
 
@@ -43,7 +48,7 @@
 
 在严格模式下，调用方必须提供有限且同长度的 `y_true`、`y_pred`，以及可用于 `sales` 列反归一化的 `sales_scaler` 和 `feature_columns`。缺失或无效时抛出带缺失字段名称的 `MetricProtocolError(ValueError)`；不得返回先前的 normalized `rmse` 或 `smape`。反归一化或主指标计算不成功时同样不能返回有限主指标。
 
-这个异常只表示当前 method/entity 的严格指标无效。D4–D6 的 per-method/per-entity 边界必须捕获它，写出一条 `paper_metric_status=invalid`、`paper_metric_computed_valid=False`、`paper_metric_error` 非空且 `rmse/smape=NaN` 的错误行，再继续处理其他 method/entity。异常不得中断整批 D4–D6 运行；直接调用计算函数的单元测试仍必须观察到 raise。
+`paper_metric_status` 只能为 `valid`、`not_requested`、`missing_y_true`、`missing_y_pred`、`missing_scaler`、`missing_sales_feature`、`length_mismatch`、`nonfinite_input`、`inverse_transform_failed` 或 `metric_computation_failed`。这个异常只表示当前 method/entity 的严格指标无效。D1–D6 的 per-method/per-entity 边界必须统一捕获它，写出一条具有统一 schema 的 invalid 行：`paper_metric_computed_valid=False`、`paper_metric_error` 非空且主 `rmse/smape=NaN`，再继续处理其他 method/entity。异常不得中断任一数据集的批量运行；直接调用计算函数的单元测试仍必须观察到 raise。
 
 在 non-strict/debug 模式，normalized 指标仍可保留，但 `*_metric_space` 和 `paper_metric_status` 必须准确标示 fallback 或不可用状态。
 
@@ -55,8 +60,14 @@ MSWA-TL、MSSB-TL、MSML-TL、MSML-TL-RFE 传给 `_extract_method_metrics()` 的
 - `y_pred`
 - `sales_scaler`
 - `feature_columns`
+- `metric_target_key`
+- `metric_horizon`
+- `metric_sample_count`
+- `metric_date_start`
+- `metric_date_end`
+- `metric_index_digest`
 
-`_extract_method_metrics()` 接收 `metric_protocol`。若严格模式开启，它只接受上述 payload 并强制调用 canonical 计算函数，不透传 transfer 层预存的 `rmse` 或 `smape`。方法内部已计算的指标可作为诊断信息，但不是严格主指标来源。
+`_extract_method_metrics()` 接收 `metric_protocol` 和当前 entity 的预期 target/horizon/sample manifest 信息。若严格模式开启，它只接受上述 payload 并强制调用 canonical 计算函数，不透传 transfer 层预存的 `rmse` 或 `smape`。除缺字段外，它还验证可明确展平的一维数组、同长度、全有限、`metric_target_key` 与当前结果行一致、horizon 一致、样本数与预期一致，以及 index digest 一致；不一致按 `length_mismatch`、`nonfinite_input` 或 `metric_computation_failed` 失败。方法内部已计算的指标可作为诊断信息，但不是严格主指标来源。
 
 ## 结果与序列化合同
 
@@ -72,14 +83,18 @@ MSWA-TL、MSSB-TL、MSML-TL、MSML-TL-RFE 传给 `_extract_method_metrics()` 的
 
 不同 horizon 不得隐式合并成一个正式排名。若保留 `horizons_1_5` 等跨 horizon 汇总，它必须标为 descriptive/exploratory、明确是 horizon macro mean，且不得用作论文主表排名或正式 Friedman/Wilcoxon 结论。
 
-aggregation、visualization 和 statistical tests 共同调用唯一的 `is_formally_comparable_smape_row(row)` 函数。排序、Friedman、Wilcoxon 和平均排名均以通过该函数的 `smape` 为值；RMSE 不参与这些正式结论。没有任何消费者可以直接根据 `smape` 有限值绕过该筛选。
+aggregation、visualization 和 statistical tests 共同调用唯一的 `is_formally_comparable_smape_row(row)` 函数。函数返回 `{"eligible": bool, "failure_reasons": list[str]}`，并检查合同版本/公式/单位/epsilon、strict、requested/actual/primary/sMAPE 空间、inverse status、计算状态、有限且 `[0,200]` 的 sMAPE、正 sample count 与空 error。排序、Friedman、Wilcoxon 和平均排名均以通过该函数的 `smape` 为值；RMSE 不参与这些正式结论。没有任何消费者可以直接根据 `smape` 有限值绕过该筛选。
 
-每个计算结果行必须包含 `target_sales_zero_count`、`target_sales_zero_rate`、`target_sales_negative_count`、`target_sales_negative_rate`、`metric_sample_count` 和 `sales_distribution_available`。成功 original-space 计算从 original `y_true` 计算这些值；无法得到 original `y_true` 的 invalid 行仍保留字段，但 counts/rates 为空且 `sales_distribution_available=False`。正式摘要必须报告有效行数、排除行数、零值和负值的 count/rate，便于解释 sMAPE 对极端点的敏感性。
+正式 Friedman 的固定 `(horizon, scenario)` 区组为 dataset：行是 dataset，列是 method，值是该 dataset 的 target-macro sMAPE，只使用所有方法均有效的 complete-case datasets。Wilcoxon 两两比较也以同一批 dataset-level sMAPE 配对，报告参与数据集数、Holm 多重比较校正与效果大小。数据集数不足以支持稳健推断时仅输出描述性结果；target-level 检验只能标作数据集内/探索性分析，不能替代跨数据集主检验。
+
+每个计算结果行必须包含 `target_sales_zero_count`、`target_sales_zero_rate`、`target_sales_negative_count`、`target_sales_negative_rate`、`prediction_zero_count`、`prediction_zero_rate`、`prediction_negative_count`、`prediction_negative_rate`、`metric_sample_count` 和 `sales_distribution_available`。成功 original-space 计算从 original `y_true/y_pred` 计算这些值；无法得到 original `y_true` 的 invalid 行仍保留字段，但 counts/rates 为空且 `sales_distribution_available=False`。正式摘要必须报告有效行数、排除行数、真实值/预测值的零值和负值 count/rate，便于解释 sMAPE 对极端点和不符合销量约束的预测的敏感性。
 
 本轮明确不新增 `run_profile`、`paper_table_eligible` 或 `archive_eligible`：目标代码库不存在这些字段，新增它们会制造第二套准入机制。未来若引入 profile，它只能作为 `is_formally_comparable_smape_row()` 的额外输入；metric-space 严格合同仍由该函数唯一判定。
 
+历史结果按证据处理：有原始 `y_true/y_pred` 或可用 scaler 的行只重算指标；已有可证明同公式、同合同的 original-space sMAPE 的行只重聚合；只有 normalized sMAPE 或缺少公式/空间证据的行不进入正式排名，且若未保存预测则必须重跑相关实验。
+
 ## 测试与基线
 
-先为 strict 缺 scaler、缺 y_true、缺 sales 特征、成功 inverse、四空间字段单一真源、三种 strict sMAPE 别名一致性、四个多源 payload、D4–D6 序列化保留字段、per-method invalid 行不中断 entity 批处理、non-strict 空间标记、No-TL/SS-TL 回归、正式行筛选和 macro 聚合写失败测试。筛选测试必须构造 `strict_paper_metrics=False` 但 `smape` 有限的行，断言 aggregate、visualization、statistical tests 全部排除它。聚合测试必须覆盖同一 target 的多个 horizon，断言正式排名按 horizon 分表且不隐式混合。
+先为 strict 缺 scaler、缺 y_true、缺 sales 特征、成功 inverse、直接 original 输入的 `not_required`、合同版本/公式标识、字段单一真源、三种 strict sMAPE 别名一致性、invalid 行保留 current-space 诊断、四个多源 payload 的样本身份校验、D1–D6 统一 invalid 行与批处理继续、D4–D6 序列化保留字段、真实/预测零负值审计、non-strict 空间标记、No-TL/SS-TL 回归、正式行筛选、horizon 分表 macro 聚合和 dataset-level complete-case 统计写失败测试。筛选测试必须构造 `strict_paper_metrics=False` 但 `smape` 有限的行，以及公式 ID 不同但 sMAPE 有限的行，断言 aggregate、visualization、statistical tests 全部排除它。聚合测试必须覆盖同一 target 的多个 horizon，断言正式排名按 horizon 分表且不隐式混合。
 
 基线 focused pytest 在提交 `ed4ce918` 上为 42 通过、1 失败。失败测试期望 D4–D6 透传 `strict_paper_metrics=False`，而当前生产合同已强制为 true。该测试会改为验证严格合同本身，而不是仅为消除失败而改断言。
