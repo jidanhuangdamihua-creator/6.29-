@@ -10,7 +10,10 @@ import pandas as pd
 
 from scripts.validate_d1_d6_protocol_inputs import (
     DATASET_CONFIG,
+    D1D2_PROTOCOL_PARQUET_DIR,
+    PARQUET_DIR,
     build_preflight_reports,
+    resolve_parquet_dir,
     validate_protocol_frames,
 )
 
@@ -125,6 +128,17 @@ class ProtocolPreflightTest(unittest.TestCase):
         self.assertEqual(DATASET_CONFIG[1]["group_cols"], ("store_id", "item_id"))
         self.assertEqual(DATASET_CONFIG[2]["group_cols"], ("brand_id", "item_id"))
         self.assertEqual(DATASET_CONFIG[3]["group_cols"], ("store_id",))
+
+    def test_default_parquet_dir_routes_d1_d2_to_protocol_derived_data(self) -> None:
+        self.assertEqual(resolve_parquet_dir(1), D1D2_PROTOCOL_PARQUET_DIR)
+        self.assertEqual(resolve_parquet_dir(2), D1D2_PROTOCOL_PARQUET_DIR)
+
+        for dataset_id in (3, 4, 5, 6):
+            self.assertEqual(resolve_parquet_dir(dataset_id), PARQUET_DIR)
+
+        explicit = Path("/tmp/custom-protocol-parquets")
+        self.assertEqual(resolve_parquet_dir(1, explicit), explicit)
+        self.assertEqual(resolve_parquet_dir(6, explicit), explicit)
 
     def test_cli_help_can_import_project_modules(self) -> None:
         root = Path(__file__).resolve().parents[1]

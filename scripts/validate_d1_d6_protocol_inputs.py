@@ -8,7 +8,7 @@ from collections import Counter
 import json
 import sys
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 import pandas as pd
 
@@ -26,6 +26,23 @@ from src.source_selection.source_selector import SourceSelector
 
 
 PARQUET_DIR = ROOT / "数据集" / "固化数据"
+D1D2_PROTOCOL_PARQUET_DIR = (
+    ROOT / "数据集" / "派生数据" / "d1d2_protocol_v1"
+)
+
+
+def resolve_parquet_dir(
+    dataset_id: int,
+    explicit_dir: Optional[Path] = None,
+) -> Path:
+    """Resolve the authoritative parquet directory for protocol preflight."""
+    if explicit_dir is not None:
+        return Path(explicit_dir)
+    if dataset_id in (1, 2):
+        return D1D2_PROTOCOL_PARQUET_DIR
+    return PARQUET_DIR
+
+
 DATASET_CONFIG = {
     1: {"group_cols": ("store_id", "item_id"), "observed_start": "2017-06-05"},
     2: {"group_cols": ("brand_id", "item_id"), "observed_start": "2018-06-05"},
@@ -224,11 +241,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", required=True, choices=[f"d{i}" for i in range(1, 7)])
     parser.add_argument("--scenario", choices=("without", "with"), required=True)
-    parser.add_argument("--parquet-dir", type=Path, default=PARQUET_DIR)
+    parser.add_argument("--parquet-dir", type=Path)
     parser.add_argument("--k", type=int, default=3)
     parser.add_argument("--exclusion-sample-limit", type=int, default=20)
     args = parser.parse_args()
     dataset_id = int(args.dataset[1:])
+    parquet_dir = resolve_parquet_dir(dataset_id, args.parquet_dir)
     cfg = DATASET_CONFIG[dataset_id]
     source_columns = list(
         dict.fromkeys(
@@ -237,11 +255,11 @@ def main() -> None:
     )
     target_columns = list(source_columns)
     source = pd.read_parquet(
-        args.parquet_dir / f"dataset{dataset_id}-source.parquet",
+        parquet_dir / f"dataset{dataset_id}-source.parquet",
         columns=source_columns,
     )
     target = pd.read_parquet(
-        args.parquet_dir / f"dataset{dataset_id}-target.parquet",
+        parquet_dir / f"dataset{dataset_id}-target.parquet",
         columns=target_columns,
     )
     reports = build_preflight_reports(
