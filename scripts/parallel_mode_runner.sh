@@ -364,7 +364,6 @@ launch_task() {
     dataset="$(task_dataset "${task_id}")"
     mode="$(task_mode "${task_id}")"
 
-    mkdir "${output_dir}"
     LOG_FILES["${index}"]="${log_file}"
     OUTPUT_DIRS["${index}"]="${output_dir}"
     START_TIMES["${index}"]="$(date +%s)"

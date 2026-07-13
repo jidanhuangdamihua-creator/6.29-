@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
 import pandas as pd
+
+from src.utils.run_utils import create_run_dir
 
 
 STATUS_ALIGNED = "ALIGNED"
@@ -557,17 +557,7 @@ def ensure_paper_track_allowed(
 def _create_run_output_dir(root: Path) -> Path:
     """Create a unique timestamped run directory and update outputs/latest_run.txt."""
     base_output_dir = root / "outputs"
-    runs_dir = base_output_dir / "runs"
-    runs_dir.mkdir(parents=True, exist_ok=True)
-
-    while True:
-        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_output_dir = runs_dir / run_id
-        try:
-            run_output_dir.mkdir(parents=True, exist_ok=False)
-            break
-        except FileExistsError:
-            time.sleep(1.0)
+    run_output_dir = create_run_dir(root, "paper")
 
     latest_file = base_output_dir / "latest_run.txt"
     latest_file.parent.mkdir(parents=True, exist_ok=True)

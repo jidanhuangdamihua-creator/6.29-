@@ -1,0 +1,179 @@
+====================================================================================================
+D4 RAW DATA INSPECTION - FIXED VERSION
+====================================================================================================
+
+Loading: /Users/ming/Desktop/复现实验/保留的复现实验修改rfe/数据集/原始数据/Dataset 4叮咚数据集/data/train.parquet
+
+✓ Loaded 7,869,549 rows
+  Date range: 2023-06-05 to 2025-07-13
+
+====================================================================================================
+OBSERVATION WINDOW ANALYSIS
+====================================================================================================
+
+Observation window definition:
+  Start: 2024-11-17
+  End: 2024-12-16
+  Expected days: 30
+  Actual days in range: 30
+
+All dates in observation window:
+   1. 2024-11-17
+   2. 2024-11-18
+   3. 2024-11-19
+   4. 2024-11-20
+   5. 2024-11-21
+   6. 2024-11-22
+   7. 2024-11-23
+   8. 2024-11-24
+   9. 2024-11-25
+  10. 2024-11-26
+  11. 2024-11-27
+  12. 2024-11-28
+  13. 2024-11-29
+  14. 2024-11-30
+  15. 2024-12-01
+  16. 2024-12-02
+  17. 2024-12-03
+  18. 2024-12-04
+  19. 2024-12-05
+  20. 2024-12-06
+  21. 2024-12-07
+  22. 2024-12-08
+  23. 2024-12-09
+  24. 2024-12-10
+  25. 2024-12-11
+  26. 2024-12-12
+  27. 2024-12-13
+  28. 2024-12-14
+  29. 2024-12-15
+  30. 2024-12-16
+
+Boundary check:
+  Is 2024-11-17 included? True
+  Is 2024-12-16 included? True
+  Total days: 30
+
+====================================================================================================
+GLOBAL DATA COVERAGE CHECK
+====================================================================================================
+
+Observation window: 2024-11-17 to 2024-12-16
+Total rows in this window: 300,316
+
+Unique dates with data: 30/30
+✅ All 30 days have data globally
+
+Dates with data:
+   1. 2024-11-17: 10,146 rows
+   2. 2024-11-18: 10,143 rows
+   3. 2024-11-19: 10,143 rows
+   4. 2024-11-20: 10,098 rows
+   5. 2024-11-21: 10,110 rows
+   6. 2024-11-22: 10,226 rows
+   7. 2024-11-23: 10,220 rows
+   8. 2024-11-24: 10,214 rows
+   9. 2024-11-25: 10,221 rows
+  10. 2024-11-26: 10,230 rows
+  11. 2024-11-27: 10,227 rows
+  12. 2024-11-28: 10,244 rows
+  13. 2024-11-29: 10,230 rows
+  14. 2024-11-30: 10,237 rows
+  15. 2024-12-01: 10,215 rows
+  16. 2024-12-02: 10,215 rows
+  17. 2024-12-03: 10,157 rows
+  18. 2024-12-04: 10,119 rows
+  19. 2024-12-05: 10,095 rows
+  20. 2024-12-06: 10,096 rows
+  21. 2024-12-07: 9,792 rows
+  22. 2024-12-08: 9,747 rows
+  23. 2024-12-09: 9,704 rows
+  24. 2024-12-10: 9,691 rows
+  25. 2024-12-11: 9,637 rows
+  26. 2024-12-12: 9,603 rows
+  27. 2024-12-13: 9,575 rows
+  28. 2024-12-14: 9,560 rows
+  29. 2024-12-15: 9,678 rows
+  30. 2024-12-16: 9,743 rows
+
+====================================================================================================
+STORE 166 - TARGET PRODUCTS VERIFICATION
+====================================================================================================
+
+Expected targets: [258, 311, 313, 432, 433]
+Expected category: first_category=15, second_category=20
+
+Checking each target product:
+----------------------------------------------------------------------------------------------------
+
+✅ Product 258:
+   Category: first=15, second=20
+   Full date range: 2023-06-05 to 2025-07-13
+   Unique days: 770/770
+   Observation window coverage: 30/30 days
+   30-day completeness: ✅ YES (all 30 days present)
+
+✅ Product 311:
+   Category: first=15, second=20
+   Full date range: 2023-06-05 to 2025-07-13
+   Unique days: 770/770
+   Observation window coverage: 30/30 days
+   30-day completeness: ✅ YES (all 30 days present)
+
+✅ Product 313:
+   Category: first=15, second=20
+   Full date range: 2023-06-05 to 2025-07-13
+   Unique days: 770/770
+   Observation window coverage: 30/30 days
+   30-day completeness: ✅ YES (all 30 days present)
+
+✅ Product 432:
+   Category: first=15, second=20
+   Full date range: 2023-06-05 to 2025-07-13
+   Unique days: 732/770
+   Observation window coverage: 30/30 days
+   30-day completeness: ✅ YES (all 30 days present)
+
+✅ Product 433:
+   Category: first=15, second=20
+   Full date range: 2023-06-05 to 2025-07-13
+   Unique days: 770/770
+   Observation window coverage: 30/30 days
+   30-day completeness: ✅ YES (all 30 days present)
+
+====================================================================================================
+STORE 166 - SOURCE CANDIDATES (second_category=20)
+====================================================================================================
+
+Filters:
+  Store: 166
+  second_category: 20
+  Exclude target products: [258, 311, 313, 432, 433]
+  Date before: 2024-12-16
+
+Total candidate products: 2
+
+Detailed candidate analysis:
+----------------------------------------------------------------------------------------------------
+
+Product 560:
+  Date range: 2024-09-07 to 2024-12-15 (100 days)
+  Observation coverage: 29/30 days
+  30-day complete: ❌ NO (29/30)
+  Missing dates: [datetime.date(2024, 12, 16)]
+
+Product 242:
+  Date range: 2023-06-05 to 2024-12-15 (484 days)
+  Observation coverage: 29/30 days
+  30-day complete: ❌ NO (29/30)
+  Missing dates: [datetime.date(2024, 12, 16)]
+
+====================================================================================================
+SUMMARY:
+  Total candidates: 2
+  With 30-day completeness: 0
+  K≥3 feasible: ❌ NO
+
+====================================================================================================
+ANALYSIS COMPLETE
+====================================================================================================

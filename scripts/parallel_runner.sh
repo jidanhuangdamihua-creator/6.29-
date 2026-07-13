@@ -172,9 +172,6 @@ fi
 
 mkdir -p "${PROJECT_ROOT}/outputs/runs" "${PROJECT_ROOT}/outputs/parallel_runs"
 mkdir "${RESULT_ROOT}" "${LOG_ROOT}"
-for dataset in "${DATASETS[@]}"; do
-    mkdir "${RESULT_ROOT}/${dataset}"
-done
 
 : >"${RUNNER_LOG}"
 : >"${RESOURCE_LOG}"

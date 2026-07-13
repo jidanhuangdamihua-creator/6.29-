@@ -395,7 +395,16 @@ source identification 审计产物：
 
 仓库根目录也提供了一个简化入口 [run_main_experiment.py](run_main_experiment.py)（不带命令行参数）。
 
-### 4) 完整实验矩阵（批量参数组合）
+### 4) D1–D6 正式协议运行
+
+正式全量入口是 [scripts/run_unified_d1_d6.py](scripts/run_unified_d1_d6.py)，并行入口是 `scripts/parallel_runner.sh` 与 `scripts/parallel_mode_runner.sh`。每次运行会创建独立的 `outputs/runs/<run-id>/`，其中每个数据集和 with/without 模式各有子目录；汇总时必须显式传入该 run root。
+
+```bash
+python scripts/run_unified_d1_d6.py --dry-run
+python scripts/aggregate_d1_d6_results.py --run-dir "outputs/runs/<run-id>"
+```
+
+### 5) 历史参数矩阵（非 D1–D6 正式入口）
 
 入口脚本：
 

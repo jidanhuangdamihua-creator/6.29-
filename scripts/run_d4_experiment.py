@@ -14,7 +14,7 @@ import tf_compat  # must be imported before tensorflow/keras
 
 import pandas as pd
 
-from src.utils.run_utils import create_run_dir
+from src.utils.run_utils import create_run_dir, reserve_new_output_dir
 from src.utils.entity_experiment import run_single_entity_experiment
 from src.utils.parquet_data_loader import (
     load_parquet_source_target,
@@ -115,7 +115,7 @@ def main() -> None:
         run_dir = Path(args.output_dir)
         if not run_dir.is_absolute():
             run_dir = root / run_dir
-        run_dir.mkdir(parents=True, exist_ok=True)
+        reserve_new_output_dir(run_dir)
     results_dir = run_dir / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "run_config.json").write_text(
