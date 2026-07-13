@@ -16,6 +16,14 @@ SMAPE_RANGE = (0.0, 200.0)
 SALES_VALUE_POLICY = "clip_negative_to_zero_v1"
 ORIGINAL_SALES_SPACE = "original_sales_space"
 VALID_INVERSE_STATUSES = {"applied", "not_required"}
+METRIC_IDENTITY_FIELDS = (
+    "metric_target_key",
+    "metric_horizon",
+    "metric_sample_count",
+    "metric_date_start",
+    "metric_date_end",
+    "metric_index_digest",
+)
 
 SMAPE_CONTRACT_FIELDS = {
     "metric_contract_version": METRIC_CONTRACT_VERSION,
@@ -57,6 +65,31 @@ def compute_metric_index_digest(values: Sequence[Any]) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def validate_metric_identity(
+    payload: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> None:
+    """Validate method output against an orchestration-owned sample identity."""
+    missing = [field for field in METRIC_IDENTITY_FIELDS if field not in payload]
+    if missing:
+        raise MetricProtocolError("missing_metric_identity", missing_fields=missing)
+    mismatches = [
+        field
+        for field in METRIC_IDENTITY_FIELDS
+        if str(payload[field]) != str(expected.get(field))
+    ]
+    if mismatches:
+        detail = "; ".join(
+            f"{field}: expected={expected.get(field)!r} actual={payload.get(field)!r}"
+            for field in mismatches
+        )
+        raise MetricProtocolError(
+            "metric_identity_mismatch",
+            missing_fields=mismatches,
+            detail=detail,
+        )
 
 
 def _missing(row: Mapping[str, Any], field: str) -> bool:

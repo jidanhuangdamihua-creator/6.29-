@@ -314,23 +314,28 @@ def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_invers
         enabled_methods=["No-TL", "MSWA-TL"],
     )
 
+    expected_protocol = {
+        **metric_protocol,
+        "strict_paper_metrics": True,
+    }
     assert received_protocols == {
-        "No-TL": metric_protocol,
-        "MSWA-TL": metric_protocol,
+        "No-TL": expected_protocol,
+        "MSWA-TL": expected_protocol,
     }
     for row in rows:
         assert row["metric_protocol"] == json.dumps(
-            metric_protocol,
+            expected_protocol,
             ensure_ascii=False,
             sort_keys=True,
         )
-        assert row["metric_space_used"] == "normalized_minmax_space"
-        assert row["paper_metric_aligned"] == "no_paper_reference"
+        assert np.isnan(row["rmse"])
+        assert np.isnan(row["smape"])
+        assert row["paper_metric_computed_valid"] is False
+        assert row["paper_metric_status"] == "metric_computation_failed"
+        assert row["paper_metric_aligned"] is False
+        assert row["paper_reference_status"] == "no_paper_reference"
         assert row["inverse_transform_applied"] is False
-        assert (
-            row["metric_protocol_note"]
-            == "inverse transform not available for solidified parquet path"
-        )
+        assert row["paper_metric_error"]
 
 def test_d4_d6_entity_row_does_not_fabricate_paper_or_scale_metrics() -> None:
     row = _row_from_result(
@@ -352,7 +357,9 @@ def test_d4_d6_entity_row_does_not_fabricate_paper_or_scale_metrics() -> None:
         elapsed=1.0,
     )
 
-    assert row["paper_metric_aligned"] == "no_paper_reference"
+    assert row["paper_metric_aligned"] is False
+    assert row["paper_reference_available"] is False
+    assert row["paper_reference_status"] == "no_paper_reference"
     assert row["rmse_paper"] == ""
     assert row["smape_paper"] == ""
     assert row["normalized_rmse"] == ""
