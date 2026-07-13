@@ -27,7 +27,7 @@ from src.experiment.experiment_runner import (
 )
 from src.evaluation.metric_contract import (
     MetricProtocolError,
-    compute_metric_index_digest,
+    build_metric_identity_from_manifest,
 )
 from src.transfer_methods.source_failure_tolerance import (
     AllSourcesFailedError,
@@ -212,29 +212,8 @@ def _method_runner(method: str):
 
 
 def _metric_identity_from_manifest(manifest: Any, *, horizon: int) -> Dict[str, Any]:
-    """Build expected metric identity solely from the orchestration manifest."""
-    records = tuple(manifest.for_horizon(int(horizon)))
-    if not records:
-        raise MetricProtocolError(
-            "metric_identity_mismatch",
-            detail=f"manifest has no samples for horizon={horizon}",
-        )
-    target_keys = {tuple(record.target_key) for record in records}
-    if len(target_keys) != 1:
-        raise MetricProtocolError(
-            "metric_identity_mismatch",
-            detail=f"manifest has multiple target keys: {sorted(target_keys)}",
-        )
-    label_dates = [str(record.label_date) for record in records]
-    sample_keys = [str(record.sample_key) for record in records]
-    return {
-        "metric_target_key": "/".join(str(value) for value in next(iter(target_keys))),
-        "metric_horizon": int(horizon),
-        "metric_sample_count": len(records),
-        "metric_date_start": label_dates[0],
-        "metric_date_end": label_dates[-1],
-        "metric_index_digest": compute_metric_index_digest(sample_keys),
-    }
+    """Compatibility alias for the shared orchestration identity builder."""
+    return build_metric_identity_from_manifest(manifest, horizon=horizon)
 
 
 def _is_numeric_or_bool(series: pd.Series) -> bool:
