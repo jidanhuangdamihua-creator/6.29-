@@ -53,6 +53,36 @@ class ProtocolPreprocessingContractTest(unittest.TestCase):
             [(1, 10)],
         )
 
+    def test_d2_wide_raw_generation_preserves_all_protocol_sources_and_promo(self) -> None:
+        dates = pd.date_range("2020-01-01", periods=30, freq="D")
+        raw = pd.DataFrame({"DATE": dates})
+        for brand in range(1, 4):
+            for item in range(1, 11):
+                raw[f"QTY_B{brand}_{item}"] = brand * 100 + item
+                raw[f"PROMO_B{brand}_{item}"] = int((brand, item) == (2, 3))
+
+        source, target = build_d2_protocol_frames(raw)
+
+        self.assertEqual(
+            set(source[["brand_id", "item_id"]].drop_duplicates().itertuples(index=False, name=None)),
+            {(brand, item) for brand in range(1, 4) for item in range(1, 10)},
+        )
+        self.assertNotIn((1, 10), set(source[["brand_id", "item_id"]].itertuples(index=False, name=None)))
+        self.assertEqual(target["promo"].unique().tolist(), [0])
+        promo_source = source[(source["brand_id"] == 2) & (source["item_id"] == 3)]
+        self.assertEqual(promo_source["promo"].unique().tolist(), [1])
+
+    def test_d2_wide_raw_missing_protocol_source_fails_explicitly(self) -> None:
+        dates = pd.date_range("2020-01-01", periods=30, freq="D")
+        raw = pd.DataFrame({"DATE": dates})
+        for brand in range(1, 4):
+            for item in range(1, 11):
+                if (brand, item) != (3, 9):
+                    raw[f"QTY_B{brand}_{item}"] = 1
+
+        with self.assertRaisesRegex(ProtocolViolation, "QTY_B3_9"):
+            build_d2_protocol_frames(raw)
+
     def test_d3_generation_has_store1_to30_excluding_store10(self) -> None:
         raw = pd.DataFrame(
             [

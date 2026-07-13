@@ -18,7 +18,8 @@ from src.protocols.experiment_protocol import PROTOCOL_VERSION, ProtocolViolatio
 
 
 DEFAULT_D1_INPUT = ROOT / "数据集" / "原始数据" / "Dataset 1" / "train.csv"
-DEFAULT_OUTPUT_DIR = ROOT / "数据集" / "固化数据"
+DEFAULT_D2_INPUT = ROOT / "数据集" / "原始数据" / "Dataset 2" / "hierarchical_sales_data.csv"
+DEFAULT_OUTPUT_DIR = ROOT / "数据集" / "派生数据" / "d1d2_protocol_v1"
 
 
 def _rename_required(frame: pd.DataFrame, aliases: dict[str, Sequence[str]]) -> pd.DataFrame:
@@ -112,6 +113,26 @@ def build_d1_protocol_frames(raw: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFr
 
 
 def build_d2_protocol_frames(raw: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    if "DATE" in raw.columns and any(str(column).startswith("QTY_B") for column in raw.columns):
+        rows = []
+        for brand in range(1, 4):
+            for item in range(1, 11):
+                demand_col = f"QTY_B{brand}_{item}"
+                if demand_col not in raw.columns:
+                    raise ProtocolViolation(f"raw D2 wide input is missing required column {demand_col!r}")
+                promo_col = f"PROMO_B{brand}_{item}"
+                rows.append(
+                    pd.DataFrame(
+                        {
+                            "date": raw["DATE"],
+                            "brand_id": brand,
+                            "item_id": item,
+                            "sales": raw[demand_col],
+                            "promo": raw[promo_col] if promo_col in raw.columns else 0,
+                        }
+                    )
+                )
+        raw = pd.concat(rows, ignore_index=True)
     normalized = _rename_required(
         raw,
         {
@@ -146,8 +167,13 @@ def _read_table(path: Path) -> pd.DataFrame:
 
 def _write_pair(dataset_id: int, source: pd.DataFrame, target: pd.DataFrame, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    source.to_parquet(output_dir / f"dataset{dataset_id}-source.parquet", index=False)
-    target.to_parquet(output_dir / f"dataset{dataset_id}-target.parquet", index=False)
+    source_path = output_dir / f"dataset{dataset_id}-source.parquet"
+    target_path = output_dir / f"dataset{dataset_id}-target.parquet"
+    existing = [path for path in (source_path, target_path) if path.exists()]
+    if existing:
+        raise FileExistsError(f"refusing to overwrite existing protocol parquet(s): {existing!r}")
+    source.to_parquet(source_path, index=False)
+    target.to_parquet(target_path, index=False)
 
 
 def main() -> None:
@@ -157,7 +183,8 @@ def main() -> None:
     parser.add_argument(
         "--d2-input",
         type=Path,
-        help="Required D2 raw table containing Brand1-3 × Item1-10; current workspace has no D2 raw file.",
+        default=DEFAULT_D2_INPUT,
+        help="D2 raw long table or DATE + QTY_B<brand>_<item> wide table.",
     )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     args = parser.parse_args()
