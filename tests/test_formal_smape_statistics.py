@@ -3,8 +3,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from src.analysis.statistical_tests import compare_methods_smape
+from src.analysis.statistical_tests import compare_methods_smape, run_friedman_test
 from src.evaluation.metric_contract import METRIC_CONTRACT_VERSION, SMAPE_DEFINITION_ID
+from src.protocols.experiment_protocol import FORMAL_SEEDS
 from src.visualization.result_visualizer import filter_formally_comparable_results
 
 
@@ -50,6 +51,21 @@ def _row(dataset, method, smape, *, horizon=1, sharing="without", **overrides):
     return row
 
 
+def _seed_rows(dataset, method, smape, *, horizon=1, sharing="without"):
+    return [
+        _row(
+            dataset,
+            method,
+            smape,
+            horizon=horizon,
+            sharing=sharing,
+            seed=seed,
+            metric_index_digest=f"{dataset}-{method}-{horizon}-{sharing}-{seed}",
+        )
+        for seed in FORMAL_SEEDS
+    ]
+
+
 def test_visualization_filter_accepts_not_required_and_excludes_numeric_non_strict():
     frame = pd.DataFrame(
         [
@@ -73,7 +89,7 @@ def test_statistics_uses_complete_case_dataset_blocks_and_holm_correction():
     }
     for dataset, methods in values.items():
         for method, smape in methods.items():
-            rows.append(_row(dataset, method, smape))
+            rows.extend(_seed_rows(dataset, method, smape))
 
     result = compare_methods_smape(pd.DataFrame(rows), anchor="MSML-TL-RFE")
 
@@ -90,10 +106,65 @@ def test_statistics_never_combines_horizons_or_sharing_scenarios():
     for horizon in (1, 5):
         for sharing in ("without", "with"):
             for dataset in ("D1", "D2"):
-                rows.append(_row(dataset, "MSML-TL-RFE", 10.0, horizon=horizon, sharing=sharing))
-                rows.append(_row(dataset, "No-TL", 12.0, horizon=horizon, sharing=sharing))
+                rows.extend(
+                    _seed_rows(
+                        dataset,
+                        "MSML-TL-RFE",
+                        10.0,
+                        horizon=horizon,
+                        sharing=sharing,
+                    )
+                )
+                rows.extend(
+                    _seed_rows(
+                        dataset,
+                        "No-TL",
+                        12.0,
+                        horizon=horizon,
+                        sharing=sharing,
+                    )
+                )
 
     result = compare_methods_smape(pd.DataFrame(rows), anchor="MSML-TL-RFE")
 
     assert result.groupby(["horizon", "sharing_scenario"]).ngroups == 4
     assert set(result["n_datasets"]) == {2}
+
+
+def test_friedman_records_every_horizon_scenario_stratum() -> None:
+    rows = []
+    for horizon in (1, 5):
+        for sharing in ("without", "with"):
+            methods = ("Method-A", "Method-B", "Method-C")
+            if (horizon, sharing) == (5, "with"):
+                methods = ("Method-A", "Method-B")
+            for dataset_index, dataset in enumerate(("D1", "D2"), start=1):
+                for method_index, method in enumerate(methods, start=1):
+                    rows.extend(
+                        _seed_rows(
+                            dataset,
+                            method,
+                            float(dataset_index + method_index),
+                            horizon=horizon,
+                            sharing=sharing,
+                        )
+                    )
+
+    result = run_friedman_test(pd.DataFrame(rows))
+
+    assert isinstance(result, pd.DataFrame)
+    assert result.groupby(["horizon", "sharing_scenario"]).ngroups == 4
+    assert list(result.columns) == [
+        "horizon",
+        "sharing_scenario",
+        "n_datasets",
+        "n_methods",
+        "statistic",
+        "p_value",
+        "status",
+    ]
+    insufficient = result[
+        result["horizon"].eq(5) & result["sharing_scenario"].eq("with")
+    ].iloc[0]
+    assert insufficient["n_methods"] == 2
+    assert insufficient["status"] == "insufficient_data"

@@ -9,10 +9,14 @@ import pandas as pd
 from scipy.stats import friedmanchisquare, rankdata, wilcoxon
 
 from src.evaluation.metric_contract import build_formal_smape_aggregates
+from src.protocols.experiment_protocol import FORMAL_SEEDS
 
 
 def _dataset_macro(results_dataframe: pd.DataFrame) -> pd.DataFrame:
-    return build_formal_smape_aggregates(results_dataframe)["dataset_macro"]
+    return build_formal_smape_aggregates(
+        results_dataframe,
+        expected_seeds=FORMAL_SEEDS,
+    )["dataset_macro"]
 
 
 def _holm_adjust(values: pd.Series) -> pd.Series:
@@ -142,19 +146,57 @@ def run_pairwise_wilcoxon_tests(results_dataframe: pd.DataFrame) -> pd.DataFrame
     return compare_methods_smape(results_dataframe)
 
 
-def run_friedman_test(results_dataframe: pd.DataFrame) -> Dict[str, float]:
+def run_friedman_test(results_dataframe: pd.DataFrame) -> pd.DataFrame:
+    columns = [
+        "horizon",
+        "sharing_scenario",
+        "n_datasets",
+        "n_methods",
+        "statistic",
+        "p_value",
+        "status",
+    ]
     dataset_macro = _dataset_macro(results_dataframe)
     if dataset_macro.empty:
-        return {"statistic": float("nan"), "p_value": float("nan")}
-    values = []
-    for _, group in dataset_macro.groupby(["horizon", "sharing_scenario"]):
-        pivot = group.pivot(index="dataset", columns="method", values="smape").dropna(how="any")
-        if pivot.shape[0] >= 2 and pivot.shape[1] >= 3:
-            values.append(friedmanchisquare(*(pivot[column] for column in pivot.columns)))
-    if not values:
-        return {"statistic": float("nan"), "p_value": float("nan")}
-    statistic, p_value = values[0]
-    return {"statistic": float(statistic), "p_value": float(p_value)}
+        return pd.DataFrame(columns=columns)
+    rows: List[Dict[str, object]] = []
+    for (horizon, scenario), group in dataset_macro.groupby(
+        ["horizon", "sharing_scenario"],
+        dropna=False,
+        sort=True,
+    ):
+        pivot = group.pivot(
+            index="dataset",
+            columns="method",
+            values="smape",
+        ).dropna(how="any")
+        n_datasets = int(pivot.shape[0])
+        n_methods = int(pivot.shape[1])
+        row: Dict[str, object] = {
+            "horizon": horizon,
+            "sharing_scenario": scenario,
+            "n_datasets": n_datasets,
+            "n_methods": n_methods,
+            "statistic": float("nan"),
+            "p_value": float("nan"),
+            "status": "insufficient_data",
+        }
+        if n_datasets >= 2 and n_methods >= 3:
+            statistic, p_value = friedmanchisquare(
+                *(pivot[column] for column in pivot.columns)
+            )
+            row.update(
+                {
+                    "statistic": float(statistic),
+                    "p_value": float(p_value),
+                    "status": "ok",
+                }
+            )
+        rows.append(row)
+    return pd.DataFrame(rows, columns=columns).sort_values(
+        ["horizon", "sharing_scenario"],
+        kind="stable",
+    ).reset_index(drop=True)
 
 
 def compute_average_rank(results_dataframe: pd.DataFrame) -> pd.DataFrame:
