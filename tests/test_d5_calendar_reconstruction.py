@@ -13,6 +13,15 @@ from src.utils.d5_calendar_reconstruction import (
 )
 
 
+_D5_AUTHORITY_FILENAMES = (
+    "oil.csv",
+    "transactions.csv",
+    "items.csv",
+    "stores.csv",
+    "holidays_events.csv",
+)
+
+
 def _write_authorities(root: Path) -> None:
     pd.DataFrame(
         {
@@ -97,6 +106,20 @@ def _repository_fixture_root() -> Path:
             if (candidate / "数据集/固化数据/dataset5-target.parquet").is_file():
                 return candidate
     return root
+
+
+def _missing_repository_fixture_paths(root: Path) -> tuple[Path, ...]:
+    target_path = root / "数据集/固化数据/dataset5-target.parquet"
+    raw_dir = root / "数据集/原始数据/Dataset 5Favorita"
+    required = (target_path, *(raw_dir / name for name in _D5_AUTHORITY_FILENAMES))
+    return tuple(path for path in required if not path.is_file())
+
+
+def _require_complete_repository_fixture(root: Path) -> None:
+    missing = _missing_repository_fixture_paths(root)
+    if missing:
+        relative = ", ".join(str(path.relative_to(root)) for path in missing)
+        pytest.skip(f"repository D5 fixture is incomplete; missing: {relative}")
 
 
 def test_shared_oil_authority_matches_preprocessing_semantics() -> None:
@@ -281,12 +304,35 @@ def test_reconstruction_never_fabricates_historical_derived_features(tmp_path: P
         )
 
 
+def test_real_fixture_guard_skips_when_an_authority_file_is_missing(tmp_path: Path) -> None:
+    target_path = tmp_path / "数据集/固化数据/dataset5-target.parquet"
+    raw_dir = tmp_path / "数据集/原始数据/Dataset 5Favorita"
+    target_path.parent.mkdir(parents=True)
+    raw_dir.mkdir(parents=True)
+    target_path.touch()
+    _write_authorities(raw_dir)
+    (raw_dir / "holidays_events.csv").unlink()
+
+    with pytest.raises(pytest.skip.Exception, match="holidays_events.csv"):
+        _require_complete_repository_fixture(tmp_path)
+
+
+def test_real_fixture_guard_accepts_target_and_all_authorities(tmp_path: Path) -> None:
+    target_path = tmp_path / "数据集/固化数据/dataset5-target.parquet"
+    raw_dir = tmp_path / "数据集/原始数据/Dataset 5Favorita"
+    target_path.parent.mkdir(parents=True)
+    raw_dir.mkdir(parents=True)
+    target_path.touch()
+    _write_authorities(raw_dir)
+
+    assert _missing_repository_fixture_paths(tmp_path) == ()
+
+
 def test_real_48_1159415_reconstructs_15_days_in_both_modes_without_training() -> None:
     root = _repository_fixture_root()
     target_path = root / "数据集/固化数据/dataset5-target.parquet"
     raw_dir = root / "数据集/原始数据/Dataset 5Favorita"
-    if not target_path.is_file() or not raw_dir.is_dir():
-        pytest.skip("repository D5 fixture is absent")
+    _require_complete_repository_fixture(root)
 
     target = pd.read_parquet(
         target_path,

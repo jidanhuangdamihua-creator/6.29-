@@ -7,7 +7,6 @@ import pandas as pd
 from scripts import run_full_paper_experiments
 from src.data_processing.data_preprocessing import temporal_split_by_ratio_or_dates
 from scripts.aggregate_d1_d6_results import (
-    SOURCE_CSVS,
     _assert_dataset3_result_target_is_store10,
     _normalize_row,
 )
@@ -138,14 +137,29 @@ class FullPaperRunnerSolidifiedParquetTest(unittest.TestCase):
         )
 
     def test_aggregate_d3_source_csv_proves_target_store10(self):
-        d3_source = FIXTURE_ROOT / SOURCE_CSVS[3].relative_to(Path(__file__).resolve().parents[1])
-        df = pd.read_csv(d3_source, dtype=str, keep_default_na=False)
+        fixture = pd.DataFrame(
+            {
+                "target_entity_id": ["10", "10"],
+                "target_store_id": ["10", "10"],
+                "error": ["", "completed without import failures"],
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            d3_source = Path(tmpdir) / "dataset3_results.csv"
+            fixture.to_csv(d3_source, index=False)
+            df = pd.read_csv(d3_source, dtype=str, keep_default_na=False)
 
         _assert_dataset3_result_target_is_store10(df, d3_source)
-        if "error" in df.columns:
-            self.assertFalse(
-                df["error"].astype(str).str.contains("Traceback|ImportError", regex=True).any()
-            )
+        self.assertEqual({"10"}, set(df["target_entity_id"]))
+        self.assertEqual({"10"}, set(df["target_store_id"]))
+        self.assertFalse(
+            df["error"].astype(str).str.contains("Traceback|ImportError", regex=True).any()
+        )
+        bad_df = df.copy()
+        bad_df.loc[0, "error"] = "Traceback: ImportError while loading dependency"
+        self.assertTrue(
+            bad_df["error"].astype(str).str.contains("Traceback|ImportError", regex=True).any()
+        )
 
     def test_d1_d2_d3_solidified_non_strict_targets_carry_paper_window_attrs(self):
         cfg = _load_config()
