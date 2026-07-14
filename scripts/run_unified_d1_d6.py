@@ -57,6 +57,13 @@ VALID_DATASETS = tuple(f"d{number}" for number in range(1, 7))
 VALID_MODES = ("without", "with")
 
 
+def _formal_parquet_dir(project_root: Path, dataset_id: int) -> Path:
+    root = Path(project_root)
+    if int(dataset_id) in (1, 2):
+        return root / "数据集" / "派生数据" / "d1d2_protocol_v1"
+    return root / "数据集" / "固化数据"
+
+
 def discover_formal_input_identity(project_root: Path) -> dict[str, dict[str, object]]:
     root = Path(project_root)
     paths = [
@@ -66,10 +73,11 @@ def discover_formal_input_identity(project_root: Path) -> dict[str, dict[str, ob
     ]
     paths.extend(sorted((root / "configs" / "solidified" / "knn").glob("**/*.json")))
     for dataset_id in range(1, 7):
+        parquet_dir = _formal_parquet_dir(root, dataset_id)
         paths.extend(
             [
-                root / "数据集" / "固化数据" / f"dataset{dataset_id}-source.parquet",
-                root / "数据集" / "固化数据" / f"dataset{dataset_id}-target.parquet",
+                parquet_dir / f"dataset{dataset_id}-source.parquet",
+                parquet_dir / f"dataset{dataset_id}-target.parquet",
             ]
         )
     d5_raw = root / "数据集" / "原始数据" / "Dataset 5Favorita"

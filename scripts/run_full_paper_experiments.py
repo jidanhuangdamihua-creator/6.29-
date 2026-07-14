@@ -107,12 +107,12 @@ FORMAL_DATASET_PATHS = {
 }
 SOLIDIFIED_DATASET_PATHS = {
     "Dataset1": {
-        "source": "数据集/固化数据/dataset1-source.parquet",
-        "target": "数据集/固化数据/dataset1-target.parquet",
+        "source": "数据集/派生数据/d1d2_protocol_v1/dataset1-source.parquet",
+        "target": "数据集/派生数据/d1d2_protocol_v1/dataset1-target.parquet",
     },
     "Dataset2": {
-        "source": "数据集/固化数据/dataset2-source.parquet",
-        "target": "数据集/固化数据/dataset2-target.parquet",
+        "source": "数据集/派生数据/d1d2_protocol_v1/dataset2-source.parquet",
+        "target": "数据集/派生数据/d1d2_protocol_v1/dataset2-target.parquet",
     },
     "Dataset3": {
         "source": "数据集/固化数据/dataset3-source.parquet",
