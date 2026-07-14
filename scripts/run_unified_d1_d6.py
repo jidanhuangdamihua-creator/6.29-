@@ -29,6 +29,7 @@ from src.utils.result_acceptance import (
     AcceptanceScope,
     AggregateProfile,
     ExpectedResultContract,
+    ResultAcceptanceError,
 )
 from src.utils.run_artifacts import (
     CodeIdentity,
@@ -37,6 +38,8 @@ from src.utils.run_artifacts import (
     publish_global_aggregate,
     publish_mode_matrix,
     resumable_formal_cell,
+    verify_formal_cell_artifact,
+    verify_formal_mode_artifact,
     write_or_validate_run_plan,
 )
 from src.utils.run_layout import RunLayout
@@ -371,6 +374,155 @@ def load_validated_run_plan(
     if stored != current:
         raise RuntimeError("current formal plan or identity does not match run_plan.json")
     return current, code_identity
+
+
+def _require_tasks_match_plan(
+    tasks: Sequence[Task],
+    plan: Mapping[str, object],
+    *,
+    dataset_id: int,
+    mode: str,
+) -> None:
+    raw_cells = plan.get("cells")
+    if not isinstance(raw_cells, list):
+        raise RuntimeError("formal run plan has no cell list")
+    planned = [
+        cell
+        for cell in raw_cells
+        if isinstance(cell, dict)
+        and cell.get("dataset_id") == dataset_id
+        and cell.get("mode") == mode
+    ]
+    actual = [_task_plan_entry(task) for task in tasks]
+    if len(planned) != 25 or len(actual) != 25 or planned != actual:
+        raise RuntimeError(
+            f"mode worker plan mismatch for d{dataset_id}_{mode}: "
+            f"planned={len(planned)} actual={len(actual)}"
+        )
+
+
+def _cell_contract(task: Task, mode_expected: ExpectedResultContract) -> ExpectedResultContract:
+    return replace(
+        mode_expected,
+        scope=AcceptanceScope.CELL,
+        horizons=(task.horizon,),
+        seeds=(task.seed,),
+    )
+
+
+def execute_mode_worker(
+    mode_dir: Path,
+    dataset: str,
+    mode: str,
+    *,
+    resume: bool,
+) -> Path:
+    if dataset not in VALID_DATASETS:
+        raise ValueError(f"unknown formal dataset: {dataset}")
+    if mode not in VALID_MODES:
+        raise ValueError(f"unknown formal mode: {mode}")
+    dataset_id = int(dataset[1:])
+    requested_mode_dir = Path(mode_dir).resolve()
+    run_root = requested_mode_dir.parent
+    if not (run_root / "run_plan.json").is_file():
+        raise ValueError(
+            f"mode worker output is not below a prepared canonical mode directory: "
+            f"{requested_mode_dir}"
+        )
+    layout = RunLayout(run_root)
+    canonical_mode_dir = layout.mode_dir(dataset_id, mode).resolve()
+    if requested_mode_dir != canonical_mode_dir:
+        raise ValueError(
+            f"mode worker output is not the canonical mode directory: {requested_mode_dir}"
+        )
+
+    plan, code_identity = load_validated_run_plan(run_root)
+    tasks = build_tasks(
+        [dataset],
+        smoke=False,
+        run_dir=run_root,
+        info_sharing=mode,
+    )
+    _require_tasks_match_plan(
+        tasks,
+        plan,
+        dataset_id=dataset_id,
+        mode=mode,
+    )
+    expected = build_mode_expected_contract(dataset=dataset, scenario=mode)
+    output = layout.mode_result(dataset_id, mode)
+    all_cells_reused = bool(resume)
+
+    for task in tasks:
+        if task.expected_result_path is None:
+            raise RuntimeError(f"formal task has no expected result path: {task.label}")
+        cell_expected = _cell_contract(task, expected)
+        if resume:
+            try:
+                verify_formal_cell_artifact(
+                    task.expected_result_path,
+                    acceptance_path=task.expected_result_path.with_suffix(
+                        ".acceptance.json"
+                    ),
+                    expected=cell_expected,
+                    code_identity=code_identity,
+                )
+                print(f"[RESUME] accepted {task.label}")
+                continue
+            except ResultAcceptanceError:
+                all_cells_reused = False
+
+        completed = run_task(task)
+        if completed.returncode != 0 or not completed.result_paths:
+            print_result_summary([completed])
+            raise RuntimeError(
+                f"formal cell failed: {task.label} returncode={completed.returncode}"
+            )
+        verify_formal_cell_artifact(
+            task.expected_result_path,
+            acceptance_path=task.expected_result_path.with_suffix(".acceptance.json"),
+            expected=cell_expected,
+            code_identity=code_identity,
+        )
+
+    cell_paths = [
+        task.expected_result_path
+        for task in tasks
+        if task.expected_result_path is not None
+    ]
+    if len(cell_paths) != 25:
+        raise RuntimeError("mode worker did not resolve exactly 25 cell paths")
+
+    if all_cells_reused:
+        try:
+            verify_formal_mode_artifact(
+                output,
+                acceptance_path=layout.mode_acceptance_report(dataset_id, mode),
+                cell_paths=cell_paths,
+                expected=expected,
+                code_identity=code_identity,
+            )
+            print(f"[RESUME] accepted mode=d{dataset_id}_{mode}")
+            return output
+        except ResultAcceptanceError:
+            pass
+
+    load_validated_run_plan(run_root)
+    publish_mode_matrix(
+        cell_paths,
+        stable_path=output,
+        expected=expected,
+        code_identity=code_identity,
+    )
+    verify_formal_mode_artifact(
+        output,
+        acceptance_path=layout.mode_acceptance_report(dataset_id, mode),
+        cell_paths=cell_paths,
+        expected=expected,
+        code_identity=code_identity,
+    )
+    print(f"[ACCEPTED] mode=d{dataset_id}_{mode} result={output}")
+    return output
 
 
 def _resolve_run_root(args: argparse.Namespace) -> Path:

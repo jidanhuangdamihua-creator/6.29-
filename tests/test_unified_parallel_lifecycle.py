@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -87,3 +89,114 @@ def test_load_validated_run_plan_returns_locked_code_identity(
 
     assert loaded == prepared
     assert loaded_identity == identity
+
+
+@pytest.fixture
+def prepared_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Path:
+    run_root = tmp_path / "run"
+    identity = _identity()
+    monkeypatch.setattr(unified, "discover_code_identity", lambda _: identity)
+    monkeypatch.setattr(unified, "discover_formal_input_identity", lambda _: {})
+    unified.prepare_formal_run(run_root, resume=False)
+    return run_root
+
+
+def test_mode_worker_selects_exactly_25_plan_cells(
+    prepared_run: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[unified.Task] = []
+
+    def complete(task: unified.Task) -> unified.Task:
+        seen.append(task)
+        return replace(
+            task,
+            result_paths=[task.expected_result_path],
+            returncode=0,
+            elapsed_seconds=0.01,
+        )
+
+    monkeypatch.setattr(unified, "run_task", complete)
+    monkeypatch.setattr(unified, "verify_formal_cell_artifact", lambda *a, **k: None)
+    monkeypatch.setattr(unified, "publish_mode_matrix", lambda *a, **k: None)
+    monkeypatch.setattr(unified, "verify_formal_mode_artifact", lambda *a, **k: None)
+
+    output = unified.execute_mode_worker(
+        prepared_run / "d2_with",
+        "d2",
+        "with",
+        resume=False,
+    )
+
+    assert len(seen) == 25
+    assert {(task.dataset_token, task.scenario) for task in seen} == {("d2", "with")}
+    assert output == prepared_run / "d2_with" / "results" / "dataset2_with_results.csv"
+
+
+def test_mode_worker_does_not_publish_after_cell_failure(
+    prepared_run: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        unified,
+        "run_task",
+        lambda task: replace(
+            task,
+            result_paths=[],
+            returncode=9,
+            elapsed_seconds=0.01,
+        ),
+    )
+    publish = Mock()
+    monkeypatch.setattr(unified, "publish_mode_matrix", publish)
+
+    with pytest.raises(RuntimeError, match="formal cell failed"):
+        unified.execute_mode_worker(
+            prepared_run / "d2_with",
+            "d2",
+            "with",
+            resume=False,
+        )
+
+    publish.assert_not_called()
+
+
+def test_mode_worker_reuses_fully_verified_mode_without_republishing(
+    prepared_run: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_task = Mock()
+    publish = Mock()
+    cell_verify = Mock()
+    mode_verify = Mock()
+    monkeypatch.setattr(unified, "run_task", run_task)
+    monkeypatch.setattr(unified, "publish_mode_matrix", publish)
+    monkeypatch.setattr(unified, "verify_formal_cell_artifact", cell_verify)
+    monkeypatch.setattr(unified, "verify_formal_mode_artifact", mode_verify)
+
+    unified.execute_mode_worker(
+        prepared_run / "d5_without",
+        "d5",
+        "without",
+        resume=True,
+    )
+
+    assert cell_verify.call_count == 25
+    mode_verify.assert_called_once()
+    run_task.assert_not_called()
+    publish.assert_not_called()
+
+
+def test_mode_worker_rejects_nested_or_wrong_mode_output_directory(
+    prepared_run: Path,
+) -> None:
+    with pytest.raises(ValueError, match="canonical mode directory"):
+        unified.execute_mode_worker(
+            prepared_run / "d2_with" / "d2_with",
+            "d2",
+            "with",
+            resume=False,
+        )
