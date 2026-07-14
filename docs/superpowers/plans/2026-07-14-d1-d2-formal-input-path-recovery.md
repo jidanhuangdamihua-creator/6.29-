@@ -193,4 +193,3 @@ Expected: syntax and diff checks pass; only planned code/test changes or commits
 - [ ] **Step 3: Review deployment limitation**
 
 Confirm that no local or rescue-server protocol-derived D1/D2 parquet exists. Report deployment synchronization as a remaining external prerequisite rather than generating data or weakening tests.
-

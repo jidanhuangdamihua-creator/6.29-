@@ -44,4 +44,3 @@ same authoritative files. D3-D6 paths remain unchanged.
 - Run related unified-runner, formal-parquet, and protocol-preflight tests
   through `tools/protection/codex_timeout.py`.
 - Run syntax/static checks and confirm no parquet or protocol files changed.
-
