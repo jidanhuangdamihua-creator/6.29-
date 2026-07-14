@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import math
+import hashlib
+import json
 from collections.abc import Mapping, Sequence
+from types import MappingProxyType
 from typing import Any
 
 import pandas as pd
@@ -26,6 +29,36 @@ TRACE_COLUMNS = [
     "source_identifier",
     "selected_sources",
 ]
+
+RESULT_SCHEMA_REGISTRY_VERSION = "result_schema_registry_v1"
+REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY = MappingProxyType(
+    {
+        SCHEMA_FAMILY_D1_D3: (
+            "sample_count",
+            "source_identification",
+            "feature_cols_final",
+            "rfe_candidate_features",
+            "rfe_selected_features",
+            "signature_components",
+        ),
+        SCHEMA_FAMILY_D4_D6: ("sample_count",),
+    }
+)
+
+
+def result_schema_registry_digest() -> str:
+    payload = {
+        "version": RESULT_SCHEMA_REGISTRY_VERSION,
+        "base_columns": list(RESULT_SCHEMA_COLUMNS),
+        "extras": {
+            family: list(columns)
+            for family, columns in sorted(
+                REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY.items()
+            )
+        },
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _first_seen_columns(records: Sequence[Mapping[str, Any]]) -> list[str]:

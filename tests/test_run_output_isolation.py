@@ -44,10 +44,12 @@ class RunOutputIsolationTest(unittest.TestCase):
             run_dir=run_root,
         )
 
-        self.assertEqual(len(tasks), 12)
-        task_dirs = {task.expected_result_path.parent.parent for task in tasks if task.expected_result_path}
-        self.assertEqual(len(task_dirs), 12)
-        self.assertEqual({path.parent for path in task_dirs}, {run_root})
+        self.assertEqual(len(tasks), 300)
+        result_paths = {task.expected_result_path for task in tasks if task.expected_result_path}
+        self.assertEqual(len(result_paths), 300)
+        mode_dirs = {path.parents[3] for path in result_paths}
+        self.assertEqual(len(mode_dirs), 12)
+        self.assertEqual({path.parent for path in mode_dirs}, {run_root})
 
     def test_aggregator_cli_requires_an_explicit_run_root(self) -> None:
         with patch("sys.argv", ["aggregate_d1_d6_results.py"]):
@@ -71,5 +73,6 @@ class RunOutputIsolationTest(unittest.TestCase):
         )
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("[D1-without]", completed.stdout)
-        self.assertIn("[D1-with]", completed.stdout)
+        self.assertIn("[D1-without-h1-s42]", completed.stdout)
+        self.assertIn("[D1-with-h5-s46]", completed.stdout)
+        self.assertIn("[FORMAL PLAN] cells=50 unique=50", completed.stdout)

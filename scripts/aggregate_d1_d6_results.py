@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import math
 import re
 import statistics
@@ -25,6 +26,18 @@ from src.evaluation.metric_contract import (
     build_formal_smape_aggregates,
 )
 from src.protocols.experiment_protocol import FORMAL_SEEDS
+from src.protocols.experiment_protocol import FORMAL_HORIZONS, FORMAL_METHODS
+from src.utils.result_acceptance import (
+    AcceptanceScope,
+    AggregateProfile,
+    ExpectedResultContract,
+)
+from src.utils.run_artifacts import (
+    CodeIdentity,
+    discover_code_identity,
+    publish_global_aggregate,
+)
+from src.utils.run_layout import RunLayout
 from src.utils.result_validation import (
     annotate_silent_metric_failure,
     classify_protocol_result,
@@ -630,9 +643,10 @@ def aggregate(
     allow_missing: bool = False,
     legacy_fallback: bool = False,
 ) -> Dict[str, Any]:
+    """Legacy exploratory audit; never a formal acceptance or sealing path."""
     run_dir = Path(run_dir)
     if output is None:
-        output = run_dir / "aggregate" / "d1_d6_all_results.csv"
+        output = run_dir / "aggregate" / "legacy_audit_d1_d6_all_results.csv"
     csv_cache: _CsvDataFrameCache = {}
     selected, discovery_audit = discover_source_csvs(
         run_dir,
@@ -716,18 +730,118 @@ def aggregate(
     }
 
 
+def aggregate_accepted_formal_run(
+    *,
+    run_dir: Path,
+    profile: AggregateProfile,
+) -> Dict[str, Any]:
+    """Re-publish only manifest-backed accepted modes through shared authority."""
+    from scripts.run_strict_protocol_baseline import build_mode_expected_contract
+
+    run_root = Path(run_dir)
+    plan_path = run_root / "run_plan.json"
+    if not plan_path.is_file():
+        raise FileNotFoundError(f"formal aggregation requires run plan: {plan_path}")
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    raw_identity = payload.get("code_identity")
+    if not isinstance(raw_identity, dict):
+        raise ValueError("formal run plan is missing code_identity")
+    plan_identity = CodeIdentity(
+        git_commit=str(raw_identity.get("git_commit", "")),
+        dirty=bool(raw_identity.get("dirty", True)),
+        worktree_digest=str(raw_identity.get("worktree_digest", "")),
+    )
+    current_identity = discover_code_identity(PROJECT_ROOT)
+    if current_identity != plan_identity or current_identity.dirty:
+        raise ValueError("formal aggregation code identity does not match the clean run plan")
+
+    cells = payload.get("cells")
+    if not isinstance(cells, list) or not cells:
+        raise ValueError("formal run plan contains no cells")
+    groups = {
+        (int(cell["dataset_id"]), str(cell["mode"]))
+        for cell in cells
+        if isinstance(cell, dict)
+    }
+    full_groups = {
+        (dataset_id, mode)
+        for dataset_id in range(1, 7)
+        for mode in ("without", "with")
+    }
+    if profile is AggregateProfile.FULL_D1_D6_BASELINE and groups != full_groups:
+        raise ValueError("full formal profile requires all 12 dataset-mode groups")
+
+    layout = RunLayout(run_root)
+    mode_contracts = [
+        build_mode_expected_contract(dataset=f"d{dataset_id}", scenario=mode)
+        for dataset_id, mode in sorted(groups)
+    ]
+    targets = {
+        key: value
+        for contract in mode_contracts
+        for key, value in contract.targets_by_dataset_mode.items()
+    }
+    dataset_ids = tuple(sorted({dataset_id for dataset_id, _ in groups}))
+    modes = tuple(
+        mode for mode in ("without", "with") if any(item_mode == mode for _, item_mode in groups)
+    )
+    expected = ExpectedResultContract(
+        scope=AcceptanceScope.GLOBAL_AGGREGATE,
+        formal=True,
+        dataset_ids=dataset_ids,
+        modes=modes,
+        protocol_tracks=("strict_paper",),
+        targets_by_dataset_mode=targets,
+        methods=FORMAL_METHODS,
+        horizons=FORMAL_HORIZONS,
+        seeds=FORMAL_SEEDS,
+        confirmation_eligible=True,
+        aggregate_profile=profile,
+    )
+    mode_paths = [layout.mode_result(dataset_id, mode) for dataset_id, mode in sorted(groups)]
+    manifest = publish_global_aggregate(
+        mode_paths,
+        stable_path=layout.aggregate_result,
+        expected=expected,
+        code_identity=plan_identity,
+    )
+    return {
+        "all_results_path": layout.aggregate_result,
+        "manifest_path": layout.aggregate_manifest,
+        "sha256": manifest["sha256"],
+    }
+
+
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Aggregate D1-D6 result CSVs from a run directory.")
+    parser = argparse.ArgumentParser(
+        description="Aggregate accepted formal modes, or explicitly run the legacy audit aggregator."
+    )
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--allow-missing", action="store_true")
     parser.add_argument("--legacy-fallback", action="store_true")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
+        "--formal-profile",
+        choices=[profile.value for profile in AggregateProfile],
+    )
+    mode.add_argument("--legacy-audit", action="store_true")
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
+    if args.formal_profile is not None:
+        if args.output is not None or args.strict or args.allow_missing or args.legacy_fallback:
+            raise SystemExit(
+                "formal aggregation uses RunLayout and accepted manifests; legacy options are forbidden"
+            )
+        aggregate_accepted_formal_run(
+            run_dir=args.run_dir,
+            profile=AggregateProfile(args.formal_profile),
+        )
+        return
     aggregate(
         run_dir=args.run_dir,
         output=args.output,

@@ -10,10 +10,31 @@ from typing import Iterable, Optional, Sequence, Tuple, Union
 PROTOCOL_VERSION = "d1_d6_protocol_v1"
 FORMAL_HORIZONS = (1, 2, 3, 4, 5)
 FORMAL_SEEDS = (42, 43, 44, 45, 46)
-STRICT_PAPER_TRACK = "strict_paper"
+FORMAL_METHODS = (
+    "No-TL",
+    "SS-TL",
+    "MSWA-TL",
+    "MSSB-TL",
+    "MSML-TL",
+    "MSML-TL-RFE",
+)
+FORMAL_PROTOCOL_TRACK = "strict_paper"
+STRICT_PAPER_TRACK = FORMAL_PROTOCOL_TRACK
 EXTENDED_TRACK = "extended"
 
 SourceKey = Tuple[str, ...]
+
+
+def resolve_result_protocol_tracks(
+    source_pool_track: str,
+    *,
+    formal: bool,
+) -> tuple[str, str]:
+    """Return result identity track plus the separately recorded pool track."""
+    pool_track = str(source_pool_track).strip()
+    if pool_track not in {FORMAL_PROTOCOL_TRACK, EXTENDED_TRACK}:
+        raise ProtocolViolation(f"unsupported source-pool protocol track: {source_pool_track!r}")
+    return (FORMAL_PROTOCOL_TRACK if formal else pool_track, pool_track)
 
 
 class ProtocolViolation(ValueError):

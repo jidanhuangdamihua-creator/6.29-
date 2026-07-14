@@ -17,14 +17,18 @@ import pandas as pd
 from src.utils.run_utils import create_run_dir, reserve_new_output_dir
 from src.utils.entity_experiment import run_single_entity_experiment
 from src.utils.parquet_data_loader import (
-    load_parquet_source_target,
+    ParquetSourceTargetLoad,
+    expected_target_dates_from_windows,
+    load_parquet_source_target_with_diagnostics,
     read_dataset_windows,
     load_knn_results,
 )
+from src.utils.d5_calendar_reconstruction import load_d5_authorities
 from src.utils.d4_d6_runtime import apply_runtime_source_domain_policy, load_default_metric_protocol
 from src.utils.finite_diagnostics import validate_feature_frame_finite
 from src.utils.knn_feature_loader import resolve_knn_feature_columns
 from src.protocols.reproducibility import set_protocol_seed
+from src.utils.run_artifacts import publish_formal_cell_output_frame
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -33,6 +37,7 @@ config = {
     "dataset_id": 5,
     "dataset_name": "Dataset5",
     "parquet_dir": "数据集/固化数据",
+    "raw_dir": "数据集/原始数据/Dataset 5Favorita",
     "knn_json_dir": str(SOLIDIFIED_KNN_ROOT / "Dataset5"),
     "info_sharing": "without",
     "source_history_days": SOURCE_HISTORY_DAYS,
@@ -86,6 +91,26 @@ def _align_results_to_reference_schema(df: pd.DataFrame) -> pd.DataFrame:
     return align_d4_d6_result_records(df.to_dict(orient="records"))
 
 
+def load_d5_runtime_inputs(
+    *,
+    raw_dir: Path,
+    parquet_dir: Path,
+    windows: dict[str, object],
+    source_history_days: int,
+) -> ParquetSourceTargetLoad:
+    """Load every D5 authority once, then reconstruct from fixed window dates."""
+    authorities = load_d5_authorities(Path(raw_dir), use_holidays=True)
+    expected_dates = expected_target_dates_from_windows(windows)
+    return load_parquet_source_target_with_diagnostics(
+        dataset_id=5,
+        parquet_dir=parquet_dir,
+        windows=windows,
+        source_history_days=source_history_days,
+        expected_dates=expected_dates,
+        d5_authorities=authorities,
+    )
+
+
 def main() -> None:
     args = _parse_args()
     config["info_sharing"] = str(args.info_sharing)
@@ -134,11 +159,20 @@ def main() -> None:
         info_sharing=config["info_sharing"],
         knn_payload=knn_data,
     )
-    source_df, target_df = load_parquet_source_target(
-        dataset_id=config["dataset_id"],
-        parquet_dir=config["parquet_dir"],
+    runtime_inputs = load_d5_runtime_inputs(
+        raw_dir=root / config["raw_dir"],
+        parquet_dir=root / config["parquet_dir"],
         windows=windows,
         source_history_days=config["source_history_days"],
+    )
+    source_df = runtime_inputs.source_df
+    target_df = runtime_inputs.target_df
+    if runtime_inputs.calendar_reconstruction is None:
+        raise AssertionError("D5 runtime loader did not return reconstruction diagnostics")
+    config["d5_calendar_reconstruction"] = runtime_inputs.calendar_reconstruction.to_dict()
+    (run_dir / "run_config.json").write_text(
+        json.dumps(config, indent=2, ensure_ascii=False),
+        encoding="utf-8",
     )
     feature_info = resolve_knn_feature_columns(
         dataset_id=config["dataset_id"],
@@ -230,7 +264,19 @@ def main() -> None:
     df = pd.DataFrame(all_rows)
     df = _align_results_to_reference_schema(df)
     out_path = results_dir / config["output_filename"]
-    df.to_csv(out_path, index=False, encoding="utf-8")
+    if config["smoke"]:
+        df.to_csv(out_path, index=False, encoding="utf-8")
+    else:
+        publish_formal_cell_output_frame(
+            df,
+            stable_path=out_path,
+            dataset_id=config["dataset_id"],
+            mode=config["info_sharing"],
+            targets=target_entity_keys,
+            horizon=config["horizon"],
+            seed=config["random_state"],
+            project_root=PROJECT_ROOT,
+        )
     print(f"Results saved to {out_path}")
     print(df[["target_entity_key", "method", "smape", "rmse"]].to_string())
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import unittest
 
 from src.protocols.experiment_protocol import (
+    FORMAL_METHODS,
+    FORMAL_PROTOCOL_TRACK,
     PROTOCOL_VERSION,
     ProtocolViolation,
     SourceIdentity,
@@ -17,6 +19,11 @@ class ExperimentProtocolContractTest(unittest.TestCase):
         d4 = get_experiment_protocol("dataset4")
 
         self.assertEqual(PROTOCOL_VERSION, "d1_d6_protocol_v1")
+        self.assertEqual(FORMAL_PROTOCOL_TRACK, "strict_paper")
+        self.assertEqual(
+            FORMAL_METHODS,
+            ("No-TL", "SS-TL", "MSWA-TL", "MSSB-TL", "MSML-TL", "MSML-TL-RFE"),
+        )
         self.assertEqual(d1.track, "strict_paper")
         self.assertEqual(d4.track, "extended")
         self.assertEqual(d1.horizons, (1, 2, 3, 4, 5))

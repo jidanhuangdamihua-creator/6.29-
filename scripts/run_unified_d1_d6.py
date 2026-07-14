@@ -1,63 +1,85 @@
 #!/usr/bin/env python3
-"""Unified D1-D6 runner.
-
-Design notes from the referenced scripts:
-1. D1-D3 source count k is controlled by paper protocol/strict mode, not a
-   direct CLI argument. Passing --strict-paper-mode makes multi-source methods
-   use top-k=3; No-TL and SS-TL keep their existing semantics.
-2. D1-D3 lr/epochs/dropout/clipnorm are injected by FORMAL_* constants through
-   _apply_formal_config_overrides() in scripts/run_full_paper_experiments.py.
-   D1-D3 seed is not injectable from that runner.
-3. scripts/run_full_paper_experiments.py has no --config argument and no
-   parameter to restrict INFO_SHARING_SCENARIOS to just one scenario.
-4. D4-D6 argparse exposes only info_sharing, smoke, target_limit, and
-   source_limit. lr/epochs/source_count/random_state live in each runner's
-   config dict; dropout/clipnorm come from model defaults.
-5. D4-D6 run_dir format is:
-   outputs/runs/{YYYYmmdd_HHMMSS}_D{dataset_id}_{source_history_days}d_{info_sharing}
-6. scripts/aggregate_d1_d6_results.py uses hardcoded SOURCE_CSVS, so this
-   runner reports this run's CSVs but does not call the aggregate script.
-"""
+"""Single-owner D1-D6 formal matrix orchestrator."""
 
 from __future__ import annotations
 
 import argparse
 import csv
-import re
+from dataclasses import dataclass, field, replace
+from datetime import datetime
+from pathlib import Path
 import shlex
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, field
-from datetime import datetime
-from pathlib import Path
 from typing import Iterable, List, Optional, Sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.run_strict_protocol_baseline import (
+    build_matrix_tasks,
+    build_mode_expected_contract,
+)
+from src.protocols.experiment_protocol import FORMAL_HORIZONS, FORMAL_METHODS, FORMAL_SEEDS
+from src.utils.result_acceptance import (
+    AcceptanceScope,
+    AggregateProfile,
+    ExpectedResultContract,
+)
+from src.utils.run_artifacts import (
+    CodeIdentity,
+    discover_code_identity,
+    discover_input_identity,
+    publish_global_aggregate,
+    publish_mode_matrix,
+    resumable_formal_cell,
+    write_or_validate_run_plan,
+)
+from src.utils.run_layout import RunLayout
 from src.utils.run_utils import create_run_dir, reserve_new_output_dir
+from src.utils.result_schema import (
+    RESULT_SCHEMA_REGISTRY_VERSION,
+    result_schema_registry_digest,
+)
 
 
 RUNS_DIR = PROJECT_ROOT / "outputs" / "runs"
 UNIFIED_RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
 UNIFIED_RUN_DIR = RUNS_DIR / UNIFIED_RUN_ID
+VALID_DATASETS = tuple(f"d{number}" for number in range(1, 7))
+VALID_MODES = ("without", "with")
 
-FIXED_LR = 1e-4
-FIXED_EPOCHS = 50
-FIXED_CLIPNORM = None
-FIXED_DROPOUT = 0.1
-FIXED_K = 3
-FIXED_SEED = 42
 
-VALID_DATASETS = ("d1", "d2", "d3", "d4", "d5", "d6")
-D1_D3_DATASET_ARGS = {
-    "d1": "dataset1",
-    "d2": "dataset2",
-    "d3": "dataset3",
-}
-D4_D6_SCENARIOS = ("without", "with")
+def discover_formal_input_identity(project_root: Path) -> dict[str, dict[str, object]]:
+    root = Path(project_root)
+    paths = [
+        root / "configs" / "default_config.json",
+        root / "configs" / "dataset_paths.json",
+        root / "configs" / "matrix_config.json",
+    ]
+    paths.extend(sorted((root / "configs" / "solidified" / "knn").glob("**/*.json")))
+    for dataset_id in range(1, 7):
+        paths.extend(
+            [
+                root / "数据集" / "固化数据" / f"dataset{dataset_id}-source.parquet",
+                root / "数据集" / "固化数据" / f"dataset{dataset_id}-target.parquet",
+            ]
+        )
+    d5_raw = root / "数据集" / "原始数据" / "Dataset 5Favorita"
+    paths.extend(
+        d5_raw / filename
+        for filename in (
+            "train.csv",
+            "transactions.csv",
+            "items.csv",
+            "stores.csv",
+            "oil.csv",
+            "holidays_events.csv",
+        )
+    )
+    return discover_input_identity(root, paths)
 
 
 @dataclass(frozen=True)
@@ -70,6 +92,8 @@ class Task:
     config_check: str
     result_filename: str
     expected_result_path: Optional[Path] = None
+    horizon: int = 1
+    seed: int = 42
     result_paths: List[Path] = field(default_factory=list)
     returncode: Optional[int] = None
     elapsed_seconds: Optional[float] = None
@@ -78,13 +102,9 @@ class Task:
 def _split_tokens(values: Optional[Iterable[str]]) -> List[str]:
     if not values:
         return list(VALID_DATASETS)
-
     tokens: List[str] = []
     for value in values:
-        for part in str(value).split(","):
-            token = part.strip().lower()
-            if token:
-                tokens.append(token)
+        tokens.extend(part.strip().lower() for part in str(value).split(",") if part.strip())
     return tokens or list(VALID_DATASETS)
 
 
@@ -92,100 +112,9 @@ def expand_only_tokens(values: Optional[Iterable[str]]) -> List[str]:
     requested = _split_tokens(values)
     unknown = [token for token in requested if token not in VALID_DATASETS]
     if unknown:
-        raise ValueError(
-            f"Unknown dataset id(s): {unknown}. Valid values: {list(VALID_DATASETS)}"
-        )
-
-    requested_set = set(requested)
-    return [token for token in VALID_DATASETS if token in requested_set]
-
-
-def _fixed_values_text() -> str:
-    return (
-        f"lr={FIXED_LR:g} epochs={FIXED_EPOCHS} k={FIXED_K} "
-        f"seed={FIXED_SEED} dropout={FIXED_DROPOUT:g} clipnorm={FIXED_CLIPNORM}"
-    )
-
-
-def _d1_d3_config_check() -> str:
-    return (
-        "[CONFIG CHECK] "
-        f"{_fixed_values_text()} - "
-        "D1-D3 use FORMAL_* overrides for lr/epochs/dropout/clipnorm; "
-        "--strict-paper-mode enforces k=3 for multi-source methods; "
-        "seed=42 is noted but not injectable in run_full_paper_experiments.py."
-    )
-
-
-def _d4_d6_config_check() -> str:
-    return (
-        "[CONFIG CHECK] "
-        f"{_fixed_values_text()} - "
-        "D4-D6 values come from each runner config/model defaults; "
-        "no hyperparameter CLI injection is available or needed."
-    )
-
-
-def _build_d1_d3_task(
-    dataset_token: str,
-    run_dir: Path,
-    info_sharing: Optional[str] = None,
-) -> Task:
-    dataset_id = int(dataset_token[1:])
-    dataset_arg = D1_D3_DATASET_ARGS[dataset_token]
-    cmd = [
-        sys.executable,
-        "scripts/run_full_paper_experiments.py",
-        "--only-dataset",
-        dataset_arg,
-        "--strict-paper-mode",
-        "--output-dir",
-        str(run_dir),
-    ]
-    if info_sharing is None:
-        label = f"D{dataset_id}"
-        scenario = "with+without"
-        result_filename = f"dataset{dataset_id}_results.csv"
-    else:
-        cmd.extend(["--info-sharing", info_sharing])
-        label = f"D{dataset_id}-{info_sharing}"
-        scenario = info_sharing
-        result_filename = f"dataset{dataset_id}_{info_sharing}_results.csv"
-    return Task(
-        dataset_token=dataset_token,
-        dataset_id=dataset_id,
-        label=label,
-        scenario=scenario,
-        cmd=cmd,
-        config_check=_d1_d3_config_check(),
-        result_filename=result_filename,
-        expected_result_path=run_dir / "results" / result_filename,
-    )
-
-
-def _build_d4_d6_task(dataset_token: str, scenario: str, smoke: bool, run_dir: Path) -> Task:
-    dataset_id = int(dataset_token[1:])
-    cmd = [
-        sys.executable,
-        f"scripts/run_d{dataset_id}_experiment.py",
-        "--info-sharing",
-        scenario,
-        "--output-dir",
-        str(run_dir),
-    ]
-    if smoke:
-        cmd.append("--smoke")
-    result_filename = f"dataset{dataset_id}_{scenario}_results.csv"
-    return Task(
-        dataset_token=dataset_token,
-        dataset_id=dataset_id,
-        label=f"D{dataset_id}-{scenario}",
-        scenario=scenario,
-        cmd=cmd,
-        config_check=_d4_d6_config_check(),
-        result_filename=result_filename,
-        expected_result_path=run_dir / "results" / result_filename,
-    )
+        raise ValueError(f"Unknown dataset id(s): {unknown}. Valid values: {list(VALID_DATASETS)}")
+    selected = set(requested)
+    return [token for token in VALID_DATASETS if token in selected]
 
 
 def build_tasks(
@@ -194,50 +123,53 @@ def build_tasks(
     run_dir: Optional[Path] = None,
     info_sharing: Optional[str] = None,
 ) -> List[Task]:
-    run_dir = UNIFIED_RUN_DIR if run_dir is None else Path(run_dir)
-    if info_sharing is not None and info_sharing not in D4_D6_SCENARIOS:
+    if smoke:
+        raise ValueError(
+            "unified --smoke is disabled because diagnostic cells are not formal or resumable"
+        )
+    run_root = UNIFIED_RUN_DIR if run_dir is None else Path(run_dir)
+    if info_sharing is not None and info_sharing not in VALID_MODES:
         raise ValueError("--info-sharing must be one of: without, with")
+    layout = RunLayout(run_root)
     tasks: List[Task] = []
+    modes = (info_sharing,) if info_sharing is not None else VALID_MODES
     for dataset_token in expand_only_tokens(only):
-        scenarios = (info_sharing,) if info_sharing is not None else D4_D6_SCENARIOS
-        for scenario in scenarios:
-            task_run_dir = run_dir / f"{dataset_token}_{scenario}"
-            if dataset_token in D1_D3_DATASET_ARGS:
-                tasks.append(_build_d1_d3_task(dataset_token, task_run_dir, info_sharing=scenario))
-            else:
-                tasks.append(_build_d4_d6_task(dataset_token, scenario, smoke=smoke, run_dir=task_run_dir))
+        dataset_id = int(dataset_token[1:])
+        for mode in modes:
+            matrix = build_matrix_tasks(
+                dataset=dataset_token,
+                scenario=mode,
+                output_dir=layout.mode_dir(dataset_id, mode),
+            )
+            for cell in matrix:
+                command = list(cell.command)
+                if smoke and dataset_id >= 4:
+                    command.append("--smoke")
+                tasks.append(
+                    Task(
+                        dataset_token=dataset_token,
+                        dataset_id=dataset_id,
+                        label=f"D{dataset_id}-{mode}-h{cell.horizon}-s{cell.seed}",
+                        scenario=mode,
+                        cmd=command,
+                        config_check="[FORMAL CELL] strict_paper; six methods; exact horizon/seed",
+                        result_filename=cell.result_path.name,
+                        expected_result_path=cell.result_path,
+                        horizon=cell.horizon,
+                        seed=cell.seed,
+                    )
+                )
     return tasks
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run unified D1-D6 full experiments.")
-    parser.add_argument(
-        "--only",
-        action="append",
-        help="Dataset id(s), comma-separated or repeated. Valid values: d1,d2,d3,d4,d5,d6.",
-    )
-    parser.add_argument(
-        "--smoke",
-        action="store_true",
-        help="Pass --smoke to selected D4-D6 runners only.",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print the ordered execution plan without running subprocesses.",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=None,
-        help="Optional shared D1-D6 run directory. Defaults to outputs/runs/<timestamp>.",
-    )
-    parser.add_argument(
-        "--info-sharing",
-        choices=["without", "with"],
-        default=None,
-        help="Run only one information-sharing mode for selected datasets.",
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--only", action="append", help="d1..d6, comma-separated or repeated")
+    parser.add_argument("--info-sharing", choices=VALID_MODES, default=None)
+    parser.add_argument("--output-dir", type=Path, default=None)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--resume", action="store_true", help="Reuse only accepted cells with matching hashes and code identity")
+    parser.add_argument("--smoke", action="store_true", help="Diagnostic D4-D6 cells; never promotable")
     return parser.parse_args()
 
 
@@ -248,52 +180,8 @@ def _format_cmd(cmd: Sequence[str]) -> str:
 def print_dry_run(tasks: Sequence[Task]) -> None:
     for index, task in enumerate(tasks, start=1):
         print(f"{index}. [{task.label}] {_format_cmd(task.cmd)}")
-        print(f"   {task.config_check}")
-        if task.expected_result_path is not None:
-            print(f"   expected result: {task.expected_result_path}")
-
-
-def _snapshot_run_dirs() -> set[Path]:
-    if not RUNS_DIR.exists():
-        return set()
-    return {path for path in RUNS_DIR.iterdir() if path.is_dir()}
-
-
-def _resolve_result_path(text: str, filename: str) -> List[Path]:
-    escaped = re.escape(filename)
-    patterns = [
-        rf"Results saved to\s+(.+?{escaped})",
-        rf"Saved Dataset\d+ results:\s+(.+?{escaped})",
-    ]
-    paths: List[Path] = []
-    for pattern in patterns:
-        for match in re.finditer(pattern, text):
-            raw = match.group(1).strip()
-            path = Path(raw)
-            if not path.is_absolute():
-                path = PROJECT_ROOT / path
-            if path not in paths:
-                paths.append(path)
-    return paths
-
-
-def _fallback_scan_result_paths(before_dirs: set[Path], filename: str) -> List[Path]:
-    if not RUNS_DIR.exists():
-        return []
-
-    after_dirs = {path for path in RUNS_DIR.iterdir() if path.is_dir()}
-    new_dirs = sorted(after_dirs - before_dirs, key=lambda path: path.name)
-    paths: List[Path] = []
-    for run_dir in new_dirs:
-        candidate = run_dir / "results" / filename
-        if candidate.exists() and candidate not in paths:
-            paths.append(candidate)
-    return paths
-
-
-def _tail(text: str, max_lines: int = 40) -> str:
-    lines = text.splitlines()
-    return "\n".join(lines[-max_lines:])
+        print(f"   expected result: {task.expected_result_path}")
+    print(f"[FORMAL PLAN] cells={len(tasks)} unique={len({task.expected_result_path for task in tasks})}")
 
 
 def _task_with_result(
@@ -303,65 +191,30 @@ def _task_with_result(
     returncode: int,
     elapsed_seconds: float,
 ) -> Task:
-    return Task(
-        dataset_token=task.dataset_token,
-        dataset_id=task.dataset_id,
-        label=task.label,
-        scenario=task.scenario,
-        cmd=list(task.cmd),
-        config_check=task.config_check,
-        result_filename=task.result_filename,
-        expected_result_path=task.expected_result_path,
+    return replace(
+        task,
         result_paths=list(result_paths),
-        returncode=returncode,
-        elapsed_seconds=elapsed_seconds,
+        returncode=int(returncode),
+        elapsed_seconds=float(elapsed_seconds),
     )
 
 
 def run_task(task: Task) -> Task:
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[D{task.dataset_id}] 开始 {task.scenario}，时间戳 {timestamp}")
-    print(f"Command: {_format_cmd(task.cmd)}")
-    print(task.config_check)
-    print(f"[orchestrator] parent python: {sys.executable}", flush=True)
-    print(f"[orchestrator] command: {_format_cmd(task.cmd)}", flush=True)
-
-    before_dirs = _snapshot_run_dirs()
+    print(f"[{task.label}] {_format_cmd(task.cmd)}", flush=True)
     start = time.perf_counter()
     completed = subprocess.run(
         task.cmd,
         cwd=PROJECT_ROOT,
-        text=True,
-        capture_output=True,
         check=False,
     )
     elapsed = time.perf_counter() - start
-    combined_output = "\n".join(part for part in (completed.stdout, completed.stderr) if part)
-    result_paths = _resolve_result_path(combined_output, task.result_filename)
-    if not result_paths:
-        result_paths = _fallback_scan_result_paths(before_dirs, task.result_filename)
-
-    run_dirs = sorted({path.parent.parent for path in result_paths})
-    run_dir_text = ", ".join(str(path.relative_to(PROJECT_ROOT)) for path in run_dirs) or "未找到"
-    print(
-        f"[D{task.dataset_id}] 完成 {task.scenario}: "
-        f"耗时 {elapsed:.1f}s, returncode={completed.returncode}, 输出目录路径={run_dir_text}"
-    )
-
-    if completed.returncode != 0:
-        print(f"[D{task.dataset_id}] 子进程失败但继续后续任务。")
-        if completed.stdout:
-            print("[stdout tail]")
-            print(_tail(completed.stdout))
-        if completed.stderr:
-            print("[stderr tail]")
-            print(_tail(completed.stderr))
-
+    expected = task.expected_result_path
+    result_paths = [expected] if expected is not None and expected.is_file() else []
     return _task_with_result(
         task,
         result_paths=result_paths,
-        returncode=int(completed.returncode),
-        elapsed_seconds=float(elapsed),
+        returncode=completed.returncode,
+        elapsed_seconds=elapsed,
     )
 
 
@@ -378,59 +231,179 @@ def _csv_row_count(path: Path) -> Optional[int]:
 
 
 def print_result_summary(tasks: Sequence[Task]) -> None:
-    print("\n数据集 | scenario | 结果路径 | 行数")
-    print("--- | --- | --- | ---")
+    print("\ncell | result | rows")
     for task in tasks:
-        if not task.result_paths:
-            print(f"D{task.dataset_id} | {task.scenario} | missing | missing")
-            continue
-        for path in task.result_paths:
-            row_count = _csv_row_count(path)
-            row_text = "missing" if row_count is None else str(row_count)
-            try:
-                display_path = str(path.relative_to(PROJECT_ROOT))
-            except ValueError:
-                display_path = str(path)
-            print(f"D{task.dataset_id} | {task.scenario} | {display_path} | {row_text}")
+        path = task.expected_result_path
+        count = None if path is None else _csv_row_count(path)
+        print(f"{task.label} | {path or 'missing'} | {count if count is not None else 'missing'}")
+
+
+def _mode_groups(tasks: Sequence[Task]) -> list[tuple[tuple[int, str], list[Task]]]:
+    grouped: dict[tuple[int, str], list[Task]] = {}
+    for task in tasks:
+        grouped.setdefault((task.dataset_id, task.scenario), []).append(task)
+    return list(grouped.items())
+
+
+def _global_contract(mode_contracts: Sequence[ExpectedResultContract]) -> ExpectedResultContract:
+    dataset_ids = tuple(sorted({contract.dataset_ids[0] for contract in mode_contracts}))
+    modes = tuple(mode for mode in VALID_MODES if any(mode in contract.modes for contract in mode_contracts))
+    targets = {
+        key: value
+        for contract in mode_contracts
+        for key, value in contract.targets_by_dataset_mode.items()
+    }
+    full = set(targets) == {
+        (dataset_id, mode) for dataset_id in range(1, 7) for mode in VALID_MODES
+    }
+    return ExpectedResultContract(
+        scope=AcceptanceScope.GLOBAL_AGGREGATE,
+        formal=True,
+        dataset_ids=dataset_ids,
+        modes=modes,
+        protocol_tracks=("strict_paper",),
+        targets_by_dataset_mode=targets,
+        methods=FORMAL_METHODS,
+        horizons=FORMAL_HORIZONS,
+        seeds=FORMAL_SEEDS,
+        confirmation_eligible=True,
+        aggregate_profile=(
+            AggregateProfile.FULL_D1_D6_BASELINE
+            if full
+            else AggregateProfile.RUN_SELECTION_AGGREGATE
+        ),
+    )
+
+
+def _resolve_run_root(args: argparse.Namespace) -> Path:
+    output_dir = getattr(args, "output_dir", None)
+    if getattr(args, "dry_run", False):
+        return UNIFIED_RUN_DIR if output_dir is None else Path(output_dir)
+    if output_dir is None:
+        return create_run_dir(PROJECT_ROOT, "unified")
+    path = Path(output_dir)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    if getattr(args, "resume", False):
+        if not path.is_dir():
+            raise FileNotFoundError(f"resume run root does not exist: {path}")
+        return path
+    return reserve_new_output_dir(path)
 
 
 def main() -> None:
     args = _parse_args()
-    if args.dry_run:
-        run_dir = UNIFIED_RUN_DIR if args.output_dir is None else Path(args.output_dir)
-    elif args.output_dir is None:
-        run_dir = create_run_dir(PROJECT_ROOT, "unified")
-    else:
-        run_dir = Path(args.output_dir)
-        if not run_dir.is_absolute():
-            run_dir = PROJECT_ROOT / run_dir
-        reserve_new_output_dir(run_dir)
+    if args.smoke:
+        raise SystemExit(
+            "unified --smoke is disabled; run an individual dataset diagnostic runner instead"
+        )
+    run_root = _resolve_run_root(args)
     try:
         tasks = build_tasks(
             only=args.only,
             smoke=bool(args.smoke),
-            run_dir=run_dir,
+            run_dir=run_root,
             info_sharing=args.info_sharing,
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
-
     if args.dry_run:
         print_dry_run(tasks)
         return
 
-    completed_tasks = [run_task(task) for task in tasks]
+    code_identity = discover_code_identity(PROJECT_ROOT)
+    if code_identity.dirty:
+        raise SystemExit(
+            "formal execution requires a clean git worktree; commit or stash code changes first"
+        )
+    input_identity = discover_formal_input_identity(PROJECT_ROOT)
+    run_plan = {
+        "run_plan_version": "formal_d1_d6_run_plan_v1",
+        "code_identity": code_identity.to_dict(),
+        "schema_registry_version": RESULT_SCHEMA_REGISTRY_VERSION,
+        "schema_registry_digest": result_schema_registry_digest(),
+        "input_identity": input_identity,
+        "methods": list(FORMAL_METHODS),
+        "horizons": list(FORMAL_HORIZONS),
+        "seeds": list(FORMAL_SEEDS),
+        "cells": [
+            {
+                "dataset_id": task.dataset_id,
+                "mode": task.scenario,
+                "horizon": task.horizon,
+                "seed": task.seed,
+                "command": list(task.cmd),
+                "result_path": str(task.expected_result_path),
+            }
+            for task in tasks
+        ],
+    }
+    write_or_validate_run_plan(
+        run_root / "run_plan.json",
+        run_plan,
+        resume=bool(getattr(args, "resume", False)),
+    )
+    completed_tasks: list[Task] = []
+    for task in tasks:
+        if getattr(args, "resume", False) and not args.smoke and task.expected_result_path is not None:
+            mode_expected = build_mode_expected_contract(
+                dataset=task.dataset_token,
+                scenario=task.scenario,
+            )
+            cell_expected = replace(
+                mode_expected,
+                scope=AcceptanceScope.CELL,
+                horizons=(task.horizon,),
+                seeds=(task.seed,),
+            )
+            if resumable_formal_cell(
+                stable_path=task.expected_result_path,
+                manifest_path=task.expected_result_path.with_suffix(".manifest.json"),
+                expected=cell_expected,
+                code_identity=code_identity,
+            ):
+                completed_tasks.append(
+                    _task_with_result(task, result_paths=[task.expected_result_path], returncode=0, elapsed_seconds=0.0)
+                )
+                print(f"[RESUME] accepted {task.label}")
+                continue
+        completed = run_task(task)
+        completed_tasks.append(completed)
+        if completed.returncode != 0 or not completed.result_paths:
+            print_result_summary(completed_tasks)
+            raise SystemExit(1)
+
     print_result_summary(completed_tasks)
-    failed_tasks = [task for task in completed_tasks if task.returncode not in (None, 0)]
-    if failed_tasks:
-        labels = ", ".join(f"{task.label}(returncode={task.returncode})" for task in failed_tasks)
-        print(f"[orchestrator] 子进程失败，统一 runner 返回非零状态: {labels}")
-        raise SystemExit(1)
+    if args.smoke:
+        print("[DIAGNOSTIC] smoke outputs are not acceptance-eligible")
+        return
+
+    if discover_formal_input_identity(PROJECT_ROOT) != input_identity:
+        raise SystemExit("formal inputs changed while the run was executing")
+
+    layout = RunLayout(run_root)
+    mode_paths: list[Path] = []
+    mode_contracts: list[ExpectedResultContract] = []
+    for (dataset_id, mode), group in _mode_groups(completed_tasks):
+        expected = build_mode_expected_contract(dataset=f"d{dataset_id}", scenario=mode)
+        output = layout.mode_result(dataset_id, mode)
+        publish_mode_matrix(
+            [task.expected_result_path for task in group if task.expected_result_path is not None],
+            stable_path=output,
+            expected=expected,
+            code_identity=code_identity,
+        )
+        mode_paths.append(output)
+        mode_contracts.append(expected)
+
+    publish_global_aggregate(
+        mode_paths,
+        stable_path=layout.aggregate_result,
+        expected=_global_contract(mode_contracts),
+        code_identity=code_identity,
+    )
+    print(f"[ACCEPTED] aggregate={layout.aggregate_result}")
 
 
 if __name__ == "__main__":
     main()
-
-# Minimal smoke verification command:
-# .venv/bin/python scripts/run_unified_d1_d6.py --only d4 --smoke --dry-run
-# Expected output: prints 2 commands, d4_without and d4_with, and runs no subprocesses.

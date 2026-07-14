@@ -18,6 +18,7 @@ class ScenarioSeparatedReportsTest(unittest.TestCase):
                         "dataset": "Dataset1",
                         "method": "No-TL",
                         "scenario": "without_information_sharing",
+                        "smape": 100.0,
                         "rmse": 100.0,
                         "accuracy": 0.10,
                     },
@@ -25,6 +26,7 @@ class ScenarioSeparatedReportsTest(unittest.TestCase):
                         "dataset": "Dataset1",
                         "method": "MSML-TL-RFE",
                         "scenario": "without_information_sharing",
+                        "smape": 80.0,
                         "rmse": 80.0,
                         "accuracy": 0.20,
                     },
@@ -32,6 +34,7 @@ class ScenarioSeparatedReportsTest(unittest.TestCase):
                         "dataset": "Dataset1",
                         "method": "No-TL",
                         "scenario": "with_information_sharing",
+                        "smape": 50.0,
                         "rmse": 50.0,
                         "accuracy": 0.50,
                     },
@@ -39,6 +42,7 @@ class ScenarioSeparatedReportsTest(unittest.TestCase):
                         "dataset": "Dataset1",
                         "method": "MSML-TL-RFE",
                         "scenario": "with_information_sharing",
+                        "smape": 40.0,
                         "rmse": 40.0,
                         "accuracy": 0.60,
                     },
@@ -46,6 +50,7 @@ class ScenarioSeparatedReportsTest(unittest.TestCase):
                         "dataset": "Dataset2",
                         "method": "No-TL",
                         "scenario": "without_information_sharing",
+                        "smape": 200.0,
                         "rmse": 200.0,
                         "accuracy": 0.30,
                     },
@@ -53,6 +58,7 @@ class ScenarioSeparatedReportsTest(unittest.TestCase):
                         "dataset": "Dataset2",
                         "method": "No-TL",
                         "scenario": "without_information_sharing",
+                        "smape": 190.0,
                         "rmse": 190.0,
                         "accuracy": 0.35,
                     },
@@ -84,7 +90,7 @@ class ScenarioSeparatedReportsTest(unittest.TestCase):
                 float(
                     without_improvement.loc[
                         without_improvement["method"] == "MSML-TL-RFE",
-                        "rmse_improvement_percent",
+                        "smape_improvement_percent",
                     ].iloc[0]
                 ),
             )
@@ -94,7 +100,7 @@ class ScenarioSeparatedReportsTest(unittest.TestCase):
                 output_dir / "duplicate_dataset_method_scenario_rows.csv",
                 report["duplicate_rows_path"],
             )
-            self.assertTrue((output_dir / "rmse_comparison_without_information_sharing.png").exists())
+            self.assertTrue((output_dir / "smape_comparison_without_information_sharing.png").exists())
             self.assertTrue((output_dir / "accuracy_comparison_with_information_sharing.png").exists())
 
     def test_results_output_paths_create_unique_run_directory_and_latest_pointer(self):

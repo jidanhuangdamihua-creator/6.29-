@@ -18,6 +18,26 @@ from src.protocols.experiment_protocol import FORMAL_HORIZONS, FORMAL_SEEDS, PRO
 from src.protocols.experiment_protocol import normalize_source_key
 
 
+CELL_TRANSITIONS = {
+    "planned": frozenset({"claimed", "failed"}),
+    "claimed": frozenset({"running", "failed"}),
+    "running": frozenset({"candidate", "failed"}),
+    "candidate": frozenset({"accepted_cell", "failed"}),
+    "accepted_cell": frozenset(),
+    "failed": frozenset(),
+}
+
+
+def validate_cell_transition(current: str, candidate: str) -> str:
+    if current not in CELL_TRANSITIONS:
+        raise ValueError(f"unknown cell state: {current!r}")
+    if candidate not in CELL_TRANSITIONS:
+        raise ValueError(f"unknown cell state: {candidate!r}")
+    if candidate not in CELL_TRANSITIONS[current]:
+        raise ValueError(f"illegal cell state transition: {current!r} -> {candidate!r}")
+    return candidate
+
+
 def _is_missing_or_nonfinite(value: Any) -> bool:
     if value is None:
         return True

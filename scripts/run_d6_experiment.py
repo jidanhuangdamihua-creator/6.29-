@@ -25,6 +25,7 @@ from src.utils.d4_d6_runtime import apply_runtime_source_domain_policy, load_def
 from src.utils.finite_diagnostics import validate_feature_frame_finite
 from src.utils.knn_feature_loader import resolve_knn_feature_columns
 from src.protocols.reproducibility import set_protocol_seed
+from src.utils.run_artifacts import publish_formal_cell_output_frame
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -212,7 +213,19 @@ def main() -> None:
     df = pd.DataFrame(all_rows)
     df = _align_results_to_reference_schema(df)
     out_path = results_dir / config["output_filename"]
-    df.to_csv(out_path, index=False, encoding="utf-8")
+    if config["smoke"]:
+        df.to_csv(out_path, index=False, encoding="utf-8")
+    else:
+        publish_formal_cell_output_frame(
+            df,
+            stable_path=out_path,
+            dataset_id=config["dataset_id"],
+            mode=config["info_sharing"],
+            targets=target_entity_keys,
+            horizon=config["horizon"],
+            seed=config["random_state"],
+            project_root=PROJECT_ROOT,
+        )
     print(f"Results saved to {out_path}")
     print(df[["target_entity_key", "method", "smape", "rmse"]].to_string())
 

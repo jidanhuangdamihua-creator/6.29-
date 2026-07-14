@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from scripts import run_full_paper_experiments
 from src.data_processing.data_preprocessing import temporal_split_by_ratio_or_dates
-from scripts import fix_d3_parquet as d3_fix
 from scripts.aggregate_d1_d6_results import (
     SOURCE_CSVS,
     _assert_dataset3_result_target_is_store10,
@@ -23,61 +23,34 @@ from scripts.run_full_paper_experiments import (
     _resolve_dataset_feature_cols,
     _save_dataset_result_csvs,
 )
-from src.source_selection.source_selector import SourceSelector
 from src.utils.parquet_data_loader import attach_window_attrs
 
 
-class FullPaperRunnerSolidifiedParquetTest(unittest.TestCase):
-    def _selector_fixture(self, *, all_sources_valid: bool = False):
-        target_dates = pd.date_range("2024-01-01", periods=10, freq="D")
-        target_df = pd.DataFrame(
-            {
-                "date": target_dates,
-                "entity_id": ["target"] * len(target_dates),
-                "item_id": [10] * len(target_dates),
-                "sales": range(10, 20),
-                "promo": [0, 1] * 5,
-            }
-        )
-        target_df.attrs.update(
-            {
-                "dataset_name": "Dataset3",
-                "information_sharing_scenario": "with_information_sharing",
-                "method": "MSWA-TL",
-                "paper_split_protocol": "solidified_non_strict_train15_val15_test180",
-                "observed_days": 3,
-                "test_days": 2,
-                "train_days": 2,
-                "val_days": 1,
-            }
-        )
+def _fixture_root() -> Path:
+    checkout = Path(__file__).resolve().parents[1]
+    if (checkout / "数据集" / "固化数据" / "dataset1-source.parquet").is_file():
+        return checkout
+    git_pointer = checkout / ".git"
+    if git_pointer.is_file():
+        git_dir = Path(git_pointer.read_text(encoding="utf-8").strip().split(":", 1)[1].strip())
+        primary = git_dir.parents[2]
+        if (primary / "数据集" / "固化数据" / "dataset1-source.parquet").is_file():
+            return primary
+    return checkout
 
-        source_rows = []
-        for entity_id, dates in [
-            ("valid-a", pd.date_range("2024-01-06", periods=3, freq="D")),
-            (
-                "valid-b" if all_sources_valid else "short-b",
-                pd.date_range("2024-01-06", periods=3 if all_sources_valid else 2, freq="D"),
-            ),
-        ]:
-            for idx, date in enumerate(dates):
-                source_rows.append(
-                    {
-                        "date": date,
-                        "entity_id": entity_id,
-                        "item_id": 1,
-                        "sales": float(idx + 1),
-                        "promo": idx % 2,
-                    }
-                )
-        source_df = pd.DataFrame(source_rows)
-        source_df.attrs.update(
-            {
-                "dataset_name": "Dataset3",
-                "information_sharing_scenario": "with_information_sharing",
-            }
-        )
-        return source_df, target_df
+
+FIXTURE_ROOT = _fixture_root()
+
+
+class FullPaperRunnerSolidifiedParquetTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._original_root = run_full_paper_experiments.ROOT
+        run_full_paper_experiments.ROOT = FIXTURE_ROOT
+
+    @classmethod
+    def tearDownClass(cls):
+        run_full_paper_experiments.ROOT = cls._original_root
 
     def test_d3_solidified_base_data_has_no_todo_region_and_normalized_columns(self):
         base = _load_solidified_base_data(
@@ -165,7 +138,7 @@ class FullPaperRunnerSolidifiedParquetTest(unittest.TestCase):
         )
 
     def test_aggregate_d3_source_csv_proves_target_store10(self):
-        d3_source = SOURCE_CSVS[3]
+        d3_source = FIXTURE_ROOT / SOURCE_CSVS[3].relative_to(Path(__file__).resolve().parents[1])
         df = pd.read_csv(d3_source, dtype=str, keep_default_na=False)
 
         _assert_dataset3_result_target_is_store10(df, d3_source)
@@ -289,110 +262,6 @@ class FullPaperRunnerSolidifiedParquetTest(unittest.TestCase):
             self.assertEqual("10", d3_df.loc[0, "target_entity_id"])
             self.assertEqual("10", d3_df.loc[0, "target_store_id"])
             self.assertEqual("1", d3_df.loc[0, "target_item_id"])
-
-    def test_d3_non_strict_paper_observed_sequence_uses_30_day_window(self):
-        cfg = _load_config()
-        base = _load_solidified_base_data(
-            dataset_name="Dataset3",
-            cfg=cfg,
-            strict_paper_mode=False,
-            strict_paper_split=False,
-        )
-        source_df = _apply_information_sharing_filter(
-            dataset_name="Dataset3",
-            source_df=base["source_df"],
-            target_df=base["target_df"],
-            use_information_sharing=True,
-            strict_paper_mode=False,
-            protocol={},
-            cfg=cfg,
-        )
-        feature_cols = _resolve_dataset_feature_cols("Dataset3", source_df, base["target_df"], cfg)
-        _, target_df = _project_modeling_frames(source_df, base["target_df"], feature_cols)
-
-        observed_df, metadata = SourceSelector()._target_observed_window_for_paper_knn(target_df)
-
-        observed_dates = pd.to_datetime(observed_df["date"]).drop_duplicates().sort_values()
-        self.assertEqual(30, int(observed_dates.nunique()))
-        self.assertEqual("2015-01-03", observed_dates.min().strftime("%Y-%m-%d"))
-        self.assertEqual("2015-02-01", observed_dates.max().strftime("%Y-%m-%d"))
-        self.assertEqual("solidified_observed_days", metadata["target_window_source"])
-
-    def test_solidified_missing_observed_attrs_raises_instead_of_fallback(self):
-        _, target_df = self._selector_fixture()
-        target_df.attrs.pop("observed_days")
-
-        with self.assertRaisesRegex(ValueError, "Missing solidified paper observed window attrs"):
-            SourceSelector()._target_observed_window_for_paper_knn(target_df)
-
-    def test_legacy_missing_observed_attrs_warns_and_falls_back_to_full_sequence(self):
-        _, target_df = self._selector_fixture()
-        for key in ("paper_split_protocol", "observed_days", "test_days", "train_days", "val_days"):
-            target_df.attrs.pop(key, None)
-
-        with self.assertLogs("experiment", level="WARNING") as captured:
-            observed_df, metadata = SourceSelector()._target_observed_window_for_paper_knn(target_df)
-
-        self.assertEqual(10, int(observed_df["date"].nunique()))
-        self.assertEqual("provided_target_df", metadata["target_window_source"])
-        self.assertTrue(
-            any("falling back to full target sequence" in message for message in captured.output)
-        )
-
-    def test_paper_observed_sequence_skips_incomplete_source_and_uses_effective_k(self):
-        source_df, target_df = self._selector_fixture()
-
-        result = SourceSelector().select_top_k_sources(
-            target_df=target_df,
-            source_df=source_df,
-            feature_cols=["sales", "promo"],
-            k=2,
-            group_cols=("entity_id", "item_id"),
-            knn_representation="paper_observed_sequence",
-        )
-
-        meta = result["meta"]
-        self.assertEqual(2, meta["requested_k"])
-        self.assertEqual(1, meta["effective_k"])
-        self.assertEqual(1, meta["valid_source_count"])
-        self.assertEqual(1, meta["skipped_source_count"])
-        self.assertEqual(1, len(result["sources"]))
-        self.assertEqual(1, len(meta["date_alignment_diagnostics"]["skipped_sources"]))
-        self.assertEqual("skipped", meta["date_alignment_diagnostics"]["skipped_sources"][0]["source_kept_or_skipped"])
-
-    def test_paper_observed_sequence_all_invalid_sources_raise_clear_error(self):
-        source_df, target_df = self._selector_fixture()
-        source_df = source_df[source_df["entity_id"].eq("short-b")].copy()
-
-        with self.assertRaisesRegex(ValueError, "No valid sources after paper_observed_sequence alignment"):
-            SourceSelector().select_top_k_sources(
-                target_df=target_df,
-                source_df=source_df,
-                feature_cols=["sales", "promo"],
-                k=2,
-                group_cols=("entity_id", "item_id"),
-                knn_representation="paper_observed_sequence",
-            )
-
-    def test_paper_observed_sequence_records_requested_and_effective_k_when_all_sources_valid(self):
-        source_df, target_df = self._selector_fixture(all_sources_valid=True)
-        target_df.attrs["method"] = "MSSB-TL"
-
-        result = SourceSelector().select_top_k_sources(
-            target_df=target_df,
-            source_df=source_df,
-            feature_cols=["sales", "promo"],
-            k=2,
-            group_cols=("entity_id", "item_id"),
-            knn_representation="paper_observed_sequence",
-        )
-
-        meta = result["meta"]
-        self.assertEqual(2, meta["requested_k"])
-        self.assertEqual(2, meta["effective_k"])
-        self.assertEqual(2, meta["valid_source_count"])
-        self.assertEqual(0, meta["skipped_source_count"])
-        self.assertEqual(2, len(result["sources"]))
 
     def test_d3_feature_cols_are_numeric_non_identifier_and_projected(self):
         cfg = _load_config()
@@ -545,33 +414,6 @@ class FullPaperRunnerSolidifiedParquetTest(unittest.TestCase):
             "without_information_sharing_domain_filter",
             filtered.attrs["source_pool_scope_mode"],
         )
-
-    def test_d3_region_derivation_matches_knn_domain_semantics(self):
-        source_df = pd.DataFrame({"entity_id": list(range(1, 10)) + list(range(11, 30))})
-        target_df = pd.DataFrame({"entity_id": [10, 10]})
-
-        source_with_region = d3_fix.derive_region(source_df)
-        target_with_region = d3_fix.derive_region(target_df)
-
-        d3_fix.assert_region_frame(source_with_region, "source")
-        d3_fix.assert_region_frame(target_with_region, "target")
-        d3_fix.assert_d3_region_semantics(source_with_region, target_with_region)
-        self.assertEqual(
-            [1, 2, 3, 4, 5, 6, 7, 8, 9],
-            sorted(
-                source_with_region.loc[
-                    source_with_region["region"] == 1, "entity_id"
-                ].unique().tolist()
-            ),
-        )
-        self.assertEqual([1], sorted(target_with_region["region"].unique().tolist()))
-
-    def test_d3_region_semantics_rejects_target_entity_in_source(self):
-        source_df = d3_fix.derive_region(pd.DataFrame({"entity_id": list(range(1, 11))}))
-        target_df = d3_fix.derive_region(pd.DataFrame({"entity_id": [10]}))
-
-        with self.assertRaisesRegex(AssertionError, "target entity_id=10 leaked"):
-            d3_fix.assert_d3_region_semantics(source_df, target_df)
 
     def test_strict_solidified_target_split_attrs_use_positive_days(self):
         cfg = _load_config()

@@ -37,6 +37,7 @@ from src.transfer_methods.source_failure_tolerance import (
 from src.utils.finite_diagnostics import NonFiniteArrayError, validate_feature_frame_finite
 from src.utils.result_validation import annotate_silent_metric_failure
 from src.protocols.runner_adapter import configure_protocol_frames
+from src.protocols.experiment_protocol import resolve_result_protocol_tracks
 from src.protocols.rolling_origin import build_sample_manifest
 from src.utils.source_fillna import fill_source_numeric_na
 
@@ -419,6 +420,7 @@ def _row_from_result(
         "result_contract_version": RESULT_CONTRACT_VERSION,
         "schema_family": SCHEMA_FAMILY_D4_D6,
         "protocol_track": config.get("protocol_track", ""),
+        "source_pool_track": config.get("source_pool_track", ""),
         "protocol_version": config.get("protocol_version", ""),
         "knn_observed_start": config.get("knn_observed_start", ""),
         "knn_observed_end": config.get("knn_observed_end", ""),
@@ -712,9 +714,14 @@ def run_single_entity_experiment(
     )
     target_entity_df.attrs["protocol_sample_manifest"] = protocol_manifest
     config = dict(config)
+    result_track, source_pool_track = resolve_result_protocol_tracks(
+        target_entity_df.attrs["protocol_track"],
+        formal=not bool(config.get("smoke", False)),
+    )
     config.update(
         {
-            "protocol_track": target_entity_df.attrs["protocol_track"],
+            "protocol_track": result_track,
+            "source_pool_track": source_pool_track,
             "protocol_version": target_entity_df.attrs["protocol_version"],
             "knn_observed_start": target_entity_df.attrs["knn_observed_start"],
             "knn_observed_end": target_entity_df.attrs["knn_observed_end"],

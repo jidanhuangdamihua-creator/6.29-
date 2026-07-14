@@ -37,6 +37,7 @@ RESULT_SCHEMA_COLUMNS = [
     "result_status",
     "failure_type",
     "protocol_track",
+    "source_pool_track",
     "dataset",
     "dataset_id",
     "scenario",

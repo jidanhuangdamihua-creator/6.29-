@@ -13,12 +13,15 @@ from src.protocols.candidate_pool import (
 )
 
 from scripts.run_strict_protocol_baseline import (
+    build_mode_expected_contract,
     build_matrix_tasks,
     combine_result_frames,
 )
+from src.protocols.experiment_protocol import FORMAL_METHODS
+from src.utils.result_acceptance import AcceptanceScope
 
 
-def _row(horizon: int, seed: int) -> dict:
+def _row(horizon: int, seed: int, method: str = "MSWA-TL") -> dict:
     digest_input = {
         "protocol_version": "d1_d6_protocol_v1",
         "dataset_id": "D1",
@@ -50,7 +53,7 @@ def _row(horizon: int, seed: int) -> dict:
         "dataset_id": "D1",
         "target_entity_key": "1/10",
         "scenario": "without",
-        "method": "MSWA-TL",
+        "method": method,
         "protocol_track": "strict_paper",
         "protocol_version": "d1_d6_protocol_v1",
         "knn_observed_start": "2017-06-05",
@@ -103,13 +106,32 @@ class FormalProtocolMatrixTest(unittest.TestCase):
             self.assertIn(str(task.seed), task.command)
 
     def test_combiner_promotes_only_complete_matrix(self) -> None:
-        frames = [pd.DataFrame([_row(horizon, seed)]) for horizon in range(1, 6) for seed in range(42, 47)]
+        frames = [
+            pd.DataFrame([_row(horizon, seed, method) for method in FORMAL_METHODS])
+            for horizon in range(1, 6)
+            for seed in range(42, 47)
+        ]
         combined = combine_result_frames(frames)
-        self.assertEqual(len(combined), 25)
+        self.assertEqual(len(combined), 150)
         self.assertEqual(set(combined["result_status"]), {"confirmed_baseline"})
 
         with self.assertRaisesRegex(ValueError, "incomplete groups"):
             combine_result_frames(frames[:-1])
+
+        missing_method = [frame[frame["method"] != "MSML-TL-RFE"] for frame in frames]
+        with self.assertRaisesRegex(ValueError, "method coverage"):
+            combine_result_frames(missing_method)
+
+    def test_mode_contract_uses_authoritative_targets_and_correct_methods(self) -> None:
+        expected = build_mode_expected_contract(
+            dataset="d5",
+            scenario="with",
+        )
+
+        self.assertEqual(expected.scope, AcceptanceScope.MODE_MATRIX)
+        self.assertEqual(expected.methods, FORMAL_METHODS)
+        self.assertEqual(len(expected.targets_by_dataset_mode[(5, "with")]), 5)
+        self.assertEqual(expected.protocol_tracks, ("strict_paper",))
 
     def test_d1_matrix_uses_child_cli_dataset_choice(self) -> None:
         task = build_matrix_tasks(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 import logging
 from pathlib import Path
@@ -8,6 +9,11 @@ from typing import Any, Dict, Tuple
 import pandas as pd
 
 from src.constants import D4_D6_RUNTIME_KNN_PROTOCOL_VERSION, SOLIDIFIED_TARGET_WINDOWS
+from src.utils.d5_calendar_reconstruction import (
+    D5AuthorityBundle,
+    D5ReconstructionReport,
+    reconstruct_d5_target_calendar,
+)
 
 
 LOGGER = logging.getLogger("experiment")
@@ -27,6 +33,13 @@ RUNTIME_KNN_WINDOW_ATTRS = (
     "scaling",
     "scaler_fit_scope",
 )
+
+
+@dataclass(frozen=True)
+class ParquetSourceTargetLoad:
+    source_df: pd.DataFrame
+    target_df: pd.DataFrame
+    calendar_reconstruction: D5ReconstructionReport | None
 
 
 def _dataset_name(dataset_id: int) -> str:
@@ -80,6 +93,20 @@ def derive_d4_d6_runtime_knn_windows(
         "scaling": "none",
         "scaler_fit_scope": "not_applicable",
     }
+
+
+def expected_target_dates_from_windows(windows: Dict[str, Any]) -> pd.DatetimeIndex:
+    """Materialize the target calendar only from the fixed window authority."""
+    if "train_start" not in windows or "test_end" not in windows:
+        raise ValueError("target window authority requires train_start and test_end")
+    start = pd.to_datetime(windows["train_start"], errors="coerce")
+    end = pd.to_datetime(windows["test_end"], errors="coerce")
+    if pd.isna(start) or pd.isna(end) or pd.Timestamp(start) > pd.Timestamp(end):
+        raise ValueError(
+            f"invalid target window authority: train_start={windows.get('train_start')!r} "
+            f"test_end={windows.get('test_end')!r}"
+        )
+    return pd.date_range(pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize(), freq="D")
 
 
 def _knn_json_path(knn_json_dir: str | Path, info_sharing: str) -> Path:
@@ -197,7 +224,13 @@ def _reindex_target_calendar(
     return result
 
 
-def attach_window_attrs(df: pd.DataFrame, windows: Dict[str, Any], role: str) -> pd.DataFrame:
+def attach_window_attrs(
+    df: pd.DataFrame,
+    windows: Dict[str, Any],
+    role: str,
+    *,
+    calendarize_target: bool = True,
+) -> pd.DataFrame:
     """Attach split/window metadata and return the frame to use downstream."""
     dataset_id = int(windows.get("dataset_id", 0))
     df.attrs["dataset_name"] = _dataset_name(dataset_id) if dataset_id else "unknown"
@@ -215,18 +248,19 @@ def attach_window_attrs(df: pd.DataFrame, windows: Dict[str, Any], role: str) ->
         if entity_col not in df.columns:
             raise AssertionError("target dataframe requires entity_id as the entity column")
 
-        train_start = pd.to_datetime(windows["train_start"])
-        test_end = pd.to_datetime(windows["test_end"])
-        df = df.copy()
-        df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-        df = df[(df[date_col] >= train_start) & (df[date_col] <= test_end)].copy()
-        df = _reindex_target_calendar(
-            df,
-            date_col=date_col,
-            entity_col=entity_col,
-            train_start=train_start,
-            test_end=test_end,
-        )
+        if calendarize_target:
+            train_start = pd.to_datetime(windows["train_start"])
+            test_end = pd.to_datetime(windows["test_end"])
+            df = df.copy()
+            df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+            df = df[(df[date_col] >= train_start) & (df[date_col] <= test_end)].copy()
+            df = _reindex_target_calendar(
+                df,
+                date_col=date_col,
+                entity_col=entity_col,
+                train_start=train_start,
+                test_end=test_end,
+            )
 
         train_days = 15
         val_days = 15
@@ -327,12 +361,15 @@ def _coerce_known_model_candidate_columns(df: pd.DataFrame, *, dataset_id: int, 
     return out
 
 
-def load_parquet_source_target(
+def load_parquet_source_target_with_diagnostics(
     dataset_id: int,
     parquet_dir: str | Path,
     windows: Dict[str, Any],
     source_history_days: int | None = None,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    *,
+    expected_dates: pd.DatetimeIndex | None = None,
+    d5_authorities: D5AuthorityBundle | None = None,
+) -> ParquetSourceTargetLoad:
     """Load D4-D6 fixed source/target parquet files only."""
     parquet_root = Path(parquet_dir)
     source_path = parquet_root / f"dataset{int(dataset_id)}-source.parquet"
@@ -368,7 +405,49 @@ def load_parquet_source_target(
     ].copy()
 
     source_df = attach_window_attrs(source_df, runtime_windows, role="source")
-    target_df = attach_window_attrs(target_df, runtime_windows, role="target")
+    reconstruction: D5ReconstructionReport | None = None
+    if int(dataset_id) == 5:
+        if expected_dates is None:
+            raise ValueError("D5 loader requires expected_dates from the window authority")
+        if d5_authorities is None:
+            raise ValueError("D5 loader requires a preloaded D5AuthorityBundle")
+        target_df = target_df[target_df["date"].isin(expected_dates)].copy()
+        target_df, reconstruction = reconstruct_d5_target_calendar(
+            target_df,
+            date_col="date",
+            entity_col="entity_id",
+            expected_dates=expected_dates,
+            authorities=d5_authorities,
+        )
+        target_df = attach_window_attrs(
+            target_df,
+            runtime_windows,
+            role="target",
+            calendarize_target=False,
+        )
+    else:
+        target_df = attach_window_attrs(target_df, runtime_windows, role="target")
     source_df.attrs["solidified_parquet_path"] = str(source_path)
     target_df.attrs["solidified_parquet_path"] = str(target_path)
-    return source_df, target_df
+    return ParquetSourceTargetLoad(source_df, target_df, reconstruction)
+
+
+def load_parquet_source_target(
+    dataset_id: int,
+    parquet_dir: str | Path,
+    windows: Dict[str, Any],
+    source_history_days: int | None = None,
+    *,
+    expected_dates: pd.DatetimeIndex | None = None,
+    d5_authorities: D5AuthorityBundle | None = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Compatibility tuple wrapper around the diagnostics-returning loader."""
+    loaded = load_parquet_source_target_with_diagnostics(
+        dataset_id=dataset_id,
+        parquet_dir=parquet_dir,
+        windows=windows,
+        source_history_days=source_history_days,
+        expected_dates=expected_dates,
+        d5_authorities=d5_authorities,
+    )
+    return loaded.source_df, loaded.target_df

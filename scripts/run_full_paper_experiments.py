@@ -51,6 +51,8 @@ from src.utils.result_schema import (
 from src.protocols.runner_adapter import configure_protocol_frames
 from src.protocols.rolling_origin import build_sample_manifest
 from src.protocols.reproducibility import set_protocol_seed
+from src.protocols.experiment_protocol import get_experiment_protocol
+from src.utils.run_artifacts import publish_formal_cell_output_frame
 from src.evaluation.metric_contract import (
     MetricProtocolError,
     build_metric_identity_from_manifest,
@@ -102,12 +104,12 @@ FORMAL_DATASET_PATHS = {
 }
 SOLIDIFIED_DATASET_PATHS = {
     "Dataset1": {
-        "source": "数据集/派生数据/d1d2_protocol_v1/dataset1-source.parquet",
-        "target": "数据集/派生数据/d1d2_protocol_v1/dataset1-target.parquet",
+        "source": "数据集/固化数据/dataset1-source.parquet",
+        "target": "数据集/固化数据/dataset1-target.parquet",
     },
     "Dataset2": {
-        "source": "数据集/派生数据/d1d2_protocol_v1/dataset2-source.parquet",
-        "target": "数据集/派生数据/d1d2_protocol_v1/dataset2-target.parquet",
+        "source": "数据集/固化数据/dataset2-source.parquet",
+        "target": "数据集/固化数据/dataset2-target.parquet",
     },
     "Dataset3": {
         "source": "数据集/固化数据/dataset3-source.parquet",
@@ -252,6 +254,7 @@ def _save_dataset_result_csvs(
     datasets: Optional[Sequence[str]] = None,
     info_sharing_suffix: Optional[str] = None,
     dataset_frames: Optional[Dict[str, pd.DataFrame]] = None,
+    formal_cell_contexts: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Path]:
     saved: Dict[str, Path] = {}
     selected_datasets = tuple(DATASETS) if datasets is None else tuple(datasets)
@@ -265,7 +268,20 @@ def _save_dataset_result_csvs(
         else:
             filename = f"{dataset_slug}_{info_sharing_suffix}_results.csv"
         out_path = results_dir / filename
-        dataset_df.to_csv(out_path, index=False, encoding="utf-8")
+        context = (formal_cell_contexts or {}).get(dataset_name)
+        if context is None:
+            dataset_df.to_csv(out_path, index=False, encoding="utf-8")
+        else:
+            publish_formal_cell_output_frame(
+                dataset_df,
+                stable_path=out_path,
+                dataset_id=int(context["dataset_id"]),
+                mode=str(context["mode"]),
+                targets=tuple(str(value) for value in context["targets"]),
+                horizon=int(context["horizon"]),
+                seed=int(context["seed"]),
+                project_root=ROOT,
+            )
         saved[dataset_name] = out_path
     return saved
 
@@ -305,15 +321,10 @@ def _save_run_results(
     output_paths: Dict[str, Path],
     datasets: Optional[Sequence[str]] = None,
     info_sharing_suffix: Optional[str] = None,
+    formal_cell_contexts: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Path]:
     results_dir = output_paths["results_dir"]
     results_dir.mkdir(parents=True, exist_ok=True)
-
-    paper_results_df.to_csv(output_paths["paper_csv"], index=False, encoding="utf-8")
-    if output_paths["paper_csv"] != output_paths["full_paper_csv"]:
-        paper_results_df.to_csv(output_paths["full_paper_csv"], index=False, encoding="utf-8")
-    extended_results_df.to_csv(output_paths["extended_csv"], index=False, encoding="utf-8")
-    paper_results_df.to_csv(output_paths["full_results_csv"], index=False, encoding="utf-8")
 
     dataset_result_frames: Dict[str, pd.DataFrame] = {}
     dataset_csv_paths = _save_dataset_result_csvs(
@@ -322,7 +333,13 @@ def _save_run_results(
         datasets=datasets,
         info_sharing_suffix=info_sharing_suffix,
         dataset_frames=dataset_result_frames,
+        formal_cell_contexts=formal_cell_contexts,
     )
+    paper_results_df.to_csv(output_paths["paper_csv"], index=False, encoding="utf-8")
+    if output_paths["paper_csv"] != output_paths["full_paper_csv"]:
+        paper_results_df.to_csv(output_paths["full_paper_csv"], index=False, encoding="utf-8")
+    extended_results_df.to_csv(output_paths["extended_csv"], index=False, encoding="utf-8")
+    paper_results_df.to_csv(output_paths["full_results_csv"], index=False, encoding="utf-8")
     ranking_df = _build_ranking_df(paper_results_df)
     summary_df = _build_summary_df(paper_results_df)
     ranking_df.to_csv(output_paths["ranking_csv"], index=False, encoding="utf-8")
@@ -1488,7 +1505,8 @@ def _build_run_plan(
     extended_counts = [] if strict_paper_mode else get_extended_source_counts(protocol)
     for method_name in methods:
         if method_name in {"No-TL", "SS-TL"}:
-            plan.append((method_name, 1, "without_information_sharing", "paper"))
+            for scenario in INFO_SHARING_SCENARIOS:
+                plan.append((method_name, 1, scenario, "paper"))
             continue
         for scenario in INFO_SHARING_SCENARIOS:
             effective_paper_counts = list(paper_counts)
@@ -2122,12 +2140,29 @@ def main() -> None:
     )
 
     output_paths["results_dir"].mkdir(parents=True, exist_ok=True)
+    formal_cell_contexts: Optional[Dict[str, Dict[str, Any]]] = None
+    if strict_paper_mode and args.info_sharing is not None:
+        formal_cell_contexts = {}
+        for dataset_name in selected_datasets:
+            dataset_id = int(dataset_name[-1])
+            target_key = get_experiment_protocol(f"D{dataset_id}").source_pool_rule.target_key
+            if target_key is None:
+                raise ValueError(f"{dataset_name} has no formal target key")
+            formal_cell_contexts[dataset_name] = {
+                "dataset_id": dataset_id,
+                "mode": args.info_sharing,
+                "targets": ("/".join(target_key),),
+                "horizon": int(args.horizon),
+                "seed": int(args.seed),
+            }
+
     saved_paths = _save_run_results(
         paper_results_df=paper_results_df,
         extended_results_df=extended_results_df,
         output_paths=output_paths,
         datasets=selected_datasets,
         info_sharing_suffix=args.info_sharing,
+        formal_cell_contexts=formal_cell_contexts,
     )
 
     # Source identification audit report for Table 5/6 style verification.

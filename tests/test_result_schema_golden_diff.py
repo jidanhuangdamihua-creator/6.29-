@@ -14,14 +14,35 @@ from src.constants import (
     SCHEMA_FAMILY_D4_D6,
 )
 from src.utils.result_schema import (
+    REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY,
+    RESULT_SCHEMA_REGISTRY_VERSION,
     TRACE_COLUMNS,
     align_d1_d3_result_records,
     align_d4_d6_result_records,
     align_result_records,
+    result_schema_registry_digest,
 )
 
 
 MAX_DIFFS_TO_REPORT = 50
+
+
+def test_result_extra_registry_is_explicit_and_deterministic() -> None:
+    assert RESULT_SCHEMA_REGISTRY_VERSION == "result_schema_registry_v1"
+    assert set(REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY) == {
+        SCHEMA_FAMILY_D1_D3,
+        SCHEMA_FAMILY_D4_D6,
+    }
+    assert REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY[SCHEMA_FAMILY_D1_D3] == (
+        "sample_count",
+        "source_identification",
+        "feature_cols_final",
+        "rfe_candidate_features",
+        "rfe_selected_features",
+        "signature_components",
+    )
+    assert len(result_schema_registry_digest()) == 64
+    assert result_schema_registry_digest() == result_schema_registry_digest()
 
 
 def _is_missing(value: Any) -> bool:

@@ -17,6 +17,8 @@ from typing import Callable, Iterable
 import numpy as np
 import pandas as pd
 
+from src.utils.d5_calendar_reconstruction import build_authoritative_d5_oil_by_date
+
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "preprocessing"
 DEFAULT_PATHS = {
@@ -268,16 +270,15 @@ def clean_d4_dataframe(raw: pd.DataFrame) -> pd.DataFrame:
 
 
 def preprocess_d5_oil(oil_raw: pd.DataFrame) -> pd.DataFrame:
-    oil = oil_raw.copy()
-    oil["date"] = pd.to_datetime(oil["date"], errors="coerce")
-    oil = oil.sort_values("date").set_index("date")
-    oil["dcoilwtico"] = pd.to_numeric(oil["dcoilwtico"], errors="coerce")
-    oil = oil.resample("D").asfreq()
-    oil["dcoilwtico"] = oil["dcoilwtico"].ffill()
-    oil["oil_price"] = oil["dcoilwtico"].shift(1)
-    oil = oil.reset_index()
+    raw_dates = pd.to_datetime(oil_raw["date"], errors="coerce").dropna().dt.normalize()
+    if raw_dates.empty:
+        raise ValueError("D5 oil.csv has no valid dates")
+    oil = build_authoritative_d5_oil_by_date(
+        oil_raw,
+        expected_dates=pd.date_range(raw_dates.min(), raw_dates.max(), freq="D"),
+    )
     oil["date"] = oil["date"].dt.strftime("%Y-%m-%d")
-    return oil[["date", "oil_price"]]
+    return oil
 
 
 def _d5_effective_holiday_mask(holidays: pd.DataFrame) -> pd.Series:
