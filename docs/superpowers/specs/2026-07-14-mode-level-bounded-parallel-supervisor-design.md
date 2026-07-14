@@ -235,4 +235,3 @@ mode acceptances passing, unique paths, and no `ProtocolViolation`,
 Codex may execute the probe only through the repository timeout wrapper. If it
 exits 124, Codex stops immediately and reports the exact manual terminal
 command without retrying, splitting, simplifying, or resuming the probe.
-

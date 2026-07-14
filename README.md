@@ -397,12 +397,29 @@ source identification 审计产物：
 
 ### 4) D1–D6 正式协议运行
 
-正式全量入口是 [scripts/run_unified_d1_d6.py](scripts/run_unified_d1_d6.py)，并行入口是 `scripts/parallel_runner.sh` 与 `scripts/parallel_mode_runner.sh`。每次运行会创建独立的 `outputs/runs/<run-id>/`，其中每个数据集和 with/without 模式各有子目录；汇总时必须显式传入该 run root。
+正式运行由 [scripts/parallel_mode_runner.sh](scripts/parallel_mode_runner.sh) 统一监督；[scripts/parallel_runner.sh](scripts/parallel_runner.sh) 是兼容入口并委托给同一个 supervisor。supervisor 默认最多同时运行 6 个 `dataset × mode` worker，D5 固定最多 1 个。每个 worker 仍由 [scripts/run_unified_d1_d6.py](scripts/run_unified_d1_d6.py) 执行 25 个 cell，并完成 cell 与 mode acceptance；只有 12 个 mode 全部成功后，父进程才会执行一次 global acceptance 和原子发布。
+
+正式运行要求 Git worktree 干净。每次新运行会创建独立的 `outputs/runs/<run-id>_formal/`，保存不可变 `run_plan.json`、12 个隔离 mode 目录，以及带 acceptance、manifest 和 SHA-256 的正式结果。不要手工复制或拼接 CSV。
 
 ```bash
-python scripts/run_unified_d1_d6.py --dry-run
-python scripts/aggregate_d1_d6_results.py --run-dir "outputs/runs/<run-id>"
+# 只查看 12 个 worker 和 300-cell 计划，不创建目录、不启动 Python
+DRY_RUN=1 MAX_JOBS=6 bash scripts/parallel_mode_runner.sh
+
+# 新的正式全量运行；成功后自动发布全局结果
+MAX_JOBS=6 bash scripts/parallel_mode_runner.sh
+
+# 仅复用相同代码、输入和 run plan 下重新验收通过的 cell/mode
+RUN_ROOT="outputs/runs/<run-id>_formal" RESUME=1 MAX_JOBS=6 \
+  bash scripts/parallel_mode_runner.sh
+
+# 封存前四-mode 服务器 probe；永不发布 global aggregate
+python tools/protection/codex_timeout.py --timeout 180 \
+  env PROBE=1 PUBLISH_GLOBAL=0 MAX_JOBS=4 \
+  RUN_ROOT="outputs/runs/<probe-id>_formal" \
+  bash scripts/parallel_mode_runner.sh
 ```
+
+probe 若由保护器以退出码 124 终止，不要拆分、简化、重试或续跑；请在服务器 Terminal 手工执行同一条命令。
 
 ### 5) 历史参数矩阵（非 D1–D6 正式入口）
 

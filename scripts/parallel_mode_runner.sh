@@ -326,6 +326,7 @@ cleanup_active() {
     set +e
     log_message "[ABORT] ${reason}"
     for index in "${!TASKS[@]}"; do
+        worker_pid=""
         if [[ "${STATUSES[${index}]}" != "running" \
             && "${STATUSES[${index}]}" != "starting" ]]; then
             continue
