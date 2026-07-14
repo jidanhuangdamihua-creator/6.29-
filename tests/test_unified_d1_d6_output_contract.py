@@ -69,7 +69,7 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
                 run_full_paper_experiments._should_sync_latest_results_copy()
             )
 
-    def test_parallel_runner_dry_run_delegates_one_300_cell_plan(self):
+    def test_parallel_runner_dry_run_prints_twelve_mode_workers(self):
         runner = ROOT / "scripts" / "parallel_runner.sh"
         self.assertTrue(runner.is_file(), "parallel runner script is missing")
 
@@ -83,8 +83,12 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
 
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertIn("[FORMAL PLAN] cells=300 unique=300", completed.stdout)
-        self.assertEqual(300, completed.stdout.count("expected result:"))
-        self.assertRegex(completed.stdout, r"outputs/runs/\d{8}_\d{6}_formal/d1_without/cells/h1_s42")
+        mode_lines = [
+            line for line in completed.stdout.splitlines() if line.startswith("[MODE]")
+        ]
+        self.assertEqual(12, len(mode_lines))
+        self.assertEqual(12, len(set(mode_lines)))
+        self.assertRegex(completed.stdout, r"outputs/runs/\d{8}_\d{6}_formal/d1_without")
         self.assertNotRegex(completed.stdout, r"d[1-6]_(?:with|without)/d[1-6]_(?:with|without)")
 
     def test_parallel_runner_has_no_thread_limits_or_aggregation(self):
@@ -221,7 +225,7 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
                 run_unified_d1_d6.main()
         resolve_root.assert_not_called()
 
-    def test_parallel_mode_runner_dry_run_delegates_one_300_cell_plan(self):
+    def test_parallel_mode_runner_dry_run_prints_bounded_300_cell_plan(self):
         runner = ROOT / "scripts" / "parallel_mode_runner.sh"
         self.assertTrue(runner.is_file(), "parallel mode runner script is missing")
 
@@ -238,9 +242,10 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
         )
 
         self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertIn("MAX_JOBS=10 is ignored", completed.stdout)
+        self.assertIn("MAX_JOBS=6", completed.stdout)
+        self.assertIn("D5_MAX_JOBS=1", completed.stdout)
         self.assertIn("[FORMAL PLAN] cells=300 unique=300", completed.stdout)
-        self.assertEqual(300, completed.stdout.count("expected result:"))
+        self.assertEqual(12, completed.stdout.count("[MODE]"))
 
     def test_parallel_mode_runner_dry_run_honors_max_jobs_override(self):
         runner = ROOT / "scripts" / "parallel_mode_runner.sh"
@@ -259,7 +264,7 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
         )
 
         self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertIn("MAX_JOBS=12 is ignored", completed.stdout)
+        self.assertIn("MAX_JOBS=12", completed.stdout)
 
     def test_d4_alignment_uses_reference_dataset_to_error_columns_and_keeps_source_trace(self):
         raw = pd.DataFrame(
