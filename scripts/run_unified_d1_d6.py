@@ -7,12 +7,14 @@ import argparse
 import csv
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+import hashlib
+import json
 from pathlib import Path
 import shlex
 import subprocess
 import sys
 import time
-from typing import Iterable, List, Optional, Sequence
+from typing import Iterable, List, Mapping, Optional, Sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -273,6 +275,102 @@ def _global_contract(mode_contracts: Sequence[ExpectedResultContract]) -> Expect
             else AggregateProfile.RUN_SELECTION_AGGREGATE
         ),
     )
+
+
+def _task_plan_entry(task: Task) -> dict[str, object]:
+    if task.expected_result_path is None:
+        raise RuntimeError(f"formal task has no expected result path: {task.label}")
+    return {
+        "dataset_id": task.dataset_id,
+        "mode": task.scenario,
+        "horizon": task.horizon,
+        "seed": task.seed,
+        "command": list(task.cmd),
+        "result_path": str(task.expected_result_path),
+    }
+
+
+def _canonical_digest(payload: Mapping[str, object]) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def build_run_plan(
+    run_root: Path,
+    *,
+    code_identity: CodeIdentity,
+    input_identity: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    root = Path(run_root).resolve()
+    tasks = build_tasks(None, smoke=False, run_dir=root)
+    cells = [_task_plan_entry(task) for task in tasks]
+    result_paths = [str(cell["result_path"]) for cell in cells]
+    if len(cells) != 300 or len(set(result_paths)) != 300:
+        raise RuntimeError("formal run plan must contain exactly 300 unique cells")
+
+    payload: dict[str, object] = {
+        "run_plan_version": "formal_d1_d6_run_plan_v2",
+        "code_identity": code_identity.to_dict(),
+        "schema_registry_version": RESULT_SCHEMA_REGISTRY_VERSION,
+        "schema_registry_digest": result_schema_registry_digest(),
+        "input_identity": input_identity,
+        "methods": list(FORMAL_METHODS),
+        "horizons": list(FORMAL_HORIZONS),
+        "seeds": list(FORMAL_SEEDS),
+        "cells": cells,
+    }
+    return {**payload, "run_identity": _canonical_digest(payload)}
+
+
+def prepare_formal_run(run_root: Path, *, resume: bool) -> dict[str, object]:
+    root = Path(run_root).resolve()
+    code_identity = discover_code_identity(PROJECT_ROOT)
+    if code_identity.dirty:
+        raise RuntimeError("formal execution requires a clean git worktree")
+    input_identity = discover_formal_input_identity(PROJECT_ROOT)
+    plan = build_run_plan(
+        root,
+        code_identity=code_identity,
+        input_identity=input_identity,
+    )
+
+    if resume:
+        if not root.is_dir():
+            raise FileNotFoundError(f"resume run root does not exist: {root}")
+    else:
+        reserve_new_output_dir(root)
+    write_or_validate_run_plan(root / "run_plan.json", plan, resume=resume)
+    return plan
+
+
+def load_validated_run_plan(
+    run_root: Path,
+) -> tuple[dict[str, object], CodeIdentity]:
+    root = Path(run_root).resolve()
+    plan_path = root / "run_plan.json"
+    try:
+        stored = json.loads(plan_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        raise RuntimeError(f"formal run plan is unreadable: {plan_path}") from exc
+    if not isinstance(stored, dict):
+        raise RuntimeError(f"formal run plan must be a JSON object: {plan_path}")
+
+    code_identity = discover_code_identity(PROJECT_ROOT)
+    if code_identity.dirty:
+        raise RuntimeError("formal execution requires a clean git worktree")
+    current = build_run_plan(
+        root,
+        code_identity=code_identity,
+        input_identity=discover_formal_input_identity(PROJECT_ROOT),
+    )
+    if stored != current:
+        raise RuntimeError("current formal plan or identity does not match run_plan.json")
+    return current, code_identity
 
 
 def _resolve_run_root(args: argparse.Namespace) -> Path:
