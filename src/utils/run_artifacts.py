@@ -176,6 +176,91 @@ def _require_matching_artifact_manifest(
     return manifest
 
 
+def _require_passing_acceptance_report(path: Path) -> dict[str, Any]:
+    report_path = Path(path)
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        raise ResultAcceptanceError(
+            f"acceptance report unreadable: {report_path}"
+        ) from exc
+    if not isinstance(report, dict) or report.get("passed") is not True:
+        raise ResultAcceptanceError(
+            f"acceptance report did not pass: {report_path}"
+        )
+    return report
+
+
+def verify_formal_cell_artifact(
+    stable_path: Path,
+    *,
+    acceptance_path: Path,
+    expected: ExpectedResultContract,
+    code_identity: CodeIdentity,
+) -> None:
+    report = _require_passing_acceptance_report(acceptance_path)
+    manifest = _require_matching_artifact_manifest(
+        stable_path,
+        artifact_type="formal_cell",
+        code_identity=code_identity,
+    )
+    if manifest.get("acceptance") != report:
+        raise ResultAcceptanceError(
+            f"cell acceptance report does not match manifest: {stable_path}"
+        )
+    outcome = accept_cell_csv(Path(stable_path), expected=expected)
+    if not outcome.report.passed:
+        raise ResultAcceptanceError(
+            "cell acceptance revalidation failed: "
+            + ",".join(outcome.report.reasons)
+        )
+
+
+def verify_formal_mode_artifact(
+    stable_path: Path,
+    *,
+    acceptance_path: Path,
+    cell_paths: tuple[Path, ...] | list[Path],
+    expected: ExpectedResultContract,
+    code_identity: CodeIdentity,
+) -> None:
+    paths = tuple(Path(path) for path in cell_paths)
+    for path in paths:
+        cell_report = _require_passing_acceptance_report(
+            path.with_suffix(".acceptance.json")
+        )
+        cell_manifest = _require_matching_artifact_manifest(
+            path,
+            artifact_type="formal_cell",
+            code_identity=code_identity,
+        )
+        if cell_manifest.get("acceptance") != cell_report:
+            raise ResultAcceptanceError(
+                f"cell acceptance report does not match manifest: {path}"
+            )
+
+    report = _require_passing_acceptance_report(acceptance_path)
+    manifest = _require_matching_artifact_manifest(
+        stable_path,
+        artifact_type="formal_mode_matrix",
+        code_identity=code_identity,
+    )
+    if manifest.get("acceptance") != report:
+        raise ResultAcceptanceError(
+            f"mode acceptance report does not match manifest: {stable_path}"
+        )
+    outcome = accept_mode_matrix(
+        paths,
+        expected=expected,
+        candidate_mode_csv=Path(stable_path),
+    )
+    if not outcome.report.passed:
+        raise ResultAcceptanceError(
+            "mode acceptance revalidation failed: "
+            + ",".join(outcome.report.reasons)
+        )
+
+
 def publish_formal_cell_frame(
     frame: pd.DataFrame,
     *,

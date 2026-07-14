@@ -13,6 +13,7 @@ from src.utils.result_acceptance import (
     AcceptanceScope,
     AggregateProfile,
     ExpectedResultContract,
+    ResultAcceptanceError,
     build_formal_cell_contract,
 )
 from src.utils.run_artifacts import (
@@ -22,6 +23,8 @@ from src.utils.run_artifacts import (
     publish_global_aggregate,
     publish_mode_matrix,
     resumable_formal_cell,
+    verify_formal_cell_artifact,
+    verify_formal_mode_artifact,
     write_or_validate_run_plan,
 )
 from src.utils.run_layout import RunLayout
@@ -145,6 +148,35 @@ def test_accepted_cell_is_atomic_hashed_and_resume_requires_same_code(tmp_path: 
     )
 
 
+def test_verify_cell_requires_passing_acceptance_sidecar(tmp_path: Path) -> None:
+    layout = RunLayout(tmp_path / "run")
+    stable = layout.cell_result(1, "without", 1, 42)
+    expected = build_formal_cell_contract(
+        dataset_id=1,
+        mode="without",
+        targets=("1/10",),
+        horizon=1,
+        seed=42,
+    )
+    identity = CodeIdentity("abc", False, "1" * 64)
+    publish_formal_cell_frame(
+        _valid_cell(),
+        stable_path=stable,
+        expected=expected,
+        code_identity=identity,
+    )
+    acceptance_path = layout.cell_acceptance_report(1, "without", 1, 42)
+    acceptance_path.unlink()
+
+    with pytest.raises(ResultAcceptanceError, match="acceptance report"):
+        verify_formal_cell_artifact(
+            stable,
+            acceptance_path=acceptance_path,
+            expected=expected,
+            code_identity=identity,
+        )
+
+
 def test_dirty_code_identity_hashes_contents_not_only_git_status(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -235,6 +267,62 @@ def test_mode_and_selection_aggregate_are_also_acceptance_gated(tmp_path: Path) 
     )
     assert layout.aggregate_result.is_file()
     assert layout.aggregate_manifest.is_file()
+
+
+def test_verify_mode_rejects_manifest_hash_mismatch(tmp_path: Path) -> None:
+    layout = RunLayout(tmp_path / "run")
+    identity = CodeIdentity("abc", False, "2" * 64)
+    mode_expected = ExpectedResultContract(
+        scope=AcceptanceScope.MODE_MATRIX,
+        formal=True,
+        dataset_ids=(1,),
+        modes=("without",),
+        protocol_tracks=("strict_paper",),
+        targets_by_dataset_mode={(1, "without"): ("1/10",)},
+        methods=FORMAL_METHODS,
+        horizons=(1, 2, 3, 4, 5),
+        seeds=(42, 43, 44, 45, 46),
+        confirmation_eligible=True,
+    )
+    cell_paths = []
+    for horizon in mode_expected.horizons:
+        for seed in mode_expected.seeds:
+            path = layout.cell_result(1, "without", horizon, seed)
+            publish_formal_cell_frame(
+                _valid_cell().assign(horizon=horizon, seed=seed),
+                stable_path=path,
+                expected=ExpectedResultContract(
+                    **{
+                        **mode_expected.__dict__,
+                        "scope": AcceptanceScope.CELL,
+                        "horizons": (horizon,),
+                        "seeds": (seed,),
+                    }
+                ),
+                code_identity=identity,
+            )
+            cell_paths.append(path)
+
+    mode_path = layout.mode_result(1, "without")
+    publish_mode_matrix(
+        cell_paths,
+        stable_path=mode_path,
+        expected=mode_expected,
+        code_identity=identity,
+    )
+    mode_path.write_text(
+        mode_path.read_text(encoding="utf-8") + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ResultAcceptanceError, match="hash"):
+        verify_formal_mode_artifact(
+            mode_path,
+            acceptance_path=layout.mode_acceptance_report(1, "without"),
+            cell_paths=cell_paths,
+            expected=mode_expected,
+            code_identity=identity,
+        )
 
 
 def test_resume_requires_the_exact_immutable_run_plan(tmp_path: Path) -> None:
