@@ -149,6 +149,15 @@ def _prepare_source(
     source_df: pd.DataFrame,
     group_cols: Sequence[str],
 ) -> pd.DataFrame:
+    if not source_df.columns.is_unique:
+        duplicates = list(
+            dict.fromkeys(
+                source_df.columns[source_df.columns.duplicated(keep=False)].tolist()
+            )
+        )
+        raise ProtocolViolation(
+            f"source provenance dataframe contains duplicate columns: {duplicates!r}"
+        )
     missing = [column for column in (*group_cols, "date") if column not in source_df.columns]
     if missing:
         raise ProtocolViolation(f"source provenance dataframe missing columns: {missing}")

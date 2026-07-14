@@ -23,6 +23,74 @@ from src.data_processing.data_preprocessing import (
 
 
 class KnnCnnProvenanceTest(unittest.TestCase):
+    def test_actual_source_frame_rejects_duplicate_protocol_columns(self) -> None:
+        frame = pd.DataFrame(
+            [[1, 8, 8, pd.Timestamp("2020-01-01"), 1.0]],
+            columns=["store_id", "item_id", "item_id", "date", "sales"],
+        )
+
+        with self.assertRaisesRegex(
+            ProtocolViolation,
+            r"source provenance dataframe contains duplicate columns: \['item_id'\]",
+        ):
+            bind_actual_cnn_source_frame(
+                frame,
+                source_key=("1", "8"),
+                group_cols=("store_id", "item_id"),
+                feature_cols=("sales",),
+            )
+
+    def test_actual_source_frame_rejects_multiple_real_source_keys(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "store_id": [1, 2],
+                "item_id": [8, 9],
+                "date": pd.to_datetime(["2020-01-01", "2020-01-01"]),
+                "sales": [1.0, 2.0],
+            }
+        )
+
+        with self.assertRaisesRegex(
+            ProtocolViolation,
+            r"actual CNN source frame key mismatch: expected=\('1', '8'\)",
+        ):
+            bind_actual_cnn_source_frame(
+                frame,
+                source_key=("1", "8"),
+                group_cols=("store_id", "item_id"),
+                feature_cols=("sales",),
+            )
+
+    def test_d2_d6_legal_source_keys_remain_exact(self) -> None:
+        cases = (
+            ("D2", ("brand_id", "item_id"), ("1", "8")),
+            ("D3", ("entity_id",), ("9",)),
+            ("D4", ("store_id", "product_id"), ("1", "8")),
+            ("D5", ("store_nbr", "item_nbr"), ("1", "8")),
+            ("D6", ("store_id", "item_id"), ("1", "8")),
+        )
+
+        for dataset, group_cols, source_key in cases:
+            with self.subTest(dataset=dataset):
+                values = {column: [int(value)] for column, value in zip(group_cols, source_key)}
+                values.update(
+                    {
+                        "date": pd.to_datetime(["2020-01-01"]),
+                        "sales": [1.0],
+                    }
+                )
+                frame = pd.DataFrame(values)
+
+                bind_actual_cnn_source_frame(
+                    frame,
+                    source_key=source_key,
+                    group_cols=group_cols,
+                    feature_cols=("sales",),
+                )
+
+                self.assertTrue(frame.columns.is_unique)
+                self.assertEqual(frame.attrs["protocol_actual_source_key"], source_key)
+
     def test_actual_normalized_cnn_arrays_are_validated_against_raw_rows(self) -> None:
         frame = pd.DataFrame(
             {

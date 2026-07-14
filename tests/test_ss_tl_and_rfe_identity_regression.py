@@ -6,8 +6,10 @@ from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
+from src.data_processing.data_preprocessing import temporal_split_by_ratio_or_dates
+from src.experiment import experiment_runner
 from src.experiment.experiment_runner import run_ss_tl_experiment
-from src.transfer_methods import msml_tl_rfe
+from src.transfer_methods import msml_tl, msml_tl_rfe, mssb_tl, mswa_tl
 
 
 class _PredictingModel:
@@ -36,6 +38,113 @@ def _frame(
 
 
 class SourceIdentityRegressionTest(TestCase):
+    def test_ss_tl_d1_overlapping_item_id_columns_remain_unique(self) -> None:
+        import src.transfer_methods.single_source_tl as single_source_tl
+
+        group_cols = ("store_id", "item_id")
+        source = pd.concat(
+            [
+                _frame(group_cols, 1, 8, periods=80),
+                _frame(group_cols, 1, 9, periods=80),
+            ],
+            ignore_index=True,
+        )
+        target = _frame(group_cols, 1, 10, periods=80)
+        selected_key = ("1", "8")
+        constructed_frames: list[pd.DataFrame] = []
+
+        def capture_split(frame: pd.DataFrame):
+            constructed_frames.append(frame)
+            return temporal_split_by_ratio_or_dates(frame)
+
+        with patch.object(
+            experiment_runner.SourceSelector,
+            "select_top_k_sources",
+            return_value={
+                "sources": [{"source_key": list(selected_key), "distance": 0.25, "weight": 1.0}],
+                "meta": {},
+            },
+        ), patch.object(
+            experiment_runner,
+            "temporal_split_by_ratio_or_dates",
+            side_effect=capture_split,
+        ), patch.object(
+            single_source_tl, "train_source_model", return_value=object()
+        ), patch.object(
+            single_source_tl,
+            "build_target_model_from_source",
+            return_value=(_PredictingModel(), ["conv1"]),
+        ), patch.object(
+            single_source_tl,
+            "fine_tune_target_model",
+            side_effect=lambda target_model, **_kwargs: target_model,
+        ), patch.object(
+            single_source_tl,
+            "evaluate_regression_model",
+            return_value={"rmse": 1.0, "accuracy": 0.5},
+        ):
+            result = run_ss_tl_experiment(
+                source_df=source,
+                target_df=target,
+                feature_cols=("sales", "planned_price", "item_id"),
+                window_size=5,
+                source_epochs=1,
+                target_epochs=1,
+                batch_size=4,
+                group_cols=group_cols,
+            )
+
+        self.assertEqual(len(constructed_frames), 2)
+        source_frame, target_frame = constructed_frames
+        self.assertTrue(source_frame.columns.is_unique)
+        self.assertTrue(target_frame.columns.is_unique)
+        self.assertEqual(source_frame.columns.tolist().count("item_id"), 1)
+        self.assertEqual(target_frame.columns.tolist().count("item_id"), 1)
+        self.assertEqual(source_frame.attrs["protocol_actual_source_key"], selected_key)
+        self.assertEqual(result["meta"]["source_key"], selected_key)
+
+    def test_multi_source_frames_have_unique_columns_before_provenance_binding(self) -> None:
+        class StopAfterBindingCheck(RuntimeError):
+            pass
+
+        group_cols = ("store_id", "item_id")
+        source = _frame(group_cols, 1, 8)
+        target = _frame(group_cols, 1, 10)
+        selected_key = ("1", "8")
+
+        for module, runner in (
+            (mswa_tl, mswa_tl.run_mswa_tl),
+            (mssb_tl, mssb_tl.run_mssb_tl),
+            (msml_tl, msml_tl.run_msml_tl),
+        ):
+            with self.subTest(method=module.__name__):
+                def check_binding(frame: pd.DataFrame, **_kwargs: object) -> None:
+                    self.assertTrue(frame.columns.is_unique)
+                    self.assertEqual(frame.columns.tolist().count("item_id"), 1)
+                    raise StopAfterBindingCheck
+
+                with patch.object(
+                    module.SourceSelector,
+                    "select_top_k_sources",
+                    return_value={
+                        "sources": [
+                            {"source_key": selected_key, "distance": 0.25, "weight": 1.0}
+                        ],
+                        "meta": {},
+                    },
+                ), patch.object(
+                    module,
+                    "bind_actual_cnn_source_frame",
+                    side_effect=check_binding,
+                ), self.assertRaises(StopAfterBindingCheck):
+                    runner(
+                        source_df=source,
+                        target_df=target,
+                        feature_cols=("sales", "planned_price", "item_id"),
+                        k=1,
+                        group_cols=group_cols,
+                    )
+
     def test_ss_tl_result_meta_uses_normalized_selector_source_key(self) -> None:
         import src.transfer_methods.single_source_tl as single_source_tl
 
@@ -161,6 +270,8 @@ class SourceIdentityRegressionTest(TestCase):
 
         source_frame = captured["source_frame"]
         self.assertIsInstance(source_frame, pd.DataFrame)
+        self.assertTrue(source_frame.columns.is_unique)
+        self.assertEqual(source_frame.columns.tolist().count("item_id"), 1)
         self.assertTrue(set(group_cols).issubset(source_frame.columns))
         self.assertIn("date", source_frame.columns)
         self.assertFalse(set(group_cols).intersection(result["rfe_info"]["selected_feature_cols"]))

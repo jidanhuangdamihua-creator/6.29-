@@ -48,12 +48,22 @@ from paper_reproduction_protocol import (
 )
 from src.source_selection.source_selector import SourceSelector
 from src.transfer_methods.source_failure_tolerance import runtime_selection_meta
+from src.protocols.experiment_protocol import ProtocolViolation
 from src.protocols.runner_adapter import source_key_mask
 from src.protocols.provenance import (
     assert_actual_cnn_training_validated,
     bind_actual_cnn_source_frame,
 )
 from src.utils.source_fillna import fill_source_numeric_na
+
+
+def _assert_unique_frame_columns(frame: pd.DataFrame, *, context: str) -> None:
+    if frame.columns.is_unique:
+        return
+    duplicates = list(
+        dict.fromkeys(frame.columns[frame.columns.duplicated(keep=False)].tolist())
+    )
+    raise ProtocolViolation(f"{context} contains duplicate columns: {duplicates!r}")
 
 
 LOGGER_NAME = "experiment"
@@ -728,9 +738,12 @@ def run_ss_tl_experiment(
     source_mask = source_key_mask(sorted_source, resolved_group_cols, source_key)
     single_source_df = sorted_source[source_mask].copy()
 
-    keep_cols = ["date", "entity_id", "item_id", *resolved_group_cols, *cols]
+    keep_cols = list(
+        dict.fromkeys(["date", "entity_id", "item_id", *resolved_group_cols, *cols])
+    )
     keep_cols = [c for c in keep_cols if c in single_source_df.columns]
     single_source_df = single_source_df[keep_cols].copy()
+    _assert_unique_frame_columns(single_source_df, context="SS-TL source frame")
 
     single_source_df.attrs["split_role"] = "source"
     single_source_df.attrs["split_mode"] = "ratio"
@@ -749,6 +762,7 @@ def run_ss_tl_experiment(
 
     target_min_df = target_df[[c for c in keep_cols if c in target_df.columns]].copy()
     target_min_df.attrs = target_df.attrs.copy()
+    _assert_unique_frame_columns(target_min_df, context="SS-TL target frame")
 
     src_train, src_val, src_test = temporal_split_by_ratio_or_dates(single_source_df)
     src_train, src_val, src_test, _, _ = normalize_features(
