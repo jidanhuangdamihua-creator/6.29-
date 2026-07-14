@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -8,6 +9,7 @@ from unittest.mock import Mock
 import pytest
 
 from scripts import run_unified_d1_d6 as unified
+from src.utils.result_acceptance import ResultAcceptanceError
 from src.utils.run_artifacts import CodeIdentity
 
 
@@ -200,3 +202,171 @@ def test_mode_worker_rejects_nested_or_wrong_mode_output_directory(
             "with",
             resume=False,
         )
+
+
+def test_aggregate_requires_all_twelve_verified_modes(
+    prepared_run: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verified: list[Path] = []
+    published: list[Path] = []
+    monkeypatch.setattr(
+        unified,
+        "verify_formal_mode_artifact",
+        lambda path, **kwargs: verified.append(path),
+    )
+    monkeypatch.setattr(
+        unified,
+        "publish_global_aggregate",
+        lambda paths, **kwargs: published.extend(paths),
+    )
+
+    output = unified.aggregate_prepared_run(prepared_run)
+
+    assert len(verified) == 12
+    assert len(set(verified)) == 12
+    assert published == verified
+    assert output == prepared_run / "results" / "d1_d6_results.csv"
+
+
+def test_aggregate_never_publishes_when_one_mode_fails_validation(
+    prepared_run: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_on_d3_with(path: Path, **kwargs) -> None:
+        if "d3_with" in str(path):
+            raise ResultAcceptanceError("mode artifact failed validation")
+
+    publish = Mock()
+    monkeypatch.setattr(unified, "verify_formal_mode_artifact", fail_on_d3_with)
+    monkeypatch.setattr(unified, "publish_global_aggregate", publish)
+
+    with pytest.raises(ResultAcceptanceError, match="failed validation"):
+        unified.aggregate_prepared_run(prepared_run)
+
+    publish.assert_not_called()
+
+
+def test_aggregate_rejects_non_full_plan_before_publication(
+    prepared_run: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan_path = prepared_run / "run_plan.json"
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    plan["cells"] = plan["cells"][:-1]
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    publish = Mock()
+    monkeypatch.setattr(unified, "publish_global_aggregate", publish)
+
+    with pytest.raises(RuntimeError, match="plan|identity"):
+        unified.aggregate_prepared_run(prepared_run)
+
+    publish.assert_not_called()
+
+
+def test_parse_args_exposes_internal_lifecycle_operations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_unified_d1_d6.py",
+            "--operation",
+            "mode-worker",
+            "--only",
+            "d4",
+            "--info-sharing",
+            "with",
+            "--output-dir",
+            "/tmp/formal/d4_with",
+            "--resume",
+        ],
+    )
+
+    args = unified._parse_args()
+
+    assert args.operation == "mode-worker"
+    assert args.only == ["d4"]
+    assert args.info_sharing == "with"
+    assert args.output_dir == Path("/tmp/formal/d4_with")
+    assert args.resume is True
+
+
+def test_main_dispatches_prepare_operation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_root = tmp_path / "run"
+    prepare = Mock(
+        return_value={"run_identity": "a" * 64, "cells": [None] * 300}
+    )
+    monkeypatch.setattr(
+        unified,
+        "_parse_args",
+        lambda: argparse.Namespace(
+            operation="prepare",
+            only=None,
+            info_sharing=None,
+            output_dir=run_root,
+            dry_run=False,
+            resume=False,
+            smoke=False,
+        ),
+    )
+    monkeypatch.setattr(unified, "prepare_formal_run", prepare)
+
+    unified.main()
+
+    prepare.assert_called_once_with(run_root, resume=False)
+
+
+def test_main_dispatches_mode_worker_operation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mode_dir = tmp_path / "run" / "d4_with"
+    worker = Mock(return_value=mode_dir / "results" / "dataset4_with_results.csv")
+    monkeypatch.setattr(
+        unified,
+        "_parse_args",
+        lambda: argparse.Namespace(
+            operation="mode-worker",
+            only=["d4"],
+            info_sharing="with",
+            output_dir=mode_dir,
+            dry_run=False,
+            resume=True,
+            smoke=False,
+        ),
+    )
+    monkeypatch.setattr(unified, "execute_mode_worker", worker)
+
+    unified.main()
+
+    worker.assert_called_once_with(mode_dir, "d4", "with", resume=True)
+
+
+def test_main_dispatches_aggregate_operation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_root = tmp_path / "run"
+    aggregate = Mock(return_value=run_root / "results" / "d1_d6_results.csv")
+    monkeypatch.setattr(
+        unified,
+        "_parse_args",
+        lambda: argparse.Namespace(
+            operation="aggregate",
+            only=None,
+            info_sharing=None,
+            output_dir=run_root,
+            dry_run=False,
+            resume=False,
+            smoke=False,
+        ),
+    )
+    monkeypatch.setattr(unified, "aggregate_prepared_run", aggregate)
+
+    unified.main()
+
+    aggregate.assert_called_once_with(run_root)

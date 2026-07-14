@@ -169,6 +169,12 @@ def build_tasks(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--operation",
+        choices=("standalone", "prepare", "mode-worker", "aggregate"),
+        default="standalone",
+        help="Internal formal lifecycle operation; standalone preserves the direct runner.",
+    )
     parser.add_argument("--only", action="append", help="d1..d6, comma-separated or repeated")
     parser.add_argument("--info-sharing", choices=VALID_MODES, default=None)
     parser.add_argument("--output-dir", type=Path, default=None)
@@ -525,6 +531,66 @@ def execute_mode_worker(
     return output
 
 
+def aggregate_prepared_run(run_root: Path) -> Path:
+    root = Path(run_root).resolve()
+    plan, code_identity = load_validated_run_plan(root)
+    raw_cells = plan.get("cells")
+    if not isinstance(raw_cells, list) or len(raw_cells) != 300:
+        raise RuntimeError("global publication requires the full 300-cell formal plan")
+
+    layout = RunLayout(root)
+    mode_paths: list[Path] = []
+    mode_contracts: list[ExpectedResultContract] = []
+    for dataset_id in range(1, 7):
+        dataset = f"d{dataset_id}"
+        for mode in VALID_MODES:
+            tasks = build_tasks(
+                [dataset],
+                smoke=False,
+                run_dir=root,
+                info_sharing=mode,
+            )
+            _require_tasks_match_plan(
+                tasks,
+                plan,
+                dataset_id=dataset_id,
+                mode=mode,
+            )
+            cell_paths = [
+                task.expected_result_path
+                for task in tasks
+                if task.expected_result_path is not None
+            ]
+            if len(cell_paths) != 25:
+                raise RuntimeError(
+                    f"global publication requires 25 cells for d{dataset_id}_{mode}"
+                )
+            expected = build_mode_expected_contract(
+                dataset=dataset,
+                scenario=mode,
+            )
+            output = layout.mode_result(dataset_id, mode)
+            verify_formal_mode_artifact(
+                output,
+                acceptance_path=layout.mode_acceptance_report(dataset_id, mode),
+                cell_paths=cell_paths,
+                expected=expected,
+                code_identity=code_identity,
+            )
+            mode_paths.append(output)
+            mode_contracts.append(expected)
+
+    load_validated_run_plan(root)
+    publish_global_aggregate(
+        mode_paths,
+        stable_path=layout.aggregate_result,
+        expected=_global_contract(mode_contracts),
+        code_identity=code_identity,
+    )
+    print(f"[ACCEPTED] aggregate={layout.aggregate_result}")
+    return layout.aggregate_result
+
+
 def _resolve_run_root(args: argparse.Namespace) -> Path:
     output_dir = getattr(args, "output_dir", None)
     if getattr(args, "dry_run", False):
@@ -543,6 +609,59 @@ def _resolve_run_root(args: argparse.Namespace) -> Path:
 
 def main() -> None:
     args = _parse_args()
+    operation = getattr(args, "operation", "standalone")
+    if operation != "standalone":
+        if getattr(args, "smoke", False) or getattr(args, "dry_run", False):
+            raise SystemExit(
+                f"--operation {operation} does not allow --smoke or --dry-run"
+            )
+        output_dir = getattr(args, "output_dir", None)
+        if output_dir is None:
+            raise SystemExit(f"--operation {operation} requires --output-dir")
+        output_path = Path(output_dir)
+
+        if operation == "prepare":
+            if getattr(args, "only", None) or getattr(args, "info_sharing", None):
+                raise SystemExit("prepare does not allow --only or --info-sharing")
+            plan = prepare_formal_run(
+                output_path,
+                resume=bool(getattr(args, "resume", False)),
+            )
+            print(
+                f"[PREPARED] run_root={output_path} "
+                f"run_identity={plan['run_identity']} cells={len(plan['cells'])}"
+            )
+            return
+
+        if operation == "mode-worker":
+            selected = expand_only_tokens(getattr(args, "only", None))
+            mode = getattr(args, "info_sharing", None)
+            if len(selected) != 1 or mode not in VALID_MODES:
+                raise SystemExit(
+                    "mode-worker requires exactly one --only dN and one --info-sharing mode"
+                )
+            execute_mode_worker(
+                output_path,
+                selected[0],
+                mode,
+                resume=bool(getattr(args, "resume", False)),
+            )
+            return
+
+        if operation == "aggregate":
+            if (
+                getattr(args, "only", None)
+                or getattr(args, "info_sharing", None)
+                or getattr(args, "resume", False)
+            ):
+                raise SystemExit(
+                    "aggregate does not allow --only, --info-sharing, or --resume"
+                )
+            aggregate_prepared_run(output_path)
+            return
+
+        raise SystemExit(f"unknown formal lifecycle operation: {operation}")
+
     if args.smoke:
         raise SystemExit(
             "unified --smoke is disabled; run an individual dataset diagnostic runner instead"
