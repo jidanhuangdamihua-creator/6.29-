@@ -9,11 +9,14 @@ import pandas as pd
 from .candidate_pool import PreparedDailySequencePool
 from .experiment_protocol import (
     EXTENDED_TRACK,
+    STRICT_PAPER_TRACK,
     ProtocolViolation,
     SourceIdentity,
     get_experiment_protocol,
+    normalize_canonical_target_key,
     normalize_scenario,
     normalize_source_key,
+    validate_canonical_target_key,
 )
 
 
@@ -186,6 +189,7 @@ def configure_protocol_frames(
     observed_start: object,
     grouping_col: str | None = None,
     prepared_pool: PreparedDailySequencePool | None = None,
+    enforce_formal_target: bool | None = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Attach strict metadata and clip source history before any fitted transform."""
 
@@ -199,7 +203,27 @@ def configure_protocol_frames(
         )
     if "date" not in source_df.columns or "date" not in target_df.columns:
         raise ProtocolViolation("protocol frames require date columns")
-    target_key = _unique_key(target_df, normalized_group_cols, role="target")
+    require_static_target = (
+        protocol.track == STRICT_PAPER_TRACK
+        if enforce_formal_target is None
+        else bool(enforce_formal_target)
+    )
+    if require_static_target and normalized_group_cols != protocol.source_pool_rule.key_fields:
+        raise ProtocolViolation(
+            f"{protocol.dataset_id} formal runtime requires canonical group columns "
+            f"{protocol.source_pool_rule.key_fields!r}, got {normalized_group_cols!r}"
+        )
+    runtime_target_key = _unique_key(target_df, normalized_group_cols, role="target")
+    if require_static_target:
+        target_key = validate_canonical_target_key(
+            protocol.dataset_id,
+            runtime_target_key,
+        )
+    else:
+        target_key = normalize_canonical_target_key(
+            runtime_target_key,
+            expected_arity=expected_arity,
+        )
     available = (
         prepared_pool.source_keys
         if prepared_pool is not None

@@ -79,6 +79,23 @@ def normalize_source_key(key: Sequence[object]) -> SourceKey:
     return normalized
 
 
+def normalize_canonical_target_key(
+    key: Sequence[object],
+    *,
+    expected_arity: Optional[int] = None,
+) -> SourceKey:
+    """Normalize a data-primary-key tuple without interpreting display aliases."""
+
+    normalized = normalize_source_key(key)
+    if expected_arity is not None and len(normalized) != int(expected_arity):
+        raise ProtocolViolation(
+            f"canonical target key arity must be {int(expected_arity)}, got {len(normalized)}"
+        )
+    if any("/" in component for component in normalized):
+        raise ProtocolViolation("canonical target key components may not contain '/'")
+    return normalized
+
+
 def normalize_scenario(scenario: object) -> str:
     text = "_".join(
         str(scenario).strip().lower().replace("-", "_").replace(" ", "_").split("_")
@@ -149,6 +166,8 @@ class ExperimentProtocol:
     dataset_id: str
     track: str
     source_pool_rule: SourcePoolRule
+    formal_target_keys: Tuple[SourceKey, ...] = ()
+    target_display_label: Optional[str] = None
     protocol_version: str = PROTOCOL_VERSION
     horizons: Tuple[int, ...] = FORMAL_HORIZONS
     seeds: Tuple[int, ...] = FORMAL_SEEDS
@@ -158,6 +177,32 @@ class ExperimentProtocol:
     weight_mode: str = "inverse_distance"
     weight_epsilon: float = 1e-8
 
+    def __post_init__(self) -> None:
+        configured = self.formal_target_keys
+        if not configured and self.source_pool_rule.target_key is not None:
+            configured = (self.source_pool_rule.target_key,)
+        expected_arity = len(self.source_pool_rule.key_fields)
+        normalized = tuple(
+            normalize_canonical_target_key(key, expected_arity=expected_arity)
+            for key in configured
+        )
+        if not normalized:
+            raise ProtocolViolation(f"{self.dataset_id} requires formal target keys")
+        if len(set(normalized)) != len(normalized):
+            raise ProtocolViolation(f"{self.dataset_id} contains duplicate formal target keys")
+        if (
+            self.source_pool_rule.target_key is not None
+            and normalize_canonical_target_key(
+                self.source_pool_rule.target_key,
+                expected_arity=expected_arity,
+            )
+            not in normalized
+        ):
+            raise ProtocolViolation(
+                f"{self.dataset_id} fixed target is absent from formal target keys"
+            )
+        object.__setattr__(self, "formal_target_keys", normalized)
+
     def observation_window(self, observed_start: object) -> ObservationWindow:
         return ObservationWindow.from_start(observed_start)
 
@@ -166,39 +211,63 @@ _PROTOCOLS = {
     "D1": ExperimentProtocol(
         "D1",
         STRICT_PAPER_TRACK,
-        SourcePoolRule(("store", "item"), ("Store1", "Item10")),
+        SourcePoolRule(("store_id", "item_id"), ("1", "10")),
+        target_display_label="Store1/Item10",
     ),
     "D2": ExperimentProtocol(
         "D2",
         STRICT_PAPER_TRACK,
-        SourcePoolRule(("brand", "item"), ("Brand1", "Item10")),
+        SourcePoolRule(("brand_id", "item_id"), ("1", "10")),
+        target_display_label="Brand1/Item10",
     ),
     "D3": ExperimentProtocol(
         "D3",
         STRICT_PAPER_TRACK,
-        SourcePoolRule(("store",), ("Store10",)),
+        SourcePoolRule(("store_id",), ("10",)),
+        target_display_label="Store10",
     ),
     "D4": ExperimentProtocol(
         "D4",
         EXTENDED_TRACK,
         SourcePoolRule(
-            ("store", "item"),
+            ("store_id", "product_id"),
             None,
             "category",
             require_same_group=False,
-            excluded_candidate_key_fields=("item",),
+            excluded_candidate_key_fields=("product_id",),
             domain_filter_scope="target_only",
+        ),
+        formal_target_keys=(
+            ("166", "258"),
+            ("166", "432"),
+            ("166", "433"),
+            ("166", "313"),
+            ("166", "311"),
         ),
     ),
     "D5": ExperimentProtocol(
         "D5",
         EXTENDED_TRACK,
-        SourcePoolRule(("store", "item"), None, "family"),
+        SourcePoolRule(("store_nbr", "item_nbr"), None, "family"),
+        formal_target_keys=(
+            ("48", "364606"),
+            ("48", "1159415"),
+            ("48", "1159414"),
+            ("48", "1349808"),
+            ("48", "320682"),
+        ),
     ),
     "D6": ExperimentProtocol(
         "D6",
         EXTENDED_TRACK,
-        SourcePoolRule(("store", "item"), None, "department"),
+        SourcePoolRule(("store_id", "item_id"), None, "department"),
+        formal_target_keys=(
+            ("CA_1", "FOODS_3_586"),
+            ("CA_1", "FOODS_3_080"),
+            ("CA_1", "FOODS_3_555"),
+            ("CA_1", "FOODS_3_377"),
+            ("CA_1", "FOODS_3_668"),
+        ),
     ),
 }
 
@@ -214,23 +283,62 @@ def get_experiment_protocol(dataset_id: object) -> ExperimentProtocol:
     return _PROTOCOLS[_normalize_dataset_id(dataset_id)]
 
 
+def validate_canonical_target_key(
+    dataset_id: object,
+    key: Sequence[object],
+) -> SourceKey:
+    """Validate a runtime key against the static formal protocol authority."""
+
+    protocol = get_experiment_protocol(dataset_id)
+    normalized = normalize_canonical_target_key(
+        key,
+        expected_arity=len(protocol.source_pool_rule.key_fields),
+    )
+    if normalized not in protocol.formal_target_keys:
+        raise ProtocolViolation(
+            f"{protocol.dataset_id} runtime canonical target key {normalized!r} "
+            f"does not match static protocol canonical target keys "
+            f"{protocol.formal_target_keys!r}"
+        )
+    return normalized
+
+
+def serialize_canonical_target_key(
+    dataset_id: object,
+    key: Sequence[object],
+) -> str:
+    """Serialize a validated formal canonical target key with '/' separators."""
+
+    return "/".join(validate_canonical_target_key(dataset_id, key))
+
+
+def formal_target_entity_keys(dataset_id: object) -> Tuple[str, ...]:
+    """Return the static acceptance identities for one formal dataset."""
+
+    protocol = get_experiment_protocol(dataset_id)
+    return tuple(
+        serialize_canonical_target_key(protocol.dataset_id, key)
+        for key in protocol.formal_target_keys
+    )
+
+
 def _strict_expected_keys(dataset_id: str, scenario: str) -> Tuple[SourceKey, ...]:
     if dataset_id == "D1":
         stores = range(1, 4) if scenario == "with" else range(1, 2)
         return tuple(
-            (f"Store{store}", f"Item{item}")
+            (str(store), str(item))
             for store in stores
             for item in range(1, 10)
         )
     if dataset_id == "D2":
         brands = range(1, 4) if scenario == "with" else range(1, 2)
         return tuple(
-            (f"Brand{brand}", f"Item{item}")
+            (str(brand), str(item))
             for brand in brands
             for item in range(1, 10)
         )
     stores = range(1, 31) if scenario == "with" else range(1, 10)
-    return tuple((f"Store{store}",) for store in stores if store != 10)
+    return tuple((str(store),) for store in stores if store != 10)
 
 
 AvailableIdentity = Union[SourceIdentity, Sequence[object]]

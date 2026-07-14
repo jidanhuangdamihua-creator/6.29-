@@ -221,12 +221,15 @@ def main() -> None:
     if config["smoke"]:
         df.to_csv(out_path, index=False, encoding="utf-8")
     else:
+        canonical_targets = tuple(
+            dict.fromkeys(df["target_entity_key"].astype(str))
+        )
         publish_formal_cell_output_frame(
             df,
             stable_path=out_path,
             dataset_id=config["dataset_id"],
             mode=config["info_sharing"],
-            targets=target_entity_keys,
+            targets=canonical_targets,
             horizon=config["horizon"],
             seed=config["random_state"],
             project_root=PROJECT_ROOT,

@@ -15,6 +15,7 @@ from src.experiment.experiment_runner import run_msml_rfe_experiment
 def _daily_rows(store, item, sales, *, group_col=None, group_value=None, periods=30):
     payload = {
         "entity_id": store,
+        "store_id": store,
         "item_id": item,
         "date": pd.date_range("2020-01-01", periods=periods, freq="D"),
         "sales": np.full(periods, sales, dtype=float),
@@ -70,7 +71,7 @@ class RunnerProtocolIntegrationTest(unittest.TestCase):
             target,
             dataset_id="D1",
             scenario="with",
-            group_cols=("entity_id", "item_id"),
+            group_cols=("store_id", "item_id"),
             observed_start="2020-01-01",
         )
         self.assertEqual(len(source.attrs["protocol_candidate_keys"]), 27)
@@ -83,19 +84,19 @@ class RunnerProtocolIntegrationTest(unittest.TestCase):
                 target,
                 dataset_id="D1",
                 scenario="with",
-                group_cols=("entity_id", "item_id"),
+                group_cols=("store_id", "item_id"),
                 observed_start="2020-01-01",
             )
 
     def test_d5_without_and_with_follow_same_family_store_semantics(self) -> None:
         target = _daily_rows(
-            "S1", "I1", 0.0, group_col="family", group_value="F1", periods=35
+            "48", "364606", 0.0, group_col="family", group_value="F1", periods=35
         )
         source = pd.concat(
             [
-                _daily_rows("S1", "I2", 1.0, group_col="family", group_value="F1"),
-                _daily_rows("S2", "I2", 2.0, group_col="family", group_value="F1"),
-                _daily_rows("S2", "I3", 3.0, group_col="family", group_value="F2"),
+                _daily_rows("48", "1159415", 1.0, group_col="family", group_value="F1"),
+                _daily_rows("49", "1159415", 2.0, group_col="family", group_value="F1"),
+                _daily_rows("49", "1159414", 3.0, group_col="family", group_value="F2"),
             ],
             ignore_index=True,
         )
@@ -117,10 +118,10 @@ class RunnerProtocolIntegrationTest(unittest.TestCase):
             grouping_col="family",
             observed_start="2020-01-01",
         )
-        self.assertEqual(without.attrs["protocol_candidate_keys"], (("S1", "I2"),))
+        self.assertEqual(without.attrs["protocol_candidate_keys"], (("48", "1159415"),))
         self.assertEqual(
             with_sharing.attrs["protocol_candidate_keys"],
-            (("S1", "I2"), ("S2", "I2")),
+            (("48", "1159415"), ("49", "1159415")),
         )
 
 

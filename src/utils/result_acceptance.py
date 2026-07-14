@@ -14,6 +14,8 @@ from src.constants import RESULT_SCHEMA_COLUMNS
 from src.protocols.experiment_protocol import (
     FORMAL_METHODS,
     FORMAL_PROTOCOL_TRACK,
+    ProtocolViolation,
+    formal_target_entity_keys,
     normalize_scenario,
 )
 from src.utils.result_schema import REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY
@@ -96,6 +98,13 @@ def build_formal_cell_contract(
     seed: int,
 ) -> ExpectedResultContract:
     normalized_mode = normalize_scenario(mode)
+    canonical_targets = formal_target_entity_keys(dataset_id)
+    requested_targets = tuple(str(target) for target in targets)
+    if requested_targets != canonical_targets:
+        raise ProtocolViolation(
+            f"D{int(dataset_id)} formal targets must be {canonical_targets!r}, "
+            f"got {requested_targets!r}"
+        )
     return ExpectedResultContract(
         scope=AcceptanceScope.CELL,
         formal=True,
@@ -103,7 +112,7 @@ def build_formal_cell_contract(
         modes=(normalized_mode,),
         protocol_tracks=(FORMAL_PROTOCOL_TRACK,),
         targets_by_dataset_mode={
-            (int(dataset_id), normalized_mode): tuple(str(target) for target in targets)
+            (int(dataset_id), normalized_mode): canonical_targets
         },
         methods=FORMAL_METHODS,
         horizons=(int(horizon),),

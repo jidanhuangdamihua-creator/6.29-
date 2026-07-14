@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-import json
 from pathlib import Path
 import subprocess
 import sys
@@ -22,7 +21,7 @@ from src.protocols.experiment_protocol import (
     FORMAL_METHODS,
     FORMAL_PROTOCOL_TRACK,
     FORMAL_SEEDS,
-    get_experiment_protocol,
+    formal_target_entity_keys,
 )
 from src.utils.result_acceptance import (
     AcceptanceScope,
@@ -45,24 +44,8 @@ class MatrixTask:
 
 
 def _authoritative_targets(dataset_id: int, scenario: str) -> tuple[str, ...]:
-    if int(dataset_id) <= 3:
-        target_key = get_experiment_protocol(f"D{dataset_id}").source_pool_rule.target_key
-        if target_key is None:
-            raise ValueError(f"D{dataset_id} has no fixed formal target")
-        return ("/".join(target_key),)
-    path = (
-        ROOT
-        / "configs"
-        / "solidified"
-        / "knn"
-        / f"Dataset{dataset_id}"
-        / f"knn_{scenario}_info_sharing.json"
-    )
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    results = payload.get("results")
-    if not isinstance(results, dict) or not results:
-        raise ValueError(f"D{dataset_id} {scenario} has no authoritative target results")
-    return tuple(str(target) for target in results)
+    del scenario
+    return formal_target_entity_keys(f"D{int(dataset_id)}")
 
 
 def build_mode_expected_contract(

@@ -51,7 +51,10 @@ from src.utils.result_schema import (
 from src.protocols.runner_adapter import configure_protocol_frames
 from src.protocols.rolling_origin import build_sample_manifest
 from src.protocols.reproducibility import set_protocol_seed
-from src.protocols.experiment_protocol import get_experiment_protocol
+from src.protocols.experiment_protocol import (
+    formal_target_entity_keys,
+    serialize_canonical_target_key,
+)
 from src.utils.run_artifacts import publish_formal_cell_output_frame
 from src.evaluation.metric_contract import (
     MetricProtocolError,
@@ -1145,6 +1148,7 @@ def run_experiment(
         scenario=information_sharing_scenario,
         group_cols=protocol_group_cols,
         observed_start=STRICT_KNN_OBSERVED_START[dataset_name],
+        enforce_formal_target=True,
     )
     target_df.attrs["model_window_size"] = int(exp_cfg["window_size"])
     target_df.attrs["model_horizon"] = int(exp_cfg["horizon"])
@@ -1368,7 +1372,10 @@ def run_experiment(
         "sample_count": len(protocol_manifest.for_horizon(int(exp_cfg["horizon"]))),
         "dataset": dataset_name,
         "dataset_id": int(dataset_name[-1]),
-        "target_entity_key": "/".join(target_df.attrs["protocol_target_key"]),
+        "target_entity_key": serialize_canonical_target_key(
+            target_df.attrs["protocol_dataset_id"],
+            target_df.attrs["protocol_target_key"],
+        ),
         "method": str(raw["method"]),
         "information_sharing": information_sharing_contract,
         "scenario": information_sharing_contract,
@@ -1812,11 +1819,7 @@ def _build_error_row(
         "sample_manifest_digest": NOT_APPLICABLE,
         "dataset": dataset_name,
         "dataset_id": int(dataset_name[-1]),
-        "target_entity_key": {
-            "Dataset1": "1/10",
-            "Dataset2": "1/10",
-            "Dataset3": "10",
-        }[dataset_name],
+        "target_entity_key": formal_target_entity_keys(dataset_name)[0],
         "method": method_name,
         "information_sharing": normalize_information_sharing_contract(
             information_sharing_scenario
@@ -2145,13 +2148,10 @@ def main() -> None:
         formal_cell_contexts = {}
         for dataset_name in selected_datasets:
             dataset_id = int(dataset_name[-1])
-            target_key = get_experiment_protocol(f"D{dataset_id}").source_pool_rule.target_key
-            if target_key is None:
-                raise ValueError(f"{dataset_name} has no formal target key")
             formal_cell_contexts[dataset_name] = {
                 "dataset_id": dataset_id,
                 "mode": args.info_sharing,
-                "targets": ("/".join(target_key),),
+                "targets": formal_target_entity_keys(dataset_name),
                 "horizon": int(args.horizon),
                 "seed": int(args.seed),
             }

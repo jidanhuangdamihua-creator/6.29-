@@ -8,6 +8,8 @@ import math
 from collections import Counter
 from typing import Any, Mapping, Sequence
 
+from src.protocols.experiment_protocol import serialize_canonical_target_key
+
 
 METRIC_CONTRACT_VERSION = "smape_original_v1"
 SMAPE_DEFINITION_ID = "smape_2abs_eps1e-8_pct_v1"
@@ -88,9 +90,16 @@ def build_metric_identity_from_manifest(
         )
     label_dates = [str(record.label_date) for record in records]
     sample_keys = [str(record.sample_key) for record in records]
+    dataset_ids = {str(record.dataset_id) for record in records}
+    if len(dataset_ids) != 1:
+        raise MetricProtocolError(
+            "metric_identity_mismatch",
+            detail=f"manifest has multiple dataset ids: {sorted(dataset_ids)}",
+        )
     return {
-        "metric_target_key": "/".join(
-            str(value) for value in next(iter(target_keys))
+        "metric_target_key": serialize_canonical_target_key(
+            next(iter(dataset_ids)),
+            next(iter(target_keys)),
         ),
         "metric_horizon": int(horizon),
         "metric_sample_count": len(records),

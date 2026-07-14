@@ -253,7 +253,7 @@ def test_entity_loop_passes_same_solidified_model_features_to_all_tl_methods(mon
     tl_rows = [row for row in rows if row["method"] != "No-TL"]
     assert tl_rows
     for row in tl_rows:
-        assert row["target_entity_key"] == "48_1159415"
+        assert row["target_entity_key"] == "48/1159415"
         assert row["target_store_id"] == "48"
         assert row["target_item_id"] == "1159415"
         assert row["source_identifier"]
@@ -322,7 +322,11 @@ def test_source_sanitize_path_is_shared_by_d4_d5_d6(monkeypatch, dataset_id):
     )
 
     assert rows[0]["dataset_id"] == dataset_id
-    assert rows[0]["target_entity_key"] == entity_key
+    assert rows[0]["target_entity_key"] == {
+        4: "166/258",
+        5: "48/1159415",
+        6: "CA_1/FOODS_3_586",
+    }[dataset_id]
 
 
 def test_source_level_failure_is_recorded_but_target_schema_errors_still_raise(monkeypatch):

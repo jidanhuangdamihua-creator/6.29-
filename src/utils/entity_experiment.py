@@ -37,7 +37,10 @@ from src.transfer_methods.source_failure_tolerance import (
 from src.utils.finite_diagnostics import NonFiniteArrayError, validate_feature_frame_finite
 from src.utils.result_validation import annotate_silent_metric_failure
 from src.protocols.runner_adapter import configure_protocol_frames
-from src.protocols.experiment_protocol import resolve_result_protocol_tracks
+from src.protocols.experiment_protocol import (
+    resolve_result_protocol_tracks,
+    serialize_canonical_target_key,
+)
 from src.protocols.rolling_origin import build_sample_manifest
 from src.utils.source_fillna import fill_source_numeric_na
 
@@ -698,6 +701,11 @@ def run_single_entity_experiment(
         group_cols=source_selection_group_cols,
         grouping_col=grouping_cols[dataset_id],
         observed_start=observed_start,
+        enforce_formal_target=True,
+    )
+    canonical_entity_key = serialize_canonical_target_key(
+        dataset_id,
+        target_entity_df.attrs["protocol_target_key"],
     )
     target_entity_df.attrs["model_window_size"] = int(config["window_size"])
     target_entity_df.attrs["model_horizon"] = int(config["horizon"])
@@ -809,7 +817,7 @@ def run_single_entity_experiment(
                     _row_from_metric_protocol_error(
                         exc,
                         method,
-                        entity_key,
+                        canonical_entity_key,
                         config,
                         time.perf_counter() - t0,
                     )
@@ -844,14 +852,14 @@ def run_single_entity_experiment(
                     requested_k=_source_count_for_method(method, config),
                     elapsed=time.perf_counter() - t0,
                 )
-                rows.append(_row_from_result(raw, method, entity_key, config, time.perf_counter() - t0))
+                rows.append(_row_from_result(raw, method, canonical_entity_key, config, time.perf_counter() - t0))
                 continue
             except NonFiniteArrayError as exc:
                 rows.append(
                     _row_from_nonfinite_error(
                         exc,
                         method,
-                        entity_key,
+                        canonical_entity_key,
                         config,
                         time.perf_counter() - t0,
                     )
@@ -862,11 +870,11 @@ def run_single_entity_experiment(
                     _row_from_metric_protocol_error(
                         exc,
                         method,
-                        entity_key,
+                        canonical_entity_key,
                         config,
                         time.perf_counter() - t0,
                     )
                 )
                 continue
-        rows.append(_row_from_result(raw, method, entity_key, config, time.perf_counter() - t0))
+        rows.append(_row_from_result(raw, method, canonical_entity_key, config, time.perf_counter() - t0))
     return rows

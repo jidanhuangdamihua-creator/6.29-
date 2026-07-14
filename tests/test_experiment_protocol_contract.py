@@ -38,7 +38,7 @@ class ExperimentProtocolContractTest(unittest.TestCase):
 
     def test_d1_without_and_with_candidate_keys_are_exact(self) -> None:
         available = {
-            (f"Store{store}", f"Item{item}")
+            (str(store), str(item))
             for store in range(1, 4)
             for item in range(1, 11)
         }
@@ -47,44 +47,44 @@ class ExperimentProtocolContractTest(unittest.TestCase):
         without = build_candidate_keys(
             protocol,
             "without_info_sharing",
-            ("Store1", "Item10"),
+            ("1", "10"),
             available,
         )
         with_sharing = build_candidate_keys(
             protocol,
             "with_info_sharing",
-            ("Store1", "Item10"),
+            ("1", "10"),
             available,
         )
 
         self.assertEqual(
             without,
-            tuple(("Store1", f"Item{item}") for item in range(1, 10)),
+            tuple(("1", str(item)) for item in range(1, 10)),
         )
         self.assertEqual(len(with_sharing), 27)
-        self.assertNotIn(("Store1", "Item10"), with_sharing)
-        self.assertEqual(with_sharing[0], ("Store1", "Item1"))
-        self.assertEqual(with_sharing[-1], ("Store3", "Item9"))
+        self.assertNotIn(("1", "10"), with_sharing)
+        self.assertEqual(with_sharing[0], ("1", "1"))
+        self.assertEqual(with_sharing[-1], ("3", "9"))
 
     def test_d2_and_d3_candidate_keys_are_exact(self) -> None:
         d2_available = {
-            (f"Brand{brand}", f"Item{item}")
+            (str(brand), str(item))
             for brand in range(1, 4)
             for item in range(1, 11)
         }
         d2 = get_experiment_protocol("D2")
         self.assertEqual(
-            len(build_candidate_keys(d2, "with", ("Brand1", "Item10"), d2_available)),
+            len(build_candidate_keys(d2, "with", ("1", "10"), d2_available)),
             27,
         )
 
-        d3_available = {(f"Store{store}",) for store in range(1, 31)}
+        d3_available = {(str(store),) for store in range(1, 31)}
         d3 = get_experiment_protocol("D3")
-        without = build_candidate_keys(d3, "without", ("Store10",), d3_available)
-        with_sharing = build_candidate_keys(d3, "with", ("Store10",), d3_available)
-        self.assertEqual(without, tuple((f"Store{store}",) for store in range(1, 10)))
+        without = build_candidate_keys(d3, "without", ("10",), d3_available)
+        with_sharing = build_candidate_keys(d3, "with", ("10",), d3_available)
+        self.assertEqual(without, tuple((str(store),) for store in range(1, 10)))
         self.assertEqual(len(with_sharing), 29)
-        self.assertNotIn(("Store10",), with_sharing)
+        self.assertNotIn(("10",), with_sharing)
 
     def test_extended_pool_stays_in_group_and_excludes_target(self) -> None:
         protocol = get_experiment_protocol("D5")
@@ -103,13 +103,13 @@ class ExperimentProtocolContractTest(unittest.TestCase):
 
     def test_strict_pool_fails_when_required_keys_are_missing(self) -> None:
         protocol = get_experiment_protocol("D1")
-        incomplete = {("Store1", f"Item{item}") for item in range(1, 10)}
+        incomplete = {("1", str(item)) for item in range(1, 10)}
 
         with self.assertRaisesRegex(ProtocolViolation, "missing required candidate keys"):
             build_candidate_keys(
                 protocol,
                 "with",
-                ("Store1", "Item10"),
+                ("1", "10"),
                 incomplete,
             )
 

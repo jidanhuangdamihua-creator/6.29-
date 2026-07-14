@@ -25,7 +25,7 @@ def _cell_rows(
     *,
     dataset_id: int = 1,
     mode: str = "without",
-    target: str = "Store1/Item10",
+    target: str = "1/10",
     horizon: int = 1,
     seed: int = 42,
 ) -> pd.DataFrame:
@@ -64,7 +64,7 @@ def _contract(
         modes=modes,
         protocol_tracks=("strict_paper",),
         targets_by_dataset_mode=targets
-        or {(dataset_id, mode): ("Store1/Item10",) for dataset_id in dataset_ids for mode in modes},
+        or {(dataset_id, mode): ("1/10",) for dataset_id in dataset_ids for mode in modes},
         methods=FORMAL_METHODS,
         horizons=horizons,
         seeds=seeds,
@@ -92,7 +92,7 @@ def test_cell_acceptance_requires_exact_formal_coverage(tmp_path: Path) -> None:
     built = build_formal_cell_contract(
         dataset_id=1,
         mode="without_information_sharing",
-        targets=("Store1/Item10",),
+        targets=("1/10",),
         horizon=1,
         seed=42,
     )

@@ -7,6 +7,7 @@ import pytest
 
 from src.protocols.experiment_protocol import (
     FORMAL_PROTOCOL_TRACK,
+    formal_target_entity_keys,
     get_experiment_protocol,
     resolve_result_protocol_tracks,
 )
@@ -43,7 +44,7 @@ def test_zero_returncode_cannot_mask_invalid_written_cell(tmp_path: Path) -> Non
                 "protocol_track": "strict_paper",
                 "scenario": "with",
                 "information_sharing": "with",
-                "target_entity_key": "48_1159415",
+                "target_entity_key": "48/364606",
                 "method": "No-TL",
                 "horizon": 1,
                 "seed": 42,
@@ -61,7 +62,7 @@ def test_zero_returncode_cannot_mask_invalid_written_cell(tmp_path: Path) -> Non
             path,
             dataset_id=5,
             mode="with",
-            targets=("48_1159415",),
+            targets=formal_target_entity_keys(5),
             horizon=1,
             seed=42,
         )

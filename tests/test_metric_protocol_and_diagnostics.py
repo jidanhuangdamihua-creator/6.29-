@@ -257,7 +257,7 @@ def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_invers
     source_df = pd.DataFrame(
         {
             "date": dates,
-            "entity_id": ["target"] * len(dates),
+            "entity_id": ["48"] * len(dates),
             "item_id": [1] * len(dates),
             "family": ["F1"] * len(dates),
             "sales": np.arange(1.0, len(dates) + 1.0),
@@ -266,12 +266,16 @@ def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_invers
     target_df = pd.DataFrame(
         {
             "date": dates,
-            "entity_id": ["target"] * len(dates),
-            "item_id": [2] * len(dates),
+            "entity_id": ["48"] * len(dates),
+            "item_id": [364606] * len(dates),
             "family": ["F1"] * len(dates),
             "sales": np.arange(2.0, len(dates) + 2.0),
         }
     )
+    source_df["store_nbr"] = source_df["entity_id"]
+    source_df["item_nbr"] = source_df["item_id"]
+    target_df["store_nbr"] = target_df["entity_id"]
+    target_df["item_nbr"] = target_df["item_id"]
     metric_protocol = {
         "current_metric_space": "normalized_minmax_space",
         "paper_metric_space": "original_sales_space",
@@ -294,7 +298,7 @@ def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_invers
     monkeypatch.setattr(entity_experiment, "_method_runner", fake_runner)
 
     rows = entity_experiment.run_single_entity_experiment(
-        entity_key="target",
+        entity_key="48_364606",
         source_df=source_df,
         target_entity_df=target_df,
         feature_cols=["sales"],
@@ -302,6 +306,7 @@ def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_invers
             "dataset_id": 5,
             "dataset_name": "Dataset5",
             "info_sharing": "without",
+            "group_cols": ("store_nbr", "item_nbr"),
             "source_count": 1,
             "horizon": 1,
             "window_size": 1,

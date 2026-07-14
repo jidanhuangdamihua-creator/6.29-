@@ -197,10 +197,11 @@ def test_formal_smape_rejects_missing_metric_identity_field(field):
 
 def test_shared_metric_identity_is_derived_from_orchestration_manifest():
     class Record:
-        def __init__(self, sample_key, label_date, target_key=("target", "item")):
+        def __init__(self, sample_key, label_date, target_key=("1", "10")):
             self.sample_key = sample_key
             self.label_date = label_date
             self.target_key = target_key
+            self.dataset_id = "D1"
 
     class Manifest:
         def for_horizon(self, horizon):
@@ -215,7 +216,7 @@ def test_shared_metric_identity_is_derived_from_orchestration_manifest():
     identity = builder(Manifest(), horizon=1)
 
     assert set(identity) == set(METRIC_IDENTITY_FIELDS)
-    assert identity["metric_target_key"] == "target/item"
+    assert identity["metric_target_key"] == "1/10"
     assert identity["metric_horizon"] == 1
     assert identity["metric_sample_count"] == 2
     assert identity["metric_date_start"] == "2024-01-02"
@@ -230,6 +231,7 @@ def test_shared_metric_identity_rejects_invalid_manifest(mode):
             self.sample_key = str(target_key)
             self.label_date = "2024-01-02"
             self.target_key = target_key
+            self.dataset_id = "D1"
 
     class Manifest:
         def for_horizon(self, horizon):

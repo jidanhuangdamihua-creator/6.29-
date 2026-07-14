@@ -316,7 +316,8 @@ def test_expected_metric_identity_is_derived_from_orchestration_manifest():
         def __init__(self, sample_key, label_date):
             self.sample_key = sample_key
             self.label_date = label_date
-            self.target_key = ("target", "item")
+            self.target_key = ("1", "10")
+            self.dataset_id = "D1"
 
     class Manifest:
         def for_horizon(self, horizon):
@@ -328,7 +329,7 @@ def test_expected_metric_identity_is_derived_from_orchestration_manifest():
 
     identity = _metric_identity_from_manifest(Manifest(), horizon=1)
 
-    assert identity["metric_target_key"] == "target/item"
+    assert identity["metric_target_key"] == "1/10"
     assert identity["metric_horizon"] == 1
     assert identity["metric_sample_count"] == 2
     assert identity["metric_date_start"] == "2024-01-02"

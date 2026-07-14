@@ -25,6 +25,7 @@ def _rows(domain, item, *, group_col=None, group_value=None, periods=35):
         sales_value = float(len(str(item)))
     payload = {
         "entity_id": str(domain),
+        "store_id": str(domain),
         "item_id": str(item),
         "date": pd.date_range("2020-01-01", periods=periods, freq="D"),
         "sales": np.full(periods, sales_value, dtype=float),
@@ -159,7 +160,7 @@ class ProtocolPreflightTest(unittest.TestCase):
             target,
             dataset_id="D1",
             scenario="with",
-            group_cols=("entity_id", "item_id"),
+            group_cols=("store_id", "item_id"),
             observed_start="2020-01-01",
             k=3,
         )
@@ -175,7 +176,7 @@ class ProtocolPreflightTest(unittest.TestCase):
             _rows(1, 10),
             dataset_id="D1",
             scenario="with",
-            group_cols=("entity_id", "item_id"),
+            group_cols=("store_id", "item_id"),
             observed_start="2020-01-01",
             k=3,
         )

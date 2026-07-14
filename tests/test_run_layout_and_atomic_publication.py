@@ -35,7 +35,7 @@ def _valid_cell() -> pd.DataFrame:
         row.update(
             {
                 "dataset_id": "D1",
-                "target_entity_key": "Store1/Item10",
+                "target_entity_key": "1/10",
                 "scenario": "without",
                 "information_sharing": "without",
                 "method": method,
@@ -81,7 +81,7 @@ def test_invalid_candidate_never_replaces_stable_cell(tmp_path: Path) -> None:
     expected = build_formal_cell_contract(
         dataset_id=1,
         mode="without",
-        targets=("Store1/Item10",),
+        targets=("1/10",),
         horizon=1,
         seed=42,
     )
@@ -106,7 +106,7 @@ def test_accepted_cell_is_atomic_hashed_and_resume_requires_same_code(tmp_path: 
     expected = build_formal_cell_contract(
         dataset_id=1,
         mode="without",
-        targets=("Store1/Item10",),
+        targets=("1/10",),
         horizon=1,
         seed=42,
     )
@@ -175,7 +175,7 @@ def test_mode_and_selection_aggregate_are_also_acceptance_gated(tmp_path: Path) 
         dataset_ids=(1,),
         modes=("without",),
         protocol_tracks=("strict_paper",),
-        targets_by_dataset_mode={(1, "without"): ("Store1/Item10",)},
+        targets_by_dataset_mode={(1, "without"): ("1/10",)},
         methods=FORMAL_METHODS,
         horizons=(1, 2, 3, 4, 5),
         seeds=(42, 43, 44, 45, 46),

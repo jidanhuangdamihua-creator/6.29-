@@ -190,7 +190,7 @@ def test_entity_loop_writes_error_row_for_all_sources_failed(monkeypatch) -> Non
     source_df = pd.DataFrame(
         {
             "date": list(dates) * 2,
-            "entity_id": ["target"] * (len(dates) * 2),
+            "entity_id": ["48"] * (len(dates) * 2),
             "item_id": ["bad"] * len(dates) + ["also_bad"] * len(dates),
             "family": ["F1"] * (len(dates) * 2),
             "sales": np.concatenate(
@@ -204,12 +204,16 @@ def test_entity_loop_writes_error_row_for_all_sources_failed(monkeypatch) -> Non
     target_df = pd.DataFrame(
         {
             "date": dates,
-            "entity_id": ["target"] * len(dates),
-            "item_id": ["item"] * len(dates),
+            "entity_id": ["48"] * len(dates),
+            "item_id": ["364606"] * len(dates),
             "family": ["F1"] * len(dates),
             "sales": np.arange(10.0, len(dates) + 10.0),
         }
     )
+    source_df["store_nbr"] = source_df["entity_id"]
+    source_df["item_nbr"] = source_df["item_id"]
+    target_df["store_nbr"] = target_df["entity_id"]
+    target_df["item_nbr"] = target_df["item_id"]
     failed_sources = [
         {
             "failed_source_key": ("bad", "item"),
@@ -233,7 +237,7 @@ def test_entity_loop_writes_error_row_for_all_sources_failed(monkeypatch) -> Non
     monkeypatch.setattr(entity_experiment, "run_mswa_experiment", fake_runner)
 
     rows = entity_experiment.run_single_entity_experiment(
-        entity_key="target_item",
+        entity_key="48_364606",
         source_df=source_df,
         target_entity_df=target_df,
         feature_cols=["sales"],
@@ -241,6 +245,7 @@ def test_entity_loop_writes_error_row_for_all_sources_failed(monkeypatch) -> Non
             "dataset_id": 5,
             "dataset_name": "Dataset5",
             "info_sharing": "without",
+            "group_cols": ("store_nbr", "item_nbr"),
             "source_count": 2,
             "horizon": 1,
             "window_size": 1,
@@ -261,7 +266,7 @@ def test_entity_loop_writes_error_row_for_all_sources_failed(monkeypatch) -> Non
     assert row["dataset"] == "Dataset5"
     assert row["dataset_id"] == 5
     assert row["information_sharing"] == "without"
-    assert row["target_entity_key"] == "target_item"
+    assert row["target_entity_key"] == "48/364606"
     assert row["target_entity_id"] == "target"
     assert row["target_store_id"] == "target-store"
     assert row["target_item_id"] == "item"

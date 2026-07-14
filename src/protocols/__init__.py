@@ -10,7 +10,11 @@ from .experiment_protocol import (
     SourceIdentity,
     SourcePoolRule,
     build_candidate_keys,
+    formal_target_entity_keys,
     get_experiment_protocol,
+    normalize_canonical_target_key,
+    serialize_canonical_target_key,
+    validate_canonical_target_key,
 )
 
 __all__ = [
@@ -23,5 +27,9 @@ __all__ = [
     "SourceIdentity",
     "SourcePoolRule",
     "build_candidate_keys",
+    "formal_target_entity_keys",
     "get_experiment_protocol",
+    "normalize_canonical_target_key",
+    "serialize_canonical_target_key",
+    "validate_canonical_target_key",
 ]

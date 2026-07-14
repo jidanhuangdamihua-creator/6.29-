@@ -16,6 +16,7 @@ from .experiment_protocol import (
     ProtocolViolation,
     normalize_scenario,
     normalize_source_key,
+    serialize_canonical_target_key,
 )
 
 
@@ -171,7 +172,10 @@ def build_sample_manifest(
                     normalized_dataset,
                     track,
                     normalized_scenario,
-                    "/".join(normalized_target),
+                    serialize_canonical_target_key(
+                        normalized_dataset,
+                        normalized_target,
+                    ),
                     forecast_origin,
                     f"h{horizon}",
                     label_date,
