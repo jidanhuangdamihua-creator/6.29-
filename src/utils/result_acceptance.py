@@ -21,8 +21,11 @@ from src.protocols.experiment_protocol import (
 )
 from src.utils.result_schema import REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY
 from src.utils.result_validation import classify_protocol_result, validate_seed_bundle_coverage
+from src.utils.result_validation import validate_result_row_against_evaluated_trace
 from src.utils.artifact_rehydration import resolve_bound_artifact
+from src.utils.prediction_artifacts import read_prediction_artifact
 from src.utils.run_recovery import RunRecovery
+from src.protocols.sealing_protocol import FORMAL_SAMPLE_COUNTS
 
 
 FORMAL_KEY_COLUMNS = (
@@ -104,6 +107,167 @@ class AcceptanceReport:
 class AcceptanceOutcome:
     report: AcceptanceReport
     accepted_rows: pd.DataFrame
+
+
+@dataclass(frozen=True)
+class SealedRunAcceptanceReport:
+    passed: bool
+    reasons: tuple[str, ...]
+    counts: Mapping[str, int]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "passed": self.passed,
+            "reasons": list(self.reasons),
+            "counts": dict(self.counts),
+        }
+
+
+def _formal_result_key(row: Mapping[str, object]) -> tuple[object, ...]:
+    return tuple(row.get(name) for name in (
+        "dataset_id", "scenario", "target_entity_key", "method", "seed", "horizon"
+    ))
+
+
+def accept_sealed_run_records(
+    records: Sequence[Mapping[str, object]],
+    *,
+    run_root: Path,
+    run_plan: Mapping[str, object],
+    trace_identities: Mapping[str, Mapping[str, object]] | None = None,
+    source_selection_proofs: Mapping[str, Mapping[str, object]] | None = None,
+    worker_trace_proofs: Mapping[str, Mapping[str, object]] | None = None,
+) -> SealedRunAcceptanceReport:
+    """Validate every authoritative result against its evaluated trace."""
+
+    reasons: list[str] = []
+    cells = run_plan.get("cells")
+    if not isinstance(cells, list) or len(cells) != 60:
+        reasons.append("formal_plan_must_have_60_bundles")
+        cells = []
+    cell_keys = {
+        (int(cell.get("dataset_id", -1)), str(cell.get("mode")), int(cell.get("seed", -1)))
+        for cell in cells if isinstance(cell, Mapping)
+    }
+    if len(cell_keys) != 60:
+        reasons.append("seed_bundle_identity_mismatch")
+    mode_keys = {(dataset_id, mode) for dataset_id, mode, _ in cell_keys}
+    if mode_keys != {(dataset_id, mode) for dataset_id in range(1, 7) for mode in ("without", "with")}:
+        reasons.append("mode_coverage_mismatch")
+    if run_plan.get("scheduler_contract") != {
+        "d5_dependency": ["d5_without", "d5_with"],
+        "d5_threads": 6,
+        "ordinary_threads": 2,
+        "total_thread_budget": 16,
+    }:
+        reasons.append("scheduler_contract_mismatch")
+
+    keys = [_formal_result_key(row) for row in records]
+    if len(keys) != len(set(keys)):
+        reasons.append("duplicate_formal_result_key")
+    traces_checked = 0
+    source_proofs_checked = 0
+    identities = trace_identities or {}
+    proofs = source_selection_proofs or {}
+    worker_proofs = worker_trace_proofs or {}
+    worker_traces_checked = 0
+    for row in records:
+        trace_path_value = str(row.get("accepted_trace_path") or "")
+        trace_path = Path(trace_path_value)
+        if trace_path.is_absolute() or ".." in trace_path.parts or not trace_path_value:
+            reasons.append("unsafe_or_missing_evaluated_trace_path")
+            continue
+        absolute_trace = Path(run_root) / trace_path
+        expected_trace = identities.get(trace_path_value, {
+            "artifact_sha256": row.get("accepted_trace_artifact_sha256"),
+            "canonical_content_sha256": row.get("accepted_trace_canonical_content_sha256"),
+            "semantic_prediction_digest": row.get("semantic_prediction_digest"),
+        })
+        try:
+            trace = read_prediction_artifact(
+                absolute_trace,
+                expected=expected_trace,
+                schema_name="EvaluatedPredictionTraceSchemaV1",
+            )
+        except Exception:
+            reasons.append("evaluated_trace_invalid")
+            continue
+        traces_checked += 1
+        worker_proof = worker_proofs.get(trace_path_value)
+        if (
+            worker_proof is None
+            or worker_proof.get("status") != "accepted"
+            or str(worker_proof.get("semantic_prediction_digest"))
+            != str(row.get("semantic_prediction_digest"))
+        ):
+            reasons.append("worker_trace_proof_missing_or_invalid")
+        else:
+            worker_traces_checked += 1
+        trace_identity = {
+            **expected_trace,
+            "artifact_path": trace_path_value,
+            "source_selection_identity": row.get("source_selection_identity"),
+            "predictor_feature_schema_digest": row.get("predictor_feature_schema_digest"),
+            "feature_mask_digest": row.get("feature_mask_digest"),
+            "protocol_identity": row.get("protocol_identity"),
+            "input_identity": row.get("input_identity"),
+            "code_identity": row.get("code_identity"),
+        }
+        reasons.extend(
+            validate_result_row_against_evaluated_trace(
+                row, trace, trace_identity=trace_identity
+            )
+        )
+        selection_identity = str(row.get("source_selection_identity") or "")
+        proof = proofs.get(selection_identity)
+        if proof is None or str(proof.get("identity")) != selection_identity or proof.get("status") != "accepted":
+            reasons.append("source_selection_proof_missing_or_invalid")
+        else:
+            source_proofs_checked += 1
+
+    actual_groups = {
+        (str(row.get("dataset_id")), str(row.get("scenario"))) for row in records
+    }
+    if actual_groups != {(f"D{i}", mode) for i in range(1, 7) for mode in ("without", "with")}:
+        reasons.append("accepted_mode_coverage_mismatch")
+    expected_keys = {
+        (f"D{dataset_id}", mode, target, method, seed, horizon)
+        for dataset_id in range(1, 7)
+        for mode in ("without", "with")
+        for target in formal_target_entity_keys(dataset_id)
+        for method in FORMAL_METHODS
+        for seed in FORMAL_SEEDS
+        for horizon in FORMAL_HORIZONS
+    }
+    if set(keys) != expected_keys:
+        reasons.append("formal_result_key_coverage_mismatch")
+    if len(records) != len(expected_keys):
+        reasons.append("formal_result_row_count_mismatch")
+    horizon_counts: dict[int, int] = {}
+    for horizon, count in zip(FORMAL_HORIZONS, FORMAL_SAMPLE_COUNTS):
+        matches = 0
+        for row in records:
+            try:
+                if int(row.get("horizon", -1)) == horizon and int(row.get("sample_count", -1)) == count:
+                    matches += 1
+            except (TypeError, ValueError):
+                continue
+        horizon_counts[horizon] = matches
+    if any(value == 0 for value in horizon_counts.values()):
+        reasons.append("horizon_count_contract_missing")
+    normalized = tuple(dict.fromkeys(reasons))
+    return SealedRunAcceptanceReport(
+        passed=not normalized,
+        reasons=normalized,
+        counts={
+            "modes": len(actual_groups),
+            "bundles": len(cell_keys),
+            "result_rows": len(records),
+            "evaluated_traces": traces_checked,
+            "worker_traces": worker_traces_checked,
+            "source_selection_proofs": source_proofs_checked,
+        },
+    )
 
 
 def build_formal_cell_contract(

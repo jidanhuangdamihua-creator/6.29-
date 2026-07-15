@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Iterable, Mapping
 
 import json
 import math
@@ -16,6 +16,8 @@ from src.protocols.candidate_pool import (
 )
 from src.protocols.experiment_protocol import FORMAL_HORIZONS, FORMAL_SEEDS, PROTOCOL_VERSION
 from src.protocols.experiment_protocol import normalize_source_key
+from src.protocols.sealing_protocol import formal_sample_count, get_target_window
+from src.utils.prediction_artifacts import derive_formal_result_row, validate_evaluated_trace
 
 
 CELL_TRANSITIONS = {
@@ -36,6 +38,79 @@ def validate_cell_transition(current: str, candidate: str) -> str:
     if candidate not in CELL_TRANSITIONS[current]:
         raise ValueError(f"illegal cell state transition: {current!r} -> {candidate!r}")
     return candidate
+
+
+def validate_result_row_against_evaluated_trace(
+    result_row: Mapping[str, Any],
+    evaluated_records: Iterable[Mapping[str, Any]],
+    *,
+    trace_identity: Mapping[str, Any],
+    required_identities: Mapping[str, str] | None = None,
+    metric_tolerance: float = 1e-12,
+) -> tuple[str, ...]:
+    """Recompute one formal row from its metric-authority trace and fail closed."""
+
+    reasons: list[str] = []
+    try:
+        rows = validate_evaluated_trace(evaluated_records)
+        rebuilt = derive_formal_result_row(rows, trace_identity=trace_identity)
+    except Exception:
+        return ("evaluated_trace_invalid",)
+
+    key_fields = ("dataset_id", "scenario", "target_entity_key", "method", "seed", "horizon")
+    if any(str(result_row.get(name)) != str(rebuilt[name]) for name in key_fields):
+        reasons.append("result_trace_key_mismatch")
+    horizon = int(rebuilt["horizon"])
+    if len(rows) != formal_sample_count(horizon):
+        reasons.append("horizon_sample_count_mismatch")
+    if len({row["prediction_row_key"] for row in rows}) != len(rows):
+        reasons.append("duplicate_prediction_row_key")
+    if len({row["sample_key"] for row in rows}) != len(rows):
+        reasons.append("duplicate_sample_key")
+    target_window = get_target_window(rebuilt["dataset_id"])
+    expected_origin_start = target_window.validation_end
+    expected_origin_end = (pd.Timestamp(target_window.blind_end) - pd.Timedelta(days=horizon)).date()
+    expected_label_start = (
+        pd.Timestamp(target_window.blind_start) + pd.Timedelta(days=horizon - 1)
+    ).date()
+    if pd.Timestamp(rebuilt["forecast_origin_start"]).date() != expected_origin_start:
+        reasons.append("forecast_origin_start_mismatch")
+    if pd.Timestamp(rebuilt["forecast_origin_end"]).date() != expected_origin_end:
+        reasons.append("forecast_origin_end_mismatch")
+    if pd.Timestamp(rebuilt["label_date_start"]).date() != expected_label_start:
+        reasons.append("label_date_start_mismatch")
+    if pd.Timestamp(rebuilt["label_date_end"]).date() != target_window.blind_end:
+        reasons.append("label_date_end_mismatch")
+    for name in ("sample_count", "clipping_count"):
+        try:
+            if int(result_row.get(name)) != int(rebuilt[name]):
+                reasons.append(f"{name}_mismatch")
+        except (TypeError, ValueError):
+            reasons.append(f"{name}_mismatch")
+    for name in ("rmse", "smape", "accuracy"):
+        try:
+            if not math.isclose(
+                float(result_row.get(name)), float(rebuilt[name]),
+                rel_tol=metric_tolerance, abs_tol=metric_tolerance,
+            ):
+                reasons.append(f"{name}_recompute_mismatch")
+        except (TypeError, ValueError):
+            reasons.append(f"{name}_recompute_mismatch")
+    for name in (
+        "accepted_trace_path", "accepted_trace_sha256",
+        "accepted_trace_canonical_content_sha256", "accepted_trace_artifact_sha256",
+        "semantic_prediction_digest", "source_selection_identity",
+        "predictor_feature_schema_digest", "feature_mask_digest",
+        "protocol_identity", "input_identity", "code_identity",
+    ):
+        if str(result_row.get(name)) != str(rebuilt.get(name)):
+            reasons.append(f"{name}_mismatch")
+    for name, expected in (required_identities or {}).items():
+        if str(result_row.get(name)) != str(expected):
+            reasons.append(f"{name}_identity_mismatch")
+    if result_row.get("status") != "accepted" or result_row.get("failure_code") != "NONE":
+        reasons.append("result_row_not_accepted")
+    return tuple(dict.fromkeys(reasons))
 
 
 def _is_missing_or_nonfinite(value: Any) -> bool:

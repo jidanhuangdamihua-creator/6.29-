@@ -10,6 +10,7 @@ from datetime import datetime
 import getpass
 import hashlib
 import json
+import os
 from pathlib import Path
 import shlex
 import subprocess
@@ -25,6 +26,7 @@ from scripts.run_strict_protocol_baseline import (
     build_matrix_tasks,
     build_mode_expected_contract,
 )
+from scripts.validate_d1_d6_protocol_inputs import validate_formal_entry_preflight
 from src.protocols.experiment_protocol import FORMAL_HORIZONS, FORMAL_METHODS, FORMAL_SEEDS
 from src.protocols.artifact_schemas import (
     EVALUATED_PREDICTION_TRACE_SCHEMA_NAME,
@@ -38,6 +40,7 @@ from src.utils.result_acceptance import (
     AggregateProfile,
     ExpectedResultContract,
     ResultAcceptanceError,
+    accept_sealed_run_records,
 )
 from src.utils.run_artifacts import (
     CodeIdentity,
@@ -58,6 +61,7 @@ from src.utils.result_schema import (
     RESULT_SCHEMA_REGISTRY_VERSION,
     result_schema_registry_digest,
 )
+from src.utils.prediction_artifacts import publish_prediction_artifact
 
 
 RUNS_DIR = PROJECT_ROOT / "outputs" / "runs"
@@ -504,6 +508,12 @@ def build_run_plan(
         "methods": list(FORMAL_METHODS),
         "horizons": list(FORMAL_HORIZONS),
         "seeds": list(FORMAL_SEEDS),
+        "scheduler_contract": {
+            "d5_dependency": ["d5_without", "d5_with"],
+            "d5_threads": 6,
+            "ordinary_threads": 2,
+            "total_thread_budget": 16,
+        },
         "cells": cells,
     }
     return {**payload, "run_identity": _canonical_digest(payload)}
@@ -511,6 +521,12 @@ def build_run_plan(
 
 def prepare_formal_run(run_root: Path, *, resume: bool) -> dict[str, object]:
     root = Path(run_root).resolve()
+    preflight = validate_formal_entry_preflight(run_id=root.name)
+    if preflight["status"] != "ready":
+        raise RuntimeError(
+            "formal entry preflight blocked before attempt creation: "
+            + json.dumps(preflight, ensure_ascii=False, sort_keys=True)
+        )
     code_identity = discover_code_identity(PROJECT_ROOT)
     if code_identity.dirty:
         raise RuntimeError("formal execution requires a clean git worktree")
@@ -543,6 +559,73 @@ def prepare_formal_run(run_root: Path, *, resume: bool) -> dict[str, object]:
             run_identity=str(plan["run_identity"]),
         )
     return plan
+
+
+def finalize_sealed_run(
+    run_root: Path,
+    records: Sequence[Mapping[str, object]],
+    *,
+    trace_identities: Mapping[str, Mapping[str, object]] | None = None,
+    source_selection_proofs: Mapping[str, Mapping[str, object]] | None = None,
+    worker_trace_proofs: Mapping[str, Mapping[str, object]] | None = None,
+) -> Path:
+    """Run the terminal trace gate and write SEALED_SUCCESS last."""
+
+    root = Path(run_root).resolve()
+    recovery = RunRecovery(root)
+    state = recovery.load_state()
+    if state.get("run_state") != RunState.COMPLETE_UNSEALED.value:
+        raise RuntimeError("final sealing is allowed only from complete_unsealed")
+    plan, _ = load_validated_run_plan(root)
+    report = accept_sealed_run_records(
+        records,
+        run_root=root,
+        run_plan=plan,
+        trace_identities=trace_identities,
+        source_selection_proofs=source_selection_proofs,
+        worker_trace_proofs=worker_trace_proofs,
+    )
+    report_path = root / "results" / "sealed_acceptance.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = report_path.with_name(f".{report_path.name}.tmp.{os.getpid()}")
+    try:
+        with temporary.open("w", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(report.to_dict(), ensure_ascii=False, sort_keys=True, indent=2)
+                + "\n"
+            )
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, report_path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    token = int(state["fencing_token"])
+    if not report.passed:
+        recovery.transition(
+            RunState.SEALED_FAILED,
+            actor=_recovery_actor(),
+            fencing_token=token,
+            reason="final trace acceptance failed: " + ",".join(report.reasons),
+        )
+        raise ResultAcceptanceError(
+            "sealed acceptance failed: " + ",".join(report.reasons)
+        )
+
+    authoritative = root / "results" / "experiment_results.csv"
+    publish_prediction_artifact(
+        records,
+        authoritative,
+        schema_name="FormalResultRowSchemaV1",
+        run_root=root,
+        format="csv",
+    )
+    recovery.transition(
+        RunState.SEALED_SUCCESS,
+        actor=_recovery_actor(),
+        fencing_token=token,
+        reason="all formal traces, proofs, metrics, keys, and identities accepted",
+    )
+    return authoritative
 
 
 def load_validated_run_plan(
