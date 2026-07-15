@@ -43,6 +43,7 @@ from src.protocols.experiment_protocol import (
 )
 from src.protocols.rolling_origin import build_sample_manifest
 from src.utils.source_fillna import fill_source_numeric_na
+from src.data_processing.sealed_daily import TargetViews
 from src.experiment.fitted_predictor import (
     FittedMethodBundle,
     fit_joint_horizon_method_bundle,
@@ -338,6 +339,26 @@ def _build_model_dataframe(
         f"缺失列={expected_cols - model_only_cols}"
     )
     return model_df
+
+
+def worker_frames_from_target_views(target_views: TargetViews) -> Dict[str, pd.DataFrame]:
+    """Expose only worker-safe target views to fitting/model code.
+
+    Evaluator truth remains owned by the evaluator cache.  This adapter is
+    intentionally a projection over an already separated ``TargetViews``
+    object; it never accepts a raw truth frame or a truth path.
+    """
+
+    if not isinstance(target_views, TargetViews):
+        raise TypeError("worker_frames_from_target_views requires TargetViews")
+    return {
+        "knn_observed_frame": target_views.knn_observed_frame.copy(),
+        "observed_model_frame": target_views.observed_model_frame.copy(),
+        "blind_covariate_frame": target_views.blind_covariate_frame.copy(),
+    }
+
+
+build_worker_target_frames = worker_frames_from_target_views
 
 
 def _sanitize_source_model_dataframe(
