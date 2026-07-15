@@ -1,0 +1,1002 @@
+# D1–D6 Formal Execution Chain Integration Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 在不修改既有 D1–D6 封存设计的前提下，将已经完成的 Task 1–13 协议模块迁移到唯一官方正式入口，使正式执行从 sealed 数据开始，经 truth-free 联合预测、typed artifacts、fenced 原子发布和完整验收，最终可靠到达 `SEALED_SUCCESS`。
+
+**Architecture:** 保留现有设计和协议模块，新增一个统一的 seed-bundle worker，令 D1–D6 六个数据集全部走同一条正式调用链。`run_unified_d1_d6.py` 继续作为单一生命周期所有者，shell supervisor 只负责有界调度和进程组管理，不再自行定义产物权威或状态。旧 loader、逐 horizon runner 和 legacy publisher 可以保留用于非封存兼容路径，但 formal mode 必须通过结构和测试双重门禁禁止调用它们。
+
+**Tech Stack:** Python 3.9/3.10、pandas、PyArrow、JSON Schema、pytest、Bash、现有 `RunRecovery`/artifact schema/blind rollout/fitted predictor 模块。
+
+## Global Constraints
+
+- 权威设计保持为 `docs/superpowers/specs/2026-07-15-d1-d6-experiment-sealing-design.md`，冻结 SHA-256 为 `914ab6e4b3ac2eca7d2bb1c7cc2811a75c905995269b15b3300b0038f7343f6d`。
+- 原 Task 1–13 实施计划保持为历史执行记录，不通过本计划重写，当前 SHA-256 为 `70ae0719ca765051198aa2dd5e5e84bdd6c4e935dc28f8f24681aa687736f6ac`。
+- 除非权威设计内部存在无法同时满足的直接矛盾，否则禁止修改设计、增加新协议、扩大数据集范围、增加方法、增加 horizon 或改变 seeds。
+- 正式矩阵固定为 6 datasets × 2 modes × 5 seeds = 60 seed bundles；每个 bundle 固定覆盖 6 methods × h1–h5。
+- formal mode 只能读取 `数据集/固化数据/d1_d6_sealed_v1/datasetN/` 下通过 manifest 绑定的 sealed artifacts。
+- worker 不得接收 evaluator truth；worker trace 不得包含 `y_true`；只有 evaluator 可以将 truth 加入 evaluated trace。
+- 正式产物只能通过注册 typed schema、冻结 binding、当前 attempt 的 fencing token 和原子目录发布成为 accepted。
+- `SEALED_SUCCESS` 必须是成功路径的最后一次写入，只能由 `complete_unsealed` 经完整 Task 12 acceptance 产生。
+- 所有 Python 测试和验证命令必须使用 `python tools/protection/codex_timeout.py --timeout 180 -- <command...>`；返回 124 时立即停止，不得拆分、重试或继续其他测试。
+- 测试使用 `PYTHONDONTWRITEBYTECODE=1`、`-p no:cacheprovider` 和 `/tmp` basetemp；不得创建正式 `outputs/runs/`、不得生成真实全量训练。
+- 本计划不以测试数量、模块存在或局部函数通过作为完成证明；完成证明仅来自官方入口的端到端调用链及独立只读审计。
+
+---
+
+## 1. 决策与范围冻结
+
+### 1.1 本次决策
+
+现有设计内容视为已经完成并冻结。本计划不是 Task 1–13 的第二轮设计，也不是再造一套协议，而是唯一的：
+
+```text
+Task 14: Integrate the official formal execution path
+```
+
+Task 14 只解决一件事：让已经实现的协议能力成为正式 CLI 实际执行的能力。
+
+唯一允许的正式数据流为：
+
+```text
+sealed dataset handle
+→ worker/evaluator truth-isolated views
+→ exact Predictor/KNN Schema gate
+→ source 180-day validation and 30-day KNN
+→ truth-free fitted predictor bundle
+→ blind h1–h5 rollout
+→ Worker Prediction Trace
+→ evaluator truth join
+→ Evaluated Prediction Trace
+→ Formal Result Rows
+→ fenced atomic bundle publication
+→ validate/rehydrate accepted artifacts
+→ freeze artifact binding set
+→ 12-mode/60-bundle aggregate acceptance
+→ complete_unsealed
+→ final sealing gate
+→ SEALED_SUCCESS
+```
+
+### 1.2 明确不做的事项
+
+- 不重新讨论 D1–D6 窗口、方法集合、seeds、horizons、sMAPE 定义或特征角色。
+- 不新增第七种方法，不扩大到 D7，不调整论文协议。
+- 不为了兼容旧 runner 而削弱 truth 隔离、schema、trace、recovery 或 final gate。
+- 不把旧输出迁移成新 sealed 输出；旧产物只能保留为 legacy audit evidence。
+- 不用真实训练证明调度正确；端到端 gate 使用小型 deterministic fixture 和 fake fitted predictors。
+- 不在 Task 14 中进行无关重构、性能优化或代码风格统一。
+
+### 1.3 变更控制
+
+若实施中出现新的建议，必须先分类：
+
+| 类别 | 处理方式 |
+|---|---|
+| 现有设计的明确要求未接入 | 纳入 Task 14 对应 gate |
+| 正式调用链缺陷 | 纳入 Task 14，先写失败测试 |
+| 新功能或更严格的新协议 | 记录到 deferred list，不在本计划实施 |
+| 与正式封存无关的 legacy 缺陷 | 不修改 |
+| 权威设计内部直接矛盾 | 停止实施，形成一条书面 decision record，由用户批准后才可改设计 |
+
+任何人不得以“顺手完善”为理由扩大本计划。
+
+---
+
+## 2. 最近一周问题总结与反思
+
+### 2.1 客观工作量
+
+2026-07-08 至 2026-07-15：
+
+- 共 104 个提交；
+- 每日提交数依次为 7、7、11、12、7、27、19、14；
+- 最后封存分支相对 `bfee110a` 有 14 个提交；
+- 该分支修改 97 个文件，新增约 13,505 行、删除约 1,523 行；
+- 最终轻量审查运行 229 个目标测试，全部通过。
+
+这些数据说明问题不是缺少投入，也不是没有测试，而是工作被同时分散到数据、训练、协议、产物、恢复、调度和文档多个层次，集成证明晚于模块实现。
+
+### 2.2 最近审计发现的共同根因
+
+上次审计的多个 BLOCKER/HIGH 可以收敛为三个系统性根因：
+
+1. **双执行栈并存。** 新 sealed/protocol 模块已实现，正式 CLI 仍能进入旧 loader、旧逐 horizon runner 和旧 publisher。
+2. **验证层级错位。** 测试证明模块独立正确，却没有证明官方命令真实调用这些模块。
+3. **完成定义过早。** “Task 代码和单测完成”被汇报为“正式系统完成”，直到最终审计才检查端到端接线。
+
+因此，新发现多为此前未检查到的集成缺口，而不是每次修复都重新制造了一组完全不同的问题。
+
+### 2.3 具体流程问题及改进措施
+
+| 最近出现的问题 | 为什么原检验没有挡住 | 本计划的改进措施 |
+|---|---|---|
+| sealed loader 已存在，但 D4–D6 正式 runner 仍读旧/raw 数据 | 测试直接调用新 loader，没有从官方 task command 启动 | 增加 official-entry negative call gate；formal worker 只接受 `SealedDatasetHandle` |
+| truth isolation、fitted bundle、blind rollout 都通过单测，但正式 runner 仍处理完整 target/y_true | 测试对象是协议函数，不是正式 child process | 使用官方 CLI 小型端到端测试；修改 evaluator truth 后比较 worker trace semantic digest |
+| typed schemas 存在，正式产物仍是 legacy CSV/manifest | schema contract 与 publisher integration 分开测试 | 让 bundle acceptance 只消费 typed identities；旧 publisher 在 formal test 中被 monkeypatch 为必然失败 |
+| recovery/fencing/rehydration 库通过，但调度器未使用 | fake scheduler 只验证进程生命周期 | 每个 bundle 必须产生 append-only cell transitions；旧 token 发布必须在端到端测试中被拒绝 |
+| `finalize_sealed_run` 存在但官方成功路径未调用 | sealing gate 测试直接调用函数 | shell 官方命令必须从 prepare 运行至 marker；断言 marker 是最后发布对象 |
+| preflight 对 D3–D6 repair proof 缺失仍返回 ready | preflight 测试使用满足当前弱合同的 fixture | 当前本地 `unavailable/null` proof 作为失败 fixture，明确要求 blocked |
+| 代码 SHA 不包含 ignored sealed 数据 | 本地机器已有数据，fresh checkout 未作为 gate | 新增 sealed data deployment manifest 和 fresh-checkout/install/preflight gate |
+| 最终审计才发现跨模块旁路 | Task review 关注各自文件 | 每个集成 gate 完成后进行一次只读 call-graph review；未通过不得进入下一 gate |
+
+### 2.4 对原工作流程的评价
+
+原流程在“规范细化、模块测试、审计证据”方面有效，但不适合一次性完成跨七层的正式封存迁移。问题不是 TDD 或审计本身，而是缺少自第一天起持续运行的 official-entry end-to-end gate。
+
+本计划保留以下有效做法：
+
+- 设计优先、协议显式化；
+- 轻量测试和 180 秒保护器；
+- append-only 审计和 fail-closed；
+- 最终独立只读审计。
+
+同时改变以下做法：
+
+- 从“按模块完成”改为“按可运行的正式切片完成”；
+- 从“最后统一集成”改为“每个 gate 都从官方入口验证”；
+- 从“测试通过即完成”改为“正向结果 + 旁路调用次数为零 + 故障注入均通过”；
+- 从“发现问题继续扩需求”改为“冻结设计，新需求延期”。
+
+### 2.5 每条 BLOCKER 的统一关闭流程
+
+每条审计 BLOCKER/HIGH 都按同一个闭环处理。禁止一次提交同时迁移多个尚未独立通过门禁的调用边。
+
+1. **打开报告点出的官方入口行。** 从该行沿调用链向下追踪，记录实际 import、被调函数、输入对象、产物和异常处理；不能只看函数名称。
+2. **定位现有新协议能力。** 优先复用已经实现并通过测试的 sealed loader、schema、truth isolation、fitted bundle、blind rollout、typed artifact、recovery、rehydration 和 acceptance API。
+3. **判断迁移类型。** 标记为“直接替换”或“需要薄 orchestration glue”。不得假设每个 BLOCKER 都有一个可以一换一替代的函数。
+4. **先写失败测试。** 从官方 task command 或 CLI 进入，令旧函数一旦被调用就抛出异常，并断言新函数收到精确的 typed inputs。
+5. **迁移完整调用合同。** 同时迁移输入类型、truth boundary、schema identity、fencing token、artifact identity、失败码和返回码，不能只替换函数名。
+6. **删除 formal 分支和 fallback。** legacy 函数可以保留给明确标记的 compatibility CLI，但 formal ownership 下必须不可达；不存在 warning 后继续或 silent fallback。
+7. **运行 official dry-run。** 证明任务规划、sealed identity、命令路径、60-bundle 计划和零写入正确。dry-run 不得声称证明 fit/predict/rollout 已执行。
+8. **运行 mini sealed integration call。** 使用真实 official entry、mini sealed fixture 和 deterministic fake fitted predictor，实际经过新 orchestration，但不训练真实模型。用 spy/call record 证明目标新函数被调用且 legacy 调用数为 0。
+9. **只读复核该 BLOCKER。** 检查 call sites、imports、fallback、返回码和测试证据；通过后才提交并进入下一条。
+
+每条 BLOCKER 的提交记录必须包含：
+
+```text
+审计编号：
+旧官方入口与行号：
+旧调用函数：
+新协议函数：
+迁移类型：直接替换 / 薄 orchestration glue
+删除的 formal fallback：
+失败测试：
+official dry-run 命令、退出码和零写入证据：
+mini integration 命令、退出码和新旧函数 call counts：
+残余 legacy 用途：无 / compatibility-only 路径：
+```
+
+#### 为什么 dry-run 后仍需要 mini integration
+
+当前 dry-run 的职责是解析 sealed identities、preflight、task matrix 和 scheduler contract，并保证不创建 RUN_ROOT。它不会执行模型 fit、blind rollout、typed publication 或 recovery cell transitions。因此仅看到 dry-run 输出新脚本名称，不能证明运行时没有在新脚本内部回退到 legacy 函数。
+
+本计划把验证分为两层：
+
+- **official dry-run：** 证明控制面、身份和零写入；
+- **mini integration call：** 证明数据面实际触发新 loader/schema/truth/rollout/artifact/recovery 调用，仍不进行真实训练。
+
+两者必须同时通过，任何一者不能替代另一者。
+
+### 2.6 BLOCKER 逐条迁移工作表
+
+下表将上次审计发现映射到当前代码和 Task 14 的目标接口。表中的“薄 glue”只允许组合既有能力和传递 typed identities，不得复制协议算法。
+
+| ID | 官方入口中的 legacy 调用 | 已有新协议能力 | 迁移方式 | 必须删除或禁止的 formal fallback | 最小非训练验证 |
+|---|---|---|---|---|---|
+| B1 sealed-only 输入 | `run_strict_protocol_baseline.build_matrix_tasks()` 生成 `run_full_paper_experiments.py`/`run_d4_experiment.py`/`run_d5_experiment.py`/`run_d6_experiment.py`；D4/D6 调 `load_parquet_source_target()`，D5 调 `load_parquet_source_target_with_diagnostics()` | `load_sealed_target_views()`、`read_sealed_projection()`、sealed manifest/schema/repair sidecars | 新增薄 `SealedDatasetHandle.open()`，所有 60 tasks 直接调用唯一 bundle worker | formal task 中所有旧 scripts、raw D5 authority、旧 `数据集/固化数据` root、smoke/raw fallback | dry-run 断言 60 commands 只含新 worker且 RUN_ROOT 不存在；mini call 断言 sealed handle call > 0，两个 legacy loader calls = 0 |
+| B2 truth-free joint rollout | D1–D3 调旧 `run_no_tl_experiment()` 等实验函数；D4–D6 调 `run_single_entity_experiment()` 并逐 horizon 循环 | `load_sealed_target_views()`、`create_worker_cache()`、`create_evaluator_cache()`、`run_truth_free_fit()`、`fit_formal_method_bundle()`、`run_blind_rollout()`、`join_worker_trace_with_truth()` | 薄 seed-bundle orchestration 按固定顺序组合现有 API | full target dataframe 进入 worker、worker 构造/返回 `y_true`、逐 horizon child fit、h2–h5 feedback | mini call 断言每 method bundle fit = 1、blind rollout = 6、legacy experiment calls = 0；修改 evaluator truth 后 worker semantic digest 不变 |
+| B3 exact Schema gate | `run_full_paper_experiments.py` 动态解析 feature cols；D4 runtime feature mismatch 只 warning；`_resolve_model_feature_cols()` 静默 drop；source 数值缺失统一填 0 | `get_predictor_schema()`、`get_knn_schema()`、`audit_future_known_lineage()`、`PredictorFeatureMask` | 在 `SealedDatasetHandle` 与 fit adapter 之间加入 exact ordered-schema assertion；直接使用既有 schema registry | 动态交集、静默 drop、warning 后继续、通用 fill-zero | mini fixture 分别注入 missing/extra/reordered/dtype/lineage/repair drift，均在 fit call count = 0 时 fail closed |
+| B4 adoption/repair proof | `adopt_and_seal_d3_d6.py` 调通用 `validate_adopted_pair(source, target)`；随后硬编码 `not_reconstructed_during_adoption`/`unavailable` sidecar；preflight 接受 null/null | `canonicalize_source_sales()`、`prepare_daily_sequence_pool()` 的完整 180-day validation、`get_predictor_schema()`、`get_knn_schema()`、现有 adoption report/schema helpers | **不是直接替换。** 收紧 `validate_adopted_pair()` 的 dataset-specific 输入和输出，并在 adoption 阶段调用既有 canonicalization；preflight 消费完整 proof | structural-only 大表跳过、unavailable counts、null repair mask/digest、optional proof comparison | 对 D3–D6 mini authority 实际 adoption；断言 proof 完整且 preflight ready；删除/篡改任一 proof 后 blocked，任何训练 call = 0 |
+| B5 typed artifacts | 正式 runner 调 `publish_formal_seed_bundle_output_frame()`，其下进入 legacy `publish_formal_cell_frame()` 和 ad hoc manifest | `publish_prediction_artifact()`、`build_worker_manifest()`、`join_worker_trace_with_truth()`、`derive_formal_result_row()`、artifact schema registry | seed-bundle orchestration 直接发布全部 typed artifacts；legacy CSV 仅由 verified evaluated trace 派生 | formal path 中 `publish_formal_seed_bundle_output_frame()`、self-signed fields、未注册字段和未认证 CSV authority | mini call 用 registry 逐个读回 artifacts；typed publisher calls > 0，legacy publisher calls = 0；worker trace schema 中不存在 `y_true` |
+| B6 recovery/fencing/binding | shell 以 TSV 表示 task 状态；`_current_fencing_token()` 在发布时读取 mutable state；legacy publisher token 默认 0；bundle files 分步发布 | `RunRecovery.set_cell_state()`、`publish_cell_directory()`、`heartbeat()`、`resume()`、`ArtifactRehydrator.rehydrate()`/`freeze_binding_set()`、`resolve_bound_artifact()` | 薄 lifecycle orchestration 显式传递 attempt-held token；生产结束后冻结完整 binding 再启动 aggregate | token 0、发布时领取新 token、TSV 权威状态、accepted sidecar、binding 外 path resolution | mini supervisor 注入 stale worker/crash/missing artifact；断言旧 token 发布失败、accepted 不重复、rehydration fit/predict = 0、aggregate 只经 binding |
+| B7 final sealing 不可达 | shell 成功后只执行 `aggregate`；`aggregate` 停在 `complete_unsealed`；`finalize_sealed_run()` 无官方 CLI 调用点 | `accept_sealed_run_records()`、`finalize_sealed_run()`、`RunRecovery.transition()`、`publish_prediction_artifact()` | 增加 `final-seal` operation 并由 shell 在 aggregate 后唯一调用 | aggregate 后直接退出 0、直接写 marker、调用者提交未认证内存 proofs | 60-bundle mini supervisor 到达 success；故意破坏 trace 后到达 sealed_failed；成功 marker mtime/事件序列为最后写入 |
+| B8 server sealed data 不自包含 | `.gitignore` 忽略 `数据集/`，代码 SHA 不提供数据安装或 byte-level authority；没有可替换的单一 legacy 函数 | sealed manifest/validation report/content SHA 与 formal preflight identity | **不是直接替换。** 新增内容寻址 deployment manifest、安装/验证步骤和 fresh-checkout gate | 未记录的人工复制、本地绝对路径、服务器既有同名文件被默认信任 | 在临时 fresh-install root 按 manifest 安装 mini artifacts；缺失/替换 bytes 时 preflight blocked，完整 bytes 时 ready；RUN_ROOT 仍不存在 |
+
+#### 每条迁移的通过标准
+
+一条 BLOCKER 只有在下列五项同时成立时才能关闭：
+
+1. 报告指出的旧 call site 在 formal ownership 下不可达；
+2. 新函数由 official-entry mini call 实际调用，而不是只被 import；
+3. 输入、身份、失败语义和产物一起迁移，不存在中间 legacy adapter 把合同降级；
+4. official dry-run 零写入，mini integration 不运行真实训练；
+5. 对应负向测试证明删除 fallback 后会 fail closed，而不是换一个位置继续 fallback。
+
+---
+
+## 3. 文件与职责边界
+
+### 新建文件
+
+- `scripts/run_formal_seed_bundle.py`
+  - 唯一正式 child-process CLI；只接受 dataset、mode、seed、run root、attempt id 和 fencing token。
+  - 不接受 `--horizon`、raw path、legacy parquet root 或 smoke fallback。
+- `src/experiment/formal_seed_bundle.py`
+  - 实现一个 seed bundle 的纯编排；组织六种方法、h1–h5 rollout、worker/evaluator trace 和 bundle manifest。
+  - 不拥有全局调度、run state transition 或最终聚合。
+- `src/utils/formal_sealed_inputs.py`
+  - 将 manifest、binding、sealed parquet、schema、lineage、repair proof 和 source window 组合为只读 `SealedDatasetHandle`。
+  - 这是 formal worker 唯一的数据入口。
+- `tests/fixtures/formal_sealed_mini/`
+  - 小型确定性 D1–D6 sealed fixture，保持真实 schema、窗口身份和 sidecar 结构，但不进行真实训练。
+- `tests/fixtures/fake_fitted_formal_methods.py`
+  - 确定性的 truth-free fitted predictors；用于验证 rollout、trace、恢复和 sealing，不替代 adapter 单测。
+- `tests/test_formal_no_legacy_calls.py`
+  - 从官方 task command 验证旧 loader、旧 runner、旧 publisher 调用次数为 0。
+- `tests/test_formal_seed_bundle_integration.py`
+  - 验证一个 bundle 的 sealed-input 到 fenced typed publication。
+- `tests/test_formal_end_to_end_sealing.py`
+  - 验证 60 个轻量 bundles 从官方 supervisor 到最终 marker。
+- `tests/test_formal_server_data_contract.py`
+  - 验证 ignored sealed 数据的独立部署 manifest、内容摘要和 fresh-install preflight。
+
+### 修改文件
+
+- `scripts/run_strict_protocol_baseline.py`
+  - 60 个 task 全部改为调用 `scripts/run_formal_seed_bundle.py`。
+- `scripts/run_unified_d1_d6.py`
+  - 保存 attempt token，而不是发布时重新读取当前 token；增加 binding freeze、cell lifecycle 和 `final-seal` operation。
+- `scripts/parallel_mode_runner.sh`
+  - 启动 heartbeat；把 attempt id/token 传入 child；成功聚合后调用 `final-seal`；不再把 TSV 作为权威状态。
+- `scripts/validate_d1_d6_protocol_inputs.py`
+  - 对 D3–D6 adoption/canonicalization proof 缺失 fail closed，并验证部署 manifest。
+- `scripts/run_full_paper_experiments.py`、`scripts/run_d4_experiment.py`、`scripts/run_d5_experiment.py`、`scripts/run_d6_experiment.py`
+  - 保留 legacy 能力；formal flag 必须拒绝或转交新 worker，不能继续内部执行旧路径。
+- `src/utils/parquet_data_loader.py`
+  - 保留 legacy loader；formal code 不再导入 `load_parquet_source_target*`。
+- `src/utils/entity_experiment.py`
+  - 保留 method adapter；新 worker 只能从 exact schema gate 调用 `fit_formal_method_bundle`。
+- `src/utils/run_recovery.py`
+  - 仅补充正式编排所需的小型接口或验证；不重写已通过测试的状态机。
+- `src/utils/result_acceptance.py`
+  - final gate 从冻结 binding 解析 typed artifacts，拒绝 legacy/self-signed paths。
+- `README.md`
+  - 仅在端到端 gate 完成后更新正式命令和服务器数据安装步骤。
+
+### 禁止的结构变化
+
+- 不再创建第二个 recovery/state-machine 实现。
+- 不再为 D1–D3 和 D4–D6 分别创建正式 orchestrator。
+- 不复制 artifact schema 或 blind rollout 逻辑到 scripts。
+- 不删除 legacy runner；通过 formal boundary 和测试隔离它们。
+- 不在 shell 中重新实现 JSON identity、digest 或 acceptance。
+
+---
+
+## 4. Task 14 实施门禁
+
+以下均属于同一个 Task 14。每一 Gate 都必须形成独立可审查、可拒绝的提交；前一 Gate 未通过不得进入下一 Gate。
+
+### Gate 0：冻结设计并建立审计映射
+
+**Files:**
+- Create: `tests/test_formal_design_freeze.py`
+- Modify: `docs/superpowers/plans/2026-07-15-d1-d6-formal-execution-chain-integration.md`
+
+**Interfaces:**
+- Consumes: 两份现有权威文档。
+- Produces: 设计 digest gate、Task 1–13 到 Gate 1–8 的覆盖映射。
+
+- [ ] **Step 1: 写设计冻结测试**
+
+```python
+from hashlib import sha256
+from pathlib import Path
+
+
+def test_authoritative_design_is_frozen():
+    path = Path("docs/superpowers/specs/2026-07-15-d1-d6-experiment-sealing-design.md")
+    assert sha256(path.read_bytes()).hexdigest() == (
+        "914ab6e4b3ac2eca7d2bb1c7cc2811a75c905995269b15b3300b0038f7343f6d"
+    )
+```
+
+- [ ] **Step 2: 运行测试并确认通过**
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
+python -m pytest tests/test_formal_design_freeze.py -q -p no:cacheprovider \
+--basetemp /tmp/d1-d6-task14-design-freeze
+```
+
+Expected: `1 passed`。
+
+- [ ] **Step 3: 将本计划第 9 节覆盖矩阵与冻结 digest 一同提交**
+
+```bash
+git add docs/superpowers/plans/2026-07-15-d1-d6-formal-execution-chain-integration.md tests/test_formal_design_freeze.py
+git commit -m "test: freeze D1-D6 sealing design for Task 14"
+```
+
+**Gate 0 acceptance:** 现有设计 bytes 未改变，所有后续变更可映射到现有要求；没有新协议条目。
+
+### Gate 1：建立 sealed-only 数据句柄和部署合同
+
+**Files:**
+- Create: `src/utils/formal_sealed_inputs.py`
+- Create: `tests/test_formal_server_data_contract.py`
+- Modify: `scripts/validate_d1_d6_protocol_inputs.py`
+- Modify: `scripts/run_unified_d1_d6.py`
+
+**Interfaces:**
+- Consumes: `load_sealed_target_views()`、sealed manifest、validation report、source-sales canonicalization、schema/lineage registry、frozen binding。
+- Produces: `SealedDatasetHandle.open(dataset_id, binding_path) -> SealedDatasetHandle`；handle 暴露 truth-isolated views、source frame 和不可变 identities，不暴露 raw/legacy path。
+
+- [ ] **Step 1: 写失败测试，拒绝 unavailable repair proof**
+
+```python
+def test_formal_preflight_blocks_unavailable_source_repair_proof(sealed_fixture):
+    sealed_fixture.write_repair(
+        dataset_id="D4",
+        status="not_reconstructed_during_adoption",
+        counts="unavailable",
+        repair_mask_sha256=None,
+    )
+    report = sealed_fixture.preflight()
+    assert report["status"] == "blocked"
+    assert "SOURCE_SALES_REPAIR_PROOF_MISSING" in report["failure_codes"]
+```
+
+- [ ] **Step 2: 写失败测试，证明 fresh install 必须按内容摘要部署**
+
+```python
+def test_server_install_rejects_missing_or_changed_sealed_bytes(sealed_fixture):
+    installation = sealed_fixture.install_from_manifest()
+    installation.dataset(6).source_path.write_bytes(b"changed")
+    report = installation.preflight()
+    assert report["status"] == "blocked"
+    assert "ARTIFACT_BYTES_MISMATCH" in report["failure_codes"]
+```
+
+- [ ] **Step 3: 实现 `SealedDatasetHandle` 和 fail-closed preflight**
+
+最小公开接口固定为：
+
+```python
+@dataclass(frozen=True)
+class SealedDatasetHandle:
+    dataset_id: str
+    source_path: Path
+    target_views: TargetViews
+    predictor_schema: PredictorFeatureSchema
+    knn_schema: KnnFeatureSchema
+    identities: Mapping[str, str]
+    source_sales_repair: Mapping[str, object]
+    future_known_lineage: tuple[FutureKnownLineage, ...]
+```
+
+构造入口固定为 `SealedDatasetHandle.open(*, dataset_id: str, deployment_manifest_path: Path, run_plan_input_identity: Mapping[str, object]) -> SealedDatasetHandle`，不得增加 raw root、legacy parquet directory 或 truth dataframe 参数。sealed 输入由部署 manifest 和 run plan identity 绑定；`artifact_binding_set.json` 只负责当前 run 内已经发布或再水化的产物权威。
+
+实现必须在打开后重新计算内容 SHA，拒绝 symlink、`..`、绝对外部路径和 binding 外文件。
+
+- [ ] **Step 4: 从 formal input identity 删除 D5 raw authority 和旧 KNN roots**
+
+`discover_formal_input_identity()` 只枚举 frozen binding 中的内容寻址 artifacts；raw 文件不得进入正式 plan，也不得成为运行时 fallback。
+
+- [ ] **Step 5: 运行 Gate 1 测试**
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
+python -m pytest tests/test_formal_server_data_contract.py \
+tests/test_formal_entry_preflight.py tests/test_hybrid_sealed_builder.py \
+tests/test_adopt_validation_contract.py tests/test_source_sales_canonicalization.py \
+-q -p no:cacheprovider --basetemp /tmp/d1-d6-task14-sealed-inputs
+```
+
+Expected: 全部通过；当前 `unavailable/null` D3–D6 proof fixture 必须 blocked。
+
+- [ ] **Step 6: 提交 Gate 1**
+
+```bash
+git add src/utils/formal_sealed_inputs.py scripts/validate_d1_d6_protocol_inputs.py scripts/run_unified_d1_d6.py tests/test_formal_server_data_contract.py
+git commit -m "feat: require sealed-only formal dataset handles"
+```
+
+**Gate 1 acceptance:** fresh install 能仅凭部署 manifest 校验六个 sealed datasets；formal identity 中没有 raw、legacy 或 smoke path。
+
+### Gate 2：建立唯一 truth-free seed-bundle worker
+
+**Files:**
+- Create: `src/experiment/formal_seed_bundle.py`
+- Create: `scripts/run_formal_seed_bundle.py`
+- Create: `tests/fixtures/fake_fitted_formal_methods.py`
+- Create: `tests/test_formal_seed_bundle_integration.py`
+- Modify: `scripts/run_strict_protocol_baseline.py`
+
+**Interfaces:**
+- Consumes: `SealedDatasetHandle`、`fit_formal_method_bundle()`、`run_blind_rollout()`、worker cache、current attempt identity。
+- Produces: `run_formal_seed_bundle(request: FormalSeedBundleRequest) -> FormalSeedBundleCandidate`，candidate 只位于 attempt staging directory，尚未 accepted。
+
+- [ ] **Step 1: 写失败测试，固定一个 seed bundle 只拟合每个 method 一次联合 bundle**
+
+```python
+def test_one_seed_bundle_uses_joint_horizon_fit_once_per_method(formal_request, spies):
+    candidate = run_formal_seed_bundle(formal_request, adapters=spies.adapters)
+    assert spies.method_bundle_fit_calls == {
+        "No-TL": 1,
+        "SS-TL": 1,
+        "MSWA-TL": 1,
+        "MSSB-TL": 1,
+        "MSML-TL": 1,
+        "MSML-TL-RFE": 1,
+    }
+    assert candidate.horizons == (1, 2, 3, 4, 5)
+```
+
+- [ ] **Step 2: 写失败测试，修改 evaluator truth 不改变 worker trace**
+
+```python
+def test_evaluator_truth_mutation_does_not_change_worker_predictions(formal_request):
+    first = run_formal_seed_bundle(formal_request)
+    changed = formal_request.with_evaluator_truth_offset(1000.0)
+    second = run_formal_seed_bundle(changed)
+    assert first.worker_semantic_digests == second.worker_semantic_digests
+    assert first.evaluated_artifact_digests != second.evaluated_artifact_digests
+```
+
+- [ ] **Step 3: 实现请求和 candidate 边界**
+
+```python
+@dataclass(frozen=True)
+class FormalSeedBundleRequest:
+    run_root: Path
+    dataset_id: str
+    scenario: str
+    seed: int
+    attempt_id: str
+    fencing_token: int
+    sealed_deployment_manifest_path: Path
+
+
+@dataclass(frozen=True)
+class FormalSeedBundleCandidate:
+    cell_id: str
+    staging_directory: Path
+    manifest_path: Path
+    identities: Mapping[str, str]
+    horizons: tuple[int, ...] = (1, 2, 3, 4, 5)
+```
+
+worker orchestration 必须按以下顺序调用：exact schema gate、source 180-day validation、KNN last-30-day selection、method bundle fit、blind rollout、worker trace publication。evaluator truth join 发生在 worker trace bytes 固定之后。
+
+- [ ] **Step 4: 把 60 个正式 task 全部改为新 child CLI**
+
+`build_matrix_tasks()` 生成的 command 第一段脚本必须全部为 `scripts/run_formal_seed_bundle.py`。新 CLI 同时出现 `--horizon` 或缺少 `--seed` 时必须退出非零。
+
+- [ ] **Step 5: 运行 Gate 2 测试**
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
+python -m pytest tests/test_formal_seed_bundle_integration.py \
+tests/test_joint_horizon_method_bundle.py tests/test_blind_rollout_protocol.py \
+tests/test_fitted_predictor_adapters.py tests/test_truth_isolation.py \
+tests/test_source_pretrain_180d.py tests/test_daily_knn_protocol.py \
+-q -p no:cacheprovider --basetemp /tmp/d1-d6-task14-bundle-worker
+```
+
+Expected: 全部通过；fit call counts 精确；truth mutation invariant 成立。
+
+- [ ] **Step 6: 提交 Gate 2**
+
+```bash
+git add src/experiment/formal_seed_bundle.py scripts/run_formal_seed_bundle.py scripts/run_strict_protocol_baseline.py tests/fixtures/fake_fitted_formal_methods.py tests/test_formal_seed_bundle_integration.py
+git commit -m "feat: route formal seeds through truth-free bundle worker"
+```
+
+**Gate 2 acceptance:** 六个数据集共享一个正式 worker；worker API 中不存在 truth argument；无逐 horizon child task。
+
+### Gate 3：建立 formal legacy-deny 门禁
+
+**Files:**
+- Create: `tests/test_formal_no_legacy_calls.py`
+- Modify: `scripts/run_full_paper_experiments.py`
+- Modify: `scripts/run_d4_experiment.py`
+- Modify: `scripts/run_d5_experiment.py`
+- Modify: `scripts/run_d6_experiment.py`
+
+**Interfaces:**
+- Consumes: Gate 2 的官方 task commands。
+- Produces: 结构检查和运行时 spy，证明 formal path 的 legacy call count 为 0。
+
+- [ ] **Step 1: 写 command-level 测试**
+
+```python
+def test_all_60_formal_tasks_use_only_new_bundle_entry(tmp_path):
+    tasks = tuple(
+        task
+        for dataset_id in range(1, 7)
+        for scenario in ("without", "with")
+        for task in build_matrix_tasks(
+            dataset=f"d{dataset_id}",
+            scenario=scenario,
+            output_dir=tmp_path / f"d{dataset_id}_{scenario}",
+        )
+    )
+    assert len(tasks) == 60
+    assert {Path(task.command[1]).name for task in tasks} == {"run_formal_seed_bundle.py"}
+    forbidden = {"--horizon", "run_full_paper_experiments.py", "run_d4_experiment.py", "run_d5_experiment.py", "run_d6_experiment.py"}
+    assert all(not forbidden.intersection(task.command) for task in tasks)
+```
+
+- [ ] **Step 2: 写运行时 negative-spy 测试**
+
+把以下函数 monkeypatch 为一旦调用就抛出 `AssertionError`：
+
+```python
+load_parquet_source_target_with_diagnostics
+run_single_entity_experiment
+run_no_tl_experiment  # legacy module function
+publish_formal_seed_bundle_output_frame
+publish_formal_cell_frame
+```
+
+通过官方 bundle CLI 的 in-process main 执行 mini fixture，Expected: 成功且所有 forbidden spy call count 为 0。
+
+- [ ] **Step 3: legacy runner 明确拒绝 formal ownership**
+
+旧 runner 的 `--strict-paper-mode` 不再代表 sealed formal authority；README 和 `--help` 必须标注 compatibility-only。若传入由 supervisor 保留的新 formal ownership token，旧 runner 必须退出非零。
+
+- [ ] **Step 4: 运行 Gate 3 测试**
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
+python -m pytest tests/test_formal_no_legacy_calls.py tests/test_formal_protocol_matrix.py \
+tests/test_full_paper_runner_solidified_parquet.py -q -p no:cacheprovider \
+--basetemp /tmp/d1-d6-task14-no-legacy
+```
+
+Expected: 全部通过；60 个 task 不含 legacy scripts。
+
+- [ ] **Step 5: 提交 Gate 3**
+
+```bash
+git add tests/test_formal_no_legacy_calls.py scripts/run_full_paper_experiments.py scripts/run_d4_experiment.py scripts/run_d5_experiment.py scripts/run_d6_experiment.py
+git commit -m "test: forbid legacy calls from formal execution"
+```
+
+**Gate 3 acceptance:** 下次审计无需从大量代码推断旁路是否存在；一条测试直接证明正式 command 和运行时调用均未触达 legacy path。
+
+### Gate 4：typed artifact、fencing 和原子 bundle 发布
+
+**Files:**
+- Modify: `src/experiment/formal_seed_bundle.py`
+- Modify: `scripts/run_formal_seed_bundle.py`
+- Modify: `scripts/run_unified_d1_d6.py`
+- Modify: `src/utils/result_acceptance.py`
+- Test: `tests/test_formal_seed_bundle_integration.py`
+- Test: `tests/test_run_recovery_state_machine.py`
+
+**Interfaces:**
+- Consumes: typed artifact registry、`RunRecovery.set_cell_state()`、`publish_cell_directory()`、`accept_cell()`、attempt-held token。
+- Produces: 一个 fenced、原子、typed、身份完整的 accepted bundle directory。
+
+- [ ] **Step 1: 写失败测试，固定 typed artifact 集合**
+
+每个 candidate bundle 必须且只能包含：
+
+```text
+worker_manifest.json
+worker_prediction_trace.csv.gz
+evaluated_prediction_trace.csv.gz
+source_selection_trace.csv.gz
+formal_result_rows.csv
+bundle_result_manifest.json
+```
+
+测试逐一使用 registry descriptor 读取，拒绝缺失、额外、schema drift、canonical digest drift 和 semantic digest drift。
+
+- [ ] **Step 2: 写失败测试，旧 attempt 不能冒用新 token**
+
+```python
+def test_stale_bundle_cannot_publish_with_current_state_token(run_root):
+    first = create_attempt(run_root)
+    stale_candidate = build_candidate(first)
+    second = expire_and_resume(run_root, first)
+    with pytest.raises(StaleFencingTokenError):
+        publish_candidate(stale_candidate, fencing_token=first.fencing_token)
+    assert not accepted_directory(run_root, stale_candidate.cell_id).exists()
+```
+
+- [ ] **Step 3: 删除 formal publication 对 `_current_fencing_token()` 的依赖**
+
+token 只能来自 `FormalSeedBundleRequest`，并与 attempt id 一同进入 worker manifest、bundle manifest、mode acceptance、aggregate manifest 和 recovery event。任何发布函数都不得在最后时刻从 mutable `state.json` 领取 token。
+
+- [ ] **Step 4: 接入原子目录发布**
+
+固定状态顺序：
+
+```text
+queued
+→ in_flight (CAS using attempt token)
+→ build and validate private staging directory
+→ publish_cell_directory with a validator that verifies every byte and identity
+→ atomic rename and accepted cell event under the same lock and token
+```
+
+formal path 不得在 `publish_cell_directory()` 之后再单独调用 `accept_cell()`；现有目录发布接口已经在同一锁和 token 下完成 rename 与 accepted event。信号或异常只能留下 `in_flight`、`failed` 或 `orphaned`，不得留下 accepted sidecar 与不完整目录组合。
+
+- [ ] **Step 5: 运行 Gate 4 测试**
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
+python -m pytest tests/test_formal_seed_bundle_integration.py \
+tests/test_prediction_artifacts.py tests/test_artifact_schema_contract.py \
+tests/test_run_recovery_state_machine.py tests/test_run_layout_and_atomic_publication.py \
+-q -p no:cacheprovider --basetemp /tmp/d1-d6-task14-publication
+```
+
+Expected: 全部通过；stale-token 和 partial-publication 测试明确通过拒绝条件。
+
+- [ ] **Step 6: 提交 Gate 4**
+
+```bash
+git add src/experiment/formal_seed_bundle.py scripts/run_formal_seed_bundle.py scripts/run_unified_d1_d6.py src/utils/result_acceptance.py tests/test_formal_seed_bundle_integration.py tests/test_run_recovery_state_machine.py
+git commit -m "feat: publish formal bundles through fenced typed artifacts"
+```
+
+**Gate 4 acceptance:** accepted bundle 只能由当前 attempt 的同一 token 和完整 typed identity 产生；不存在 legacy acceptance sidecar 先于内容发布的窗口。
+
+### Gate 5：binding、heartbeat、恢复和调度生命周期
+
+**Files:**
+- Modify: `scripts/run_unified_d1_d6.py`
+- Modify: `scripts/parallel_mode_runner.sh`
+- Modify: `src/utils/artifact_rehydration.py` only if an existing interface cannot express the frozen formal binding
+- Test: `tests/test_parallel_mode_supervisor.py`
+- Test: `tests/test_unified_parallel_lifecycle.py`
+- Test: `tests/test_artifact_rehydration.py`
+
+**Interfaces:**
+- Consumes: `ArtifactRehydrator.freeze_binding_set()`、`resolve_bound_artifact()`、`RunRecovery.heartbeat()`、`mark_downstream_scheduling_started()`。
+- Produces: attempt-scoped frozen authority、周期 lease 更新、crash-safe resume。
+
+- [ ] **Step 1: 写失败测试，aggregate 等下游消费者启动前必须冻结 binding**
+
+```python
+def test_aggregate_cannot_start_before_binding_is_frozen(run_root):
+    publish_all_bundle_candidates_without_binding(run_root)
+    result = start_aggregate(run_root)
+    assert result.returncode != 0
+    assert not aggregate_path(run_root).exists()
+```
+
+- [ ] **Step 2: 写失败测试，heartbeat 贯穿活动任务**
+
+fake worker 运行超过一个短测试 lease interval；测试轮询 event/lease identity，确认 token 不变且 heartbeat_at 前进。停止 heartbeat 后 resume 必须 orphan 旧 in-flight bundle。
+
+- [ ] **Step 3: 写失败测试，rehydration fit/predict 调用数为 0**
+
+删除一个已注册 artifact，提供匹配的 trusted replica，恢复后验证 canonical、semantic、schema 和 full identity 未改变；fake fit/predict spy 均为 0。bytes mismatch 必须走认证操作者显式恢复，不能自签新 digest。
+
+- [ ] **Step 4: 正式 prepare/resume 接入 binding 生命周期**
+
+生产 bundle 与下游消费之间的顺序固定为：
+
+```text
+preflight
+→ create/resume attempt and receive Lease
+→ launch workers with attempt_id and fencing_token
+→ atomically publish or exactly reuse accepted bundles
+→ validate or explicitly rehydrate every accepted run artifact
+→ freeze artifact_binding_set.json containing the complete accepted set
+→ mark_downstream_scheduling_started
+→ mode/global aggregate resolves only through the frozen binding
+```
+
+这里的“downstream scheduling”明确指消费 accepted artifacts 的 mode/global aggregation 与 final acceptance，不指产生 bundle 的训练 worker。这样 binding 在包含完整 60-bundle 权威后一次冻结，冻结后不再增加或替换物理引用。
+
+- [ ] **Step 5: shell 接入 heartbeat 和 fenced failure API**
+
+shell 只能把进程状态作为本地显示；权威 task status 由 Python recovery API记录。SIGINT/SIGTERM 先停止新增调度，再终止整个活动进程组，最后使用当前 attempt-held token 发布 `partial_failed`。
+
+- [ ] **Step 6: 运行 Gate 5 测试**
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
+python -m pytest tests/test_parallel_mode_supervisor.py \
+tests/test_unified_parallel_lifecycle.py tests/test_artifact_rehydration.py \
+tests/test_run_recovery_state_machine.py -q -p no:cacheprovider \
+--basetemp /tmp/d1-d6-task14-recovery
+```
+
+Expected: 全部通过；无后台 fake child 残留。
+
+- [ ] **Step 7: shell syntax check**
+
+```bash
+bash -n scripts/parallel_mode_runner.sh
+```
+
+Expected: exit 0。
+
+- [ ] **Step 8: 提交 Gate 5**
+
+```bash
+git add scripts/run_unified_d1_d6.py scripts/parallel_mode_runner.sh src/utils/artifact_rehydration.py tests/test_parallel_mode_supervisor.py tests/test_unified_parallel_lifecycle.py tests/test_artifact_rehydration.py
+git commit -m "feat: connect formal scheduling to binding and recovery"
+```
+
+**Gate 5 acceptance:** scheduler crash/resume 不重复 accepted bundle；D5 顺序和 16-thread budget 保持；所有恢复解析经 frozen binding。
+
+### Gate 6：接通唯一最终 sealing gate
+
+**Files:**
+- Modify: `scripts/run_unified_d1_d6.py`
+- Modify: `scripts/parallel_mode_runner.sh`
+- Modify: `src/utils/result_acceptance.py`
+- Test: `tests/test_sealed_run_acceptance.py`
+- Create: `tests/test_formal_end_to_end_sealing.py`
+
+**Interfaces:**
+- Consumes: 60 accepted bundle manifests、12 mode identities、evaluated traces、source-selection proofs、worker trace proofs、binding、fencing token。
+- Produces: authoritative `results/experiment_results.csv`、sealed acceptance report、Run Manifest、最后写入的 `SEALED_SUCCESS`。
+
+- [ ] **Step 1: 增加 `final-seal` operation 的失败测试**
+
+缺少、重复、额外 bundle/horizon，trace metric 不匹配，worker proof 缺失，binding identity 不匹配或 fencing token 不一致时，operation 必须非零并从 `complete_unsealed` 发布 `sealed_failed`，不得写成功 marker。
+
+- [ ] **Step 2: 实现 official final-seal operation**
+
+CLI operation choices 增加 `final-seal`。它自行从 frozen binding 和 accepted manifests 收集 records/proofs，不允许调用者提交未认证的内存 mappings 作为权威身份。
+
+- [ ] **Step 3: 强制成功写入顺序和 durability**
+
+```text
+validate all inputs
+→ write acceptance report temp + fsync + replace + directory fsync
+→ write authoritative CSV temp + fsync + replace + directory fsync
+→ write Run Manifest temp + fsync + replace + directory fsync
+→ append sealed_success transition/event + fsync
+→ exclusive write SEALED_SUCCESS + fsync run root
+```
+
+marker 写入后不得再修改 run 内任何权威产物。
+
+- [ ] **Step 4: shell 成功路径调用 final-seal**
+
+`aggregate` 只产生 `complete_unsealed`；shell 随后必须调用 `--operation final-seal` 并以其退出码作为全局成功码。
+
+- [ ] **Step 5: 运行 Gate 6 测试**
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
+python -m pytest tests/test_sealed_run_acceptance.py \
+tests/test_formal_end_to_end_sealing.py tests/test_result_acceptance_scopes.py \
+tests/test_failure_exit_propagation.py -q -p no:cacheprovider \
+--basetemp /tmp/d1-d6-task14-final-seal
+```
+
+Expected: 全部通过；成功 marker 最后写入；sealed failure 不可 resume。
+
+- [ ] **Step 6: 提交 Gate 6**
+
+```bash
+git add scripts/run_unified_d1_d6.py scripts/parallel_mode_runner.sh src/utils/result_acceptance.py tests/test_sealed_run_acceptance.py tests/test_formal_end_to_end_sealing.py
+git commit -m "feat: complete formal acceptance and terminal sealing"
+```
+
+**Gate 6 acceptance:** 官方成功路径能够到达 `SEALED_SUCCESS`；`finalize_sealed_run` 不再是无调用点的库函数。
+
+### Gate 7：官方端到端和故障注入验收
+
+**Files:**
+- Modify: `tests/test_formal_end_to_end_sealing.py`
+- Modify: `tests/fixtures/fake_formal_worker.py` or replace its formal role with `tests/fixtures/fake_fitted_formal_methods.py`
+- Modify: `README.md`
+
+**Interfaces:**
+- Consumes: 官方 shell supervisor、mini sealed fixture、所有 Gate 1–6 接口。
+- Produces: 一条足以证明“整台机器使用新零件”的端到端证据。
+
+- [ ] **Step 1: 正向 60-bundle mini run**
+
+使用 6 个 mini datasets、2 modes、5 seeds 和 fake fitted predictors 运行官方 shell；必须生成精确 60 个 accepted bundle、12 个 mode、完整 aggregate、Run Manifest 和最后 marker。
+
+- [ ] **Step 2: 增加旁路零调用断言**
+
+同一测试记录并断言：
+
+```text
+legacy_loader_calls == 0
+legacy_per_horizon_runner_calls == 0
+legacy_publisher_calls == 0
+worker_truth_accesses == 0
+```
+
+- [ ] **Step 3: 增加故障矩阵**
+
+至少覆盖：worker 非零退出、SIGTERM、heartbeat 停止、stale worker 晚发布、artifact missing、有 trusted replica 的 rehydration、artifact bytes mismatch、重复 bundle、缺 horizon、D5-with 前置失败、aggregate 后 final gate 失败。
+
+- [ ] **Step 4: dry-run 零写入测试**
+
+运行 Python 和 shell 两条官方 dry-run；RUN_ROOT、attempt、bundle、CSV、manifest、binding、marker 全部不存在。
+
+- [ ] **Step 5: 更新 README**
+
+README 仅描述已经由本 Gate 证明的命令。legacy 命令必须标记为 non-sealed compatibility；sealed data deployment、resume、rehydration、lease 和 terminal semantics 与实际 CLI 一致。
+
+- [ ] **Step 6: 运行端到端测试**
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
+python -m pytest tests/test_formal_end_to_end_sealing.py \
+tests/test_formal_no_legacy_calls.py tests/test_formal_entry_preflight.py \
+tests/test_parallel_mode_supervisor.py -q -p no:cacheprovider \
+--basetemp /tmp/d1-d6-task14-e2e
+```
+
+Expected: 全部通过，且命令在 180 秒内完成；若返回 124，立即停止并交给用户手动运行，不得缩小端到端合同来追求通过。
+
+- [ ] **Step 7: 提交 Gate 7**
+
+```bash
+git add tests/test_formal_end_to_end_sealing.py tests/fixtures/fake_formal_worker.py tests/fixtures/fake_fitted_formal_methods.py README.md
+git commit -m "test: gate the complete formal sealing path"
+```
+
+**Gate 7 acceptance:** official-entry 正向、负向和恢复场景全部由同一调用链覆盖；不能通过 mock 掉被审查的 orchestration 本身。
+
+### Gate 8：平台验证和最终只读审计准备
+
+**Files:**
+- Modify: `README.md` only if actual verified server commands differ
+- Create: `docs/superpowers/reviews/d1-d6-task14-verification-record.md`
+
+**Interfaces:**
+- Consumes: Gate 0–7 的固定提交序列。
+- Produces: clean-server preflight/dry-run 证据和最终审计输入。
+
+- [ ] **Step 1: 本地联合轻量套件**
+
+运行 Task 1–13 原联合套件、Gate 1–7 新测试、compileall、`bash -n` 和 `git diff --check`。任何 warning 必须分类记录，不得只报告退出码。
+
+- [ ] **Step 2: Ubuntu/Python 3.10 clean checkout 验证**
+
+在服务器 fresh checkout 固定候选 SHA，通过正式部署 manifest 安装 sealed 数据；运行 preflight 和两条 dry-run。不得复制本地 `.venv`、绝对路径、历史 `outputs/runs/` 或未注册 sidecar。
+
+- [ ] **Step 3: 验证候选 SHA 自包含关系**
+
+记录代码 SHA、设计 digest、部署 manifest digest、六个 dataset digests、schema registry digest、result registry digest 和 60-bundle run plan digest。
+
+- [ ] **Step 4: 冻结候选，不再在审计中顺手修改**
+
+最终审计开始后只读。若出现 BLOCKER/HIGH，退回对应 Gate；不得在审计过程中直接修复并继续沿用原审计结论。
+
+- [ ] **Step 5: 提交验证记录**
+
+```bash
+git add README.md docs/superpowers/reviews/d1-d6-task14-verification-record.md
+git commit -m "docs: record Task 14 formal verification"
+```
+
+**Gate 8 acceptance:** fresh-server preflight/dry-run 使用与训练相同的 resolver；工作树干净；不存在本地路径或 ignored data 的隐含依赖。
+
+---
+
+## 5. 进度汇报规则
+
+为避免再次出现“局部完成被汇报为整体完成”，进度只允许使用以下状态：
+
+| 状态 | 含义 |
+|---|---|
+| `NOT STARTED` | Gate 尚未开始 |
+| `IMPLEMENTED, NOT GATED` | 代码已写，但失败/通过测试或审查未完成 |
+| `GATE PASSED` | 本 Gate 的正向、负向和旁路测试均通过并已形成提交 |
+| `INTEGRATION COMPLETE, AUDIT PENDING` | Gate 0–8 全部通过，尚未开始最终只读审计 |
+| `READY` | 最终只读审计无 BLOCKER/HIGH |
+| `BLOCKED AT GATE N` | 明确退回某个 Gate，不使用“基本完成”表述 |
+
+每日报告固定为：
+
+```text
+当前 Gate：
+今日完成的可验证结果：
+实际执行命令与退出码：
+新增或改变的正式调用边：
+legacy 旁路调用数：
+尚未满足的 Gate 条件：
+是否出现范围变更：否 / 已停止并请求决策
+下一步仅做：
+```
+
+禁止使用“代码已经差不多”“测试基本通过”“只剩收尾”等无法审计的描述。
+
+---
+
+## 6. 时间计划和停止条件
+
+### 6.1 工期
+
+在一名熟悉仓库的实施者、设计不变、无 180 秒 timeout、mini fixture 可在本地稳定运行的前提下：
+
+| 工作 | 理想工程日 | 稳妥工程日 |
+|---|---:|---:|
+| Gate 0–1：冻结、sealed input、部署合同 | 1.0 | 1.5–2.0 |
+| Gate 2–3：统一 bundle worker、禁止 legacy | 1.5–2.0 | 2.0–3.0 |
+| Gate 4–5：typed publication、fencing、binding、recovery | 2.0 | 3.0–4.0 |
+| Gate 6–7：final seal、E2E、故障注入 | 1.5–2.0 | 2.0–3.0 |
+| Gate 8：服务器验证和只读审计准备 | 0.5–1.0 | 1.0–2.0 |
+| **合计** | **6–8** | **8–12** |
+
+该时间不包括真实 D1–D6 模型训练时长，也不包括设计范围变化。
+
+### 6.2 强制停止条件
+
+出现以下任一情况必须停止当前 Gate，不得通过简化合同继续：
+
+- timeout wrapper 返回 124；
+- 需要修改冻结设计才能继续；
+- mini E2E 必须 mock 掉正式 orchestration 才能通过；
+- 正式 worker 必须读取 raw/legacy 数据才能运行；
+- D3–D6 无法提供可信 adoption/repair proof；
+- 服务器 sealed bytes 无法与部署 manifest 对齐；
+- stale token 或半发布目录无法被可靠拒绝；
+- `SEALED_SUCCESS` 无法保证最后写入；
+- 同一 Gate 连续两轮修改后仍出现同类旁路，必须先做根因复核，不继续堆补丁。
+
+---
+
+## 7. 如何降低下次审计大修概率
+
+本计划不能保证审计永远没有发现，但可以把“最终才发现系统没接线”的概率降到最低。下次审计前必须满足：
+
+1. **设计未漂移。** 冻结 digest 测试通过。
+2. **唯一入口。** 60 个 task command 全部指向同一个 bundle worker。
+3. **旁路为零。** legacy loader/runner/publisher 既有静态门禁，也有运行时 zero-call assertion。
+4. **同一链路验收。** preflight、正式运行和 dry-run 共享相同 sealed resolver。
+5. **真实状态接线。** scheduler 的 cell 状态、heartbeat、fencing 和 binding 均由正式 E2E 覆盖。
+6. **最终门禁可达。** 官方 shell 成功路径确实写出最后 marker，而不是直接测试 finalizer 函数。
+7. **故障先于审计注入。** crash、signal、stale worker、artifact corruption、D5 dependency 和 duplicate bundle 在提交审计前已验证。
+8. **服务器环境先验证。** 不把 macOS 本地通过视为 Ubuntu/Python 3.10 可用证明。
+9. **审计候选冻结。** 审计期间不修改候选；发现问题明确退回 Gate。
+10. **完成定义唯一。** 只有最终审计无 BLOCKER/HIGH 才使用 `READY`。
+
+这套机制的目标不是让审计“不能发现问题”，而是让问题在对应 Gate 当天暴露，而不是在 Task 1–13 全部宣布完成后集中暴露。
+
+---
+
+## 8. Task 1–13 到 Task 14 Gate 的覆盖映射
+
+| 原 Task | Task 14 负责证明其正式接线的 Gate |
+|---|---|
+| Task 1：协议与特征冻结 | Gate 0、Gate 1、Gate 2 |
+| Task 2：封存数据 | Gate 1、Gate 8 |
+| Task 3：truth 隔离 | Gate 2、Gate 7 |
+| Task 4：source 选择 | Gate 1、Gate 2 |
+| Task 5：盲滚动 | Gate 2、Gate 7 |
+| Task 6：预测接口 | Gate 2 |
+| Task 7：typed artifacts | Gate 4、Gate 6 |
+| Task 8：恢复状态机 | Gate 4、Gate 5、Gate 7 |
+| Task 9：rehydration/binding | Gate 5、Gate 7 |
+| Task 10：60 seed bundles | Gate 2、Gate 3、Gate 7 |
+| Task 11：调度器 | Gate 5、Gate 7 |
+| Task 12：最终门禁 | Gate 6、Gate 7 |
+| Task 13：正式入口 | Gate 3、Gate 6、Gate 7、Gate 8 |
+
+任何一项原 Task 都不因“已有单测”直接标记完成；必须由上表对应 Gate 证明它已进入官方调用链。
+
+---
+
+## 9. 最终完成条件
+
+Task 14 只有在以下条件同时满足时才能标记完成：
+
+- Gate 0–8 全部为 `GATE PASSED`；
+- 现有权威设计 digest 未改变；
+- 官方 task matrix 精确为 60 个 bundle，且全部调用新正式 worker；
+- formal E2E 中 legacy loader/runner/publisher 调用数均为 0；
+- worker truth access 为 0，truth mutation 不改变 worker semantic prediction digest；
+- 所有 accepted bundle 均由同一 attempt-held fencing token 通过原子目录发布；
+- 恢复只使用 frozen binding 或认证 trusted replica，fit/predict 调用数为 0；
+- final acceptance 独立复算 metrics/keys/counts/identity chain；
+- `SEALED_SUCCESS` 是成功路径最后一次写入；
+- 两条 dry-run 均零写入；
+- Ubuntu/Python 3.10 fresh-server preflight/dry-run 通过；
+- 最终只读全面审查结论为 `READY — NO BLOCKING FINDINGS`。
+
+在这些条件满足前，项目状态应报告为：
+
+```text
+协议基础设施已完成；正式执行链正在 Task 14 集成，尚未获准启动正式 D1–D6。
+```
