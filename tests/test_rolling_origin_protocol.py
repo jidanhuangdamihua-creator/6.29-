@@ -14,7 +14,10 @@ from src.protocols.experiment_protocol import ProtocolViolation
 from src.protocols.reproducibility import set_protocol_seed
 from src.protocols.rolling_origin import (
     assert_same_sample_manifest,
+    build_prediction_row_key,
+    build_prediction_sample_key,
     build_sample_manifest,
+    build_truth_key,
     validate_feature_availability,
 )
 
@@ -76,6 +79,26 @@ class RollingOriginProtocolTest(unittest.TestCase):
         assert_same_sample_manifest(manifest, keys, method="CNN")
         with self.assertRaisesRegex(ProtocolViolation, "sample manifest mismatch"):
             assert_same_sample_manifest(manifest, keys[:-1], method="BL1")
+
+    def test_sealed_prediction_keys_have_exact_dependency_boundaries(self) -> None:
+        truth = build_truth_key("a" * 64, "D1", "1/10", "2024-01-02")
+        sample = build_prediction_sample_key(truth, "2024-01-01", 1)
+        row = build_prediction_row_key(sample, "without", "No-TL", 42)
+
+        self.assertEqual(len({truth, sample, row}), 3)
+        self.assertTrue(all(len(value) == 64 for value in (truth, sample, row)))
+        self.assertEqual(
+            truth,
+            build_truth_key("a" * 64, "D1", "1/10", "2024-01-02"),
+        )
+        self.assertNotEqual(
+            sample,
+            build_prediction_sample_key(truth, "2024-01-01", 2),
+        )
+        self.assertNotEqual(
+            row,
+            build_prediction_row_key(sample, "without", "No-TL", 43),
+        )
 
     def test_manifest_can_start_at_common_model_valid_origin(self) -> None:
         manifest = build_sample_manifest(

@@ -432,7 +432,15 @@ class ArtifactSchemaDescriptor:
         ):
             raise SchemaValidationError("%s must be lowercase 64-hex" % field.name)
         if field.value_format == "canonical_entity_key":
-            if not isinstance(value, str) or not value or value != value.strip() or "/" in value:
+            if (
+                not isinstance(value, str)
+                or not value
+                or value != value.strip()
+                or any(
+                    not component or component != component.strip()
+                    for component in value.split("/")
+                )
+            ):
                 raise SchemaValidationError("%s is not canonical" % field.name)
         if field.value_format == "posix_relative" and not _is_safe_relative_path(value):
             raise SchemaValidationError("%s must be a safe relative POSIX path" % field.name)

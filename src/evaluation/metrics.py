@@ -64,11 +64,17 @@ def smape(y_true, y_pred, epsilon: float = 1e-8) -> float:
     """
     y_true_arr = np.asarray(y_true, dtype=np.float64).reshape(-1)
     y_pred_arr = np.asarray(y_pred, dtype=np.float64).reshape(-1)
+    if y_true_arr.size == 0 or y_pred_arr.size == 0:
+        raise ValueError("sMAPE arrays must be non-empty")
     if y_true_arr.shape[0] != y_pred_arr.shape[0]:
         raise ValueError(
             "y_true and y_pred size mismatch: "
             f"y_true={y_true_arr.shape[0]} y_pred={y_pred_arr.shape[0]}"
         )
+    if not np.isfinite(y_true_arr).all() or not np.isfinite(y_pred_arr).all():
+        raise ValueError("sMAPE arrays must be finite")
+    if not np.isfinite(float(epsilon)) or float(epsilon) <= 0.0:
+        raise ValueError("sMAPE epsilon must be finite and positive")
     return float(
         100.0
         * np.mean(

@@ -12,7 +12,7 @@ from src.evaluation.metric_contract import (
     compute_metric_index_digest,
     is_formally_comparable_smape_row,
 )
-from src.evaluation.metrics import compute_metrics_with_protocol
+from src.evaluation.metrics import compute_metrics_with_protocol, smape
 
 
 class DummyMinMaxScaler:
@@ -173,6 +173,21 @@ def test_contract_rejects_negative_target_instead_of_clipping_inside_metric_laye
         )
 
     assert exc_info.value.status == "negative_target"
+
+
+def test_formal_smape_uses_the_frozen_epsilon_inside_each_denominator():
+    actual = smape(np.array([0.0, 10.0]), np.array([0.0, 0.0]))
+    expected = 100.0 * np.mean([0.0, 20.0 / (10.0 + 1e-8)])
+    assert actual == expected
+
+
+@pytest.mark.parametrize(
+    ("y_true", "y_pred"),
+    [([], []), ([1.0], [np.nan]), ([np.inf], [1.0])],
+)
+def test_smape_fails_closed_for_empty_or_nonfinite_inputs(y_true, y_pred):
+    with pytest.raises(ValueError, match="non-empty|finite"):
+        smape(np.asarray(y_true), np.asarray(y_pred))
 
 
 def test_metric_index_digest_is_order_sensitive_and_deterministic():

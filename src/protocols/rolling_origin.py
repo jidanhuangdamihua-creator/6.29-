@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any, Iterable, Mapping, Sequence, Tuple
 
 import numpy as np
@@ -18,6 +19,82 @@ from .experiment_protocol import (
     normalize_source_key,
     serialize_canonical_target_key,
 )
+
+
+def canonical_typed_sha256(*parts: object) -> str:
+    """Hash fixed-order typed values without delimiter ambiguity.
+
+    This is the key primitive for the sealed rollout.  Type tags and byte
+    lengths make ``(1, "23")`` distinct from ``("1", 23)`` while keeping the
+    wire representation canonical UTF-8.
+    """
+
+    encoded_parts = []
+    for value in parts:
+        if isinstance(value, bool):
+            type_name, text = "bool", "true" if value else "false"
+        elif isinstance(value, (int, np.integer)) and not isinstance(value, bool):
+            type_name, text = "int", str(int(value))
+        elif isinstance(value, (datetime, date, pd.Timestamp)):
+            type_name, text = "date", pd.Timestamp(value).date().isoformat()
+        elif isinstance(value, str):
+            type_name, text = "str", value
+        else:
+            raise ProtocolViolation(
+                f"unsupported canonical hash component: {type(value).__name__}"
+            )
+        payload = text.encode("utf-8")
+        encoded_parts.append(
+            type_name.encode("ascii")
+            + b":"
+            + str(len(payload)).encode("ascii")
+            + b":"
+            + payload
+        )
+    return hashlib.sha256(b"\n".join(encoded_parts)).hexdigest()
+
+
+def build_truth_key(
+    evaluation_contract_digest: str,
+    dataset_id: str,
+    target_entity_key: str,
+    label_date: object,
+) -> str:
+    return canonical_typed_sha256(
+        "truth-key/v1",
+        evaluation_contract_digest,
+        dataset_id,
+        target_entity_key,
+        pd.Timestamp(label_date).date(),
+    )
+
+
+def build_prediction_sample_key(
+    truth_key: str,
+    forecast_origin: object,
+    horizon: int,
+) -> str:
+    return canonical_typed_sha256(
+        "prediction-sample-key/v1",
+        truth_key,
+        pd.Timestamp(forecast_origin).date(),
+        int(horizon),
+    )
+
+
+def build_prediction_row_key(
+    sample_key: str,
+    scenario: str,
+    method: str,
+    seed: int,
+) -> str:
+    return canonical_typed_sha256(
+        "prediction-row-key/v1",
+        sample_key,
+        scenario,
+        method,
+        int(seed),
+    )
 
 
 @dataclass(frozen=True)
