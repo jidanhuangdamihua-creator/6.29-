@@ -14,7 +14,7 @@
 - 原 Task 1–13 实施计划保持为历史执行记录，不通过本计划重写，当前 SHA-256 为 `70ae0719ca765051198aa2dd5e5e84bdd6c4e935dc28f8f24681aa687736f6ac`。
 - 除非权威设计内部存在无法同时满足的直接矛盾，否则禁止修改设计、增加新协议、扩大数据集范围、增加方法、增加 horizon 或改变 seeds。
 - 正式矩阵固定为 6 datasets × 2 modes × 5 seeds = 60 seed bundles；每个 bundle 固定覆盖 6 methods × h1–h5。
-- formal mode 只能读取 `数据集/固化数据/d1_d6_sealed_v1/datasetN/` 下通过 manifest 绑定的 sealed artifacts。
+- formal mode 只能读取 `数据集/固化数据/d1_d6_sealed_v1/datasetN/` 下由 `configs/sealed_deployments/d1_d6_sealed_v1.json` 精确绑定的 sealed artifacts。
 - worker 不得接收 evaluator truth；worker trace 不得包含 `y_true`；只有 evaluator 可以将 truth 加入 evaluated trace。
 - 正式产物只能通过注册 typed schema、冻结 binding、当前 attempt 的 fencing token 和原子目录发布成为 accepted。
 - `SEALED_SUCCESS` 必须是成功路径的最后一次写入，只能由 `complete_unsealed` 经完整 Task 12 acceptance 产生。
@@ -187,11 +187,11 @@ mini integration 命令、退出码和新旧函数 call counts：
 | B1 sealed-only 输入 | `run_strict_protocol_baseline.build_matrix_tasks()` 生成 `run_full_paper_experiments.py`/`run_d4_experiment.py`/`run_d5_experiment.py`/`run_d6_experiment.py`；D4/D6 调 `load_parquet_source_target()`，D5 调 `load_parquet_source_target_with_diagnostics()` | `load_sealed_target_views()`、`read_sealed_projection()`、sealed manifest/schema/repair sidecars | Gate 1B 新增薄 `SealedDatasetHandle.open()`，Gate 2 使所有 60 tasks 直接调用唯一 bundle worker | formal task 中所有旧 scripts、raw D5 authority、旧 `数据集/固化数据` root、smoke/raw fallback | dry-run 断言 60 commands 只含新 worker且 RUN_ROOT 不存在；mini call 断言 sealed handle call > 0，两个 legacy loader calls = 0 |
 | B2 truth-free joint rollout | D1–D3 调旧 `run_no_tl_experiment()` 等实验函数；D4–D6 调 `run_single_entity_experiment()` 并逐 horizon 循环 | `load_sealed_target_views()`、`create_worker_cache()`、`create_evaluator_cache()`、`run_truth_free_fit()`、`fit_formal_method_bundle()`、`run_blind_rollout()`、`join_worker_trace_with_truth()` | 薄 seed-bundle orchestration 按固定顺序组合现有 API | full target dataframe 进入 worker、worker 构造/返回 `y_true`、逐 horizon child fit、h2–h5 feedback | mini call 断言每 method bundle fit = 1、blind rollout = 6、legacy experiment calls = 0；修改 evaluator truth 后 worker semantic digest 不变 |
 | B3 exact Schema gate | `run_full_paper_experiments.py` 动态解析 feature cols；D4 runtime feature mismatch 只 warning；`_resolve_model_feature_cols()` 静默 drop；source 数值缺失统一填 0 | `get_predictor_schema()`、`get_knn_schema()`、`audit_future_known_lineage()`、`PredictorFeatureMask` | 在 `SealedDatasetHandle` 与 fit adapter 之间加入 exact ordered-schema assertion；直接使用既有 schema registry | 动态交集、静默 drop、warning 后继续、通用 fill-zero | mini fixture 分别注入 missing/extra/reordered/dtype/lineage/repair drift，均在 fit call count = 0 时 fail closed |
-| B4 adoption/repair proof | `adopt_and_seal_d3_d6.py` 调通用 `validate_adopted_pair(source, target)`；随后硬编码 `not_reconstructed_during_adoption`/`unavailable` sidecar；preflight 接受 null/null | `calendarize_and_fill()`、`canonicalize_source_sales()`、`prepare_daily_sequence_pool()` 的完整 180-day validation、`get_predictor_schema()`、`get_knn_schema()`、现有 adoption report/schema helpers | **Gate 1A** 只负责在 adoption 阶段生产完整、确定的 proof 并做 producer-level 自检；**Gate 1B** 独立消费并严格校验 proof，不能生成或推断 proof | structural-only 大表跳过、unavailable counts、null repair mask/digest、optional proof comparison | Gate 1A 用 mini authority 实际 adoption，断言 calendarization/canonicalization 调用、proof 完整、闭合、稳定且三处 identity 一致；Gate 1B 删除、置 null 或篡改任一 proof 后 formal preflight blocked；任何训练 call = 0 |
+| B4 adoption/repair proof | `adopt_and_seal_d3_d6.py` 调通用 `validate_adopted_pair(source, target)`；随后硬编码 `not_reconstructed_during_adoption`/`unavailable` sidecar；preflight 接受 null/null | `calendarize_and_fill()`、`canonicalize_source_sales()`、`prepare_daily_sequence_pool()` 的完整 180-day validation、`get_predictor_schema()`、`get_knn_schema()`、现有 adoption report/schema helpers | **Gate 1A** 只负责在 adoption 阶段生产完整、确定的 proof 并做 producer-level 自检；**Gate 1A-P** 使用已提交 producer 将 proof 物化为正式 sealed authority；**Gate 1B** 独立消费并严格校验 proof，不能生成或推断 proof | structural-only 大表跳过、unavailable counts、null repair mask/digest、optional proof comparison | Gate 1A 用 mini authority 证明 producer；Gate 1A-P 在 sibling staging 重放两次并原子发布，经 inventory 证明 source/target bytes 不变、proof identity 确定且三处一致；Gate 1B 删除、置 null 或篡改任一 proof 后 formal preflight blocked；任何训练 call = 0 |
 | B5 typed artifacts | 正式 runner 调 `publish_formal_seed_bundle_output_frame()`，其下进入 legacy `publish_formal_cell_frame()` 和 ad hoc manifest | `publish_prediction_artifact()`、`build_worker_manifest()`、`join_worker_trace_with_truth()`、`derive_formal_result_row()`、artifact schema registry | seed-bundle orchestration 直接发布全部 typed artifacts；legacy CSV 仅由 verified evaluated trace 派生 | formal path 中 `publish_formal_seed_bundle_output_frame()`、self-signed fields、未注册字段和未认证 CSV authority | mini call 用 registry 逐个读回 artifacts；typed publisher calls > 0，legacy publisher calls = 0；worker trace schema 中不存在 `y_true` |
 | B6 recovery/fencing/binding | shell 以 TSV 表示 task 状态；`_current_fencing_token()` 在发布时读取 mutable state；legacy publisher token 默认 0；bundle files 分步发布 | `RunRecovery.set_cell_state()`、`publish_cell_directory()`、`heartbeat()`、`resume()`、`ArtifactRehydrator.rehydrate()`/`freeze_binding_set()`、`resolve_bound_artifact()` | 薄 lifecycle orchestration 显式传递 attempt-held token；生产结束后冻结完整 binding 再启动 aggregate | token 0、发布时领取新 token、TSV 权威状态、accepted sidecar、binding 外 path resolution | mini supervisor 注入 stale worker/crash/missing artifact；断言旧 token 发布失败、accepted 不重复、rehydration fit/predict = 0、aggregate 只经 binding |
 | B7 final sealing 不可达 | shell 成功后只执行 `aggregate`；`aggregate` 停在 `complete_unsealed`；`finalize_sealed_run()` 无官方 CLI 调用点 | `accept_sealed_run_records()`、`finalize_sealed_run()`、`RunRecovery.transition()`、`publish_prediction_artifact()` | 增加 `final-seal` operation 并由 shell 在 aggregate 后唯一调用 | aggregate 后直接退出 0、直接写 marker、调用者提交未认证内存 proofs | 60-bundle mini supervisor 到达 success；故意破坏 trace 后到达 sealed_failed；成功 marker mtime/事件序列为最后写入 |
-| B8 server sealed data 不自包含 | `.gitignore` 忽略 `数据集/`，代码 SHA 不提供数据安装或 byte-level authority；没有可替换的单一 legacy 函数 | sealed manifest/validation report/content SHA 与 formal preflight identity | **Gate 1B。** 新增薄内容寻址 deployment manifest、安装/验证步骤和 fresh-checkout gate；不扩展为 runtime artifact authority | 未记录的人工复制、本地绝对路径、服务器既有同名文件被默认信任 | 在临时 fresh-install root 按 manifest 安装 mini artifacts；缺失/替换 bytes 时 preflight blocked，完整 bytes 时 ready；RUN_ROOT 仍不存在 |
+| B8 server sealed data 不自包含 | `.gitignore` 忽略 `数据集/`，代码 SHA 不提供数据安装或 byte-level authority；没有可替换的单一 legacy 函数 | sealed manifest/validation report/content SHA 与 formal preflight identity | **Gate 1A-P** 创建并提交薄内容寻址 deployment manifest；**Gate 1B** 只实现安装/验证、resolver 和 fresh-checkout gate，不得创建第二份 manifest；两者均不得扩展为 runtime artifact authority | 未记录的人工复制、本地绝对路径、服务器既有同名文件被默认信任 | Gate 1A-P 证明 manifest 精确绑定正式六数据 bytes；Gate 1B 在临时 fresh-install root 按该 manifest 安装 mini artifacts，缺失/替换 bytes 时 preflight blocked，完整 bytes 时 ready；RUN_ROOT 仍不存在 |
 
 #### 每条迁移的通过标准
 
@@ -209,6 +209,9 @@ mini integration 命令、退出码和新旧函数 call counts：
 
 ### 新建文件
 
+- `configs/sealed_deployments/d1_d6_sealed_v1.json`
+  - Gate 1A-P 唯一 Git 跟踪产物；精确绑定正式 D1–D6 sealed artifacts 的规范相对路径、size 和 SHA-256。
+  - 只是薄部署索引，不包含 run artifact binding、attempt、fencing、rehydration、raw/legacy authority 或服务器绝对路径。
 - `scripts/run_formal_seed_bundle.py`
   - 唯一正式 child-process CLI；只接受 dataset、mode、seed、run root、attempt id 和 fencing token。
   - 不接受 `--horizon`、raw path、legacy parquet root 或 smoke fallback。
@@ -282,7 +285,7 @@ mini integration 命令、退出码和新旧函数 call counts：
 
 **Interfaces:**
 - Consumes: 两份现有权威文档。
-- Produces: 设计 digest gate、Task 1–13 到 Gate 1A、Gate 1B、Gate 2–8 的覆盖映射。
+- Produces: 设计 digest gate、Task 1–13 到 Gate 1A、Gate 1A-P、Gate 1B、Gate 2–8 的覆盖映射。
 
 - [ ] **Step 1: 写设计冻结测试**
 
@@ -321,8 +324,9 @@ git commit -m "test: freeze D1-D6 sealing design for Task 14"
 
 Gate 1A 是 Task 2 的漏接调用点修复，不是新的封存协议。D3–D6 继续使用
 `adopted_solidified` provenance，不进行 raw rebuild，不预先假定或人为改写
-source/target parquet bytes。Gate 1A 必须先于 Gate 1B；Gate 2 只有在 Gate 1A
-和 Gate 1B 均通过后才能开始。
+source/target parquet bytes。Gate 1A 必须先于 Gate 1A-P，Gate 1A-P 必须先于 Gate 1B；
+Gate 2 只有在 Gate 1A、Gate 1A-P 和 Gate 1B 均通过后才能开始。Gate 1A producer 提交后必须先经过
+Gate 1A-P 将输出物化为正式 sealed authority；Gate 1B 不得直接消费未物化的 producer 能力。
 
 Gate 1A 的责任边界固定为 **proof 生产和 producer-level 自检**。本 Gate 不修改正式
 preflight 生产实现，不要求正式 preflight 已能拒绝每一种 proof tamper；完整
@@ -395,6 +399,184 @@ git commit -m "fix: publish complete D3-D6 adoption repair proofs"
 
 **Gate 1A acceptance:** D3–D6 adoption producer 在 mini fixtures 上真实使用现有 calendarization/canonicalization；`calendar_row_missing_mask` 来自真实 calendarization；proof 完整、闭合且确定；manifest、repair sidecar 和 adoption report 身份一致；producer-level 破坏被检出；无修复 mini source 的逻辑内容没有无依据变化；没有正式全量 replay、新协议、第二套实现或正式 preflight 生产变更。
 
+### Gate 1A-P：物化 sealed repair authority 和部署清单
+
+Gate 1A-P 是 Gate 1A producer 实现与 Gate 1B proof consumer 之间的独立数据发布 Gate。
+它不是新的算法、验证器、canonicalization 或 formal preflight；唯一生产者固定为提交
+`c4a905cd` 中的 `scripts/adopt_and_seal_d3_d6.py`。此前在保护器中返回 124 的只读诊断
+replay 不得重试、拆分、简化、续跑或作为本 Gate 命令；本 Gate 调用 adoption producer 是
+新的正式物化操作，但任一命令返回 124 时仍须立即停止。
+
+**Files and mutable authority:**
+- Create and commit: `configs/sealed_deployments/d1_d6_sealed_v1.json`
+- Materialize, Git ignored: `数据集/固化数据/d1_d6_sealed_v1/dataset3/`
+- Materialize, Git ignored: `数据集/固化数据/d1_d6_sealed_v1/dataset4/`
+- Materialize, Git ignored: `数据集/固化数据/d1_d6_sealed_v1/dataset5/`
+- Materialize, Git ignored: `数据集/固化数据/d1_d6_sealed_v1/dataset6/`
+- Read only: `数据集/固化数据/d1_d6_sealed_v1/dataset1/`
+- Read only: `数据集/固化数据/d1_d6_sealed_v1/dataset2/`
+
+除 deployment manifest 外不得修改任何 Git 跟踪文件。D3–D6 预期只改变
+`source_sales_canonicalization.json`、`manifest.json`、`adopt_validation_report.json` 和 producer
+实际规定必须同步更新的 audit/report sidecars；`source.parquet` 与 `target.parquet` 的 bytes、size
+或 SHA-256 任一变化时，必须在正式 root 发布前停止。
+
+**Interfaces:**
+- Consumes: Gate 1A 已提交 producer `scripts/adopt_and_seal_d3_d6.py@c4a905cd`、现有正式 D1–D6 sealed root、`src/utils/run_artifacts.py::sha256_file()` 和现有 sealed manifest/sidecars。
+- Produces: 已原子发布的正式 D3–D6 complete repair proof authority，以及唯一 Git 跟踪的薄 deployment manifest `configs/sealed_deployments/d1_d6_sealed_v1.json`。
+- Does not produce: 新算法、schema registry、digest 算法、formal resolver、`SealedDatasetHandle`、run artifact binding、rehydration authority、worker、runner、raw rebuild 或正式运行输出。
+
+- [ ] **Step 1: 冻结发布前 inventory 和输出目录基线**
+
+对正式 `数据集/固化数据/d1_d6_sealed_v1/` 的全部普通文件按 POSIX relative path 排序，使用
+`src.utils.run_artifacts.sha256_file()` 记录 `relative_path`、`size_bytes` 和 lowercase 64-hex
+`sha256` 到 `/tmp/d1-d6-task14-gate1a-p-before.json`。同时记录 `outputs/runs/` 的完整 inventory；
+inventory 命令本身也必须通过 180 秒保护器，返回 124 时立即停止。发布前断言正式 root 不含
+symlink，D1–D6 每个 dataset 的文件集合均可完整读取。
+
+- [ ] **Step 2: 在同文件系统的两个 sibling staging roots 运行已提交 producer**
+
+staging roots 固定为正式 sealed root 的 sibling，且运行前必须不存在：
+
+```text
+数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-staging-a
+数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-staging-b
+```
+
+分别执行：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
+python scripts/adopt_and_seal_d3_d6.py --dataset all \
+--parent-root 数据集/固化数据 \
+--output-dir 数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-staging-a
+
+PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
+python scripts/adopt_and_seal_d3_d6.py --dataset all \
+--parent-root 数据集/固化数据 \
+--output-dir 数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-staging-b
+```
+
+Expected: 两条命令均退出 0；任何一条返回 124 时立即停止，不得重试另一条或继续发布。producer
+不得直接指向正式 sealed root，也不得在正式 dataset 目录内逐文件覆盖。
+
+- [ ] **Step 3: 验证 staging source/target bytes 和 proof 合同**
+
+对 D3–D6 两个 staging roots 分别验证：
+
+```text
+staged source.parquet identity == before formal source.parquet identity
+staged target.parquet identity == before formal target.parquet identity
+status not in {null, unavailable, not_reconstructed_during_adoption}
+repair_reason_counts keys == {original_nan, original_negative, calendar_row_missing}
+sum(repair_reason_counts.values()) == len(affected_rows)
+len(affected_rows) <= rows_examined
+repair_mask_sha256 matches lowercase 64-hex SHA-256
+affected_date_digest matches sha256:<lowercase 64-hex SHA-256>
+sidecar proof == manifest.source_sales_repair == adoption_report.source_sales_repair
+manifest mask/count identities == complete proof mask/count identities
+staging-a proof identity == staging-b proof identity
+```
+
+任一断言失败即停止；不得从 sealed source 反推、补写、修补或推断 proof。除预期
+proof/manifest/report sidecars 外，staging 与发布前 dataset 的 relative-path 集合必须相同。
+
+- [ ] **Step 4: 使用原子 dataset-directory publication 替换 D3–D6**
+
+验证完成后，仅对 D3–D6 使用当前文件系统支持的原子 directory exchange primitive，将
+staging-a 的完整 `datasetN/` 与正式 `datasetN/` 交换；每个 dataset 的交换必须是单个原子目录
+操作，且交换后 fsync sealed root parent directory。平台不支持原子 directory exchange、交换前后
+设备号不同或无法 fsync 时立即停止并报告；不得退化为逐文件覆盖、先删除再 rename，或产生正式
+dataset path 暂时不存在的两步 publication。被交换出的旧正式目录保留为 sibling rollback evidence，
+直至 Step 6 全部验证通过；不得在验证前删除。
+
+- [ ] **Step 5: 生成唯一 deployment manifest**
+
+创建 `configs/sealed_deployments/d1_d6_sealed_v1.json`。JSON bytes 必须使用 UTF-8、键排序、
+确定性 separators 和唯一尾随换行；manifest identity 定义为对这些最终文件 bytes 调用现有
+`src.utils.run_artifacts.sha256_file()` 的结果，不在 manifest 内嵌自引用 digest。顶层只包含固定
+manifest/sealed-root version 和 `datasets`。每个 dataset 的 artifacts 必须精确覆盖：
+
+```text
+source.parquet
+target.parquet
+manifest.json
+validation_report.json
+source_schema.json
+target_schema.json
+predictor_schema.json
+knn_schema.json
+calendarization_audit.json
+source_sales_canonicalization.json
+provenance.json
+```
+
+D3–D6 还必须各含 `adopt_validation_report.json`。每个 artifact entry 只包含：
+
+```json
+{
+  "logical_role": "source",
+  "path": "dataset1/source.parquet",
+  "size_bytes": 1,
+  "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+}
+```
+
+所有 path 均相对于 manifest 所声明的 `d1_d6_sealed_v1` 部署根，使用规范 POSIX relative path；
+不得包含绝对路径、空段、`.`、`..`、反斜杠、symlink、部署根外引用或重复 normalized path。
+不得包含 raw/legacy/KNN root、attempt ID、fencing token、run artifact binding、rehydration authority、
+mutable state 或本机绝对路径。所有文件 SHA 必须通过 `sha256_file()` 从正式 root 实际 bytes 取得，
+不得复制或重写 digest 实现。
+
+- [ ] **Step 6: 发布后做完整 inventory、coverage 和零输出验证**
+
+重新生成 `/tmp/d1-d6-task14-gate1a-p-after.json`，并与 before inventory 精确分类比较：
+
+- D1/D2 全部 relative path、size 和 SHA-256 未改变；
+- D3–D6 `source.parquet`、`target.parquet` 的 size 和 SHA-256 未改变；
+- D3–D6 只有 Step 3 已列明并由 producer 同步更新的 proof/manifest/report sidecars发生变化；
+- 没有额外、缺失、symlink 或未记录文件；
+- deployment manifest artifact 集合与规定集合精确相等，无缺失或额外条目；
+- manifest 每个 size/SHA 与正式 root 实际 bytes 精确相等；
+- manifest identity 重算两次结果相同；
+- `outputs/runs/` inventory 与 Step 1 完全相同。
+
+验证通过后才可清理 sibling staging/rollback evidence；清理不得触碰正式 dataset directories。
+
+- [ ] **Step 7: 运行 Gate 1A-P 验证**
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
+python -m pytest \
+tests/test_formal_entry_preflight.py::test_repository_sealed_root_passes_layered_preflight \
+-q -p no:cacheprovider --basetemp /tmp/d1-d6-task14-gate1a-p-preflight
+
+git diff --check
+git status --short
+git diff --name-only
+```
+
+Expected: repository preflight 退出 0 且状态为 ready；`git diff --check` 退出 0；tracked diff 精确只有
+`configs/sealed_deployments/d1_d6_sealed_v1.json`；正式 `outputs/runs/` 无变化；没有训练、fit、predict、
+formal attempt、run plan 或 accepted artifact 写入。任一 Python 命令返回 124 时立即停止。
+
+- [ ] **Step 8: 提交 Gate 1A-P deployment authority**
+
+```bash
+git add configs/sealed_deployments/d1_d6_sealed_v1.json
+git diff --cached --name-only
+git commit -m "data: publish D3-D6 repair authority manifest"
+```
+
+Expected: staged/committed path 精确只有 `configs/sealed_deployments/d1_d6_sealed_v1.json`；Git ignored
+sealed root 的完整 byte identities 由该 manifest 记录并约束，不将 sealed data 强行加入 Git。
+
+**Gate 1A-P acceptance:** 正式 D3–D6 repair proof 由 `c4a905cd` producer 在 sibling staging 中两次
+确定性物化，proof 完整且 sidecar/manifest/adoption report identity 一致；D1/D2 全部 bytes 和 D3–D6
+source/target bytes 发布前后精确不变；D3–D6 通过原子 dataset-directory publication替换；唯一 Git
+tracked deployment manifest 精确绑定规定的六数据 artifact 集合和实际 bytes；repository preflight仍为
+ready；`outputs/runs/` 零变化；没有生产代码、测试、权威设计、formal preflight 或 worker 修改。
+
 ### Gate 1B：建立 sealed-only 数据句柄和部署合同
 
 **Files:**
@@ -404,8 +586,8 @@ git commit -m "fix: publish complete D3-D6 adoption repair proofs"
 - Modify: `scripts/run_unified_d1_d6.py`
 
 **Interfaces:**
-- Consumes: Gate 1A 已发布的可信 repair proof、`load_sealed_target_views()`、sealed manifest、validation report、schema/lineage registry、现有 input identity/digest 工具和 frozen run binding 边界。
-- Produces: 对 Gate 1A proof 的严格 formal preflight enforcement，以及 `SealedDatasetHandle.open(dataset_id, deployment_manifest_path, run_plan_input_identity) -> SealedDatasetHandle`；handle 暴露 truth-isolated views、source frame 和不可变 identities，不暴露 raw/legacy path。Gate 1B 只消费 proof，不生成、修补或推断 repair proof。
+- Consumes: Gate 1A-P 已物化的 D3–D6 complete repair proof、已提交的 `configs/sealed_deployments/d1_d6_sealed_v1.json`、`load_sealed_target_views()`、sealed manifest、validation report、schema/lineage registry、现有 input identity/digest 工具和 frozen run binding 边界。
+- Produces: 对已物化 proof 的严格 formal preflight enforcement，以及 `SealedDatasetHandle.open(dataset_id, deployment_manifest_path, run_plan_input_identity) -> SealedDatasetHandle`；handle 暴露 truth-isolated views、source frame 和不可变 identities，不暴露 raw/legacy path。Gate 1B 只消费 Gate 1A-P authority，不生成、修补或推断 repair proof，也不得创建第二份 deployment manifest。
 
 - [ ] **Step 1: 写失败测试，严格拒绝缺失、unavailable、null 或篡改的 repair proof**
 
@@ -476,7 +658,7 @@ tests/test_adopt_validation_contract.py tests/test_source_sales_canonicalization
 -q -p no:cacheprovider --basetemp /tmp/d1-d6-task14-sealed-inputs
 ```
 
-Expected: 全部通过；Gate 1A 产生的 proof 可被独立消费；formal preflight 验证完整 status/counts/rows/digests 和 sidecar/manifest/deployment identity；删除、置 null 或篡改任一 proof 字段时 blocked 并返回稳定失败码；fresh install 的 missing/changed bytes 被拒绝；不运行训练。
+Expected: 全部通过；Gate 1A-P 物化的 proof 和唯一 deployment manifest 可被独立消费；formal preflight 验证完整 status/counts/rows/digests 和 sidecar/manifest/deployment identity；删除、置 null 或篡改任一 proof 字段时 blocked 并返回稳定失败码；fresh install 的 missing/changed bytes 被拒绝；不运行训练。
 
 - [ ] **Step 6: 提交 Gate 1B**
 
@@ -485,9 +667,9 @@ git add src/utils/formal_sealed_inputs.py scripts/validate_d1_d6_protocol_inputs
 git commit -m "feat: require sealed-only formal dataset handles"
 ```
 
-**Gate 1B acceptance:** fresh install 能仅凭 deployment manifest 和 Gate 1A proof 校验六个 sealed datasets；formal preflight 对完整 repair proof fail closed，并在任一字段缺失、置 null、不闭合或 identity mismatch 时 blocked；formal identity 中没有 raw、legacy 或 smoke path；Gate 1B 不生成或修补 repair proof。
+**Gate 1B acceptance:** fresh install 能仅凭 Gate 1A-P 提交的 deployment manifest 和已物化 proof 校验六个 sealed datasets；formal preflight 对完整 repair proof fail closed，并在任一字段缺失、置 null、不闭合或 identity mismatch 时 blocked；formal identity 中没有 raw、legacy 或 smoke path；Gate 1B 不生成或修补 repair proof，也不创建第二份 deployment manifest。
 
-**Gate 1 combined acceptance:** Gate 1A 和 Gate 1B 均为 `GATE PASSED` 后，才允许进入 Gate 2。
+**Gate 1 combined acceptance:** Gate 1A、Gate 1A-P 和 Gate 1B 均为 `GATE PASSED` 后，才允许进入 Gate 2。
 
 ### Gate 2：建立唯一 truth-free seed-bundle worker
 
@@ -880,7 +1062,7 @@ git commit -m "feat: complete formal acceptance and terminal sealing"
 - Modify: `README.md`
 
 **Interfaces:**
-- Consumes: 官方 shell supervisor、mini sealed fixture、Gate 1A、Gate 1B、Gate 2–6 的全部接口。
+- Consumes: 官方 shell supervisor、mini sealed fixture、Gate 1A、Gate 1A-P、Gate 1B、Gate 2–6 的全部接口。
 - Produces: 一条足以证明“整台机器使用新零件”的端到端证据。
 
 - [ ] **Step 1: 正向 60-bundle mini run**
@@ -938,12 +1120,12 @@ git commit -m "test: gate the complete formal sealing path"
 - Create: `docs/superpowers/reviews/d1-d6-task14-verification-record.md`
 
 **Interfaces:**
-- Consumes: Gate 0、Gate 1A、Gate 1B、Gate 2–7 的固定提交序列。
+- Consumes: Gate 0、Gate 1A、Gate 1A-P、Gate 1B、Gate 2–7 的固定提交序列。
 - Produces: clean-server preflight/dry-run 证据和最终审计输入。
 
 - [ ] **Step 1: 本地联合轻量套件**
 
-运行 Task 1–13 原联合套件、Gate 1A、Gate 1B、Gate 2–7 新测试、compileall、`bash -n` 和 `git diff --check`。任何 warning 必须分类记录，不得只报告退出码。
+运行 Task 1–13 原联合套件、Gate 1A、Gate 1A-P authority/manifest checks、Gate 1B、Gate 2–7 新测试、compileall、`bash -n` 和 `git diff --check`。任何 warning 必须分类记录，不得只报告退出码。
 
 - [ ] **Step 2: Ubuntu/Python 3.10 clean checkout 验证**
 
@@ -977,9 +1159,9 @@ git commit -m "docs: record Task 14 formal verification"
 | `NOT STARTED` | Gate 尚未开始 |
 | `IMPLEMENTED, NOT GATED` | 代码已写，但失败/通过测试或审查未完成 |
 | `GATE PASSED` | 本 Gate 的正向、负向和旁路测试均通过并已形成提交 |
-| `INTEGRATION COMPLETE, AUDIT PENDING` | Gate 0、Gate 1A、Gate 1B、Gate 2–8 全部通过，尚未开始最终只读审计 |
+| `INTEGRATION COMPLETE, AUDIT PENDING` | Gate 0、Gate 1A、Gate 1A-P、Gate 1B、Gate 2–8 全部通过，尚未开始最终只读审计 |
 | `READY` | 最终只读审计无 BLOCKER/HIGH |
-| `BLOCKED AT GATE N` | 明确退回某个 Gate，不使用“基本完成”表述 |
+| `BLOCKED AT GATE <id>` | 明确退回某个 Gate，包括 `Gate 1A-P`，不使用“基本完成”表述 |
 
 每日报告固定为：
 
@@ -1006,12 +1188,12 @@ legacy 旁路调用数：
 
 | 工作 | 理想工程日 | 稳妥工程日 |
 |---|---:|---:|
-| Gate 0–1B：冻结、adoption proof、sealed input、部署合同 | 1.0 | 1.5–2.0 |
+| Gate 0–1B：冻结、adoption proof、authority 物化、sealed input、部署合同 | 1.0–1.5 | 2.0–2.5 |
 | Gate 2–3：统一 bundle worker、禁止 legacy | 1.5–2.0 | 2.0–3.0 |
 | Gate 4–5：typed publication、fencing、binding、recovery | 2.0 | 3.0–4.0 |
 | Gate 6–7：final seal、E2E、故障注入 | 1.5–2.0 | 2.0–3.0 |
 | Gate 8：服务器验证和只读审计准备 | 0.5–1.0 | 1.0–2.0 |
-| **合计** | **6–8** | **8–12** |
+| **合计** | **6.5–8.5** | **8.5–12.5** |
 
 该时间不包括真实 D1–D6 模型训练时长，也不包括设计范围变化。
 
@@ -1021,6 +1203,8 @@ legacy 旁路调用数：
 
 - timeout wrapper 返回 124；
 - 需要修改冻结设计才能继续；
+- Gate 1A-P staging 或发布后的 D3–D6 source/target bytes 与发布前不完全相同；
+- Gate 1A-P 所在平台无法提供同文件系统的原子 dataset-directory exchange；
 - mini E2E 必须 mock 掉正式 orchestration 才能通过；
 - 正式 worker 必须读取 raw/legacy 数据才能运行；
 - D3–D6 无法提供可信 adoption/repair proof；
@@ -1054,8 +1238,8 @@ legacy 旁路调用数：
 
 | 原 Task | Task 14 负责证明其正式接线的 Gate |
 |---|---|
-| Task 1：协议与特征冻结 | Gate 0、Gate 1B、Gate 2 |
-| Task 2：封存数据 | Gate 1A、Gate 1B、Gate 8 |
+| Task 1：协议与特征冻结 | Gate 0、Gate 1A-P、Gate 1B、Gate 2 |
+| Task 2：封存数据 | Gate 1A、Gate 1A-P、Gate 1B、Gate 8 |
 | Task 3：truth 隔离 | Gate 2、Gate 7 |
 | Task 4：source 选择 | Gate 1B、Gate 2 |
 | Task 5：盲滚动 | Gate 2、Gate 7 |
@@ -1076,8 +1260,9 @@ legacy 旁路调用数：
 
 Task 14 只有在以下条件同时满足时才能标记完成：
 
-- Gate 0、Gate 1A、Gate 1B、Gate 2–8 全部为 `GATE PASSED`；
+- Gate 0、Gate 1A、Gate 1A-P、Gate 1B、Gate 2–8 全部为 `GATE PASSED`；
 - 现有权威设计 digest 未改变；
+- 唯一 tracked deployment manifest 精确绑定正式 D1–D6 artifact bytes，且无 raw、legacy 或本机路径 authority；
 - 官方 task matrix 精确为 60 个 bundle，且全部调用新正式 worker；
 - formal E2E 中 legacy loader/runner/publisher 调用数均为 0；
 - worker truth access 为 0，truth mutation 不改变 worker semantic prediction digest；
