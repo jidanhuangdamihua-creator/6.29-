@@ -98,18 +98,6 @@ print_mode_command() {
     printf '\n'
 }
 
-if [[ "${DRY_RUN}" == "1" ]]; then
-    printf '[DRY-RUN] run_root=%s\n' "${FORMAL_RUN_ROOT}"
-    printf '[CAPS] MAX_JOBS=%s D5_MAX_JOBS=%s THREAD_BUDGET=%s D5_THREADS=%s ORDINARY_THREADS=%s publish_global=%s\n' \
-        "${MAX_JOBS}" "${D5_MAX_JOBS}" "${THREAD_BUDGET}" \
-        "${D5_THREADS}" "${ORDINARY_THREADS}" "${PUBLISH_GLOBAL}"
-    for task in "${TASKS[@]}"; do
-        print_mode_command "${task}"
-    done
-    printf '[FORMAL PLAN] cells=%s unique=%s\n' "$((TASK_COUNT * 5))" "$((TASK_COUNT * 5))"
-    exit 0
-fi
-
 resolve_python_bin() {
     local candidate
     if [[ -n "${PYTHON_BIN+x}" ]]; then
@@ -132,6 +120,28 @@ resolve_python_bin() {
     done
     return 1
 }
+
+if [[ "${DRY_RUN}" == "1" ]]; then
+    printf '[DRY-RUN] run_root=%s\n' "${FORMAL_RUN_ROOT}"
+    printf '[CAPS] MAX_JOBS=%s D5_MAX_JOBS=%s THREAD_BUDGET=%s D5_THREADS=%s ORDINARY_THREADS=%s publish_global=%s\n' \
+        "${MAX_JOBS}" "${D5_MAX_JOBS}" "${THREAD_BUDGET}" \
+        "${D5_THREADS}" "${ORDINARY_THREADS}" "${PUBLISH_GLOBAL}"
+    for task in "${TASKS[@]}"; do
+        print_mode_command "${task}"
+    done
+    printf '[FORMAL PLAN] cells=%s unique=%s\n' "$((TASK_COUNT * 5))" "$((TASK_COUNT * 5))"
+    if [[ -z "${UNIFIED_RUNNER_BIN+x}" ]]; then
+        if ! DRY_RUN_PYTHON="$(resolve_python_bin)"; then
+            fail_usage "no Python interpreter found for formal dry-run; set PYTHON_BIN"
+        fi
+        "${DRY_RUN_PYTHON}" "${DEFAULT_UNIFIED_RUNNER}" \
+            --dry-run --output-dir "${FORMAL_RUN_ROOT}"
+    else
+        printf '[DRY-RUN] enriched protocol summary skipped for injected test runner=%s\n' \
+            "${UNIFIED_RUNNER_BIN}"
+    fi
+    exit 0
+fi
 
 if ! PYTHON="$(resolve_python_bin)"; then
     fail_usage "no Python interpreter found; set PYTHON_BIN"

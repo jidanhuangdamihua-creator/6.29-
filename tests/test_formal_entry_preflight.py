@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -47,3 +48,106 @@ def test_blocked_preflight_creates_neither_run_directory_nor_attempt(
         unified.prepare_formal_run(run_root, resume=False)
 
     assert not run_root.exists()
+
+
+def test_formal_dry_run_resolves_complete_read_only_protocol_summary(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "dry-run-must-not-exist"
+    tasks = unified.build_tasks(None, smoke=False, run_dir=run_root)
+
+    report = unified.build_formal_dry_run_report(tasks, run_root=run_root)
+
+    assert report["preflight_status"] == "ready"
+    assert report["run_root"] == str(run_root.resolve())
+    assert report["formal_plan"] == {
+        "bundle_count": 60,
+        "unique_result_count": 60,
+        "mode_count": 12,
+        "horizons": [1, 2, 3, 4, 5],
+        "seeds": [42, 43, 44, 45, 46],
+    }
+    assert report["scheduler_contract"] == {
+        "d5_dependency": ["d5_without", "d5_with"],
+        "d5_threads": 6,
+        "ordinary_threads": 2,
+        "total_thread_budget": 16,
+    }
+    datasets = report["datasets"]
+    assert [item["dataset_id"] for item in datasets] == [f"D{i}" for i in range(1, 7)]
+    assert [item["provenance_level"] for item in datasets[:2]] == [
+        "raw_rebuilt",
+        "raw_rebuilt",
+    ]
+    assert {item["provenance_level"] for item in datasets[2:]} == {
+        "adopted_solidified"
+    }
+    for dataset in datasets:
+        assert dataset["identity"]["source"]["sha256"]
+        assert dataset["identity"]["target"]["sha256"]
+        assert dataset["windows"]["target"]["blind_start"]
+        assert dataset["windows"]["source"]["pretrain_start"]
+        assert dataset["predictor_schema"]["fields"]
+        assert dataset["knn_schema"]["fields"]
+        assert "source_sales_repair" in dataset
+    assert len(report["mode_cache_identities"]) == 12
+    assert len(set(report["mode_cache_identities"].values())) == 12
+    for dataset in datasets:
+        dataset_id = int(dataset["dataset_id"][1:])
+        target = dataset["identity"]["target"]
+        relative_target = str(
+            Path(target["path"]).relative_to(unified.PROJECT_ROOT)
+        )
+        input_identity = {
+            relative_target: {
+                "bytes": target["bytes"],
+                "sha256": target["sha256"],
+            }
+        }
+        for mode in unified.VALID_MODES:
+            task = next(
+                item
+                for item in tasks
+                if item.dataset_id == dataset_id and item.scenario == mode
+            )
+            pinned = unified._pin_task_identities(
+                unified._task_plan_entry(task),
+                input_identity=input_identity,
+            )
+            assert report["mode_cache_identities"][f"d{dataset_id}_{mode}"] == (
+                pinned["mode_cache_identity"]["digest"]
+            )
+    assert report["schema_digests"]["artifact_registry"]
+    assert report["schema_digests"]["result_registry"]
+    assert not run_root.exists()
+
+
+def test_print_formal_dry_run_is_canonical_json_and_creates_no_output(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_root = tmp_path / "dry-run-must-not-exist"
+    tasks = unified.build_tasks(None, smoke=False, run_dir=run_root)
+
+    unified.print_dry_run(tasks, run_root=run_root)
+
+    output = capsys.readouterr().out
+    summary_line = next(
+        line for line in output.splitlines() if line.startswith("[FORMAL DRY-RUN] ")
+    )
+    summary = json.loads(summary_line.removeprefix("[FORMAL DRY-RUN] "))
+    assert summary["preflight_status"] == "ready"
+    assert summary["formal_plan"]["bundle_count"] == 60
+    assert not run_root.exists()
+
+
+def test_readme_marks_authoritative_and_nonsealed_compatibility_paths() -> None:
+    readme = (unified.PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "60 个 seed bundle" in readme
+    assert "旧 300-cell run plan" in readme
+    assert "append-only attempts" in readme
+    assert "resume_lease_conflict" in readme
+    assert "rehydrate" in readme
+    assert "SEALED_SUCCESS" in readme
+    assert "非封存兼容路径" in readme

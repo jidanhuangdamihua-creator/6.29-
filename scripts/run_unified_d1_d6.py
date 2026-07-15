@@ -34,7 +34,7 @@ from src.protocols.artifact_schemas import (
     artifact_schema_registry_digest,
     get_artifact_schema,
 )
-from src.protocols.feature_schema import get_predictor_schema
+from src.protocols.feature_schema import get_knn_schema, get_predictor_schema
 from src.utils.result_acceptance import (
     AcceptanceScope,
     AggregateProfile,
@@ -253,11 +253,145 @@ def _format_cmd(cmd: Sequence[str]) -> str:
     return shlex.join([str(part) for part in cmd])
 
 
-def print_dry_run(tasks: Sequence[Task]) -> None:
+def _read_json_object(path: Path) -> dict[str, object]:
+    value = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"JSON object required: {path}")
+    return value
+
+
+def build_formal_dry_run_report(
+    tasks: Sequence[Task],
+    *,
+    run_root: Path,
+) -> dict[str, object]:
+    """Resolve the complete formal contract without creating run state or output."""
+
+    root = Path(run_root).resolve()
+    preflight = validate_formal_entry_preflight(run_id=root.name)
+    seal_states = {
+        str(item["dataset_id"]): item
+        for item in preflight["dataset_states"]
+    }
+    datasets: list[dict[str, object]] = []
+    target_identities: dict[int, dict[str, object]] = {}
+    for dataset_id in range(1, 7):
+        directory = _formal_parquet_dir(PROJECT_ROOT, dataset_id)
+        manifest = _read_json_object(directory / "manifest.json")
+        repair = _read_json_object(directory / "source_sales_canonicalization.json")
+        artifacts = manifest.get("artifacts")
+        if not isinstance(artifacts, dict):
+            raise ValueError(f"sealed manifest artifacts must be an object: {directory}")
+        identity: dict[str, dict[str, object]] = {}
+        for role in ("source", "target"):
+            raw_artifact = artifacts.get(role)
+            if not isinstance(raw_artifact, dict):
+                raise ValueError(f"sealed manifest is missing {role} identity: {directory}")
+            identity[role] = {
+                "path": str(directory / str(raw_artifact["path"])),
+                "bytes": int(raw_artifact["size_bytes"]),
+                "sha256": str(raw_artifact["sha256"]),
+            }
+        target_path = Path(str(identity["target"]["path"]))
+        target_identities[dataset_id] = {
+            "path": str(target_path.relative_to(PROJECT_ROOT)),
+            "bytes": identity["target"]["bytes"],
+            "sha256": identity["target"]["sha256"],
+        }
+        seal_state = seal_states[f"D{dataset_id}"]
+        datasets.append(
+            {
+                "dataset_id": f"D{dataset_id}",
+                "seal_state": seal_state["state"],
+                "validation_report_identity": {
+                    "path": seal_state["report_path"],
+                    "sha256": seal_state["report_sha256"],
+                    "validation_policy_digest": seal_state[
+                        "validation_policy_digest"
+                    ],
+                },
+                "sealed_root_version": manifest.get("sealed_root_version"),
+                "provenance_level": manifest.get("provenance_level"),
+                "identity": identity,
+                "windows": manifest.get("windows"),
+                "predictor_schema": get_predictor_schema(dataset_id).descriptor(),
+                "knn_schema": get_knn_schema(dataset_id).descriptor(),
+                "source_sales_repair": {
+                    "version": repair.get("version"),
+                    "status": repair.get("status", "recorded"),
+                    "counts": repair.get(
+                        "repair_reason_counts",
+                        manifest.get("source_sales_repair_reason_counts", "unavailable"),
+                    ),
+                    "repair_mask_sha256": repair.get(
+                        "repair_mask_sha256",
+                        manifest.get("source_sales_repair_mask_sha256"),
+                    ),
+                    "affected_date_digest": repair.get("affected_date_digest"),
+                },
+            }
+        )
+
+    mode_cache_identities: dict[str, str] = {}
+    for dataset_id, mode in sorted(
+        {(task.dataset_id, task.scenario) for task in tasks}
+    ):
+        target = target_identities[dataset_id]
+        payload = {
+            "dataset_id": dataset_id,
+            "mode": mode,
+            "target": target,
+        }
+        mode_cache_identities[f"d{dataset_id}_{mode}"] = _canonical_digest(payload)
+
+    unique_results = {
+        str(task.expected_result_path)
+        for task in tasks
+        if task.expected_result_path is not None
+    }
+    mode_count = len({(task.dataset_id, task.scenario) for task in tasks})
+    return {
+        "run_root": str(root),
+        "preflight_status": preflight["status"],
+        "preflight_failure_codes": list(preflight["failure_codes"]),
+        "protocol_version": preflight["protocol_version"],
+        "validation_policy": {
+            "version": preflight["validation_policy_version"],
+            "digest": preflight["validation_policy_digest"],
+        },
+        "datasets": datasets,
+        "mode_cache_identities": mode_cache_identities,
+        "schema_digests": {
+            **dict(preflight["schema_digests"]),
+            "result_registry": result_schema_registry_digest(),
+        },
+        "formal_plan": {
+            "bundle_count": len(tasks),
+            "unique_result_count": len(unique_results),
+            "mode_count": mode_count,
+            "horizons": list(FORMAL_HORIZONS),
+            "seeds": list(FORMAL_SEEDS),
+        },
+        "scheduler_contract": {
+            "d5_dependency": ["d5_without", "d5_with"],
+            "d5_threads": 6,
+            "ordinary_threads": 2,
+            "total_thread_budget": 16,
+        },
+    }
+
+
+def print_dry_run(tasks: Sequence[Task], *, run_root: Path) -> dict[str, object]:
     for index, task in enumerate(tasks, start=1):
         print(f"{index}. [{task.label}] {_format_cmd(task.cmd)}")
         print(f"   expected result: {task.expected_result_path}")
     print(f"[FORMAL PLAN] cells={len(tasks)} unique={len({task.expected_result_path for task in tasks})}")
+    report = build_formal_dry_run_report(tasks, run_root=run_root)
+    print(
+        "[FORMAL DRY-RUN] "
+        + json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    )
+    return report
 
 
 def _task_with_result(
@@ -1001,7 +1135,9 @@ def main() -> None:
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     if args.dry_run:
-        print_dry_run(tasks)
+        report = print_dry_run(tasks, run_root=run_root)
+        if report["preflight_status"] != "ready":
+            raise SystemExit(2)
         return
 
     code_identity = discover_code_identity(PROJECT_ROOT)

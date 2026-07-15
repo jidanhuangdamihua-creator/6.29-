@@ -328,6 +328,8 @@ source identification 审计产物：
 
 ## 运行方式
 
+只有下文“D1–D6 正式协议运行”是 `d1_d6_sealed_v1` 的封存入口。其余一键入口、旧论文脚本、单实验、历史矩阵、smoke、统计和可视化路径均为**非封存兼容路径**：可用于诊断或历史复现，但其输出不能进入正式 acceptance，也不能被标记为 `SEALED_SUCCESS`。
+
 ### 1) 一键运行（macOS）
 
 入口：[run_benchmark.command](run_benchmark.command)
@@ -397,19 +399,22 @@ source identification 审计产物：
 
 ### 4) D1–D6 正式协议运行
 
-正式运行由 [scripts/parallel_mode_runner.sh](scripts/parallel_mode_runner.sh) 统一监督；[scripts/parallel_runner.sh](scripts/parallel_runner.sh) 是兼容入口并委托给同一个 supervisor。supervisor 默认最多同时运行 6 个 `dataset × mode` worker，D5 固定最多 1 个。每个 worker 仍由 [scripts/run_unified_d1_d6.py](scripts/run_unified_d1_d6.py) 执行 25 个 cell，并完成 cell 与 mode acceptance；只有 12 个 mode 全部成功后，父进程才会执行一次 global acceptance 和原子发布。
+正式运行由 [scripts/parallel_mode_runner.sh](scripts/parallel_mode_runner.sh) 统一监督；[scripts/parallel_runner.sh](scripts/parallel_runner.sh) 只是委托给同一 supervisor 的命令兼容别名，不提供任何数据或结果 fallback。supervisor 默认最多同时运行 6 个 `dataset × mode` worker，D5 固定最多 1 个。每个 mode 包含 5 个 seed bundle，每个 bundle 一次覆盖 h1–h5，因此全局计划固定为 12 个 mode、60 个 seed bundle。只有全部 mode 和 bundle 验收成功后，父进程才执行 global acceptance 与原子发布。
 
 正式运行要求 Git worktree 干净。每次新运行会创建独立的 `outputs/runs/<run-id>_formal/`，保存不可变 `run_plan.json`、12 个隔离 mode 目录，以及带 acceptance、manifest 和 SHA-256 的正式结果。不要手工复制或拼接 CSV。
 
 ```bash
-# 只查看 12 个 worker 和 300-cell 计划，不创建目录、不启动 Python
+# 只读解析六个数据身份、provenance、日期窗口、完整 predictor/KNN schema、
+# source repair 计数、12 个 cache 身份、schema digest、60-bundle 计划和线程依赖；
+# 不创建 run root、attempt、cache 或正式结果
 DRY_RUN=1 MAX_JOBS=6 bash scripts/parallel_mode_runner.sh
 
-# 新的正式全量运行；成功后自动发布全局结果
-MAX_JOBS=6 bash scripts/parallel_mode_runner.sh
+# 服务器 Terminal：新的正式全量运行；RUN_ROOT 必须尚不存在
+MAX_JOBS=6 RUN_ROOT="outputs/runs/<new_run_id>" \
+  bash scripts/parallel_mode_runner.sh
 
-# 仅复用相同代码、输入和 run plan 下重新验收通过的 cell/mode
-RUN_ROOT="outputs/runs/<run-id>_formal" RESUME=1 MAX_JOBS=6 \
+# 服务器 Terminal：恢复已有运行；仅复用身份完全匹配且已 accepted 的 bundle/mode
+MAX_JOBS=6 RUN_ROOT="outputs/runs/<existing_run_id>" RESUME=1 \
   bash scripts/parallel_mode_runner.sh
 
 # 封存前四-mode 服务器 probe；永不发布 global aggregate
@@ -420,6 +425,14 @@ python tools/protection/codex_timeout.py --timeout 180 \
 ```
 
 probe 若由保护器以退出码 124 终止，不要拆分、简化、重试或续跑；请在服务器 Terminal 手工执行同一条命令。
+
+#### 恢复与封存语义
+
+- `attempts/` 和 scheduler events 是 append-only attempts：恢复会新建 attempt，旧 attempt、失败证据和已接受记录不原地改写。只有哈希、代码、输入、协议与 schema 身份全部匹配的 accepted bundle 才可复用。
+- resume 使用 heartbeat lease 与 fencing token。活跃 lease、过期 fencing token 或 compare-and-swap 冲突会以 `resume_lease_conflict` 失败；过期 in-flight 工作会被记为 orphaned，不能直接转成 accepted。
+- rehydrate 只处理“正式 artifact 缺失且存在已注册可信副本”的情况，在新 attempt 中校验并原子切换 binding，过程不会调用 fit/predict。字节损坏或 digest 不匹配不会自动 rehydrate；下游一旦调度，binding 集合即冻结。
+- `complete_unsealed` 表示 12 个 mode 已聚合但仍等待最终 trace gate。`sealed_success` 与 `sealed_failed` 都是终态；成功时 `SEALED_SUCCESS` 标记最后写入。终态之后禁止 resume、rehydrate 或覆盖发布。
+- `outputs/experiment_results/`、旧 300-cell run plan、legacy CSV 聚合和各历史脚本输出都是非封存兼容路径，不得作为 resume 或正式验收来源。
 
 ### 5) 历史参数矩阵（非 D1–D6 正式入口）
 
