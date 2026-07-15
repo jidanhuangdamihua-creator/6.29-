@@ -10,7 +10,7 @@ import sys
 import time
 
 
-def _append(event: str, task: str) -> None:
+def _append(event: str, task: str, **extra: object) -> None:
     path = Path(os.environ["FAKE_EVENTS"])
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(
@@ -19,6 +19,7 @@ def _append(event: str, task: str) -> None:
             "task": task,
             "pid": os.getpid(),
             "time": time.time(),
+            **extra,
         },
         sort_keys=True,
     ) + "\n"
@@ -36,6 +37,9 @@ def main() -> int:
     parser.add_argument("--info-sharing")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--scheduler-outcome")
+    parser.add_argument("--scheduler-reason")
+    parser.add_argument("--scheduler-task-status", action="append", default=[])
     args = parser.parse_args()
 
     if args.operation == "prepare":
@@ -45,6 +49,15 @@ def main() -> int:
         return 0
     if args.operation == "aggregate":
         _append("aggregate", "parent")
+        return 0
+    if args.operation == "scheduler-finalize":
+        statuses = dict(value.split("=", 1) for value in args.scheduler_task_status)
+        _append(
+            str(args.scheduler_outcome),
+            "parent",
+            statuses=statuses,
+            reason=args.scheduler_reason,
+        )
         return 0
     if args.operation != "mode-worker":
         return 2
@@ -57,12 +70,19 @@ def main() -> int:
 
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGINT, interrupted)
-    _append("start", task)
-    time.sleep(float(os.environ.get("FAKE_SLEEP", "0.08")))
+    threads = int(os.environ.get("OMP_NUM_THREADS", "0"))
+    _append("start", task, threads=threads)
+    sleep_seconds = os.environ.get(
+        "FAKE_D5_SLEEP" if task.startswith("d5_") else "FAKE_ORDINARY_SLEEP",
+        os.environ.get("FAKE_SLEEP", "0.08"),
+    )
+    time.sleep(float(sleep_seconds))
     if task == os.environ.get("FAKE_FAIL_MODE"):
         _append("fail", task)
         return int(os.environ.get("FAKE_FAIL_CODE", "7"))
-    _append("finish", task)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    (args.output_dir / "accepted.marker").write_text("accepted\n", encoding="utf-8")
+    _append("finish", task, threads=threads)
     return 0
 
 

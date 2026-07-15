@@ -11,6 +11,7 @@ import pytest
 from scripts import run_unified_d1_d6 as unified
 from src.utils.result_acceptance import ResultAcceptanceError
 from src.utils.run_artifacts import CodeIdentity
+from src.utils.run_artifacts import finalize_failed_scheduler_attempt
 
 
 def _identity(commit: str = "abc123", digest: str = "a" * 64) -> CodeIdentity:
@@ -146,6 +147,32 @@ def test_mode_worker_selects_exactly_five_plan_bundles(
     assert len(seen) == 5
     assert {(task.dataset_token, task.scenario) for task in seen} == {("d2", "with")}
     assert output == prepared_run / "d2_with" / "results" / "dataset2_with_results.csv"
+
+
+def test_scheduler_failure_is_fenced_and_published_through_recovery(
+    prepared_run: Path,
+) -> None:
+    statuses = {
+        f"d{dataset_id}_{mode}": "queued"
+        for dataset_id in range(1, 7)
+        for mode in ("without", "with")
+    }
+    statuses.update({"d5_without": "failed", "d5_with": "blocked"})
+
+    result_path = finalize_failed_scheduler_attempt(
+        prepared_run,
+        task_statuses=statuses,
+        reason="d5_without exited with code 7",
+        actor=unified._recovery_actor(),
+    )
+
+    state = json.loads((prepared_run / "state.json").read_text(encoding="utf-8"))
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    assert state["run_state"] == "partial_failed"
+    assert result["status"] == "partial_failed"
+    assert result["fencing_token"] == state["fencing_token"]
+    assert result["task_statuses"]["d5_without"] == "failed"
+    assert result["task_statuses"]["d5_with"] == "blocked"
 
 
 def test_mode_worker_does_not_publish_after_cell_failure(

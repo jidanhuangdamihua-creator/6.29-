@@ -43,6 +43,7 @@ from src.utils.run_artifacts import (
     CodeIdentity,
     discover_code_identity,
     discover_input_identity,
+    finalize_failed_scheduler_attempt,
     publish_global_aggregate,
     publish_mode_matrix,
     resumable_formal_cell,
@@ -214,7 +215,7 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--operation",
-        choices=("standalone", "prepare", "mode-worker", "aggregate"),
+        choices=("standalone", "prepare", "mode-worker", "aggregate", "scheduler-finalize"),
         default="standalone",
         help="Internal formal lifecycle operation; standalone preserves the direct runner.",
     )
@@ -224,7 +225,24 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--resume", action="store_true", help="Reuse only accepted cells with matching hashes and code identity")
     parser.add_argument("--smoke", action="store_true", help="Diagnostic D4-D6 cells; never promotable")
+    parser.add_argument("--scheduler-outcome", choices=("partial_failed",))
+    parser.add_argument("--scheduler-reason")
+    parser.add_argument("--scheduler-task-status", action="append", default=[])
     return parser.parse_args()
+
+
+def _parse_scheduler_task_statuses(values: Sequence[str]) -> dict[str, str]:
+    statuses: dict[str, str] = {}
+    for value in values:
+        task, separator, status = str(value).partition("=")
+        if not separator or not task or not status:
+            raise ValueError(
+                "--scheduler-task-status must use the form dN_mode=status"
+            )
+        if task in statuses:
+            raise ValueError(f"duplicate scheduler task status: {task}")
+        statuses[task] = status
+    return statuses
 
 
 def _format_cmd(cmd: Sequence[str]) -> str:
@@ -767,6 +785,17 @@ def aggregate_prepared_run(run_root: Path) -> Path:
     recovery = RunRecovery(root)
     state = recovery.load_state()
     if state["run_state"] == RunState.RUNNING.value:
+        recovery.finish_attempt(
+            {
+                "status": RunState.COMPLETE_UNSEALED.value,
+                "task_statuses": {
+                    f"d{dataset_id}_{mode}": "succeeded"
+                    for dataset_id in range(1, 7)
+                    for mode in VALID_MODES
+                },
+            },
+            fencing_token=int(state["fencing_token"]),
+        )
         recovery.transition(
             RunState.COMPLETE_UNSEALED,
             actor=_recovery_actor(),
@@ -832,6 +861,32 @@ def main() -> None:
                 mode,
                 resume=bool(getattr(args, "resume", False)),
             )
+            return
+
+        if operation == "scheduler-finalize":
+            if (
+                getattr(args, "only", None)
+                or getattr(args, "info_sharing", None)
+                or getattr(args, "resume", False)
+                or getattr(args, "scheduler_outcome", None) != "partial_failed"
+                or not getattr(args, "scheduler_reason", None)
+            ):
+                raise SystemExit(
+                    "scheduler-finalize requires partial_failed, a reason, and task statuses"
+                )
+            try:
+                statuses = _parse_scheduler_task_statuses(
+                    getattr(args, "scheduler_task_status", [])
+                )
+                result = finalize_failed_scheduler_attempt(
+                    output_path,
+                    task_statuses=statuses,
+                    reason=str(args.scheduler_reason),
+                    actor=_recovery_actor(),
+                )
+            except ValueError as exc:
+                raise SystemExit(str(exc)) from exc
+            print(f"[PARTIAL_FAILED] attempt_result={result}")
             return
 
         if operation == "aggregate":

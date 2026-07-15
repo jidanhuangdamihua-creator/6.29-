@@ -10,6 +10,9 @@ readonly DRY_RUN="${DRY_RUN-0}"
 readonly PROBE="${PROBE-0}"
 readonly PUBLISH_GLOBAL="${PUBLISH_GLOBAL-1}"
 readonly D5_MAX_JOBS=1
+readonly THREAD_BUDGET=16
+readonly D5_THREADS=6
+readonly ORDINARY_THREADS=2
 readonly TERMINATION_GRACE_SECONDS="${TERMINATION_GRACE_SECONDS-10}"
 readonly RUN_STAMP="$(date '+%Y%m%d_%H%M%S')"
 
@@ -53,8 +56,9 @@ fi
 readonly FORMAL_RUN_ROOT
 
 ALL_TASKS=(
+    d5_without d5_with
     d1_without d1_with d2_without d2_with d3_without d3_with
-    d4_without d4_with d5_without d5_with d6_without d6_with
+    d4_without d4_with d6_without d6_with
 )
 if [[ "${PROBE}" == "1" ]]; then
     [[ "${MAX_JOBS}" == "4" ]] || fail_usage "PROBE=1 requires MAX_JOBS=4"
@@ -96,8 +100,9 @@ print_mode_command() {
 
 if [[ "${DRY_RUN}" == "1" ]]; then
     printf '[DRY-RUN] run_root=%s\n' "${FORMAL_RUN_ROOT}"
-    printf '[CAPS] MAX_JOBS=%s D5_MAX_JOBS=%s publish_global=%s\n' \
-        "${MAX_JOBS}" "${D5_MAX_JOBS}" "${PUBLISH_GLOBAL}"
+    printf '[CAPS] MAX_JOBS=%s D5_MAX_JOBS=%s THREAD_BUDGET=%s D5_THREADS=%s ORDINARY_THREADS=%s publish_global=%s\n' \
+        "${MAX_JOBS}" "${D5_MAX_JOBS}" "${THREAD_BUDGET}" \
+        "${D5_THREADS}" "${ORDINARY_THREADS}" "${PUBLISH_GLOBAL}"
     for task in "${TASKS[@]}"; do
         print_mode_command "${task}"
     done
@@ -146,7 +151,7 @@ readonly SETSID
 if [[ "$("${SETSID}" --help 2>&1 || true)" != *"--wait"* ]]; then
     fail_usage "setsid must support --wait"
 fi
-for required in pgrep ps awk nohup; do
+for required in env pgrep ps awk nohup; do
     command -v "${required}" >/dev/null 2>&1 \
         || fail_usage "required command not found: ${required}"
 done
@@ -177,6 +182,7 @@ LAUNCHER_PIDS=()
 WORKER_PIDS=()
 PGIDS=()
 START_TIMES=()
+THREADS=()
 LOG_FILES=()
 OUTPUT_DIRS=()
 for index in "${!TASKS[@]}"; do
@@ -185,15 +191,23 @@ for index in "${!TASKS[@]}"; do
     WORKER_PIDS[${index}]="-"
     PGIDS[${index}]="-"
     START_TIMES[${index}]="-"
+    if [[ "${TASKS[${index}]}" == d5_* ]]; then
+        THREADS[${index}]="${D5_THREADS}"
+    else
+        THREADS[${index}]="${ORDINARY_THREADS}"
+    fi
     LOG_FILES[${index}]="${LOG_ROOT}/${TASKS[${index}]}.log"
     OUTPUT_DIRS[${index}]="$(task_output_dir "${TASKS[${index}]}")"
 done
 
 CLEANUP_STARTED=0
 FAILURE_CODE=0
+FAILURE_REASON=""
+SCHEDULING_STOPPED=0
 RUNNING_COUNT=0
+ACTIVE_THREADS=0
 COMPLETED_COUNT=0
-readonly SUPERVISOR_PGID="$(ps -o pgid= -p $$ | awk '{gsub(/[[:space:]]/, "", $0); print}')"
+readonly SUPERVISOR_PGID="$("${PYTHON}" -c 'import os; print(os.getpgrp())')"
 
 timestamp() {
     date '+%Y-%m-%dT%H:%M:%S%z'
@@ -221,7 +235,22 @@ resolve_worker_pid() {
     local attempt
     local candidate
     local args
+    local launcher_pgid
+    launcher_pgid="$("${PYTHON}" -c 'import os, sys; print(os.getpgid(int(sys.argv[1])))' \
+        "${launcher_pid}" 2>/dev/null || true)"
+    if [[ "${launcher_pgid}" =~ ^[0-9]+$ \
+        && "${launcher_pgid}" != "${SUPERVISOR_PGID}" ]]; then
+        printf '%s\n' "${launcher_pid}"
+        return 0
+    fi
     for ((attempt = 0; attempt < 50; attempt++)); do
+        launcher_pgid="$("${PYTHON}" -c 'import os, sys; print(os.getpgid(int(sys.argv[1])))' \
+            "${launcher_pid}" 2>/dev/null || true)"
+        if [[ "${launcher_pgid}" =~ ^[0-9]+$ \
+            && "${launcher_pgid}" != "${SUPERVISOR_PGID}" ]]; then
+            printf '%s\n' "${launcher_pid}"
+            return 0
+        fi
         candidate="$(pgrep -P "${launcher_pid}" 2>/dev/null | head -n 1 || true)"
         if [[ "${candidate}" =~ ^[0-9]+$ ]]; then
             printf '%s\n' "${candidate}"
@@ -241,12 +270,23 @@ resolve_worker_pid() {
 resolve_worker_pgid() {
     local worker_pid="$1"
     local pgid
-    pgid="$(ps -o pgid= -p "${worker_pid}" 2>/dev/null \
-        | awk '{gsub(/[[:space:]]/, "", $0); print}')"
+    pgid="$("${PYTHON}" -c 'import os, sys; print(os.getpgid(int(sys.argv[1])))' \
+        "${worker_pid}" 2>/dev/null || true)"
     if [[ ! "${pgid}" =~ ^[0-9]+$ || "${pgid}" == "${SUPERVISOR_PGID}" ]]; then
         return 1
     fi
     printf '%s\n' "${pgid}"
+}
+
+d5_without_succeeded() {
+    local index
+    for index in "${!TASKS[@]}"; do
+        if [[ "${TASKS[${index}]}" == "d5_without" ]]; then
+            [[ "${STATUSES[${index}]}" == "succeeded" ]]
+            return
+        fi
+    done
+    return 1
 }
 
 d5_is_running() {
@@ -267,10 +307,18 @@ launch_task() {
     local launcher_pid
     local worker_pid
     local pgid
+    local threads="${THREADS[${index}]}"
     local command
     dataset="$(task_dataset "${task}")"
     mode="$(task_mode "${task}")"
     command=(
+        env
+        "OMP_NUM_THREADS=${threads}"
+        "OPENBLAS_NUM_THREADS=${threads}"
+        "MKL_NUM_THREADS=${threads}"
+        "NUMEXPR_NUM_THREADS=${threads}"
+        "TF_NUM_INTRAOP_THREADS=${threads}"
+        "TF_NUM_INTEROP_THREADS=1"
         "${PYTHON}" "${UNIFIED_RUNNER}"
         --operation mode-worker
         --only "${dataset}"
@@ -301,8 +349,13 @@ launch_task() {
     PGIDS[${index}]="${pgid}"
     STATUSES[${index}]="running"
     RUNNING_COUNT=$((RUNNING_COUNT + 1))
+    ACTIVE_THREADS=$((ACTIVE_THREADS + threads))
+    if ((ACTIVE_THREADS > THREAD_BUDGET)); then
+        log_message "[INTERNAL ERROR] active thread budget exceeded: ${ACTIVE_THREADS}>${THREAD_BUDGET}"
+        return 1
+    fi
     append_event "${index}" started
-    log_message "[LAUNCHED] ${task} pid=${worker_pid} pgid=${pgid} log=${LOG_FILES[${index}]}"
+    log_message "[LAUNCHED] ${task} threads=${threads} active_threads=${ACTIVE_THREADS}/${THREAD_BUDGET} pid=${worker_pid} pgid=${pgid} log=${LOG_FILES[${index}]}"
 }
 
 group_alive() {
@@ -387,10 +440,39 @@ cleanup_active() {
     set -e
 }
 
+finalize_partial_failure() {
+    local reason="$1"
+    local index
+    local status
+    local command=(
+        "${PYTHON}" "${UNIFIED_RUNNER}"
+        --operation scheduler-finalize
+        --scheduler-outcome partial_failed
+        --scheduler-reason "${reason}"
+        --output-dir "${FORMAL_RUN_ROOT}"
+    )
+    for index in "${!TASKS[@]}"; do
+        status="${STATUSES[${index}]}"
+        if [[ "${TASKS[${index}]}" == "d5_with" ]] \
+            && ! d5_without_succeeded \
+            && [[ "${status}" == "queued" ]]; then
+            status="blocked"
+            STATUSES[${index}]="blocked"
+            append_event "${index}" blocked - -
+        fi
+        case "${status}" in
+            starting|running) status="interrupted" ;;
+        esac
+        command+=(--scheduler-task-status "${TASKS[${index}]}=${status}")
+    done
+    "${command[@]}"
+}
+
 handle_signal() {
     local name="$1"
     local code="$2"
     cleanup_active "received ${name}"
+    finalize_partial_failure "received ${name}" || true
     exit "${code}"
 }
 trap 'handle_signal SIGINT 130' INT
@@ -411,6 +493,7 @@ reap_finished() {
         set -e
         elapsed=$(($(date +%s) - START_TIMES[${index}]))
         RUNNING_COUNT=$((RUNNING_COUNT - 1))
+        ACTIVE_THREADS=$((ACTIVE_THREADS - THREADS[${index}]))
         COMPLETED_COUNT=$((COMPLETED_COUNT + 1))
         if ((code == 0)); then
             STATUSES[${index}]="succeeded"
@@ -419,21 +502,31 @@ reap_finished() {
         else
             STATUSES[${index}]="failed"
             append_event "${index}" failed "${elapsed}" "${code}"
-            FAILURE_CODE="${code}"
-            cleanup_active "${TASKS[${index}]} exited with code ${code}"
-            return 1
+            if ((SCHEDULING_STOPPED == 0)); then
+                FAILURE_CODE="${code}"
+                FAILURE_REASON="${TASKS[${index}]} exited with code ${code}"
+                SCHEDULING_STOPPED=1
+                log_message "[SCHEDULING STOPPED] ${FAILURE_REASON}; waiting for in-flight atomic completions"
+            fi
         fi
     done
     return 0
 }
 
-log_message "[START] run_root=${FORMAL_RUN_ROOT} MAX_JOBS=${MAX_JOBS} D5_MAX_JOBS=${D5_MAX_JOBS}"
-while ((COMPLETED_COUNT < TASK_COUNT)); do
-    while ((RUNNING_COUNT < MAX_JOBS)); do
+log_message "[START] run_root=${FORMAL_RUN_ROOT} MAX_JOBS=${MAX_JOBS} THREAD_BUDGET=${THREAD_BUDGET} D5_THREADS=${D5_THREADS} ORDINARY_THREADS=${ORDINARY_THREADS}"
+while true; do
+    while ((SCHEDULING_STOPPED == 0 && RUNNING_COUNT < MAX_JOBS)); do
         candidate=-1
         for index in "${!TASKS[@]}"; do
             [[ "${STATUSES[${index}]}" == "queued" ]] || continue
+            if [[ "${TASKS[${index}]}" == "d5_with" ]] \
+                && ! d5_without_succeeded; then
+                continue
+            fi
             if [[ "${TASKS[${index}]}" == d5_* ]] && d5_is_running; then
+                continue
+            fi
+            if ((ACTIVE_THREADS + THREADS[index] > THREAD_BUDGET)); then
                 continue
             fi
             candidate="${index}"
@@ -442,19 +535,32 @@ while ((COMPLETED_COUNT < TASK_COUNT)); do
         ((candidate >= 0)) || break
         if ! launch_task "${candidate}"; then
             FAILURE_CODE=2
+            FAILURE_REASON="failed to establish a safe PID/PGID for ${TASKS[${candidate}]}"
             cleanup_active "failed to establish a safe PID/PGID for ${TASKS[${candidate}]}"
+            finalize_partial_failure "${FAILURE_REASON}" || true
             exit 2
         fi
     done
 
-    if ((RUNNING_COUNT == 0 && COMPLETED_COUNT < TASK_COUNT)); then
+    if ((SCHEDULING_STOPPED == 1 && RUNNING_COUNT == 0)); then
+        if ! finalize_partial_failure "${FAILURE_REASON}"; then
+            log_message "[ERROR] failed to publish fenced partial_failed scheduler status"
+            exit 2
+        fi
+        exit "${FAILURE_CODE}"
+    fi
+    if ((COMPLETED_COUNT == TASK_COUNT)); then
+        break
+    fi
+    if ((RUNNING_COUNT == 0)); then
         cleanup_active "scheduler has queued work but no runnable worker"
+        FAILURE_CODE=2
+        FAILURE_REASON="scheduler has queued work but no runnable worker"
+        finalize_partial_failure "${FAILURE_REASON}" || true
         exit 2
     fi
     sleep 0.1
-    if ! reap_finished; then
-        exit "${FAILURE_CODE}"
-    fi
+    reap_finished
 done
 
 if [[ "${PUBLISH_GLOBAL}" == "1" ]]; then

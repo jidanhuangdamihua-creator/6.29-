@@ -53,19 +53,28 @@ def _events(tmp_path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
-def _peaks(events: list[dict[str, object]]) -> tuple[int, int]:
+def _peaks(events: list[dict[str, object]]) -> tuple[int, int, int]:
     running: set[str] = set()
     peak = 0
     d5_peak = 0
+    thread_peak = 0
     for event in events:
         task = str(event["task"])
         if event["event"] == "start":
             running.add(task)
             peak = max(peak, len(running))
             d5_peak = max(d5_peak, len([name for name in running if name.startswith("d5_")]))
+            thread_peak = max(
+                thread_peak,
+                sum(
+                    int(start["threads"])
+                    for start in events
+                    if start["event"] == "start" and str(start["task"]) in running
+                ),
+            )
         elif event["event"] in {"finish", "fail", "terminated"}:
             running.discard(task)
-    return peak, d5_peak
+    return peak, d5_peak, thread_peak
 
 
 def test_dry_run_prints_twelve_unique_mode_workers_without_launch(tmp_path: Path) -> None:
@@ -77,6 +86,9 @@ def test_dry_run_prints_twelve_unique_mode_workers_without_launch(tmp_path: Path
     assert len(set(lines)) == 12
     assert "cells=60 unique=60" in completed.stdout
     assert "MAX_JOBS=6" in completed.stdout
+    assert "THREAD_BUDGET=16" in completed.stdout
+    assert "D5_THREADS=6" in completed.stdout
+    assert "ORDINARY_THREADS=2" in completed.stdout
     assert not (tmp_path / "formal-run").exists()
     assert _events(tmp_path) == []
 
@@ -115,14 +127,51 @@ def test_probe_is_fixed_to_four_modes_and_never_aggregates(tmp_path: Path) -> No
     assert "aggregate" not in completed.stdout.lower()
 
 
-def test_scheduler_enforces_global_and_d5_caps_and_overlaps(tmp_path: Path) -> None:
-    completed = _run_supervisor(tmp_path, MAX_JOBS="4", FAKE_SLEEP="0.5")
+def test_scheduler_runs_d5_dependency_lane_first_and_within_thread_budget(
+    tmp_path: Path,
+) -> None:
+    completed = _run_supervisor(
+        tmp_path,
+        MAX_JOBS="12",
+        FAKE_D5_SLEEP="0.8",
+        FAKE_ORDINARY_SLEEP="1.2",
+    )
 
     assert completed.returncode == 0, completed.stderr
     events = _events(tmp_path)
-    peak, d5_peak = _peaks(events)
-    assert 2 <= peak <= 4
+    peak, d5_peak, thread_peak = _peaks(events)
+    assert 2 <= peak <= 12
     assert d5_peak == 1
+    assert thread_peak <= 16
+    starts = [event for event in events if event["event"] == "start"]
+    assert starts[0]["task"] == "d5_without"
+    without_finish = next(
+        float(event["time"])
+        for event in events
+        if event["event"] == "finish" and event["task"] == "d5_without"
+    )
+    with_start = next(
+        float(event["time"])
+        for event in events
+        if event["event"] == "start" and event["task"] == "d5_with"
+    )
+    assert with_start >= without_finish
+    assert not any(
+        event["event"] == "start"
+        and not str(event["task"]).startswith("d5_")
+        and without_finish < float(event["time"]) < with_start
+        for event in events
+    )
+    assert {
+        int(event["threads"])
+        for event in starts
+        if str(event["task"]).startswith("d5_")
+    } == {6}
+    assert {
+        int(event["threads"])
+        for event in starts
+        if not str(event["task"]).startswith("d5_")
+    } == {2}
     assert [event["event"] for event in events].count("finish") == 12
     assert events[-1]["event"] == "aggregate"
     pid_files = list((tmp_path / "formal-run" / "supervisor").glob("*/pids.tsv"))
@@ -131,20 +180,57 @@ def test_scheduler_enforces_global_and_d5_caps_and_overlaps(tmp_path: Path) -> N
     assert len(pid_file.read_text(encoding="utf-8").splitlines()) >= 25
 
 
-def test_first_worker_failure_terminates_peers_and_skips_global(tmp_path: Path) -> None:
+def test_worker_failure_stops_new_launches_but_preserves_inflight_completions(
+    tmp_path: Path,
+) -> None:
     completed = _run_supervisor(
         tmp_path,
         MAX_JOBS="4",
-        FAKE_SLEEP="0.35",
+        FAKE_D5_SLEEP="0.6",
+        FAKE_ORDINARY_SLEEP="0.35",
         FAKE_FAIL_MODE="d1_without",
     )
 
     assert completed.returncode == 7, completed.stderr
     events = _events(tmp_path)
-    assert any(event["event"] == "fail" for event in events)
-    assert any(event["event"] == "terminated" for event in events)
+    failure = next(event for event in events if event["event"] == "fail")
+    assert not any(event["event"] == "terminated" for event in events)
+    assert any(
+        event["event"] == "finish" and float(event["time"]) >= float(failure["time"])
+        for event in events
+    )
+    assert not any(
+        event["event"] == "start" and float(event["time"]) > float(failure["time"])
+        for event in events
+    )
     assert not any(event["event"] == "aggregate" for event in events)
-    assert len([event for event in events if event["event"] == "start"]) <= 4
+    final = next(event for event in events if event["event"] == "partial_failed")
+    assert final["statuses"]["d1_without"] == "failed"
+    finished_tasks = {
+        str(event["task"]) for event in events if event["event"] == "finish"
+    }
+    assert finished_tasks
+    for task in finished_tasks:
+        assert (tmp_path / "formal-run" / task / "accepted.marker").is_file()
+
+
+def test_d5_without_failure_blocks_d5_with(tmp_path: Path) -> None:
+    completed = _run_supervisor(
+        tmp_path,
+        MAX_JOBS="4",
+        FAKE_SLEEP="0.25",
+        FAKE_FAIL_MODE="d5_without",
+    )
+
+    assert completed.returncode == 7, completed.stderr
+    events = _events(tmp_path)
+    assert not any(
+        event["event"] == "start" and event["task"] == "d5_with"
+        for event in events
+    )
+    final = next(event for event in events if event["event"] == "partial_failed")
+    assert final["statuses"]["d5_without"] == "failed"
+    assert final["statuses"]["d5_with"] == "blocked"
 
 
 def test_sigterm_reaches_every_active_worker_group(tmp_path: Path) -> None:

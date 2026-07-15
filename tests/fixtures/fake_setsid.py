@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import subprocess
+import os
 import sys
 
 
@@ -12,8 +12,9 @@ def main() -> int:
     args = [value for value in sys.argv[1:] if value != "--wait"]
     if not args:
         return 2
-    completed = subprocess.run(args, check=False, start_new_session=True)
-    return int(completed.returncode)
+    os.setsid()
+    os.execvp(args[0], args)
+    return 127
 
 
 if __name__ == "__main__":

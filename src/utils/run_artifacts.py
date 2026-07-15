@@ -151,6 +151,65 @@ def write_or_validate_run_plan(
     _atomic_json(destination, payload)
 
 
+SCHEDULER_TASK_STATES = frozenset(
+    {"queued", "succeeded", "failed", "interrupted", "blocked"}
+)
+
+
+def finalize_failed_scheduler_attempt(
+    run_root: Path,
+    *,
+    task_statuses: Mapping[str, str],
+    reason: str,
+    actor: Any,
+) -> Path:
+    """Publish one fenced failure result, then transition the run to partial_failed."""
+
+    from src.utils.run_recovery import RunRecovery, RunState
+
+    statuses = {str(task): str(status) for task, status in task_statuses.items()}
+    if not statuses:
+        raise ValueError("scheduler failure requires task statuses")
+    unknown_states = sorted(set(statuses.values()) - SCHEDULER_TASK_STATES)
+    if unknown_states:
+        raise ValueError(f"unknown scheduler task states: {unknown_states}")
+    valid_tasks = {
+        f"d{dataset}_{mode}"
+        for dataset in range(1, 7)
+        for mode in ("without", "with")
+    }
+    unknown_tasks = sorted(set(statuses) - valid_tasks)
+    if unknown_tasks:
+        raise ValueError(f"unknown scheduler tasks: {unknown_tasks}")
+    if not any(state in {"failed", "interrupted"} for state in statuses.values()):
+        raise ValueError("partial_failed requires a failed or interrupted task")
+    if (
+        "d5_with" in statuses
+        and statuses.get("d5_without") != "succeeded"
+        and statuses["d5_with"] != "blocked"
+    ):
+        raise ValueError("d5_with must be blocked until d5_without succeeds")
+
+    recovery = RunRecovery(Path(run_root))
+    state = recovery.load_state()
+    token = int(state["fencing_token"])
+    result = recovery.finish_attempt(
+        {
+            "status": RunState.PARTIAL_FAILED.value,
+            "reason": str(reason),
+            "task_statuses": dict(sorted(statuses.items())),
+        },
+        fencing_token=token,
+    )
+    recovery.transition(
+        RunState.PARTIAL_FAILED,
+        actor=actor,
+        fencing_token=token,
+        reason=str(reason),
+    )
+    return result
+
+
 def _require_matching_artifact_manifest(
     artifact_path: Path,
     *,
