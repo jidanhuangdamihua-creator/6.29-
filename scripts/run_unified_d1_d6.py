@@ -7,6 +7,7 @@ import argparse
 import csv
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+import getpass
 import hashlib
 import json
 from pathlib import Path
@@ -43,6 +44,7 @@ from src.utils.run_artifacts import (
     write_or_validate_run_plan,
 )
 from src.utils.run_layout import RunLayout
+from src.utils.run_recovery import ActorIdentity, RunRecovery, RunState
 from src.utils.run_utils import create_run_dir, reserve_new_output_dir
 from src.utils.result_schema import (
     RESULT_SCHEMA_REGISTRY_VERSION,
@@ -55,6 +57,24 @@ UNIFIED_RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
 UNIFIED_RUN_DIR = RUNS_DIR / UNIFIED_RUN_ID
 VALID_DATASETS = tuple(f"d{number}" for number in range(1, 7))
 VALID_MODES = ("without", "with")
+
+
+def _recovery_actor() -> ActorIdentity:
+    command = "\0".join(sys.argv).encode("utf-8")
+    return ActorIdentity(
+        subject=getpass.getuser(),
+        subject_type="os_user",
+        auth_context_id="local-cli",
+        command_digest=hashlib.sha256(command).hexdigest(),
+    )
+
+
+def _current_fencing_token(run_root: Path) -> int:
+    state_path = RunLayout(Path(run_root)).state
+    if not state_path.is_file():
+        return 0
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    return int(state["fencing_token"])
 
 
 def _formal_parquet_dir(project_root: Path, dataset_id: int) -> Path:
@@ -370,6 +390,19 @@ def prepare_formal_run(run_root: Path, *, resume: bool) -> dict[str, object]:
     else:
         reserve_new_output_dir(root)
     write_or_validate_run_plan(root / "run_plan.json", plan, resume=resume)
+    recovery = RunRecovery(root)
+    if resume:
+        state = recovery.load_state()
+        recovery.resume(
+            _recovery_actor(),
+            expected_fencing_token=int(state["fencing_token"]),
+            reason="authenticated CLI resume",
+        )
+    else:
+        recovery.create(
+            _recovery_actor(),
+            run_identity=str(plan["run_identity"]),
+        )
     return plan
 
 
@@ -535,6 +568,7 @@ def execute_mode_worker(
         stable_path=output,
         expected=expected,
         code_identity=code_identity,
+        fencing_token=_current_fencing_token(run_root),
     )
     verify_formal_mode_artifact(
         output,
@@ -602,7 +636,17 @@ def aggregate_prepared_run(run_root: Path) -> Path:
         stable_path=layout.aggregate_result,
         expected=_global_contract(mode_contracts),
         code_identity=code_identity,
+        fencing_token=_current_fencing_token(root),
     )
+    recovery = RunRecovery(root)
+    state = recovery.load_state()
+    if state["run_state"] == RunState.RUNNING.value:
+        recovery.transition(
+            RunState.COMPLETE_UNSEALED,
+            actor=_recovery_actor(),
+            fencing_token=int(state["fencing_token"]),
+            reason="all twelve modes aggregated; awaiting final sealing gate",
+        )
     print(f"[ACCEPTED] aggregate={layout.aggregate_result}")
     return layout.aggregate_result
 

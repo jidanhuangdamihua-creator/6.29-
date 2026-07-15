@@ -9,7 +9,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 from uuid import uuid4
 
 import pandas as pd
@@ -155,6 +155,7 @@ def _require_matching_artifact_manifest(
     *,
     artifact_type: str,
     code_identity: CodeIdentity,
+    fencing_token: Optional[int] = None,
 ) -> dict[str, Any]:
     artifact = Path(artifact_path)
     manifest_path = artifact.with_suffix(".manifest.json")
@@ -168,6 +169,8 @@ def _require_matching_artifact_manifest(
         raise ResultAcceptanceError(f"artifact manifest type mismatch: {manifest_path}")
     if manifest.get("code_identity") != code_identity.to_dict():
         raise ResultAcceptanceError(f"artifact code identity mismatch: {artifact}")
+    if fencing_token is not None and manifest.get("fencing_token") != int(fencing_token):
+        raise ResultAcceptanceError(f"artifact fencing token mismatch: {artifact}")
     acceptance = manifest.get("acceptance")
     if not isinstance(acceptance, dict) or acceptance.get("passed") is not True:
         raise ResultAcceptanceError(f"artifact manifest is not accepted: {artifact}")
@@ -197,12 +200,14 @@ def verify_formal_cell_artifact(
     acceptance_path: Path,
     expected: ExpectedResultContract,
     code_identity: CodeIdentity,
+    fencing_token: Optional[int] = None,
 ) -> None:
     report = _require_passing_acceptance_report(acceptance_path)
     manifest = _require_matching_artifact_manifest(
         stable_path,
         artifact_type="formal_cell",
         code_identity=code_identity,
+        fencing_token=fencing_token,
     )
     if manifest.get("acceptance") != report:
         raise ResultAcceptanceError(
@@ -223,6 +228,7 @@ def verify_formal_mode_artifact(
     cell_paths: tuple[Path, ...] | list[Path],
     expected: ExpectedResultContract,
     code_identity: CodeIdentity,
+    fencing_token: Optional[int] = None,
 ) -> None:
     paths = tuple(Path(path) for path in cell_paths)
     for path in paths:
@@ -233,6 +239,7 @@ def verify_formal_mode_artifact(
             path,
             artifact_type="formal_cell",
             code_identity=code_identity,
+            fencing_token=fencing_token,
         )
         if cell_manifest.get("acceptance") != cell_report:
             raise ResultAcceptanceError(
@@ -244,6 +251,7 @@ def verify_formal_mode_artifact(
         stable_path,
         artifact_type="formal_mode_matrix",
         code_identity=code_identity,
+        fencing_token=fencing_token,
     )
     if manifest.get("acceptance") != report:
         raise ResultAcceptanceError(
@@ -267,6 +275,7 @@ def publish_formal_cell_frame(
     stable_path: Path,
     expected: ExpectedResultContract,
     code_identity: CodeIdentity,
+    fencing_token: int = 0,
 ) -> dict[str, object]:
     """Write a candidate, accept it, hash it, and only then expose it."""
     destination = Path(stable_path)
@@ -302,6 +311,7 @@ def publish_formal_cell_frame(
             "accepted_at": datetime.now(timezone.utc).isoformat(),
             "acceptance": outcome.report.to_dict(),
             "code_identity": code_identity.to_dict(),
+            "fencing_token": int(fencing_token),
         }
         _atomic_json(manifest_path, manifest)
         return manifest
@@ -319,6 +329,7 @@ def publish_formal_cell_output_frame(
     horizon: int,
     seed: int,
     project_root: Path,
+    fencing_token: int = 0,
 ) -> dict[str, object]:
     identity = discover_code_identity(project_root)
     if identity.dirty:
@@ -337,6 +348,7 @@ def publish_formal_cell_output_frame(
         stable_path=stable_path,
         expected=expected,
         code_identity=identity,
+        fencing_token=fencing_token,
     )
 
 
@@ -347,6 +359,7 @@ def _publish_accepted_rows(
     code_identity: CodeIdentity,
     artifact_type: str,
     candidate_validator,
+    fencing_token: int = 0,
 ) -> dict[str, object]:
     destination = Path(stable_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -385,6 +398,7 @@ def _publish_accepted_rows(
             "accepted_at": datetime.now(timezone.utc).isoformat(),
             "acceptance": final_outcome.report.to_dict(),
             "code_identity": code_identity.to_dict(),
+            "fencing_token": int(fencing_token),
         }
         _atomic_json(manifest_path, manifest)
         return manifest
@@ -398,6 +412,7 @@ def publish_mode_matrix(
     stable_path: Path,
     expected: ExpectedResultContract,
     code_identity: CodeIdentity,
+    fencing_token: int = 0,
 ) -> dict[str, object]:
     paths = tuple(Path(path) for path in cell_paths)
     for path in paths:
@@ -417,6 +432,7 @@ def publish_mode_matrix(
             expected=expected,
             candidate_mode_csv=temporary,
         ),
+        fencing_token=fencing_token,
     )
 
 
@@ -426,6 +442,7 @@ def publish_global_aggregate(
     stable_path: Path,
     expected: ExpectedResultContract,
     code_identity: CodeIdentity,
+    fencing_token: int = 0,
 ) -> dict[str, object]:
     paths = tuple(Path(path) for path in mode_paths)
     for path in paths:
@@ -445,6 +462,7 @@ def publish_global_aggregate(
             expected=expected,
             candidate_aggregate_csv=temporary,
         ),
+        fencing_token=fencing_token,
     )
 
 

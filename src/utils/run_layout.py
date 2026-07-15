@@ -44,6 +44,47 @@ class RunLayout:
         normalized_mode = self._mode(mode)
         return self.run_root / f"d{dataset}_{normalized_mode}"
 
+    @property
+    def attempts_dir(self) -> Path:
+        return self.run_root / "attempts"
+
+    def attempt_dir(self, attempt_id: str) -> Path:
+        value = str(attempt_id)
+        if not value or value in {".", ".."} or "/" in value or "\\" in value:
+            raise ValueError("attempt_id must be one safe path component")
+        return self.attempts_dir / value
+
+    def attempt_manifest(self, attempt_id: str) -> Path:
+        return self.attempt_dir(attempt_id) / "attempt_manifest.json"
+
+    def attempt_events_dir(self, attempt_id: str) -> Path:
+        return self.attempt_dir(attempt_id) / "scheduler_events"
+
+    def attempt_worker_logs(self, attempt_id: str) -> Path:
+        return self.attempt_dir(attempt_id) / "worker_logs"
+
+    def attempt_cells_dir(self, attempt_id: str) -> Path:
+        return self.attempt_dir(attempt_id) / "cells"
+
+    def attempt_result(self, attempt_id: str) -> Path:
+        return self.attempt_dir(attempt_id) / "attempt_result.json"
+
+    @property
+    def state(self) -> Path:
+        return self.run_root / "state.json"
+
+    @property
+    def lease(self) -> Path:
+        return self.run_root / "lease.json"
+
+    @property
+    def recovery_lock(self) -> Path:
+        return self.run_root / ".recovery.lock"
+
+    @property
+    def sealed_success(self) -> Path:
+        return self.run_root / "SEALED_SUCCESS"
+
     def cell_dir(self, dataset_id: int, mode: str, horizon: int, seed: int) -> Path:
         normalized_horizon = self._cell_value("horizon", horizon, range(1, 6))
         normalized_seed = self._cell_value("seed", seed, range(42, 47))

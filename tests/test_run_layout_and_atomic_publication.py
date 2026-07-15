@@ -70,6 +70,13 @@ def test_run_layout_has_one_canonical_owner_for_every_artifact(tmp_path: Path) -
         tmp_path / "formal-run" / "d5_without" / "results" / "dataset5_without_results.csv"
     )
     assert layout.aggregate_result == tmp_path / "formal-run" / "results" / "d1_d6_results.csv"
+    assert layout.attempt_manifest("attempt-1") == (
+        tmp_path / "formal-run" / "attempts" / "attempt-1" / "attempt_manifest.json"
+    )
+    assert layout.attempt_result("attempt-1") == (
+        tmp_path / "formal-run" / "attempts" / "attempt-1" / "attempt_result.json"
+    )
+    assert layout.sealed_success == tmp_path / "formal-run" / "SEALED_SUCCESS"
 
     with pytest.raises(ValueError, match="dataset_id"):
         layout.mode_dir(0, "without")
@@ -120,10 +127,12 @@ def test_accepted_cell_is_atomic_hashed_and_resume_requires_same_code(tmp_path: 
         stable_path=stable,
         expected=expected,
         code_identity=identity,
+        fencing_token=7,
     )
 
     assert stable.is_file()
     assert manifest["sha256"]
+    assert manifest["fencing_token"] == 7
     manifest_path = layout.cell_manifest(1, "without", 1, 42)
     assert json.loads(manifest_path.read_text(encoding="utf-8"))["sha256"] == manifest["sha256"]
     assert resumable_formal_cell(
