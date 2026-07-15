@@ -91,31 +91,30 @@ class RunLayout:
     def sealed_success(self) -> Path:
         return self.run_root / "SEALED_SUCCESS"
 
-    def cell_dir(self, dataset_id: int, mode: str, horizon: int, seed: int) -> Path:
-        normalized_horizon = self._cell_value("horizon", horizon, range(1, 6))
+    def cell_dir(self, dataset_id: int, mode: str, seed: int) -> Path:
         normalized_seed = self._cell_value("seed", seed, range(42, 47))
         return (
             self.mode_dir(dataset_id, mode)
             / "cells"
-            / f"h{normalized_horizon}_s{normalized_seed}"
+            / f"s{normalized_seed}"
         )
 
-    def cell_result(self, dataset_id: int, mode: str, horizon: int, seed: int) -> Path:
+    def cell_result(self, dataset_id: int, mode: str, seed: int) -> Path:
         dataset = self._dataset_id(dataset_id)
         normalized_mode = self._mode(mode)
         return (
-            self.cell_dir(dataset, normalized_mode, horizon, seed)
+            self.cell_dir(dataset, normalized_mode, seed)
             / "results"
             / f"dataset{dataset}_{normalized_mode}_results.csv"
         )
 
-    def cell_manifest(self, dataset_id: int, mode: str, horizon: int, seed: int) -> Path:
-        return self.cell_result(dataset_id, mode, horizon, seed).with_suffix(".manifest.json")
+    def cell_manifest(self, dataset_id: int, mode: str, seed: int) -> Path:
+        return self.cell_result(dataset_id, mode, seed).with_suffix(".manifest.json")
 
     def cell_acceptance_report(
-        self, dataset_id: int, mode: str, horizon: int, seed: int
+        self, dataset_id: int, mode: str, seed: int
     ) -> Path:
-        return self.cell_result(dataset_id, mode, horizon, seed).with_suffix(
+        return self.cell_result(dataset_id, mode, seed).with_suffix(
             ".acceptance.json"
         )
 

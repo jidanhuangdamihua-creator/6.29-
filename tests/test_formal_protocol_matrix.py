@@ -13,6 +13,7 @@ from src.protocols.candidate_pool import (
 )
 
 from scripts.run_strict_protocol_baseline import (
+    SeedBundleTask,
     build_mode_expected_contract,
     build_matrix_tasks,
     combine_result_frames,
@@ -89,21 +90,23 @@ def _row(horizon: int, seed: int, method: str = "MSWA-TL") -> dict:
 
 
 class FormalProtocolMatrixTest(unittest.TestCase):
-    def test_matrix_has_25_unique_horizon_seed_cells_and_cli_overrides(self) -> None:
+    def test_matrix_has_five_unique_seed_bundles_with_all_horizons(self) -> None:
         tasks = build_matrix_tasks(
             dataset="d5",
             scenario="with",
             output_dir=Path("outputs/formal"),
         )
-        self.assertEqual(len(tasks), 25)
-        self.assertEqual({task.horizon for task in tasks}, set(range(1, 6)))
+        self.assertEqual(len(tasks), 5)
+        self.assertTrue(all(isinstance(task, SeedBundleTask) for task in tasks))
+        self.assertEqual({task.horizons for task in tasks}, {(1, 2, 3, 4, 5)})
         self.assertEqual({task.seed for task in tasks}, set(range(42, 47)))
-        self.assertEqual(len({task.output_dir for task in tasks}), 25)
+        self.assertEqual(len({task.output_dir for task in tasks}), 5)
         for task in tasks:
-            self.assertIn("--horizon", task.command)
-            self.assertIn(str(task.horizon), task.command)
+            self.assertIn("--all-horizons", task.command)
+            self.assertNotIn("--horizon", task.command)
             self.assertIn("--seed", task.command)
             self.assertIn(str(task.seed), task.command)
+            self.assertEqual(task.output_dir.name, f"s{task.seed}")
 
     def test_combiner_promotes_only_complete_matrix(self) -> None:
         frames = [

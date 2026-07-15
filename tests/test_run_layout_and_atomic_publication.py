@@ -14,7 +14,7 @@ from src.utils.result_acceptance import (
     AggregateProfile,
     ExpectedResultContract,
     ResultAcceptanceError,
-    build_formal_cell_contract,
+    build_formal_seed_bundle_contract,
 )
 from src.utils.run_artifacts import (
     CodeIdentity,
@@ -50,19 +50,26 @@ def _valid_cell() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _valid_bundle(seed: int = 42) -> pd.DataFrame:
+    return pd.concat(
+        [_valid_cell().assign(horizon=horizon, seed=seed) for horizon in range(1, 6)],
+        ignore_index=True,
+    )
+
+
 def test_run_layout_has_one_canonical_owner_for_every_artifact(tmp_path: Path) -> None:
     layout = RunLayout(tmp_path / "formal-run")
 
     assert layout.mode_dir(5, "without") == tmp_path / "formal-run" / "d5_without"
-    assert layout.cell_dir(5, "without", 3, 44) == (
-        tmp_path / "formal-run" / "d5_without" / "cells" / "h3_s44"
+    assert layout.cell_dir(5, "without", 44) == (
+        tmp_path / "formal-run" / "d5_without" / "cells" / "s44"
     )
-    assert layout.cell_result(5, "without", 3, 44) == (
+    assert layout.cell_result(5, "without", 44) == (
         tmp_path
         / "formal-run"
         / "d5_without"
         / "cells"
-        / "h3_s44"
+        / "s44"
         / "results"
         / "dataset5_without_results.csv"
     )
@@ -86,13 +93,12 @@ def test_run_layout_has_one_canonical_owner_for_every_artifact(tmp_path: Path) -
 
 def test_invalid_candidate_never_replaces_stable_cell(tmp_path: Path) -> None:
     layout = RunLayout(tmp_path / "run")
-    stable = layout.cell_result(1, "without", 1, 42)
-    invalid = _valid_cell().iloc[:-1]
-    expected = build_formal_cell_contract(
+    stable = layout.cell_result(1, "without", 42)
+    invalid = _valid_bundle().iloc[:-1]
+    expected = build_formal_seed_bundle_contract(
         dataset_id=1,
         mode="without",
         targets=("1/10",),
-        horizon=1,
         seed=42,
     )
 
@@ -106,24 +112,23 @@ def test_invalid_candidate_never_replaces_stable_cell(tmp_path: Path) -> None:
 
     assert not stable.exists()
     assert not list(stable.parent.glob(f"{stable.name}.tmp.*"))
-    report = layout.cell_acceptance_report(1, "without", 1, 42)
+    report = layout.cell_acceptance_report(1, "without", 42)
     assert json.loads(report.read_text(encoding="utf-8"))["passed"] is False
 
 
 def test_accepted_cell_is_atomic_hashed_and_resume_requires_same_code(tmp_path: Path) -> None:
     layout = RunLayout(tmp_path / "run")
-    stable = layout.cell_result(1, "without", 1, 42)
-    expected = build_formal_cell_contract(
+    stable = layout.cell_result(1, "without", 42)
+    expected = build_formal_seed_bundle_contract(
         dataset_id=1,
         mode="without",
         targets=("1/10",),
-        horizon=1,
         seed=42,
     )
     identity = CodeIdentity("abc", True, "1" * 64)
 
     manifest = publish_formal_cell_frame(
-        _valid_cell(),
+        _valid_bundle(),
         stable_path=stable,
         expected=expected,
         code_identity=identity,
@@ -133,7 +138,7 @@ def test_accepted_cell_is_atomic_hashed_and_resume_requires_same_code(tmp_path: 
     assert stable.is_file()
     assert manifest["sha256"]
     assert manifest["fencing_token"] == 7
-    manifest_path = layout.cell_manifest(1, "without", 1, 42)
+    manifest_path = layout.cell_manifest(1, "without", 42)
     assert json.loads(manifest_path.read_text(encoding="utf-8"))["sha256"] == manifest["sha256"]
     assert resumable_formal_cell(
         stable_path=stable,
@@ -159,22 +164,21 @@ def test_accepted_cell_is_atomic_hashed_and_resume_requires_same_code(tmp_path: 
 
 def test_verify_cell_requires_passing_acceptance_sidecar(tmp_path: Path) -> None:
     layout = RunLayout(tmp_path / "run")
-    stable = layout.cell_result(1, "without", 1, 42)
-    expected = build_formal_cell_contract(
+    stable = layout.cell_result(1, "without", 42)
+    expected = build_formal_seed_bundle_contract(
         dataset_id=1,
         mode="without",
         targets=("1/10",),
-        horizon=1,
         seed=42,
     )
     identity = CodeIdentity("abc", False, "1" * 64)
     publish_formal_cell_frame(
-        _valid_cell(),
+        _valid_bundle(),
         stable_path=stable,
         expected=expected,
         code_identity=identity,
     )
-    acceptance_path = layout.cell_acceptance_report(1, "without", 1, 42)
+    acceptance_path = layout.cell_acceptance_report(1, "without", 42)
     acceptance_path.unlink()
 
     with pytest.raises(ResultAcceptanceError, match="acceptance report"):
@@ -223,24 +227,22 @@ def test_mode_and_selection_aggregate_are_also_acceptance_gated(tmp_path: Path) 
         confirmation_eligible=True,
     )
     cell_paths = []
-    for horizon in mode_expected.horizons:
-        for seed in mode_expected.seeds:
-            path = layout.cell_result(1, "without", horizon, seed)
-            frame = _valid_cell().assign(horizon=horizon, seed=seed)
-            publish_formal_cell_frame(
-                frame,
-                stable_path=path,
-                expected=ExpectedResultContract(
-                    **{
-                        **mode_expected.__dict__,
-                        "scope": AcceptanceScope.CELL,
-                        "horizons": (horizon,),
-                        "seeds": (seed,),
-                    }
-                ),
-                code_identity=identity,
-            )
-            cell_paths.append(path)
+    for seed in mode_expected.seeds:
+        path = layout.cell_result(1, "without", seed)
+        publish_formal_cell_frame(
+            _valid_bundle(seed),
+            stable_path=path,
+            expected=ExpectedResultContract(
+                **{
+                    **mode_expected.__dict__,
+                    "scope": AcceptanceScope.CELL,
+                    "horizons": mode_expected.horizons,
+                    "seeds": (seed,),
+                }
+            ),
+            code_identity=identity,
+        )
+        cell_paths.append(path)
 
     invalid_mode = layout.mode_result(1, "without")
     with pytest.raises(RuntimeError, match="mode_matrix acceptance failed"):
@@ -294,23 +296,22 @@ def test_verify_mode_rejects_manifest_hash_mismatch(tmp_path: Path) -> None:
         confirmation_eligible=True,
     )
     cell_paths = []
-    for horizon in mode_expected.horizons:
-        for seed in mode_expected.seeds:
-            path = layout.cell_result(1, "without", horizon, seed)
-            publish_formal_cell_frame(
-                _valid_cell().assign(horizon=horizon, seed=seed),
-                stable_path=path,
-                expected=ExpectedResultContract(
-                    **{
-                        **mode_expected.__dict__,
-                        "scope": AcceptanceScope.CELL,
-                        "horizons": (horizon,),
-                        "seeds": (seed,),
-                    }
-                ),
-                code_identity=identity,
-            )
-            cell_paths.append(path)
+    for seed in mode_expected.seeds:
+        path = layout.cell_result(1, "without", seed)
+        publish_formal_cell_frame(
+            _valid_bundle(seed),
+            stable_path=path,
+            expected=ExpectedResultContract(
+                **{
+                    **mode_expected.__dict__,
+                    "scope": AcceptanceScope.CELL,
+                    "horizons": mode_expected.horizons,
+                    "seeds": (seed,),
+                }
+            ),
+            code_identity=identity,
+        )
+        cell_paths.append(path)
 
     mode_path = layout.mode_result(1, "without")
     publish_mode_matrix(

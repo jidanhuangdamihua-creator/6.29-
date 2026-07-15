@@ -26,6 +26,13 @@ from scripts.run_strict_protocol_baseline import (
     build_mode_expected_contract,
 )
 from src.protocols.experiment_protocol import FORMAL_HORIZONS, FORMAL_METHODS, FORMAL_SEEDS
+from src.protocols.artifact_schemas import (
+    EVALUATED_PREDICTION_TRACE_SCHEMA_NAME,
+    WORKER_PREDICTION_TRACE_SCHEMA_NAME,
+    artifact_schema_registry_digest,
+    get_artifact_schema,
+)
+from src.protocols.feature_schema import get_predictor_schema
 from src.utils.result_acceptance import (
     AcceptanceScope,
     AggregateProfile,
@@ -133,7 +140,7 @@ class Task:
     config_check: str
     result_filename: str
     expected_result_path: Optional[Path] = None
-    horizon: int = 1
+    horizons: tuple[int, ...] = FORMAL_HORIZONS
     seed: int = 42
     result_paths: List[Path] = field(default_factory=list)
     returncode: Optional[int] = None
@@ -190,13 +197,13 @@ def build_tasks(
                     Task(
                         dataset_token=dataset_token,
                         dataset_id=dataset_id,
-                        label=f"D{dataset_id}-{mode}-h{cell.horizon}-s{cell.seed}",
+                        label=f"D{dataset_id}-{mode}-s{cell.seed}",
                         scenario=mode,
                         cmd=command,
-                        config_check="[FORMAL CELL] strict_paper; six methods; exact horizon/seed",
+                        config_check="[FORMAL SEED BUNDLE] strict_paper; six methods; h1-h5; exact seed",
                         result_filename=cell.result_path.name,
                         expected_result_path=cell.result_path,
-                        horizon=cell.horizon,
+                        horizons=cell.horizons,
                         seed=cell.seed,
                     )
                 )
@@ -328,10 +335,89 @@ def _task_plan_entry(task: Task) -> dict[str, object]:
     return {
         "dataset_id": task.dataset_id,
         "mode": task.scenario,
-        "horizon": task.horizon,
+        "horizons": list(task.horizons),
         "seed": task.seed,
         "command": list(task.cmd),
         "result_path": str(task.expected_result_path),
+    }
+
+
+def _input_subset_identity(
+    input_identity: Mapping[str, Mapping[str, object]],
+    *,
+    dataset_id: int,
+    filename: str,
+) -> dict[str, object]:
+    suffix = f"d1_d6_sealed_v1/dataset{dataset_id}/{filename}"
+    matches = [
+        (path, dict(identity))
+        for path, identity in input_identity.items()
+        if str(path).replace("\\", "/").endswith(suffix)
+    ]
+    if len(matches) != 1:
+        return {"path": suffix, "status": "unresolved"}
+    path, identity = matches[0]
+    return {"path": path, **identity}
+
+
+def _pin_task_identities(
+    entry: dict[str, object],
+    *,
+    input_identity: Mapping[str, Mapping[str, object]],
+) -> dict[str, object]:
+    dataset_id = int(entry["dataset_id"])
+    mode = str(entry["mode"])
+    seed = int(entry["seed"])
+    worker_schema = get_artifact_schema(WORKER_PREDICTION_TRACE_SCHEMA_NAME)
+    evaluated_schema = get_artifact_schema(EVALUATED_PREDICTION_TRACE_SCHEMA_NAME)
+    predictor_schema = get_predictor_schema(f"D{dataset_id}")
+    mode_cache_payload = {
+        "dataset_id": dataset_id,
+        "mode": mode,
+        "target": _input_subset_identity(
+            input_identity, dataset_id=dataset_id, filename="target.parquet"
+        ),
+    }
+    trace_base = {
+        "dataset_id": dataset_id,
+        "mode": mode,
+        "seed": seed,
+        "horizons": list(FORMAL_HORIZONS),
+    }
+    return {
+        **entry,
+        "mode_cache_identity": {
+            **mode_cache_payload,
+            "digest": _canonical_digest(mode_cache_payload),
+        },
+        "artifact_schema_registry_identity": {
+            "version": "artifact_schema_registry_v1",
+            "digest": artifact_schema_registry_digest(),
+        },
+        "predictor_feature_schema_identity": {
+            "version": predictor_schema.version,
+            "digest": predictor_schema.digest,
+            "dimension": predictor_schema.dimension,
+        },
+        "source_repair_identity": _input_subset_identity(
+            input_identity,
+            dataset_id=dataset_id,
+            filename="source_sales_canonicalization.json",
+        ),
+        "expected_trace_identities": {
+            "worker": {
+                **trace_base,
+                "schema_name": worker_schema.schema_name,
+                "schema_version": worker_schema.schema_version,
+                "schema_digest": worker_schema.schema_digest,
+            },
+            "evaluated": {
+                **trace_base,
+                "schema_name": evaluated_schema.schema_name,
+                "schema_version": evaluated_schema.schema_version,
+                "schema_digest": evaluated_schema.schema_digest,
+            },
+        },
     }
 
 
@@ -345,6 +431,36 @@ def _canonical_digest(payload: Mapping[str, object]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _reject_legacy_run_plan(
+    plan_path: Path,
+    *,
+    stored: object | None = None,
+) -> None:
+    path = Path(plan_path)
+    if stored is None:
+        try:
+            stored = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError, TypeError) as exc:
+            raise RuntimeError(f"formal run plan is unreadable: {path}") from exc
+    if not isinstance(stored, dict):
+        return
+    cells = stored.get("cells")
+    version = str(stored.get("run_plan_version", ""))
+    legacy_cells = isinstance(cells, list) and (
+        len(cells) == 300
+        or any(isinstance(cell, dict) and "horizon" in cell for cell in cells)
+    )
+    if legacy_cells or version in {
+        "formal_d1_d6_run_plan_v1",
+        "formal_d1_d6_run_plan_v2",
+    }:
+        raise RuntimeError(
+            "legacy 300-cell run plans cannot resume under the seed-bundle protocol"
+        )
+
+
 def build_run_plan(
     run_root: Path,
     *,
@@ -353,13 +469,16 @@ def build_run_plan(
 ) -> dict[str, object]:
     root = Path(run_root).resolve()
     tasks = build_tasks(None, smoke=False, run_dir=root)
-    cells = [_task_plan_entry(task) for task in tasks]
+    cells = [
+        _pin_task_identities(_task_plan_entry(task), input_identity=input_identity)
+        for task in tasks
+    ]
     result_paths = [str(cell["result_path"]) for cell in cells]
-    if len(cells) != 300 or len(set(result_paths)) != 300:
-        raise RuntimeError("formal run plan must contain exactly 300 unique cells")
+    if len(cells) != 60 or len(set(result_paths)) != 60:
+        raise RuntimeError("formal run plan must contain exactly 60 unique seed bundles")
 
     payload: dict[str, object] = {
-        "run_plan_version": "formal_d1_d6_run_plan_v2",
+        "run_plan_version": "formal_d1_d6_seed_bundle_plan_v3",
         "code_identity": code_identity.to_dict(),
         "schema_registry_version": RESULT_SCHEMA_REGISTRY_VERSION,
         "schema_registry_digest": result_schema_registry_digest(),
@@ -378,6 +497,8 @@ def prepare_formal_run(run_root: Path, *, resume: bool) -> dict[str, object]:
     if code_identity.dirty:
         raise RuntimeError("formal execution requires a clean git worktree")
     input_identity = discover_formal_input_identity(PROJECT_ROOT)
+    if resume:
+        _reject_legacy_run_plan(root / "run_plan.json")
     plan = build_run_plan(
         root,
         code_identity=code_identity,
@@ -417,6 +538,7 @@ def load_validated_run_plan(
         raise RuntimeError(f"formal run plan is unreadable: {plan_path}") from exc
     if not isinstance(stored, dict):
         raise RuntimeError(f"formal run plan must be a JSON object: {plan_path}")
+    _reject_legacy_run_plan(plan_path, stored=stored)
 
     code_identity = discover_code_identity(PROJECT_ROOT)
     if code_identity.dirty:
@@ -449,7 +571,11 @@ def _require_tasks_match_plan(
         and cell.get("mode") == mode
     ]
     actual = [_task_plan_entry(task) for task in tasks]
-    if len(planned) != 25 or len(actual) != 25 or planned != actual:
+    planned_core = [
+        {key: cell.get(key) for key in actual[0]}
+        for cell in planned
+    ] if actual else []
+    if len(planned) != 5 or len(actual) != 5 or planned_core != actual:
         raise RuntimeError(
             f"mode worker plan mismatch for d{dataset_id}_{mode}: "
             f"planned={len(planned)} actual={len(actual)}"
@@ -460,7 +586,7 @@ def _cell_contract(task: Task, mode_expected: ExpectedResultContract) -> Expecte
     return replace(
         mode_expected,
         scope=AcceptanceScope.CELL,
-        horizons=(task.horizon,),
+        horizons=task.horizons,
         seeds=(task.seed,),
     )
 
@@ -545,8 +671,8 @@ def execute_mode_worker(
         for task in tasks
         if task.expected_result_path is not None
     ]
-    if len(cell_paths) != 25:
-        raise RuntimeError("mode worker did not resolve exactly 25 cell paths")
+    if len(cell_paths) != 5:
+        raise RuntimeError("mode worker did not resolve exactly five seed bundle paths")
 
     if all_cells_reused:
         try:
@@ -585,8 +711,8 @@ def aggregate_prepared_run(run_root: Path) -> Path:
     root = Path(run_root).resolve()
     plan, code_identity = load_validated_run_plan(root)
     raw_cells = plan.get("cells")
-    if not isinstance(raw_cells, list) or len(raw_cells) != 300:
-        raise RuntimeError("global publication requires the full 300-cell formal plan")
+    if not isinstance(raw_cells, list) or len(raw_cells) != 60:
+        raise RuntimeError("global publication requires the full 60-bundle formal plan")
 
     layout = RunLayout(root)
     mode_paths: list[Path] = []
@@ -611,9 +737,9 @@ def aggregate_prepared_run(run_root: Path) -> Path:
                 for task in tasks
                 if task.expected_result_path is not None
             ]
-            if len(cell_paths) != 25:
+            if len(cell_paths) != 5:
                 raise RuntimeError(
-                    f"global publication requires 25 cells for d{dataset_id}_{mode}"
+                    f"global publication requires five bundles for d{dataset_id}_{mode}"
                 )
             expected = build_mode_expected_contract(
                 dataset=dataset,
@@ -746,8 +872,12 @@ def main() -> None:
             "formal execution requires a clean git worktree; commit or stash code changes first"
         )
     input_identity = discover_formal_input_identity(PROJECT_ROOT)
-    run_plan = {
-        "run_plan_version": "formal_d1_d6_run_plan_v1",
+    plan_cells = [
+        _pin_task_identities(_task_plan_entry(task), input_identity=input_identity)
+        for task in tasks
+    ]
+    plan_payload = {
+        "run_plan_version": "formal_d1_d6_seed_bundle_plan_v3",
         "code_identity": code_identity.to_dict(),
         "schema_registry_version": RESULT_SCHEMA_REGISTRY_VERSION,
         "schema_registry_digest": result_schema_registry_digest(),
@@ -755,18 +885,11 @@ def main() -> None:
         "methods": list(FORMAL_METHODS),
         "horizons": list(FORMAL_HORIZONS),
         "seeds": list(FORMAL_SEEDS),
-        "cells": [
-            {
-                "dataset_id": task.dataset_id,
-                "mode": task.scenario,
-                "horizon": task.horizon,
-                "seed": task.seed,
-                "command": list(task.cmd),
-                "result_path": str(task.expected_result_path),
-            }
-            for task in tasks
-        ],
+        "cells": plan_cells,
     }
+    run_plan = {**plan_payload, "run_identity": _canonical_digest(plan_payload)}
+    if bool(getattr(args, "resume", False)):
+        _reject_legacy_run_plan(run_root / "run_plan.json")
     write_or_validate_run_plan(
         run_root / "run_plan.json",
         run_plan,
@@ -782,7 +905,7 @@ def main() -> None:
             cell_expected = replace(
                 mode_expected,
                 scope=AcceptanceScope.CELL,
-                horizons=(task.horizon,),
+                horizons=task.horizons,
                 seeds=(task.seed,),
             )
             if resumable_formal_cell(

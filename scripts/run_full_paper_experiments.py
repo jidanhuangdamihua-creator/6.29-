@@ -52,10 +52,14 @@ from src.protocols.runner_adapter import configure_protocol_frames
 from src.protocols.rolling_origin import build_sample_manifest
 from src.protocols.reproducibility import set_protocol_seed
 from src.protocols.experiment_protocol import (
+    FORMAL_HORIZONS,
     formal_target_entity_keys,
     serialize_canonical_target_key,
 )
-from src.utils.run_artifacts import publish_formal_cell_output_frame
+from src.utils.run_artifacts import (
+    publish_formal_cell_output_frame,
+    publish_formal_seed_bundle_output_frame,
+)
 from src.evaluation.metric_contract import (
     MetricProtocolError,
     build_metric_identity_from_manifest,
@@ -287,16 +291,24 @@ def _save_dataset_result_csvs(
         if context is None:
             dataset_df.to_csv(out_path, index=False, encoding="utf-8")
         else:
-            publish_formal_cell_output_frame(
-                dataset_df,
-                stable_path=out_path,
-                dataset_id=int(context["dataset_id"]),
-                mode=str(context["mode"]),
-                targets=tuple(str(value) for value in context["targets"]),
-                horizon=int(context["horizon"]),
-                seed=int(context["seed"]),
-                project_root=ROOT,
+            all_horizons = bool(context.get("all_horizons", False))
+            publisher = (
+                publish_formal_seed_bundle_output_frame
+                if all_horizons
+                else publish_formal_cell_output_frame
             )
+            publish_kwargs = {
+                "frame": dataset_df,
+                "stable_path": out_path,
+                "dataset_id": int(context["dataset_id"]),
+                "mode": str(context["mode"]),
+                "targets": tuple(str(value) for value in context["targets"]),
+                "seed": int(context["seed"]),
+                "project_root": ROOT,
+            }
+            if not all_horizons:
+                publish_kwargs["horizon"] = int(context["horizon"])
+            publisher(**publish_kwargs)
         saved[dataset_name] = out_path
     return saved
 
@@ -1604,7 +1616,9 @@ def _parse_args() -> argparse.Namespace:
         default="MSWA-TL",
         help="Method used by --smoke for each D1-D3 information-sharing scenario.",
     )
-    parser.add_argument("--horizon", type=int, choices=[1, 2, 3, 4, 5], default=1)
+    horizon_group = parser.add_mutually_exclusive_group()
+    horizon_group.add_argument("--horizon", type=int, choices=[1, 2, 3, 4, 5])
+    horizon_group.add_argument("--all-horizons", action="store_true")
     parser.add_argument("--seed", type=int, choices=[42, 43, 44, 45, 46], default=42)
     return parser.parse_args()
 
@@ -1976,7 +1990,8 @@ def main() -> None:
     setup_logging(log_level="WARNING" if verbose_mode == "summary" else "INFO", log_file=None)
 
     cfg = _load_config()
-    cfg.setdefault("single_experiment", {})["horizon"] = int(args.horizon)
+    requested_horizons = FORMAL_HORIZONS if args.all_horizons else (int(args.horizon or 1),)
+    cfg.setdefault("single_experiment", {})["horizon"] = int(requested_horizons[0])
     cfg["single_experiment"]["seed"] = int(args.seed)
     set_protocol_seed(int(args.seed), include_frameworks=True)
     protocol = load_paper_protocol(cfg)
@@ -2034,9 +2049,14 @@ def main() -> None:
     extended_records: List[Dict[str, Any]] = []
     source_identification_records: List[Dict[str, Any]] = []
 
-    dataset_run_plan = _build_run_plan(METHODS, protocol=protocol, strict_paper_mode=strict_paper_mode)
+    base_dataset_run_plan = _build_run_plan(METHODS, protocol=protocol, strict_paper_mode=strict_paper_mode)
     if info_sharing_scenario is not None:
-        dataset_run_plan = [item for item in dataset_run_plan if item[2] == info_sharing_scenario]
+        base_dataset_run_plan = [item for item in base_dataset_run_plan if item[2] == info_sharing_scenario]
+    dataset_run_plan = [
+        (*item, horizon)
+        for horizon in requested_horizons
+        for item in base_dataset_run_plan
+    ]
     total_runs = len(selected_datasets) * len(dataset_run_plan)
     tracker = ExperimentProgressTracker(total_runs=max(1, total_runs))
 
@@ -2072,7 +2092,8 @@ def main() -> None:
             )
             print_dataset_header(dataset_name, target_shape, source_unique)
 
-        for method_name, source_count, info_scenario, configured_track in dataset_run_plan:
+        for method_name, source_count, info_scenario, configured_track, horizon in dataset_run_plan:
+            cfg["single_experiment"]["horizon"] = int(horizon)
             run_index += 1
             if verbose_mode == "summary":
                 snapshot = tracker.update(current_dataset=dataset_name, current_method=method_name)
@@ -2164,7 +2185,8 @@ def main() -> None:
                 "dataset_id": dataset_id,
                 "mode": args.info_sharing,
                 "targets": formal_target_entity_keys(dataset_name),
-                "horizon": int(args.horizon),
+                "horizon": int(requested_horizons[0]),
+                "all_horizons": bool(args.all_horizons),
                 "seed": int(args.seed),
             }
 

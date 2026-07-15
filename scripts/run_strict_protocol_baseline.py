@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run and combine the formal 5-horizon x 5-seed protocol matrix."""
+"""Run and combine the formal five-seed joint-horizon protocol matrix."""
 
 from __future__ import annotations
 
@@ -33,10 +33,10 @@ from src.utils.result_validation import promote_complete_baseline_groups
 
 
 @dataclass(frozen=True)
-class MatrixTask:
+class SeedBundleTask:
     dataset: str
     scenario: str
-    horizon: int
+    horizons: Tuple[int, ...]
     seed: int
     output_dir: Path
     command: Tuple[str, ...]
@@ -80,7 +80,7 @@ def build_matrix_tasks(
     dataset: str,
     scenario: str,
     output_dir: Path,
-) -> Tuple[MatrixTask, ...]:
+) -> Tuple[SeedBundleTask, ...]:
     normalized = str(dataset).strip().lower()
     if normalized not in {f"d{number}" for number in range(1, 7)}:
         raise ValueError("dataset must be d1 through d6")
@@ -88,54 +88,51 @@ def build_matrix_tasks(
         raise ValueError("scenario must be without or with")
     dataset_id = int(normalized[1:])
     tasks = []
-    for horizon in FORMAL_HORIZONS:
-        for seed in FORMAL_SEEDS:
-            cell_dir = Path(output_dir) / "cells" / f"h{horizon}_s{seed}"
-            if dataset_id <= 3:
-                command = (
-                    sys.executable,
-                    "scripts/run_full_paper_experiments.py",
-                    "--only-dataset",
-                    f"dataset{dataset_id}",
-                    "--strict-paper-mode",
-                    "--info-sharing",
-                    scenario,
-                    "--horizon",
-                    str(horizon),
-                    "--seed",
-                    str(seed),
-                    "--output-dir",
-                    str(cell_dir),
-                )
-            else:
-                command = (
-                    sys.executable,
-                    f"scripts/run_d{dataset_id}_experiment.py",
-                    "--info-sharing",
-                    scenario,
-                    "--horizon",
-                    str(horizon),
-                    "--seed",
-                    str(seed),
-                    "--output-dir",
-                    str(cell_dir),
-                )
-            result_path = (
-                cell_dir
-                / "results"
-                / f"dataset{dataset_id}_{scenario}_results.csv"
+    for seed in FORMAL_SEEDS:
+        cell_dir = Path(output_dir) / "cells" / f"s{seed}"
+        if dataset_id <= 3:
+            command = (
+                sys.executable,
+                "scripts/run_full_paper_experiments.py",
+                "--only-dataset",
+                f"dataset{dataset_id}",
+                "--strict-paper-mode",
+                "--info-sharing",
+                scenario,
+                "--all-horizons",
+                "--seed",
+                str(seed),
+                "--output-dir",
+                str(cell_dir),
             )
-            tasks.append(
-                MatrixTask(
-                    normalized,
-                    scenario,
-                    horizon,
-                    seed,
-                    cell_dir,
-                    command,
-                    result_path,
-                )
+        else:
+            command = (
+                sys.executable,
+                f"scripts/run_d{dataset_id}_experiment.py",
+                "--info-sharing",
+                scenario,
+                "--all-horizons",
+                "--seed",
+                str(seed),
+                "--output-dir",
+                str(cell_dir),
             )
+        result_path = (
+            cell_dir
+            / "results"
+            / f"dataset{dataset_id}_{scenario}_results.csv"
+        )
+        tasks.append(
+            SeedBundleTask(
+                normalized,
+                scenario,
+                FORMAL_HORIZONS,
+                seed,
+                cell_dir,
+                command,
+                result_path,
+            )
+        )
     return tuple(tasks)
 
 
@@ -188,12 +185,12 @@ def main() -> None:
     for index, task in enumerate(tasks, start=1):
         print(
             f"[{index}/{len(tasks)}] {task.dataset}/{task.scenario} "
-            f"horizon={task.horizon} seed={task.seed}"
+            f"horizons={task.horizons} seed={task.seed}"
         )
         completed = subprocess.run(task.command, cwd=ROOT, check=False)
         if completed.returncode != 0:
             raise SystemExit(
-                f"matrix cell failed: horizon={task.horizon} seed={task.seed} "
+                f"seed bundle failed: horizons={task.horizons} seed={task.seed} "
                 f"returncode={completed.returncode}"
             )
         if not task.result_path.is_file():

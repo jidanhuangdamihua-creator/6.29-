@@ -28,7 +28,11 @@ from src.utils.d4_d6_runtime import apply_runtime_source_domain_policy, load_def
 from src.utils.finite_diagnostics import validate_feature_frame_finite
 from src.utils.knn_feature_loader import resolve_knn_feature_columns
 from src.protocols.reproducibility import set_protocol_seed
-from src.utils.run_artifacts import publish_formal_cell_output_frame
+from src.protocols.experiment_protocol import FORMAL_HORIZONS
+from src.utils.run_artifacts import (
+    publish_formal_cell_output_frame,
+    publish_formal_seed_bundle_output_frame,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -75,7 +79,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=None, help="Override source/target epochs for lightweight checks.")
     parser.add_argument("--output-dir", type=Path, default=None, help="Optional run directory.")
     parser.add_argument("--repair-source-numeric-na", action="store_true")
-    parser.add_argument("--horizon", type=int, choices=[1, 2, 3, 4, 5], default=1)
+    horizon_group = parser.add_mutually_exclusive_group()
+    horizon_group.add_argument("--horizon", type=int, choices=[1, 2, 3, 4, 5])
+    horizon_group.add_argument("--all-horizons", action="store_true")
     parser.add_argument("--seed", type=int, choices=[42, 43, 44, 45, 46], default=42)
     return parser.parse_args()
 
@@ -125,7 +131,9 @@ def main() -> None:
         config["source_epochs"] = int(args.epochs)
         config["target_epochs"] = int(args.epochs)
     config["repair_source_numeric_na"] = bool(args.repair_source_numeric_na)
-    config["horizon"] = int(args.horizon)
+    horizons = FORMAL_HORIZONS if args.all_horizons else (int(args.horizon or 1),)
+    config["horizon"] = int(horizons[0])
+    config["horizons"] = list(horizons)
     config["random_state"] = int(args.seed)
     set_protocol_seed(int(args.seed), include_frameworks=True)
     config["metric_protocol"] = load_default_metric_protocol(PROJECT_ROOT)
@@ -251,15 +259,18 @@ def main() -> None:
             print(f"WARNING: entity {entity_key} not found in target_df, skipping")
             continue
 
-        rows = run_single_entity_experiment(
-            entity_key=entity_key,
-            source_df=source_df,
-            target_entity_df=target_entity_df,
-            feature_cols=feature_cols,
-            config=config,
-            enabled_methods=config["enabled_methods"],
-        )
-        all_rows.extend(rows)
+        for horizon in horizons:
+            horizon_config = dict(config)
+            horizon_config["horizon"] = int(horizon)
+            rows = run_single_entity_experiment(
+                entity_key=entity_key,
+                source_df=source_df,
+                target_entity_df=target_entity_df,
+                feature_cols=feature_cols,
+                config=horizon_config,
+                enabled_methods=config["enabled_methods"],
+            )
+            all_rows.extend(rows)
 
     df = pd.DataFrame(all_rows)
     df = _align_results_to_reference_schema(df)
@@ -270,16 +281,23 @@ def main() -> None:
         canonical_targets = tuple(
             dict.fromkeys(df["target_entity_key"].astype(str))
         )
-        publish_formal_cell_output_frame(
-            df,
-            stable_path=out_path,
-            dataset_id=config["dataset_id"],
-            mode=config["info_sharing"],
-            targets=canonical_targets,
-            horizon=config["horizon"],
-            seed=config["random_state"],
-            project_root=PROJECT_ROOT,
+        publisher = (
+            publish_formal_seed_bundle_output_frame
+            if args.all_horizons
+            else publish_formal_cell_output_frame
         )
+        publish_kwargs = {
+            "frame": df,
+            "stable_path": out_path,
+            "dataset_id": config["dataset_id"],
+            "mode": config["info_sharing"],
+            "targets": canonical_targets,
+            "seed": config["random_state"],
+            "project_root": PROJECT_ROOT,
+        }
+        if not args.all_horizons:
+            publish_kwargs["horizon"] = config["horizon"]
+        publisher(**publish_kwargs)
     print(f"Results saved to {out_path}")
     print(df[["target_entity_key", "method", "smape", "rmse"]].to_string())
 

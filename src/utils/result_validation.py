@@ -275,6 +275,26 @@ def validate_confirmed_baseline_group(rows: pd.DataFrame) -> pd.DataFrame:
     return confirmed
 
 
+def validate_seed_bundle_coverage(
+    rows: pd.DataFrame,
+    *,
+    seed: int,
+) -> None:
+    """Reject a formal execution cell unless it contains one seed and h1-h5."""
+
+    if rows.empty:
+        raise ValueError("formal seed bundle may not be empty")
+    try:
+        seeds = set(rows["seed"].astype(int))
+        horizons = set(rows["horizon"].astype(int))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("formal seed bundle has invalid horizon/seed columns") from exc
+    if seeds != {int(seed)}:
+        raise ValueError("formal seed bundle must contain exactly its declared seed")
+    if horizons != set(FORMAL_HORIZONS):
+        raise ValueError("formal seed bundle must contain horizons h1 through h5")
+
+
 def confirmed_baseline_rows(rows: pd.DataFrame) -> pd.DataFrame:
     """Return only explicitly promoted baseline rows; legacy/trial rows never mix."""
     if "result_status" not in rows.columns:

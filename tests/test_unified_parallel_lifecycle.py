@@ -17,7 +17,7 @@ def _identity(commit: str = "abc123", digest: str = "a" * 64) -> CodeIdentity:
     return CodeIdentity(commit, False, digest)
 
 
-def test_build_run_plan_locks_300_unique_cells_and_identity(tmp_path: Path) -> None:
+def test_build_run_plan_locks_60_unique_seed_bundles_and_identity(tmp_path: Path) -> None:
     identity = _identity()
 
     plan = unified.build_run_plan(
@@ -27,8 +27,18 @@ def test_build_run_plan_locks_300_unique_cells_and_identity(tmp_path: Path) -> N
     )
 
     cells = plan["cells"]
-    assert len(cells) == 300
-    assert len({cell["result_path"] for cell in cells}) == 300
+    assert len(cells) == 60
+    assert len({cell["result_path"] for cell in cells}) == 60
+    assert {tuple(cell["horizons"]) for cell in cells} == {(1, 2, 3, 4, 5)}
+    assert all("horizon" not in cell for cell in cells)
+    for cell in cells:
+        assert {
+            "mode_cache_identity",
+            "artifact_schema_registry_identity",
+            "predictor_feature_schema_identity",
+            "source_repair_identity",
+            "expected_trace_identities",
+        }.issubset(cell)
     assert len(plan["run_identity"]) == 64
     assert plan["code_identity"] == identity.to_dict()
     assert {
@@ -106,7 +116,7 @@ def prepared_run(
     return run_root
 
 
-def test_mode_worker_selects_exactly_25_plan_cells(
+def test_mode_worker_selects_exactly_five_plan_bundles(
     prepared_run: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -133,7 +143,7 @@ def test_mode_worker_selects_exactly_25_plan_cells(
         resume=False,
     )
 
-    assert len(seen) == 25
+    assert len(seen) == 5
     assert {(task.dataset_token, task.scenario) for task in seen} == {("d2", "with")}
     assert output == prepared_run / "d2_with" / "results" / "dataset2_with_results.csv"
 
@@ -186,7 +196,7 @@ def test_mode_worker_reuses_fully_verified_mode_without_republishing(
         resume=True,
     )
 
-    assert cell_verify.call_count == 25
+    assert cell_verify.call_count == 5
     mode_verify.assert_called_once()
     run_task.assert_not_called()
     publish.assert_not_called()
@@ -298,7 +308,7 @@ def test_main_dispatches_prepare_operation(
 ) -> None:
     run_root = tmp_path / "run"
     prepare = Mock(
-        return_value={"run_identity": "a" * 64, "cells": [None] * 300}
+        return_value={"run_identity": "a" * 64, "cells": [None] * 60}
     )
     monkeypatch.setattr(
         unified,
@@ -318,6 +328,28 @@ def test_main_dispatches_prepare_operation(
     unified.main()
 
     prepare.assert_called_once_with(run_root, resume=False)
+
+
+def test_prepare_resume_rejects_legacy_300_cell_plan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_root = tmp_path / "legacy"
+    run_root.mkdir()
+    (run_root / "run_plan.json").write_text(
+        json.dumps(
+            {
+                "run_plan_version": "formal_d1_d6_run_plan_v2",
+                "cells": [{"horizon": 1, "seed": 42}] * 300,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(unified, "discover_code_identity", lambda _: _identity())
+    monkeypatch.setattr(unified, "discover_formal_input_identity", lambda _: {})
+
+    with pytest.raises(RuntimeError, match="legacy 300-cell"):
+        unified.prepare_formal_run(run_root, resume=True)
 
 
 def test_main_dispatches_mode_worker_operation(

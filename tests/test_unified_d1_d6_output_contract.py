@@ -82,7 +82,7 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
         )
 
         self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertIn("[FORMAL PLAN] cells=300 unique=300", completed.stdout)
+        self.assertIn("[FORMAL PLAN] cells=60 unique=60", completed.stdout)
         mode_lines = [
             line for line in completed.stdout.splitlines() if line.startswith("[MODE]")
         ]
@@ -116,8 +116,8 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
 
         tasks = build_tasks(["d1", "d4"], smoke=False, run_dir=run_dir)
 
-        self.assertEqual(100, len(tasks))
-        self.assertEqual(100, len({task.expected_result_path for task in tasks}))
+        self.assertEqual(20, len(tasks))
+        self.assertEqual(20, len({task.expected_result_path for task in tasks}))
 
         for task in tasks:
             self.assertIn("--output-dir", task.cmd)
@@ -127,8 +127,8 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
                 task.cmd[output_arg_index],
             )
 
-        d4_without = next(task for task in tasks if task.label == "D4-without-h1-s42")
-        d4_with = next(task for task in tasks if task.label == "D4-with-h1-s42")
+        d4_without = next(task for task in tasks if task.label == "D4-without-s42")
+        d4_with = next(task for task in tasks if task.label == "D4-with-s42")
         self.assertEqual(
             "dataset4_without_results.csv",
             d4_without.result_filename,
@@ -158,8 +158,8 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
             info_sharing="with",
         )
 
-        self.assertEqual(50, len(without_tasks))
-        self.assertEqual(50, len(with_tasks))
+        self.assertEqual(10, len(without_tasks))
+        self.assertEqual(10, len(with_tasks))
         self.assertTrue(all(task.scenario == "without" for task in without_tasks))
         self.assertTrue(all(task.scenario == "with" for task in with_tasks))
         self.assertEqual("dataset1_without_results.csv", without_tasks[0].result_filename)
@@ -168,8 +168,8 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
         self.assertIn("without", without_tasks[0].cmd)
         self.assertIn("--info-sharing", with_tasks[0].cmd)
         self.assertIn("with", with_tasks[0].cmd)
-        self.assertEqual("dataset4_without_results.csv", without_tasks[25].result_filename)
-        self.assertEqual("dataset4_with_results.csv", with_tasks[25].result_filename)
+        self.assertEqual("dataset4_without_results.csv", without_tasks[5].result_filename)
+        self.assertEqual("dataset4_with_results.csv", with_tasks[5].result_filename)
 
     def test_unified_runner_exits_nonzero_when_child_task_fails(self):
         failed_task = run_unified_d1_d6.Task(
@@ -180,6 +180,9 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
             cmd=["python", "scripts/run_d5_experiment.py"],
             config_check="[CONFIG CHECK]",
             result_filename="dataset5_without_results.csv",
+            expected_result_path=Path(
+                "/private/tmp/test-unified-failure-run/d5_without/cells/s42/results/dataset5_without_results.csv"
+            ),
             returncode=1,
         )
 
@@ -225,7 +228,7 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
                 run_unified_d1_d6.main()
         resolve_root.assert_not_called()
 
-    def test_parallel_mode_runner_dry_run_prints_bounded_300_cell_plan(self):
+    def test_parallel_mode_runner_dry_run_prints_bounded_60_bundle_plan(self):
         runner = ROOT / "scripts" / "parallel_mode_runner.sh"
         self.assertTrue(runner.is_file(), "parallel mode runner script is missing")
 
@@ -244,7 +247,7 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertIn("MAX_JOBS=6", completed.stdout)
         self.assertIn("D5_MAX_JOBS=1", completed.stdout)
-        self.assertIn("[FORMAL PLAN] cells=300 unique=300", completed.stdout)
+        self.assertIn("[FORMAL PLAN] cells=60 unique=60", completed.stdout)
         self.assertEqual(12, completed.stdout.count("[MODE]"))
 
     def test_parallel_mode_runner_dry_run_honors_max_jobs_override(self):

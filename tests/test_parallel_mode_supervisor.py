@@ -75,7 +75,7 @@ def test_dry_run_prints_twelve_unique_mode_workers_without_launch(tmp_path: Path
     lines = [line for line in completed.stdout.splitlines() if line.startswith("[MODE]")]
     assert len(lines) == 12
     assert len(set(lines)) == 12
-    assert "cells=300 unique=300" in completed.stdout
+    assert "cells=60 unique=60" in completed.stdout
     assert "MAX_JOBS=6" in completed.stdout
     assert not (tmp_path / "formal-run").exists()
     assert _events(tmp_path) == []

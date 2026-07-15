@@ -16,6 +16,7 @@ from src.utils.result_acceptance import (
     accept_global_aggregate,
     accept_mode_matrix,
     build_formal_cell_contract,
+    build_formal_seed_bundle_contract,
     require_accepted,
 )
 from test_strict_result_contract import _strict_row
@@ -141,16 +142,18 @@ def test_diagnostic_cell_is_never_confirmation_eligible(tmp_path: Path) -> None:
         require_accepted(outcome)
 
 
-def test_mode_matrix_requires_25_accepted_cells_and_is_only_promoter(tmp_path: Path) -> None:
+def test_mode_matrix_requires_five_accepted_seed_bundles_and_is_only_promoter(tmp_path: Path) -> None:
     paths = []
-    for horizon in range(1, 6):
-        for seed in range(42, 47):
-            paths.append(
-                _write(
-                    tmp_path / f"h{horizon}_s{seed}.csv",
-                    _cell_rows(horizon=horizon, seed=seed),
-                )
+    for seed in range(42, 47):
+        paths.append(
+            _write(
+                tmp_path / f"s{seed}.csv",
+                pd.concat(
+                    [_cell_rows(horizon=horizon, seed=seed) for horizon in range(1, 6)],
+                    ignore_index=True,
+                ),
             )
+        )
     expected = _contract(
         scope=AcceptanceScope.MODE_MATRIX,
         horizons=(1, 2, 3, 4, 5),
@@ -160,13 +163,22 @@ def test_mode_matrix_requires_25_accepted_cells_and_is_only_promoter(tmp_path: P
     outcome = accept_mode_matrix(paths, expected=expected)
 
     assert outcome.report.passed
-    assert outcome.report.counts["cells"] == 25
+    assert outcome.report.counts["cells"] == 5
     assert len(outcome.accepted_rows) == 150
     assert set(outcome.accepted_rows["result_status"]) == {"confirmed_baseline"}
 
     incomplete = accept_mode_matrix(paths[:-1], expected=expected)
     assert not incomplete.report.passed
     assert "cell_matrix_mismatch" in incomplete.report.reasons
+
+    bundle = build_formal_seed_bundle_contract(
+        dataset_id=1,
+        mode="without",
+        targets=("1/10",),
+        seed=42,
+    )
+    assert bundle.horizons == (1, 2, 3, 4, 5)
+    assert bundle.seeds == (42,)
 
 
 FULL_TARGETS = {

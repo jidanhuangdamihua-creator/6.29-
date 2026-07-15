@@ -22,6 +22,7 @@ from src.utils.result_acceptance import (
     accept_global_aggregate,
     accept_mode_matrix,
     build_formal_cell_contract,
+    build_formal_seed_bundle_contract,
 )
 
 
@@ -341,6 +342,39 @@ def publish_formal_cell_output_frame(
         mode=mode,
         targets=targets,
         horizon=horizon,
+        seed=seed,
+    )
+    return publish_formal_cell_frame(
+        frame,
+        stable_path=stable_path,
+        expected=expected,
+        code_identity=identity,
+        fencing_token=fencing_token,
+    )
+
+
+def publish_formal_seed_bundle_output_frame(
+    frame: pd.DataFrame,
+    *,
+    stable_path: Path,
+    dataset_id: int,
+    mode: str,
+    targets: tuple[str, ...] | list[str],
+    seed: int,
+    project_root: Path,
+    fencing_token: int = 0,
+) -> dict[str, object]:
+    """Acceptance-gated publication for one seed containing all formal horizons."""
+
+    identity = discover_code_identity(project_root)
+    if identity.dirty:
+        raise ResultAcceptanceError(
+            "formal seed bundle publication requires a clean git worktree"
+        )
+    expected = build_formal_seed_bundle_contract(
+        dataset_id=dataset_id,
+        mode=mode,
+        targets=targets,
         seed=seed,
     )
     return publish_formal_cell_frame(

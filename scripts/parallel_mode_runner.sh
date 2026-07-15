@@ -101,7 +101,7 @@ if [[ "${DRY_RUN}" == "1" ]]; then
     for task in "${TASKS[@]}"; do
         print_mode_command "${task}"
     done
-    printf '[FORMAL PLAN] cells=%s unique=%s\n' "$((TASK_COUNT * 25))" "$((TASK_COUNT * 25))"
+    printf '[FORMAL PLAN] cells=%s unique=%s\n' "$((TASK_COUNT * 5))" "$((TASK_COUNT * 5))"
     exit 0
 fi
 
