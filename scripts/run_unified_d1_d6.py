@@ -59,9 +59,7 @@ VALID_MODES = ("without", "with")
 
 def _formal_parquet_dir(project_root: Path, dataset_id: int) -> Path:
     root = Path(project_root)
-    if int(dataset_id) in (1, 2):
-        return root / "数据集" / "派生数据" / "d1d2_protocol_v1"
-    return root / "数据集" / "固化数据"
+    return root / "数据集" / "固化数据" / "d1_d6_sealed_v1" / f"dataset{int(dataset_id)}"
 
 
 def discover_formal_input_identity(project_root: Path) -> dict[str, dict[str, object]]:
@@ -72,14 +70,24 @@ def discover_formal_input_identity(project_root: Path) -> dict[str, dict[str, ob
         root / "configs" / "matrix_config.json",
     ]
     paths.extend(sorted((root / "configs" / "solidified" / "knn").glob("**/*.json")))
+    common_artifacts = (
+        "source.parquet",
+        "target.parquet",
+        "manifest.json",
+        "validation_report.json",
+        "source_schema.json",
+        "target_schema.json",
+        "predictor_schema.json",
+        "knn_schema.json",
+        "calendarization_audit.json",
+        "source_sales_canonicalization.json",
+        "provenance.json",
+    )
     for dataset_id in range(1, 7):
         parquet_dir = _formal_parquet_dir(root, dataset_id)
-        paths.extend(
-            [
-                parquet_dir / f"dataset{dataset_id}-source.parquet",
-                parquet_dir / f"dataset{dataset_id}-target.parquet",
-            ]
-        )
+        paths.extend(parquet_dir / name for name in common_artifacts)
+        if dataset_id >= 3:
+            paths.append(parquet_dir / "adopt_validation_report.json")
     d5_raw = root / "数据集" / "原始数据" / "Dataset 5Favorita"
     paths.extend(
         d5_raw / filename

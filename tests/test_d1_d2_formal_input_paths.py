@@ -41,17 +41,17 @@ def _captured_formal_input_paths(
     return captured
 
 
-def test_d1_d2_formal_runner_uses_protocol_derived_parquets() -> None:
-    expected_root = Path("数据集/派生数据/d1d2_protocol_v1")
+def test_formal_runner_uses_only_versioned_sealed_parquets() -> None:
+    expected_root = Path("数据集/固化数据/d1_d6_sealed_v1")
     solidified_paths = _full_runner_solidified_paths()
 
-    for dataset_name, dataset_id in (("Dataset1", 1), ("Dataset2", 2)):
+    for dataset_name, dataset_id in (("Dataset1", 1), ("Dataset2", 2), ("Dataset3", 3)):
         paths = solidified_paths[dataset_name]
         assert Path(paths["source"]) == (
-            expected_root / f"dataset{dataset_id}-source.parquet"
+            expected_root / f"dataset{dataset_id}" / "source.parquet"
         )
         assert Path(paths["target"]) == (
-            expected_root / f"dataset{dataset_id}-target.parquet"
+            expected_root / f"dataset{dataset_id}" / "target.parquet"
         )
 
 
@@ -60,14 +60,14 @@ def test_run_plan_identity_locks_protocol_derived_d1_d2_parquets(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured = _captured_formal_input_paths(tmp_path, monkeypatch)
-    expected_root = tmp_path / "数据集" / "派生数据" / "d1d2_protocol_v1"
+    expected_root = tmp_path / "数据集" / "固化数据" / "d1_d6_sealed_v1"
     stale_root = tmp_path / "数据集" / "固化数据"
 
-    for dataset_id in (1, 2):
-        assert expected_root / f"dataset{dataset_id}-source.parquet" in captured
-        assert expected_root / f"dataset{dataset_id}-target.parquet" in captured
-        assert stale_root / f"dataset{dataset_id}-source.parquet" not in captured
-        assert stale_root / f"dataset{dataset_id}-target.parquet" not in captured
+    for dataset_id in (1, 2, 3):
+        assert expected_root / f"dataset{dataset_id}" / "source.parquet" in captured
+        assert expected_root / f"dataset{dataset_id}" / "target.parquet" in captured
+    assert not any(path == stale_root / "dataset1-source.parquet" for path in captured)
+    assert not any(path == stale_root / "dataset2-target.parquet" for path in captured)
 
 
 def test_run_plan_identity_keeps_d3_d6_on_solidified_parquets(
@@ -75,8 +75,8 @@ def test_run_plan_identity_keeps_d3_d6_on_solidified_parquets(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured = _captured_formal_input_paths(tmp_path, monkeypatch)
-    expected_root = tmp_path / "数据集" / "固化数据"
+    expected_root = tmp_path / "数据集" / "固化数据" / "d1_d6_sealed_v1"
 
     for dataset_id in range(3, 7):
-        assert expected_root / f"dataset{dataset_id}-source.parquet" in captured
-        assert expected_root / f"dataset{dataset_id}-target.parquet" in captured
+        assert expected_root / f"dataset{dataset_id}" / "source.parquet" in captured
+        assert expected_root / f"dataset{dataset_id}" / "target.parquet" in captured

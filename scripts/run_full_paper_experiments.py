@@ -107,16 +107,28 @@ FORMAL_DATASET_PATHS = {
 }
 SOLIDIFIED_DATASET_PATHS = {
     "Dataset1": {
-        "source": "数据集/派生数据/d1d2_protocol_v1/dataset1-source.parquet",
-        "target": "数据集/派生数据/d1d2_protocol_v1/dataset1-target.parquet",
+        "source": "数据集/固化数据/d1_d6_sealed_v1/dataset1/source.parquet",
+        "target": "数据集/固化数据/d1_d6_sealed_v1/dataset1/target.parquet",
     },
     "Dataset2": {
-        "source": "数据集/派生数据/d1d2_protocol_v1/dataset2-source.parquet",
-        "target": "数据集/派生数据/d1d2_protocol_v1/dataset2-target.parquet",
+        "source": "数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet",
+        "target": "数据集/固化数据/d1_d6_sealed_v1/dataset2/target.parquet",
     },
     "Dataset3": {
-        "source": "数据集/固化数据/dataset3-source.parquet",
-        "target": "数据集/固化数据/dataset3-target.parquet",
+        "source": "数据集/固化数据/d1_d6_sealed_v1/dataset3/source.parquet",
+        "target": "数据集/固化数据/d1_d6_sealed_v1/dataset3/target.parquet",
+    },
+    "Dataset4": {
+        "source": "数据集/固化数据/d1_d6_sealed_v1/dataset4/source.parquet",
+        "target": "数据集/固化数据/d1_d6_sealed_v1/dataset4/target.parquet",
+    },
+    "Dataset5": {
+        "source": "数据集/固化数据/d1_d6_sealed_v1/dataset5/source.parquet",
+        "target": "数据集/固化数据/d1_d6_sealed_v1/dataset5/target.parquet",
+    },
+    "Dataset6": {
+        "source": "数据集/固化数据/d1_d6_sealed_v1/dataset6/source.parquet",
+        "target": "数据集/固化数据/d1_d6_sealed_v1/dataset6/target.parquet",
     },
 }
 FORMAL_LR = 1e-4

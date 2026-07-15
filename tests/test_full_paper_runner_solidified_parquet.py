@@ -27,13 +27,21 @@ from src.utils.parquet_data_loader import attach_window_attrs
 
 def _fixture_root() -> Path:
     checkout = Path(__file__).resolve().parents[1]
-    if (checkout / "数据集" / "固化数据" / "dataset1-source.parquet").is_file():
+    sealed = checkout / "数据集" / "固化数据" / "d1_d6_sealed_v1" / "dataset1" / "source.parquet"
+    if sealed.is_file():
         return checkout
     git_pointer = checkout / ".git"
     if git_pointer.is_file():
         git_dir = Path(git_pointer.read_text(encoding="utf-8").strip().split(":", 1)[1].strip())
         primary = git_dir.parents[2]
-        if (primary / "数据集" / "固化数据" / "dataset1-source.parquet").is_file():
+        if (
+            primary
+            / "数据集"
+            / "固化数据"
+            / "d1_d6_sealed_v1"
+            / "dataset1"
+            / "source.parquet"
+        ).is_file():
             return primary
     return checkout
 

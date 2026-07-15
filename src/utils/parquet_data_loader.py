@@ -7,13 +7,17 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 import pandas as pd
+import pyarrow.parquet as pq
 
 from src.constants import D4_D6_RUNTIME_KNN_PROTOCOL_VERSION, SOLIDIFIED_TARGET_WINDOWS
+
+from src.data_processing.sealed_daily import TargetViews, build_target_views
 from src.utils.d5_calendar_reconstruction import (
     D5AuthorityBundle,
     D5ReconstructionReport,
     reconstruct_d5_target_calendar,
 )
+from src.utils.sealed_parquet import read_sealed_projection
 
 
 LOGGER = logging.getLogger("experiment")
@@ -111,6 +115,46 @@ def expected_target_dates_from_windows(windows: Dict[str, Any]) -> pd.DatetimeIn
             f"test_end={windows.get('test_end')!r}"
         )
     return pd.date_range(pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize(), freq="D")
+
+
+def load_sealed_target_views(
+    dataset_id: int,
+    sealed_dataset_dir: str | Path,
+    *,
+    target_window: Any | None = None,
+) -> TargetViews:
+    """Load one target artifact from the immutable sealed root and split views.
+
+    The caller supplies a dataset directory such as
+    ``d1_d6_sealed_v1/dataset1``.  No legacy ``datasetX-target.parquet`` or
+    unsealed fallback is considered here.
+    """
+
+    from src.protocols.sealing_protocol import get_target_window
+
+    normalized_id = int(dataset_id)
+    if normalized_id not in range(1, 7):
+        raise ValueError("dataset_id must be between 1 and 6")
+    dataset_dir = Path(sealed_dataset_dir)
+    target_path = dataset_dir / "target.parquet"
+    if not target_path.is_file():
+        raise FileNotFoundError(f"sealed target artifact is missing: {target_path}")
+    if dataset_dir.parent.name != "d1_d6_sealed_v1":
+        raise ValueError("formal sealed target path must be under d1_d6_sealed_v1")
+    if dataset_dir.name != f"dataset{normalized_id}":
+        raise ValueError("formal sealed target path must end with dataset<id>")
+    expected_window = target_window or get_target_window(f"D{normalized_id}")
+    schema = pq.read_schema(target_path)
+    frame = read_sealed_projection(
+        target_path,
+        columns=tuple(schema.names),
+        date_start=expected_window.target_start,
+        date_end=expected_window.blind_end,
+    )
+    return build_target_views(frame, f"D{normalized_id}", window=expected_window)
+
+
+load_formal_target_views = load_sealed_target_views
 
 
 def _knn_json_path(knn_json_dir: str | Path, info_sharing: str) -> Path:
