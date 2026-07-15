@@ -20,6 +20,8 @@ from src.protocols.experiment_protocol import (
 )
 from src.utils.result_schema import REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY
 from src.utils.result_validation import classify_protocol_result
+from src.utils.artifact_rehydration import resolve_bound_artifact
+from src.utils.run_recovery import RunRecovery
 
 
 FORMAL_KEY_COLUMNS = (
@@ -46,6 +48,20 @@ class AggregateProfile(str, Enum):
 
 class ResultAcceptanceError(RuntimeError):
     """Raised when a caller requires a passing acceptance outcome."""
+
+
+def resolve_accepted_artifact(
+    recovery: RunRecovery,
+    logical_artifact_id: str,
+    *,
+    expected_binding_set_digest: str | None = None,
+) -> Path:
+    """Resolve accepted inputs exclusively through the attempt's frozen binding set."""
+    return resolve_bound_artifact(
+        recovery,
+        logical_artifact_id,
+        expected_binding_set_digest=expected_binding_set_digest,
+    )
 
 
 @dataclass(frozen=True)

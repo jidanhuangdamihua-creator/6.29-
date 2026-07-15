@@ -273,6 +273,8 @@ class RunRecovery:
                 "event_sequence": 0,
                 "last_event_sha256": None,
                 "cells": {},
+                "artifact_binding_set": None,
+                "downstream_scheduling_started": False,
             }
             state = self._append_event(
                 state,
@@ -425,6 +427,8 @@ class RunRecovery:
             state["fencing_token"] = new_token
             state["current_attempt_id"] = attempt_id
             state["run_state"] = RunState.RUNNING.value
+            state["artifact_binding_set"] = None
+            state["downstream_scheduling_started"] = False
             state = self._append_event(
                 state,
                 event_type="run_transition",
@@ -708,6 +712,144 @@ class RunRecovery:
             )
             return path
 
+    def publish_artifact_binding_set(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        binding_set_digest: str,
+        actor: ActorIdentity,
+        fencing_token: int,
+        reason: str = "validated artifact authority frozen",
+        now: Optional[datetime] = None,
+    ) -> Path:
+        """CAS-publish the only downstream artifact authority for an attempt."""
+        timestamp = _as_utc(now)
+        with self._locked():
+            state = self.load_state()
+            self._require_token(state, fencing_token)
+            run_state = RunState(state["run_state"])
+            if run_state in {RunState.SEALED_SUCCESS, RunState.SEALED_FAILED}:
+                raise RecoveryError("artifact bindings cannot change in a sealed terminal state")
+            if run_state is not RunState.RUNNING:
+                raise RecoveryError("artifact bindings require a running attempt")
+            if state.get("downstream_scheduling_started"):
+                raise RecoveryError("artifact bindings must freeze before downstream scheduling")
+            if state.get("artifact_binding_set") is not None:
+                raise FileExistsError("artifact binding set is already frozen for this attempt")
+            attempt_id = str(state["current_attempt_id"])
+            if payload.get("attempt_id") != attempt_id:
+                raise RecoveryError("binding set attempt does not match current attempt")
+            if int(payload.get("fencing_token", -1)) != int(fencing_token):
+                raise StaleFencingTokenError("binding set fencing token mismatch")
+            unsigned = dict(payload)
+            claimed_digest = unsigned.pop("binding_set_digest", None)
+            computed_digest = "sha256:" + hashlib.sha256(
+                _canonical_bytes(unsigned)
+            ).hexdigest()
+            if (
+                claimed_digest != str(binding_set_digest)
+                or str(binding_set_digest) != computed_digest
+            ):
+                raise RecoveryError("artifact binding set digest validation failed")
+            path = self.layout.artifact_binding_set(attempt_id)
+            _atomic_json(path, dict(payload), exclusive=True)
+            relative_path = path.relative_to(self.layout.run_root).as_posix()
+            authority = {
+                "attempt_id": attempt_id,
+                "fencing_token": int(fencing_token),
+                "path": relative_path,
+                "digest": str(binding_set_digest),
+            }
+            state["artifact_binding_set"] = authority
+            state = self._append_event(
+                state,
+                event_type="artifact_binding_set_frozen",
+                actor=actor,
+                reason=reason,
+                before_state=None,
+                after_state="frozen",
+                now=timestamp,
+                published_artifacts=authority,
+            )
+            _atomic_json(self.layout.state, state)
+            return path
+
+    def record_artifact_rehydration(
+        self,
+        *,
+        logical_artifact_id: str,
+        old_artifact_sha256: str,
+        new_artifact_sha256: str,
+        physical_path: str,
+        condition: str,
+        actor: ActorIdentity,
+        fencing_token: int,
+        reason: str,
+        now: Optional[datetime] = None,
+    ) -> None:
+        """Append an authenticated audit event without making it binding authority."""
+        timestamp = _as_utc(now)
+        with self._locked():
+            state = self.load_state()
+            self._require_token(state, fencing_token)
+            if RunState(state["run_state"]) is not RunState.RUNNING:
+                raise RecoveryError("artifact rehydration requires a running attempt")
+            if state.get("artifact_binding_set") is not None:
+                raise RecoveryError("artifact rehydration cannot follow binding freeze")
+            if state.get("downstream_scheduling_started"):
+                raise RecoveryError("artifact rehydration cannot follow downstream scheduling")
+            artifact_event = {
+                "logical_artifact_id": str(logical_artifact_id),
+                "old_artifact_sha256": str(old_artifact_sha256),
+                "new_artifact_sha256": str(new_artifact_sha256),
+                "physical_path": str(physical_path),
+                "condition": str(condition),
+                "fit_call_count": 0,
+                "predict_call_count": 0,
+            }
+            state = self._append_event(
+                state,
+                event_type="artifact_rehydrated",
+                actor=actor,
+                reason=reason,
+                before_state=str(condition),
+                after_state="rehydrated",
+                now=timestamp,
+                subject_id=str(logical_artifact_id),
+                published_artifacts=artifact_event,
+            )
+            _atomic_json(self.layout.state, state)
+
+    def mark_downstream_scheduling_started(
+        self,
+        *,
+        actor: ActorIdentity,
+        fencing_token: int,
+        reason: str = "downstream scheduling started",
+        now: Optional[datetime] = None,
+    ) -> None:
+        timestamp = _as_utc(now)
+        with self._locked():
+            state = self.load_state()
+            self._require_token(state, fencing_token)
+            if RunState(state["run_state"]) is not RunState.RUNNING:
+                raise RecoveryError("downstream scheduling requires a running attempt")
+            if state.get("artifact_binding_set") is None:
+                raise RecoveryError("artifact binding set must freeze before downstream scheduling")
+            if state.get("downstream_scheduling_started"):
+                raise RecoveryError("downstream scheduling was already started")
+            state["downstream_scheduling_started"] = True
+            state = self._append_event(
+                state,
+                event_type="downstream_scheduling_started",
+                actor=actor,
+                reason=reason,
+                before_state=None,
+                after_state="started",
+                now=timestamp,
+            )
+            _atomic_json(self.layout.state, state)
+
     def rebuild_state(self) -> dict[str, Any]:
         events = self.read_events()
         if not events or events[0].get("event_type") != "run_created":
@@ -723,6 +865,8 @@ class RunRecovery:
             "event_sequence": 0,
             "last_event_sha256": None,
             "cells": {},
+            "artifact_binding_set": None,
+            "downstream_scheduling_started": False,
         }
         for event in events:
             state["event_sequence"] = event["sequence"]
@@ -731,6 +875,13 @@ class RunRecovery:
             state["current_attempt_id"] = event["attempt_id"]
             if event["event_type"] in {"run_created", "run_transition"}:
                 state["run_state"] = event["after_state"]
+                if (
+                    event["event_type"] == "run_transition"
+                    and event["before_state"] == RunState.PARTIAL_FAILED.value
+                    and event["after_state"] == RunState.RUNNING.value
+                ):
+                    state["artifact_binding_set"] = None
+                    state["downstream_scheduling_started"] = False
             elif event["event_type"] == "cell_transition":
                 state["cells"][event["subject_id"]] = {
                     "state": event["after_state"],
@@ -740,5 +891,9 @@ class RunRecovery:
                     "published_artifacts": event["published_artifacts"],
                     "updated_at": event["timestamp"],
                 }
+            elif event["event_type"] == "artifact_binding_set_frozen":
+                state["artifact_binding_set"] = event["published_artifacts"]
+            elif event["event_type"] == "downstream_scheduling_started":
+                state["downstream_scheduling_started"] = True
         _atomic_json(self.layout.state, state)
         return state

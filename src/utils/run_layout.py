@@ -69,6 +69,12 @@ class RunLayout:
     def attempt_result(self, attempt_id: str) -> Path:
         return self.attempt_dir(attempt_id) / "attempt_result.json"
 
+    def attempt_rehydrated_artifacts_dir(self, attempt_id: str) -> Path:
+        return self.attempt_dir(attempt_id) / "rehydrated_artifacts"
+
+    def artifact_binding_set(self, attempt_id: str) -> Path:
+        return self.attempt_dir(attempt_id) / "artifact_binding_set.json"
+
     @property
     def state(self) -> Path:
         return self.run_root / "state.json"
