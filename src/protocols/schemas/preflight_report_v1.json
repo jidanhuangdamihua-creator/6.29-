@@ -1,0 +1,24 @@
+{
+  "schema_name": "PreflightReportSchemaV1",
+  "schema_version": "v1",
+  "fields": [
+    {"name": "run_id", "arrow_dtype": "string", "nullable": false},
+    {"name": "protocol_version", "arrow_dtype": "string", "nullable": false},
+    {"name": "validation_policy_version", "arrow_dtype": "string", "nullable": false},
+    {"name": "validation_policy_digest", "arrow_dtype": "string", "nullable": false, "format": "sha256"},
+    {"name": "schema_registry_version", "arrow_dtype": "string", "nullable": false},
+    {"name": "schema_digests", "arrow_dtype": "json", "nullable": false},
+    {"name": "dataset_states", "arrow_dtype": "json", "nullable": false},
+    {"name": "checks", "arrow_dtype": "json", "nullable": false},
+    {"name": "failure_codes", "arrow_dtype": "json", "nullable": false},
+    {"name": "status", "arrow_dtype": "string", "nullable": false, "enum": ["ready", "blocked", "failed"]},
+    {"name": "generated_at", "arrow_dtype": "string", "nullable": false}
+  ],
+  "primary_key": ["run_id"],
+  "physical_sort_key": ["run_id"],
+  "semantic_columns": ["run_id", "protocol_version", "validation_policy_version", "validation_policy_digest", "schema_registry_version", "schema_digests", "dataset_states", "checks", "failure_codes", "status"],
+  "semantic_sort_key": ["run_id"],
+  "serialization_policy": {"csv": {"encoding": "utf-8", "bom": false, "newline": "LF", "null_token": "\\N", "boolean": "lowercase", "date": "ISO-8601", "float": "17-significant-digits", "negative_zero": "0"}, "gzip": {"mtime": 0, "filename": "", "compresslevel": 9}, "json": {"ensure_ascii": false, "sort_keys": true, "separators": [",", ":"], "trailing_newline": true, "allow_nan": false}},
+  "additionalProperties": false,
+  "schema_digest": "sha256:1f7717c75d0237b5a15c870df8945ed25bfdf972927cf17c197324d61a98e7b0"
+}

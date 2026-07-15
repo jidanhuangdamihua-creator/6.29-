@@ -11,6 +11,10 @@ from typing import Any
 
 import pandas as pd
 
+from src.protocols.artifact_schemas import (
+    get_artifact_schema,
+)
+
 from src.constants import (
     RESULT_CONTRACT_VERSION,
     RESULT_SCHEMA_COLUMNS,
@@ -44,6 +48,21 @@ REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY = MappingProxyType(
         SCHEMA_FAMILY_D4_D6: ("sample_count",),
     }
 )
+
+
+FORMAL_RESULT_SCHEMA_NAME = "FormalResultRowSchemaV1"
+
+
+def formal_result_row_columns() -> tuple[str, ...]:
+    """Return the exact sealed result-row order, separate from legacy CSV supersets."""
+    return get_artifact_schema(FORMAL_RESULT_SCHEMA_NAME).field_names
+
+
+def align_formal_result_records(records: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
+    """Validate and materialize typed formal result rows without legacy extras."""
+    schema = get_artifact_schema(FORMAL_RESULT_SCHEMA_NAME)
+    validated = schema.validate_records(records)
+    return pd.DataFrame(validated, columns=list(schema.field_names))
 
 
 def result_schema_registry_digest() -> str:

@@ -1,0 +1,33 @@
+{
+  "schema_name": "CellResultManifestSchemaV1",
+  "schema_version": "v1",
+  "fields": [
+    {"name": "run_id", "arrow_dtype": "string", "nullable": false},
+    {"name": "cell_id", "arrow_dtype": "string", "nullable": false},
+    {"name": "attempt_id", "arrow_dtype": "string", "nullable": false},
+    {"name": "dataset_id", "arrow_dtype": "string", "nullable": false, "enum": ["D1", "D2", "D3", "D4", "D5", "D6"]},
+    {"name": "scenario", "arrow_dtype": "string", "nullable": false, "enum": ["without", "with"]},
+    {"name": "target_entity_key", "arrow_dtype": "string", "nullable": false, "format": "canonical_entity_key"},
+    {"name": "method", "arrow_dtype": "string", "nullable": false, "enum": ["No-TL", "SS-TL", "MSWA-TL", "MSSB-TL", "MSML-TL", "MSML-TL-RFE"]},
+    {"name": "seed", "arrow_dtype": "int32", "nullable": false},
+    {"name": "worker_trace_schema_digest", "arrow_dtype": "string", "nullable": false},
+    {"name": "evaluated_trace_schema_digest", "arrow_dtype": "string", "nullable": false},
+    {"name": "result_schema_digest", "arrow_dtype": "string", "nullable": false},
+    {"name": "worker_trace_path", "arrow_dtype": "string", "nullable": false, "format": "posix_relative"},
+    {"name": "evaluated_trace_path", "arrow_dtype": "string", "nullable": false, "format": "posix_relative"},
+    {"name": "result_path", "arrow_dtype": "string", "nullable": false, "format": "posix_relative"},
+    {"name": "worker_trace_artifact_sha256", "arrow_dtype": "string", "nullable": false, "format": "sha256"},
+    {"name": "evaluated_trace_artifact_sha256", "arrow_dtype": "string", "nullable": false, "format": "sha256"},
+    {"name": "result_artifact_sha256", "arrow_dtype": "string", "nullable": false, "format": "sha256"},
+    {"name": "semantic_prediction_digest", "arrow_dtype": "string", "nullable": false, "format": "sha256"},
+    {"name": "status", "arrow_dtype": "string", "nullable": false, "enum": ["accepted", "failed"]},
+    {"name": "failure_code", "arrow_dtype": "string", "nullable": false, "enum": ["NONE", "TRACE_INVALID", "METRIC_RECOMPUTE_FAILED", "UPSTREAM_FAILED", "SCHEMA_INVALID"]}
+  ],
+  "primary_key": ["run_id", "cell_id", "attempt_id"],
+  "physical_sort_key": ["run_id", "cell_id", "attempt_id"],
+  "semantic_columns": ["run_id", "cell_id", "attempt_id", "dataset_id", "scenario", "target_entity_key", "method", "seed", "worker_trace_schema_digest", "evaluated_trace_schema_digest", "result_schema_digest", "worker_trace_path", "evaluated_trace_path", "result_path", "worker_trace_artifact_sha256", "evaluated_trace_artifact_sha256", "result_artifact_sha256", "semantic_prediction_digest", "status", "failure_code"],
+  "semantic_sort_key": ["run_id", "cell_id", "attempt_id"],
+  "serialization_policy": {"csv": {"encoding": "utf-8", "bom": false, "newline": "LF", "null_token": "\\N", "boolean": "lowercase", "date": "ISO-8601", "float": "17-significant-digits", "negative_zero": "0"}, "gzip": {"mtime": 0, "filename": "", "compresslevel": 9}, "json": {"ensure_ascii": false, "sort_keys": true, "separators": [",", ":"], "trailing_newline": true, "allow_nan": false}},
+  "additionalProperties": false,
+  "schema_digest": "sha256:f2d156cce0eee3570da60f104e242a913536740b3e45e4f2e020ea9ea9405643"
+}

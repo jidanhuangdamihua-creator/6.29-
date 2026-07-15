@@ -17,14 +17,23 @@ from src.utils.result_schema import (
     REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY,
     RESULT_SCHEMA_REGISTRY_VERSION,
     TRACE_COLUMNS,
+    align_formal_result_records,
     align_d1_d3_result_records,
     align_d4_d6_result_records,
     align_result_records,
+    formal_result_row_columns,
     result_schema_registry_digest,
 )
 
 
 MAX_DIFFS_TO_REPORT = 50
+
+
+def test_strict_formal_result_alignment_is_separate_from_legacy_csv_superset() -> None:
+    frame = align_formal_result_records([])
+    assert list(frame.columns) == list(formal_result_row_columns())
+    assert "result_contract_version" not in frame.columns
+    assert "status" in frame.columns
 
 
 def test_result_extra_registry_is_explicit_and_deterministic() -> None:

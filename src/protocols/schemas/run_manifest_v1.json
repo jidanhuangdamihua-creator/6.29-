@@ -1,0 +1,27 @@
+{
+  "schema_name": "RunManifestSchemaV1",
+  "schema_version": "v1",
+  "fields": [
+    {"name": "run_id", "arrow_dtype": "string", "nullable": false},
+    {"name": "protocol_version", "arrow_dtype": "string", "nullable": false},
+    {"name": "schema_registry_version", "arrow_dtype": "string", "nullable": false},
+    {"name": "dataset_ids", "arrow_dtype": "json", "nullable": false},
+    {"name": "scenarios", "arrow_dtype": "json", "nullable": false},
+    {"name": "methods", "arrow_dtype": "json", "nullable": false},
+    {"name": "seeds", "arrow_dtype": "json", "nullable": false},
+    {"name": "horizons", "arrow_dtype": "json", "nullable": false},
+    {"name": "cell_ids", "arrow_dtype": "json", "nullable": false},
+    {"name": "schema_digests", "arrow_dtype": "json", "nullable": false},
+    {"name": "code_identity_digest", "arrow_dtype": "string", "nullable": false, "format": "sha256"},
+    {"name": "input_identity_digest", "arrow_dtype": "string", "nullable": false, "format": "sha256"},
+    {"name": "created_at", "arrow_dtype": "string", "nullable": false},
+    {"name": "status", "arrow_dtype": "string", "nullable": false, "enum": ["running", "complete_unsealed", "sealed_failed", "SEALED_SUCCESS"]}
+  ],
+  "primary_key": ["run_id"],
+  "physical_sort_key": ["run_id"],
+  "semantic_columns": ["run_id", "protocol_version", "schema_registry_version", "dataset_ids", "scenarios", "methods", "seeds", "horizons", "cell_ids", "schema_digests", "code_identity_digest", "input_identity_digest", "status"],
+  "semantic_sort_key": ["run_id"],
+  "serialization_policy": {"csv": {"encoding": "utf-8", "bom": false, "newline": "LF", "null_token": "\\N", "boolean": "lowercase", "date": "ISO-8601", "float": "17-significant-digits", "negative_zero": "0"}, "gzip": {"mtime": 0, "filename": "", "compresslevel": 9}, "json": {"ensure_ascii": false, "sort_keys": true, "separators": [",", ":"], "trailing_newline": true, "allow_nan": false}},
+  "additionalProperties": false,
+  "schema_digest": "sha256:8e360df45d5abdb05304099b3408a822d608cd1e88e55b6950e4894e733cfde1"
+}
