@@ -142,7 +142,7 @@ class KnnCnnProvenanceTest(unittest.TestCase):
             )
 
     def setUp(self) -> None:
-        dates = pd.date_range("2020-01-01", periods=42, freq="D")
+        dates = pd.date_range("2020-01-01", periods=180, freq="D")
         self.source = pd.concat(
             [
                 pd.DataFrame(
@@ -150,8 +150,8 @@ class KnnCnnProvenanceTest(unittest.TestCase):
                         "store": "S1",
                         "item": "I1",
                         "date": dates,
-                        "sales": np.arange(42, dtype=float),
-                        "planned_price": np.arange(42, dtype=float) + 100.0,
+                        "sales": np.arange(180, dtype=float),
+                        "planned_price": np.arange(180, dtype=float) + 100.0,
                     }
                 ),
                 pd.DataFrame(
@@ -159,16 +159,16 @@ class KnnCnnProvenanceTest(unittest.TestCase):
                         "store": "S2",
                         "item": "I2",
                         "date": dates,
-                        "sales": np.arange(42, dtype=float) + 50.0,
-                        "planned_price": np.arange(42, dtype=float) + 200.0,
+                        "sales": np.arange(180, dtype=float) + 50.0,
+                        "planned_price": np.arange(180, dtype=float) + 200.0,
                     }
                 ),
             ],
             ignore_index=True,
         )
-        observed_dates = pd.date_range("2020-01-11", periods=30, freq="D")
+        observed_dates = dates[-30:]
         target = pd.DataFrame(
-            {"date": observed_dates, "sales": np.arange(10, 40, dtype=float)}
+            {"date": observed_dates, "sales": np.arange(150, 180, dtype=float)}
         )
         self.selection = select_daily_sequence_sources(
             target_df=target,
@@ -178,8 +178,9 @@ class KnnCnnProvenanceTest(unittest.TestCase):
             target_key=("T", "I0"),
             candidate_keys=(("S1", "I1"), ("S2", "I2")),
             group_cols=("store", "item"),
-            observed_start="2020-01-11",
+            observed_start=observed_dates[0],
             feature_cols=("sales",),
+            model_feature_cols=("sales", "planned_price"),
             k=1,
         )
 
@@ -196,12 +197,12 @@ class KnnCnnProvenanceTest(unittest.TestCase):
         self.assertEqual(selected.source_key, self.selection.ordered_source_keys[0])
         self.assertEqual(
             (selected.source_key[0], selected.source_key[1], selected.date_start, selected.date_end),
-            ("S1", "I1", "2020-01-01", "2020-02-09"),
+            ("S1", "I1", "2020-01-01", "2020-06-28"),
         )
         raw = self.source[
             (self.source["store"] == "S1")
             & (self.source["item"] == "I1")
-            & self.source["date"].between("2020-01-11", "2020-02-09")
+            & self.source["date"].between("2020-05-30", "2020-06-28")
         ].sort_values("date")
         np.testing.assert_array_equal(
             np.asarray(self.selection.entries[0].raw_vector),
@@ -212,7 +213,7 @@ class KnnCnnProvenanceTest(unittest.TestCase):
             self.source[
                 (self.source["store"] == "S1")
                 & (self.source["item"] == "I1")
-                & self.source["date"].between("2020-01-01", "2020-02-09")
+                & self.source["date"].between("2020-01-01", "2020-06-28")
             ].sort_values("date")[["sales", "planned_price"]].to_numpy(dtype=float),
         )
 

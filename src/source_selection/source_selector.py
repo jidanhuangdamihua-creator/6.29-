@@ -21,7 +21,8 @@ import pandas as pd
 
 from src.data_processing.data_preprocessing import infer_source_selection_feature_columns
 from src.constants import D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
-from src.protocols.candidate_pool import select_daily_sequence_sources
+from src.protocols.candidate_pool import prepare_daily_sequence_pool, select_daily_sequence_sources
+from src.protocols.feature_schema import get_knn_schema, get_predictor_schema
 from src.protocols.experiment_protocol import (
     PROTOCOL_VERSION,
     ProtocolViolation,
@@ -85,6 +86,8 @@ class SourceSelector:
             "knn_observed_start",
             "knn_observed_end",
             "source_observation_cutoff",
+            "source_pretrain_start",
+            "source_pretrain_end",
         )
         for role, frame in (("target", target_df), ("source", source_df)):
             missing = [name for name in required_attrs if name not in frame.attrs]
@@ -105,7 +108,22 @@ class SourceSelector:
                 f"selector group_cols differ from protocol: {tuple(group_cols)!r} != {configured_group_cols!r}"
             )
         protocol = get_experiment_protocol(target_df.attrs["protocol_dataset_id"])
+        knn_schema = get_knn_schema(protocol.dataset_id)
+        predictor_schema = get_predictor_schema(protocol.dataset_id)
+        frozen_knn_cols = knn_schema.ordered_names
+        frozen_model_cols = predictor_schema.ordered_names
         prepared_pool = source_df.attrs.get("prepared_daily_sequence_pool")
+        if prepared_pool is None:
+            prepared_pool = prepare_daily_sequence_pool(
+                source_df,
+                group_cols=configured_group_cols,
+                observed_start=target_df.attrs["knn_observed_start"],
+                observed_end=target_df.attrs["knn_observed_end"],
+                pretrain_start=target_df.attrs["source_pretrain_start"],
+                pretrain_end=target_df.attrs["source_pretrain_end"],
+                knn_feature_cols=frozen_knn_cols,
+                required_feature_cols=frozen_model_cols,
+            )
         result = select_daily_sequence_sources(
             target_df=target_df,
             source_df=source_df,
@@ -116,24 +134,18 @@ class SourceSelector:
             candidate_keys=target_df.attrs["protocol_candidate_keys"],
             group_cols=configured_group_cols,
             observed_start=target_df.attrs["knn_observed_start"],
-            feature_cols=("sales",),
+            feature_cols=frozen_knn_cols,
+            model_feature_cols=frozen_model_cols,
+            knn_schema_digest=knn_schema.digest,
             k=k,
         )
-        provenance_source_df = source_df
-        if prepared_pool is not None:
-            if tuple(model_feature_cols) != ("sales",):
-                raise ProtocolViolation(
-                    "prepared-pool source provenance currently supports sales-only preflight"
-                )
-            provenance_source_df = prepared_pool.selected_sales_frame(
-                result.ordered_source_keys
-            )
+        provenance_source_df = prepared_pool.selected_source_frame(result.ordered_source_keys)
         source_slices = extract_selected_source_slices(
             result,
             provenance_source_df,
-            training_start=result.observed_start,
-            training_end=result.source_observation_cutoff,
-            model_feature_cols=model_feature_cols,
+            training_start=result.source_window_start,
+            training_end=result.source_window_end,
+            model_feature_cols=frozen_model_cols,
         )
         tensor_provenance = tuple(
             build_cnn_tensor_provenance(
@@ -159,6 +171,10 @@ class SourceSelector:
                 "tie_group": entry.tie_group,
                 "date_start": entry.observed_start,
                 "date_end": entry.observed_end,
+                "vector_shape": entry.vector_shape,
+                "vector_digest": entry.vector_digest,
+                "source_repair_digest": entry.source_repair_digest,
+                "source_training_digest": entry.source_training_digest,
             }
             for entry in result.entries
         ]
@@ -181,13 +197,13 @@ class SourceSelector:
             "weight_mode": protocol.weight_mode,
             "distance_metric": "euclidean",
             "group_cols": list(configured_group_cols),
-            "target_signature_dim": 30,
-            "feature_cols": ["sales"],
-            "requested_feature_cols": ["sales"],
+            "target_signature_dim": 30 * len(frozen_knn_cols),
+            "feature_cols": list(frozen_knn_cols),
+            "requested_feature_cols": list(frozen_knn_cols),
             "representation": protocol.knn_representation,
             "knn_representation": protocol.knn_representation,
-            "scaling": "global_minmax_legal_observed_values",
-            "scaler_fit_scope": "target_and_candidate_legal_observed_values",
+            "scaling": "none_raw_canonical_float64",
+            "scaler_fit_scope": "not_applicable",
             "knn_observed_start": result.observed_start,
             "knn_observed_end": result.observed_end,
             "protocol_observed_start": target_df.attrs["protocol_observed_start"],
@@ -201,6 +217,12 @@ class SourceSelector:
             "candidate_pool_digest": result.candidate_pool_digest,
             "candidate_pool_digest_input": dict(result.candidate_pool_digest_input),
             "selection_result_digest": result.selection_result_digest,
+            "selection_identity_digest": result.selection_identity_digest,
+            "knn_schema_digest": result.knn_schema_digest,
+            "source_window_start": result.source_window_start,
+            "source_window_end": result.source_window_end,
+            "source_repair_digest": result.source_repair_digest,
+            "source_training_digest": result.source_training_digest,
             "selected_sources_runtime": list(sources),
             "source_skip_diagnostics": excluded,
             "candidate_source_count": len(target_df.attrs["protocol_candidate_keys"]),
@@ -210,7 +232,7 @@ class SourceSelector:
             "eligible_candidate_count": len(eligible_candidate_keys),
             "valid_30d_candidate_count": len(valid_30d_candidate_keys),
             "selected_count": len(sources),
-            "observed_days": len(result.entries[0].raw_vector),
+            "observed_days": 30,
             "skipped_source_count": len(excluded),
             "requested_k": int(k),
             "effective_k": int(k),
@@ -511,8 +533,8 @@ class SourceSelector:
             raise ValueError("D4-D6 runtime KNN observed window must contain exactly 30 calendar days")
         if source_history_end != target_observed_end:
             raise ValueError("D4-D6 runtime KNN source_history_end must equal target_observed_end")
-        if (source_history_end - source_history_start).days != 299:
-            raise ValueError("D4-D6 runtime KNN source history must contain exactly 300 calendar days")
+        if (source_history_end - source_history_start).days != 179:
+            raise ValueError("D4-D6 runtime KNN source history must contain exactly 180 calendar days")
 
         required_dates = pd.DatetimeIndex(
             pd.date_range(target_observed_start, target_observed_end, freq="D")
@@ -554,6 +576,32 @@ class SourceSelector:
             history = group[
                 group["date"].between(source_history_start, source_history_end, inclusive="both")
             ]
+            full_dates = pd.date_range(source_history_start, source_history_end, freq="D")
+            if history["date"].duplicated().any() or not pd.DatetimeIndex(
+                history["date"].sort_values()
+            ).equals(full_dates):
+                skipped.append(
+                    {
+                        "source_key": source_key,
+                        "reason": "invalid_180_day_source_history",
+                        "missing_dates": full_dates.difference(
+                            pd.DatetimeIndex(history["date"])
+                        ).strftime("%Y-%m-%d").tolist(),
+                    }
+                )
+                continue
+            full_used = history.loc[:, list(feature_cols)].apply(
+                pd.to_numeric, errors="coerce"
+            ).to_numpy(dtype=np.float64)
+            if not np.isfinite(full_used).all():
+                skipped.append(
+                    {
+                        "source_key": source_key,
+                        "reason": "nonfinite_180_day_required_feature",
+                        "missing_dates": [],
+                    }
+                )
+                continue
             aligned = history[history["date"].isin(required_dates)].sort_values("date")
             aligned_dates = pd.DatetimeIndex(aligned["date"].drop_duplicates())
             missing_dates = required_dates.difference(aligned_dates).strftime("%Y-%m-%d").tolist()

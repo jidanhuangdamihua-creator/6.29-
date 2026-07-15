@@ -128,13 +128,17 @@ class DailyKnnProtocolTest(unittest.TestCase):
         incomplete = self.source[
             ~((self.source["store"] == "S2") & (self.source["date"] == DATES[0]))
         ]
-        with self.assertRaisesRegex(ProtocolViolation, "valid candidates.*required K=3"):
-            _select(self.target, incomplete, k=3)
+        selection = _select(self.target, incomplete, k=3)
+        self.assertEqual(len(selection.entries), 3)
+        repaired = next(
+            entry for entry in selection.entries if entry.source_key == ("S2", "I2")
+        )
+        self.assertTrue(repaired.source_repair_digest)
 
     def test_duplicate_source_date_fails(self) -> None:
         duplicated = pd.concat([self.source, self.source.iloc[[0]]], ignore_index=True)
-        with self.assertRaisesRegex(ProtocolViolation, "duplicate observed dates"):
-            _select(self.target, duplicated)
+        with self.assertRaisesRegex(ProtocolViolation, "valid candidates.*required K=3"):
+            _select(self.target, duplicated, k=3)
 
     def test_target_key_in_candidate_pool_fails(self) -> None:
         with self.assertRaisesRegex(ProtocolViolation, "target key.*candidate pool"):
@@ -152,7 +156,7 @@ class DailyKnnProtocolTest(unittest.TestCase):
             )
 
     def test_non_sales_features_are_rejected(self) -> None:
-        with self.assertRaisesRegex(ProtocolViolation, "feature_cols must be exactly"):
+        with self.assertRaisesRegex(ProtocolViolation, "must start with sales"):
             select_daily_sequence_sources(
                 target_df=self.target,
                 source_df=self.source,
@@ -162,7 +166,7 @@ class DailyKnnProtocolTest(unittest.TestCase):
                 candidate_keys=(("S1", "I1"),),
                 group_cols=("store", "item"),
                 observed_start="2020-01-01",
-                feature_cols=("sales", "store"),
+                feature_cols=("store", "sales"),
                 k=1,
             )
 

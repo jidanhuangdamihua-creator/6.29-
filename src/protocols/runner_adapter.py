@@ -7,6 +7,7 @@ from typing import Sequence, Tuple
 import pandas as pd
 
 from .candidate_pool import PreparedDailySequencePool
+from .sealing_protocol import SourcePretrainWindow
 from .experiment_protocol import (
     EXTENDED_TRACK,
     STRICT_PAPER_TRACK,
@@ -287,12 +288,14 @@ def configure_protocol_frames(
 
     window = protocol.observation_window(observed_start)
     cutoff = pd.Timestamp(window.source_observation_cutoff).normalize()
+    source_window = SourcePretrainWindow.ending_at(protocol.dataset_id, cutoff)
+    source_start = pd.Timestamp(source_window.pretrain_start).normalize()
     if prepared_pool is None:
         source = source_df.copy()
         source_dates = pd.to_datetime(source["date"], errors="coerce").dt.normalize()
         if source_dates.isna().any():
             raise ProtocolViolation("source frame contains invalid dates")
-        source = source.loc[source_dates <= cutoff].copy()
+        source = source.loc[source_dates.between(source_start, cutoff, inclusive="both")].copy()
         if source.empty:
             raise ProtocolViolation("source frame is empty at source_observation_cutoff")
     else:
@@ -322,6 +325,9 @@ def configure_protocol_frames(
         "knn_observed_start": window.knn_observed_start.isoformat(),
         "knn_observed_end": window.knn_observed_end.isoformat(),
         "source_observation_cutoff": window.source_observation_cutoff.isoformat(),
+        "source_pretrain_start": source_window.pretrain_start.isoformat(),
+        "source_pretrain_end": source_window.pretrain_end.isoformat(),
+        "source_pretrain_days": source_window.pretrain_days,
         "target_observed_start": window.knn_observed_start.isoformat(),
         "target_observed_end": window.knn_observed_end.isoformat(),
         "target_test_excluded": True,

@@ -129,6 +129,8 @@ class SourceSliceRef:
     dates: Tuple[str, ...]
     feature_cols: Tuple[str, ...]
     values: Tuple[Tuple[float, ...], ...]
+    source_training_digest: str = ""
+    source_repair_digest: str = ""
 
 
 @dataclass(frozen=True)
@@ -198,6 +200,12 @@ def extract_selected_source_slices(
         raise ProtocolViolation(
             "CNN source training end exceeds source_observation_cutoff"
         )
+    if selection.source_window_start and start.strftime("%Y-%m-%d") != selection.source_window_start:
+        raise ProtocolViolation("CNN source training start differs from sealed 180-day source window")
+    if selection.source_window_end and end.strftime("%Y-%m-%d") != selection.source_window_end:
+        raise ProtocolViolation("CNN source training end differs from sealed 180-day source window")
+    if selection.source_window_start and len(pd.date_range(start, end, freq="D")) != 180:
+        raise ProtocolViolation("CNN source training window must contain exactly 180 days")
 
     prepared = _prepare_source(source_df, selection.group_cols)
     expected_dates = pd.date_range(start, end, freq="D")
@@ -229,8 +237,10 @@ def extract_selected_source_slices(
         knn_rows = sliced[
             sliced["date"].between(observed_start, observed_end, inclusive="both")
         ]
-        raw_sales = knn_rows["sales"].to_numpy(dtype=np.float64)
-        if not np.array_equal(raw_sales, np.asarray(entry.raw_vector, dtype=np.float64)):
+        raw_knn = knn_rows.loc[:, list(selection.feature_cols)].to_numpy(
+            dtype=np.float64
+        ).reshape(-1)
+        if not np.array_equal(raw_knn, np.asarray(entry.raw_vector, dtype=np.float64)):
             raise ProtocolViolation(
                 f"selected source {entry.source_key!r} KNN vector differs from raw slice"
             )
@@ -248,6 +258,8 @@ def extract_selected_source_slices(
                 dates=tuple(actual_dates.strftime("%Y-%m-%d")),
                 feature_cols=tuple(model_feature_cols),
                 values=tuple(tuple(float(value) for value in row) for row in values),
+                source_training_digest=entry.source_training_digest,
+                source_repair_digest=entry.source_repair_digest,
             )
         )
 

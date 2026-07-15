@@ -63,13 +63,17 @@ def derive_d4_d6_runtime_knn_windows(
     source_history_days: int,
 ) -> Dict[str, Any]:
     """Derive the explicit D4-D6 runtime KNN bounds using inclusive days."""
+    from src.constants import SOURCE_PRETRAIN_DAYS as formal_source_days
+
     dataset_id = int(windows.get("dataset_id", 0))
     if dataset_id not in {4, 5, 6}:
         raise ValueError(f"runtime KNN windows are only defined for D4-D6: dataset_id={dataset_id}")
     if "train_start" not in windows:
         raise ValueError("D4-D6 runtime KNN windows require train_start")
-    if int(source_history_days) <= 0:
-        raise ValueError("source_history_days must be positive")
+    if int(source_history_days) != formal_source_days:
+        raise ValueError(
+            f"formal source_history_days must be exactly {formal_source_days}"
+        )
 
     target_observed_start = pd.to_datetime(windows["train_start"], errors="coerce")
     if pd.isna(target_observed_start):

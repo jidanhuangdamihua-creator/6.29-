@@ -9,14 +9,20 @@ from src.protocols.runner_adapter import configure_protocol_frames
 from src.source_selection.source_selector import SourceSelector
 
 
+SOURCE_DATES = pd.date_range("2023-07-15", periods=190, freq="D")
+OBSERVED_DATES = SOURCE_DATES[150:180]
+
+
 def _frames() -> tuple[pd.DataFrame, pd.DataFrame]:
-    dates = pd.date_range("2024-01-01", periods=40, freq="D")
+    source_dates = SOURCE_DATES
+    observed_dates = OBSERVED_DATES
+    target_dates = source_dates[150:190]
     target = pd.DataFrame(
         {
             "store_id": "T1",
             "product_id": "P0",
             "second_category_id": 20,
-            "date": dates,
+            "date": target_dates,
             "sales": np.r_[np.zeros(30), np.full(10, 5000.0)],
         }
     )
@@ -27,8 +33,13 @@ def _frames() -> tuple[pd.DataFrame, pd.DataFrame]:
                     "store_id": store,
                     "product_id": item,
                     "second_category_id": 20,
-                    "date": dates,
-                    "sales": np.r_[np.full(30, observed), np.full(10, future)],
+                    "date": source_dates,
+                    "sales": np.r_[np.full(150, 50.0), np.full(30, observed), np.full(10, future)],
+                    "year": source_dates.year,
+                    "month": source_dates.month,
+                    "week": source_dates.isocalendar().week.to_numpy(dtype=np.int64),
+                    "day": source_dates.day,
+                    "holiday_flag": 0,
                 }
             )
             for store, item, observed, future in (
@@ -50,7 +61,7 @@ def _select(source: pd.DataFrame, target: pd.DataFrame):
         scenario="with",
         group_cols=("store_id", "product_id"),
         grouping_col="second_category_id",
-        observed_start="2024-01-01",
+        observed_start=OBSERVED_DATES[0],
     )
     return SourceSelector().select_top_k_sources(
         configured_target,
@@ -66,8 +77,8 @@ def test_future_perturbation_preserves_order_distances_weights_and_digests() -> 
     baseline = _select(source, target)
     changed_source = source.copy()
     changed_target = target.copy()
-    changed_source.loc[changed_source["date"] > "2024-01-30", "sales"] = 1e12
-    changed_target.loc[changed_target["date"] > "2024-01-30", "sales"] = -1e12
+    changed_source.loc[changed_source["date"] > OBSERVED_DATES[-1], "sales"] = 1e12
+    changed_target.loc[changed_target["date"] > OBSERVED_DATES[-1], "sales"] = -1e12
     changed = _select(changed_source, changed_target)
 
     assert baseline["sources"] == changed["sources"]
@@ -79,7 +90,7 @@ def test_observed_perturbation_has_deterministic_positive_control() -> None:
     source, target = _frames()
     baseline = _select(source, target)
     changed_source = source.copy()
-    mask = (changed_source["store_id"] == "S3") & (changed_source["date"] <= "2024-01-30")
+    mask = (changed_source["store_id"] == "S3") & changed_source["date"].isin(OBSERVED_DATES)
     changed_source.loc[mask, "sales"] = 0.0
     changed = _select(changed_source, target)
 
