@@ -56,6 +56,34 @@ from src.protocols.provenance import (
 LOGGER_NAME = "experiment"
 
 
+def expose_fitted_mssb_predictor(
+    *,
+    successful_target_models: Sequence[object],
+    target_validation_rmse: Sequence[float],
+    source_keys: Sequence[Sequence[object]],
+    feature_mask=None,
+    input_scaler=None,
+):
+    """Freeze MSSB switching using target validation RMSE only."""
+
+    from src.experiment.fitted_predictor import KerasPredictor, SwitchingPredictor
+
+    predictors = tuple(
+        model
+        if isinstance(model, KerasPredictor)
+        else KerasPredictor(model, feature_mask, input_scaler)
+        for model in successful_target_models
+    )
+    return SwitchingPredictor.from_validation_rmse(
+        predictors=predictors,
+        validation_rmse=target_validation_rmse,
+        source_keys=source_keys,
+    )
+
+
+fit_mssb_predictor = expose_fitted_mssb_predictor
+
+
 def _get_logger() -> logging.Logger:
     """Get project-level logger and initialize fallback logging if needed."""
     logger = logging.getLogger(LOGGER_NAME)

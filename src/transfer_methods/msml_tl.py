@@ -58,6 +58,27 @@ from src.protocols.provenance import (
 
 LOGGER_NAME = "experiment"
 
+
+def expose_fitted_msml_predictor(
+    *, fused_target_model, feature_mask=None, input_scaler=None
+):
+    """Expose the fine-tuned fused MSML target model as a formal predictor."""
+
+    from src.experiment.fitted_predictor import KerasPredictor
+
+    if isinstance(fused_target_model, KerasPredictor):
+        if feature_mask is None:
+            return fused_target_model
+        return fused_target_model.with_feature_mask(feature_mask)
+    return KerasPredictor(
+        model=fused_target_model,
+        feature_mask=feature_mask,
+        input_scaler=input_scaler,
+    )
+
+
+fit_msml_predictor = expose_fitted_msml_predictor
+
 # 默认参与参数融合的层名
 _DEFAULT_TRANSFERABLE_LAYERS = ["conv1", "conv2", "conv3"]
 

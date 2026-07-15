@@ -58,6 +58,29 @@ from src.protocols.provenance import (
 LOGGER_NAME = "experiment"
 
 
+def expose_fitted_mswa_predictor(
+    *,
+    successful_target_models: Sequence[object],
+    frozen_weights: Sequence[float],
+    feature_mask=None,
+    input_scaler=None,
+):
+    """Expose output fusion over successful source-specific target models."""
+
+    from src.experiment.fitted_predictor import KerasPredictor, WeightedPredictor
+
+    predictors = tuple(
+        model
+        if isinstance(model, KerasPredictor)
+        else KerasPredictor(model, feature_mask, input_scaler)
+        for model in successful_target_models
+    )
+    return WeightedPredictor(predictors=predictors, weights=tuple(frozen_weights))
+
+
+fit_mswa_predictor = expose_fitted_mswa_predictor
+
+
 def _get_logger() -> logging.Logger:
     """Get project-level logger and initialize fallback logging if needed."""
     logger = logging.getLogger(LOGGER_NAME)

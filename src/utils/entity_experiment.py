@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -43,6 +43,11 @@ from src.protocols.experiment_protocol import (
 )
 from src.protocols.rolling_origin import build_sample_manifest
 from src.utils.source_fillna import fill_source_numeric_na
+from src.experiment.fitted_predictor import (
+    FittedMethodBundle,
+    fit_joint_horizon_method_bundle,
+)
+from src.protocols.feature_schema import PredictorFeatureMask, PredictorFeatureSchema
 
 
 LOGGER = logging.getLogger("experiment")
@@ -213,6 +218,32 @@ def _method_runner(method: str):
         "MSML-TL": run_msml_experiment,
         "MSML-TL-RFE": run_msml_rfe_experiment,
     }[method]
+
+
+def fit_formal_method_bundle(
+    *,
+    method: str,
+    seed: int,
+    predictor_schema: PredictorFeatureSchema,
+    feature_mask: PredictorFeatureMask,
+    horizon_fitter,
+    metadata: Optional[Dict[str, object]] = None,
+) -> FittedMethodBundle:
+    """Build one truth-free h1-h5 unit for the later formal bundle runner.
+
+    Task 10 owns replacement of the legacy per-horizon orchestration.  This
+    Task 6 boundary intentionally accepts only a fitted-horizon callback and
+    schema identities; it has no evaluator loader, truth frame, or test data.
+    """
+
+    return fit_joint_horizon_method_bundle(
+        method=method,
+        seed=int(seed),
+        predictor_schema=predictor_schema,
+        feature_mask=feature_mask,
+        fit_horizon=horizon_fitter,
+        metadata=metadata,
+    )
 
 
 def _metric_identity_from_manifest(manifest: Any, *, horizon: int) -> Dict[str, Any]:

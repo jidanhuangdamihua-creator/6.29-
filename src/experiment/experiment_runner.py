@@ -953,6 +953,73 @@ def run_ss_tl_experiment(
     return result
 
 
+def fit_ss_tl_predictor(
+    *,
+    source_model,
+    target_train_df: pd.DataFrame,
+    target_validation_df: pd.DataFrame,
+    feature_cols: Sequence[str],
+    horizon: int,
+    window_size: int = 10,
+    learning_rate: float = 0.001,
+    target_epochs: int = 3,
+    batch_size: int = 16,
+    freeze_first_n_layers: int = 4,
+    feature_mask=None,
+):
+    """Fine-tune one pre-trained SS-TL source model with target train/val only."""
+
+    from src.experiment.fitted_predictor import KerasPredictor
+    from src.transfer_methods.single_source_tl import (
+        build_target_model_from_source,
+        fine_tune_target_model,
+    )
+
+    columns = [str(column) for column in feature_cols]
+    train_scaled, val_scaled, _, input_scaler, normalized_columns = normalize_features(
+        target_train_df,
+        target_validation_df,
+        target_validation_df,
+        feature_columns=columns,
+    )
+    x_train, y_train = build_tabular_sequence(
+        train_scaled,
+        horizon=int(horizon),
+        window_size=int(window_size),
+        feature_columns=normalized_columns,
+    )
+    x_val, y_val = build_tabular_sequence(
+        val_scaled,
+        horizon=int(horizon),
+        window_size=int(window_size),
+        feature_columns=normalized_columns,
+    )
+    if len(y_train) == 0:
+        raise ValueError("SS-TL target training windows are empty")
+    x_train = to_cnn_tensor(x_train)
+    x_val = to_cnn_tensor(x_val)
+    target_model, _ = build_target_model_from_source(
+        source_model=source_model,
+        input_shape=x_train.shape[1:],
+        learning_rate=float(learning_rate),
+        freeze_first_n_layers=int(freeze_first_n_layers),
+    )
+    target_model = fine_tune_target_model(
+        target_model=target_model,
+        X_target_train=x_train,
+        y_target_train=y_train,
+        X_target_val=x_val if len(y_val) else None,
+        y_target_val=y_val if len(y_val) else None,
+        epochs=int(target_epochs),
+        batch_size=int(batch_size),
+    )
+    return KerasPredictor(
+        model=target_model,
+        feature_mask=feature_mask,
+        input_scaler=input_scaler,
+    )
+
+
 def run_mswa_experiment(
     source_df: pd.DataFrame,
     target_df: pd.DataFrame,

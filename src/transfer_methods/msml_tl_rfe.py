@@ -68,6 +68,25 @@ from src.protocols.provenance import (
 
 LOGGER_NAME = "experiment"
 
+
+def expose_fitted_msml_rfe_predictor(
+    *, fused_target_model, feature_mask, input_scaler=None
+):
+    """Expose RFE under the unchanged full schema via a zeroing mask."""
+
+    from src.experiment.fitted_predictor import KerasPredictor
+
+    if isinstance(fused_target_model, KerasPredictor):
+        return fused_target_model.with_feature_mask(feature_mask)
+    return KerasPredictor(
+        model=fused_target_model,
+        feature_mask=feature_mask,
+        input_scaler=input_scaler,
+    )
+
+
+fit_msml_rfe_predictor = expose_fitted_msml_rfe_predictor
+
 # 默认参与参数融合的层名
 _DEFAULT_TRANSFERABLE_LAYERS = ["conv1", "conv2", "conv3"]
 
