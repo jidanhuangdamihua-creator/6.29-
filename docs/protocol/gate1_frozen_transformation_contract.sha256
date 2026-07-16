@@ -1,0 +1,6 @@
+algorithm: SHA-256
+contract_file: docs/protocol/gate1_frozen_transformation_contract.md
+contract_version: 1.0.0
+canonical_bytes: exact UTF-8 bytes with LF line endings
+excluded_from_hash: this sidecar file
+contract_digest: sha256:b145028c2b3f8314e66fc73be9795269644d016a7a1cf258a9f62f1b7443d09e
