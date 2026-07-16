@@ -187,7 +187,7 @@ mini integration 命令、退出码和新旧函数 call counts：
 | B1 sealed-only 输入 | `run_strict_protocol_baseline.build_matrix_tasks()` 生成 `run_full_paper_experiments.py`/`run_d4_experiment.py`/`run_d5_experiment.py`/`run_d6_experiment.py`；D4/D6 调 `load_parquet_source_target()`，D5 调 `load_parquet_source_target_with_diagnostics()` | `load_sealed_target_views()`、`read_sealed_projection()`、sealed manifest/schema/repair sidecars | Gate 1B 新增薄 `SealedDatasetHandle.open()`，Gate 2 使所有 60 tasks 直接调用唯一 bundle worker | formal task 中所有旧 scripts、raw D5 authority、旧 `数据集/固化数据` root、smoke/raw fallback | dry-run 断言 60 commands 只含新 worker且 RUN_ROOT 不存在；mini call 断言 sealed handle call > 0，两个 legacy loader calls = 0 |
 | B2 truth-free joint rollout | D1–D3 调旧 `run_no_tl_experiment()` 等实验函数；D4–D6 调 `run_single_entity_experiment()` 并逐 horizon 循环 | `load_sealed_target_views()`、`create_worker_cache()`、`create_evaluator_cache()`、`run_truth_free_fit()`、`fit_formal_method_bundle()`、`run_blind_rollout()`、`join_worker_trace_with_truth()` | 薄 seed-bundle orchestration 按固定顺序组合现有 API | full target dataframe 进入 worker、worker 构造/返回 `y_true`、逐 horizon child fit、h2–h5 feedback | mini call 断言每 method bundle fit = 1、blind rollout = 6、legacy experiment calls = 0；修改 evaluator truth 后 worker semantic digest 不变 |
 | B3 exact Schema gate | `run_full_paper_experiments.py` 动态解析 feature cols；D4 runtime feature mismatch 只 warning；`_resolve_model_feature_cols()` 静默 drop；source 数值缺失统一填 0 | `get_predictor_schema()`、`get_knn_schema()`、`audit_future_known_lineage()`、`PredictorFeatureMask` | 在 `SealedDatasetHandle` 与 fit adapter 之间加入 exact ordered-schema assertion；直接使用既有 schema registry | 动态交集、静默 drop、warning 后继续、通用 fill-zero | mini fixture 分别注入 missing/extra/reordered/dtype/lineage/repair drift，均在 fit call count = 0 时 fail closed |
-| B4 adoption/repair proof | `adopt_and_seal_d3_d6.py` 调通用 `validate_adopted_pair(source, target)`；随后硬编码 `not_reconstructed_during_adoption`/`unavailable` sidecar；preflight 接受 null/null | `calendarize_and_fill()`、`canonicalize_source_sales()`、`prepare_daily_sequence_pool()` 的完整 180-day validation、`get_predictor_schema()`、`get_knn_schema()`、现有 adoption report/schema helpers | **Gate 1A** 只负责在 adoption 阶段生产完整、确定的 proof 并做 producer-level 自检；**Gate 1A-P** 使用已提交 producer 将 proof 物化为正式 sealed authority；**Gate 1B** 独立消费并严格校验 proof，不能生成或推断 proof | structural-only 大表跳过、unavailable counts、null repair mask/digest、optional proof comparison | Gate 1A 用 mini authority 证明 producer；Gate 1A-P 在 sibling staging 重放两次并原子发布，经 inventory 证明 source/target bytes 不变、proof identity 确定且三处一致；Gate 1B 删除、置 null 或篡改任一 proof 后 formal preflight blocked；任何训练 call = 0 |
+| B4 adoption/repair proof | `adopt_and_seal_d3_d6.py` 调通用 `validate_adopted_pair(source, target)`；随后硬编码 `not_reconstructed_during_adoption`/`unavailable` sidecar；preflight 接受 null/null | `calendarize_and_fill()`、`canonicalize_source_sales()`、`prepare_daily_sequence_pool()` 的完整 180-day validation、`get_predictor_schema()`、`get_knn_schema()`、现有 adoption report/schema helpers | **Gate 1A** 只负责在 adoption 阶段生产完整、确定的 proof 并做 producer-level 自检；**Gate 1A-P** 使用已提交 producer 将 proof 物化为正式 sealed authority；**Gate 1B** 独立消费并严格校验 proof，不能生成或推断 proof | structural-only 大表跳过、unavailable counts、null repair mask/digest、optional proof comparison | Gate 1A 用 mini authority 证明 producer；Gate 1A-P 以 D3、D4、D5、D6 四个独立 dataset-level staging 操作物化并原子发布，经 inventory 证明 source/target bytes 不变、proof identity 确定且 sidecar/manifest/adoption report 三处一致；Gate 1B 删除、置 null 或篡改任一 proof 后 formal preflight blocked；任何训练 call = 0 |
 | B5 typed artifacts | 正式 runner 调 `publish_formal_seed_bundle_output_frame()`，其下进入 legacy `publish_formal_cell_frame()` 和 ad hoc manifest | `publish_prediction_artifact()`、`build_worker_manifest()`、`join_worker_trace_with_truth()`、`derive_formal_result_row()`、artifact schema registry | seed-bundle orchestration 直接发布全部 typed artifacts；legacy CSV 仅由 verified evaluated trace 派生 | formal path 中 `publish_formal_seed_bundle_output_frame()`、self-signed fields、未注册字段和未认证 CSV authority | mini call 用 registry 逐个读回 artifacts；typed publisher calls > 0，legacy publisher calls = 0；worker trace schema 中不存在 `y_true` |
 | B6 recovery/fencing/binding | shell 以 TSV 表示 task 状态；`_current_fencing_token()` 在发布时读取 mutable state；legacy publisher token 默认 0；bundle files 分步发布 | `RunRecovery.set_cell_state()`、`publish_cell_directory()`、`heartbeat()`、`resume()`、`ArtifactRehydrator.rehydrate()`/`freeze_binding_set()`、`resolve_bound_artifact()` | 薄 lifecycle orchestration 显式传递 attempt-held token；生产结束后冻结完整 binding 再启动 aggregate | token 0、发布时领取新 token、TSV 权威状态、accepted sidecar、binding 外 path resolution | mini supervisor 注入 stale worker/crash/missing artifact；断言旧 token 发布失败、accepted 不重复、rehydration fit/predict = 0、aggregate 只经 binding |
 | B7 final sealing 不可达 | shell 成功后只执行 `aggregate`；`aggregate` 停在 `complete_unsealed`；`finalize_sealed_run()` 无官方 CLI 调用点 | `accept_sealed_run_records()`、`finalize_sealed_run()`、`RunRecovery.transition()`、`publish_prediction_artifact()` | 增加 `final-seal` operation 并由 shell 在 aggregate 后唯一调用 | aggregate 后直接退出 0、直接写 marker、调用者提交未认证内存 proofs | 60-bundle mini supervisor 到达 success；故意破坏 trace 后到达 sealed_failed；成功 marker mtime/事件序列为最后写入 |
@@ -426,6 +426,20 @@ replay 不得重试、拆分、简化、续跑或作为本 Gate 命令；本 Gat
 - Produces: 已原子发布的正式 D3–D6 complete repair proof authority，以及唯一 Git 跟踪的薄 deployment manifest `configs/sealed_deployments/d1_d6_sealed_v1.json`。
 - Does not produce: 新算法、schema registry、digest 算法、formal resolver、`SealedDatasetHandle`、run artifact binding、rehydration authority、worker、runner、raw rebuild 或正式运行输出。
 
+**此前超时证据（永久保留）：**
+
+2026-07-16 执行的四数据集单进程物化命令：
+
+```text
+python scripts/adopt_and_seal_d3_d6.py --dataset all ...
+```
+
+在 180 秒保护器下返回 `124`。该命令永久停止，不得重试、提高 timeout、续跑、拆分、简化
+或从现有 staging 继续。`.d1_d6_sealed_v1.gate1a-p-staging-a` 是失败 staging，不是可信
+authority；不得读取、复用或从中选择已完成的 dataset。新 Gate 开始时只能在确认该路径位于
+正式 sealed root 外、不是 symlink、不是 Git tracked path 且不是当前正式 authority 后，将其
+完整删除。该清理属于失败操作清理，不属于续跑。
+
 - [ ] **Step 1: 冻结发布前 inventory 和输出目录基线**
 
 对正式 `数据集/固化数据/d1_d6_sealed_v1/` 的全部普通文件按 POSIX relative path 排序，使用
@@ -434,35 +448,63 @@ replay 不得重试、拆分、简化、续跑或作为本 Gate 命令；本 Gat
 inventory 命令本身也必须通过 180 秒保护器，返回 124 时立即停止。发布前断言正式 root 不含
 symlink，D1–D6 每个 dataset 的文件集合均可完整读取。
 
-- [ ] **Step 2: 在同文件系统的两个 sibling staging roots 运行已提交 producer**
+- [ ] **Step 2: 受控清理失败 staging**
 
-staging roots 固定为正式 sealed root 的 sibling，且运行前必须不存在：
+新 Gate 开始时只读确认 `.d1_d6_sealed_v1.gate1a-p-staging-a`：路径位于正式 sealed root
+之外、不是 symlink、不是 Git tracked path 且不是当前正式 authority。将其完整 inventory 写入
+`/tmp/d1-d6-task14-gate1a-p-failed-staging.json`，然后删除整个失败 staging。不得读取或复用
+其中的 proof、manifest、parquet 或任何部分 dataset directory。若任一确认失败，立即停止。
+
+- [ ] **Step 3: 只读确认 producer 的单 dataset CLI 合同**
+
+执行者必须先读取当前 `scripts/adopt_and_seal_d3_d6.py` parser 或运行其 `--help`，确认 D3、D4、D5、D6
+的实际合法单 dataset 参数；计划不得猜测参数值。producer 必须支持对一个 dataset 独立指定
+`--parent-root` 和 sibling `--output-dir`。若不支持单 dataset staging，立即停止。不得按 entity、
+batch、日期区间或文件片段进一步拆分。
+
+- [ ] **Step 4: 阶段 A——四个独立 dataset-level staging**
+
+四个 staging roots 必须是正式 sealed root 的 sibling，且运行前均不存在：
 
 ```text
-数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-staging-a
-数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-staging-b
+数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-d3
+数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-d4
+数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-d5
+数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-d6
 ```
 
-分别执行：
+依次对 D3、D4、D5、D6 各执行一条独立的 180 秒保护命令；命令中的 `--dataset` 值必须以 Step 3
+的实际 parser/`--help` 输出为准：
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
-python scripts/adopt_and_seal_d3_d6.py --dataset all \
+python scripts/adopt_and_seal_d3_d6.py --dataset <D3单dataset参数> \
 --parent-root 数据集/固化数据 \
---output-dir 数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-staging-a
+--output-dir 数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-d3
 
 PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
-python scripts/adopt_and_seal_d3_d6.py --dataset all \
+python scripts/adopt_and_seal_d3_d6.py --dataset <D4单dataset参数> \
 --parent-root 数据集/固化数据 \
---output-dir 数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-staging-b
+--output-dir 数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-d4
+
+PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
+python scripts/adopt_and_seal_d3_d6.py --dataset <D5单dataset参数> \
+--parent-root 数据集/固化数据 \
+--output-dir 数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-d5
+
+PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
+python scripts/adopt_and_seal_d3_d6.py --dataset <D6单dataset参数> \
+--parent-root 数据集/固化数据 \
+--output-dir 数据集/固化数据/.d1_d6_sealed_v1.gate1a-p-d6
 ```
 
-Expected: 两条命令均退出 0；任何一条返回 124 时立即停止，不得重试另一条或继续发布。producer
-不得直接指向正式 sealed root，也不得在正式 dataset 目录内逐文件覆盖。
+每条命令只处理一个 dataset，不得在一个命令中处理多个 dataset。任一命令非零或返回 `124`
+时立即停止整个 Gate，不运行后续 dataset，不重试该 dataset，不修改正式 sealed root。四个
+staging 必须全部完成后才能进入阶段 B；任何较早 dataset staging 的成功都不是正式发布。
 
-- [ ] **Step 3: 验证 staging source/target bytes 和 proof 合同**
+- [ ] **Step 5: 阶段 A 中逐 staging 验证 source/target bytes 和 proof 合同**
 
-对 D3–D6 两个 staging roots 分别验证：
+每个 staging 完成后立即验证：
 
 ```text
 staged source.parquet identity == before formal source.parquet identity
@@ -473,24 +515,31 @@ sum(repair_reason_counts.values()) == len(affected_rows)
 len(affected_rows) <= rows_examined
 repair_mask_sha256 matches lowercase 64-hex SHA-256
 affected_date_digest matches sha256:<lowercase 64-hex SHA-256>
-sidecar proof == manifest.source_sales_repair == adoption_report.source_sales_repair
+sidecar proof == manifest.source_sales_repair
+sidecar proof == adoption_report.source_sales_repair
 manifest mask/count identities == complete proof mask/count identities
-staging-a proof identity == staging-b proof identity
 ```
 
-任一断言失败即停止；不得从 sealed source 反推、补写、修补或推断 proof。除预期
-proof/manifest/report sidecars 外，staging 与发布前 dataset 的 relative-path 集合必须相同。
+`source.parquet` 与 `target.parquet` 必须 size、SHA-256 和 bytes 精确相同；proof 必须完整、闭合，
+sidecar、manifest 和 adoption report identity 必须一致。每个 dataset 必须对同一 producer 输入完成
+至少两次独立 identity comparison：`sidecar proof == manifest.source_sales_repair` 与
+`sidecar proof == adoption_report.source_sales_repair`；不得把失败 staging 的部分内容作为第二次
+输入。除计划允许的 proof/manifest/report sidecars 外，staging 与发布前 dataset 的
+relative-path 集合和其他文件 bytes 必须相同。任一验证失败即停止，不替换正式 root。
 
-- [ ] **Step 4: 使用原子 dataset-directory publication 替换 D3–D6**
+- [ ] **Step 6: 阶段 B——统一发布 D3–D6**
 
-验证完成后，仅对 D3–D6 使用当前文件系统支持的原子 directory exchange primitive，将
-staging-a 的完整 `datasetN/` 与正式 `datasetN/` 交换；每个 dataset 的交换必须是单个原子目录
-操作，且交换后 fsync sealed root parent directory。平台不支持原子 directory exchange、交换前后
-设备号不同或无法 fsync 时立即停止并报告；不得退化为逐文件覆盖、先删除再 rename，或产生正式
-dataset path 暂时不存在的两步 publication。被交换出的旧正式目录保留为 sibling rollback evidence，
-直至 Step 6 全部验证通过；不得在验证前删除。
+只有四个 staging 全部完成并通过独立验证后，重新生成并冻结发布前正式 root inventory。随后仅对
+D3–D6 使用当前文件系统支持的原子 directory exchange primitive，将四个 staging 的完整
+`datasetN/` 与正式 `datasetN/` 交换；每个 dataset 的交换必须是单个原子目录操作，且交换后
+fsync sealed root parent directory。平台不支持原子 directory exchange、交换前后设备号不同或
+无法 fsync 时立即停止并报告；不得退化为逐文件覆盖、先删除再 rename，或产生正式 dataset path
+暂时不存在的两步 publication。
 
-- [ ] **Step 5: 生成唯一 deployment manifest**
+若阶段 B 任一步失败，已交换的 dataset 按相反顺序使用保留的旧目录 rollback；不得删除旧
+authority，直到发布后全部验证完成。
+
+- [ ] **Step 7: 生成唯一 deployment manifest**
 
 创建 `configs/sealed_deployments/d1_d6_sealed_v1.json`。JSON bytes 必须使用 UTF-8、键排序、
 确定性 separators 和唯一尾随换行；manifest identity 定义为对这些最终文件 bytes 调用现有
@@ -528,7 +577,7 @@ D3–D6 还必须各含 `adopt_validation_report.json`。每个 artifact entry �
 mutable state 或本机绝对路径。所有文件 SHA 必须通过 `sha256_file()` 从正式 root 实际 bytes 取得，
 不得复制或重写 digest 实现。
 
-- [ ] **Step 6: 发布后做完整 inventory、coverage 和零输出验证**
+- [ ] **Step 8: 发布后做完整 inventory、coverage 和零输出验证**
 
 重新生成 `/tmp/d1-d6-task14-gate1a-p-after.json`，并与 before inventory 精确分类比较：
 
@@ -543,7 +592,7 @@ mutable state 或本机绝对路径。所有文件 SHA 必须通过 `sha256_file
 
 验证通过后才可清理 sibling staging/rollback evidence；清理不得触碰正式 dataset directories。
 
-- [ ] **Step 7: 运行 Gate 1A-P 验证**
+- [ ] **Step 9: 运行 Gate 1A-P 验证**
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python tools/protection/codex_timeout.py --timeout 180 -- \
@@ -560,7 +609,7 @@ Expected: repository preflight 退出 0 且状态为 ready；`git diff --check` 
 `configs/sealed_deployments/d1_d6_sealed_v1.json`；正式 `outputs/runs/` 无变化；没有训练、fit、predict、
 formal attempt、run plan 或 accepted artifact 写入。任一 Python 命令返回 124 时立即停止。
 
-- [ ] **Step 8: 提交 Gate 1A-P deployment authority**
+- [ ] **Step 10: 提交 Gate 1A-P deployment authority**
 
 ```bash
 git add configs/sealed_deployments/d1_d6_sealed_v1.json
@@ -571,9 +620,11 @@ git commit -m "data: publish D3-D6 repair authority manifest"
 Expected: staged/committed path 精确只有 `configs/sealed_deployments/d1_d6_sealed_v1.json`；Git ignored
 sealed root 的完整 byte identities 由该 manifest 记录并约束，不将 sealed data 强行加入 Git。
 
-**Gate 1A-P acceptance:** 正式 D3–D6 repair proof 由 `c4a905cd` producer 在 sibling staging 中两次
-确定性物化，proof 完整且 sidecar/manifest/adoption report identity 一致；D1/D2 全部 bytes 和 D3–D6
-source/target bytes 发布前后精确不变；D3–D6 通过原子 dataset-directory publication替换；唯一 Git
+**Gate 1A-P acceptance:** 正式 D3–D6 repair proof 由 `c4a905cd` producer 以四个独立
+dataset-level sibling staging 操作确定性物化，四个 staging 全部完成并通过 proof、identity、
+source/target bytes 和文件集合验证后，才允许统一原子发布；proof 完整且 sidecar/manifest/adoption
+report identity 一致；D1/D2 全部 bytes 和 D3–D6 source/target bytes 发布前后精确不变；D3–D6
+通过原子 dataset-directory publication 替换；唯一 Git
 tracked deployment manifest 精确绑定规定的六数据 artifact 集合和实际 bytes；repository preflight仍为
 ready；`outputs/runs/` 零变化；没有生产代码、测试、权威设计、formal preflight 或 worker 修改。
 
@@ -1202,6 +1253,10 @@ legacy 旁路调用数：
 出现以下任一情况必须停止当前 Gate，不得通过简化合同继续：
 
 - timeout wrapper 返回 124；
+- Gate 1A-P 任一单 dataset producer 返回 124；该 dataset 不得重试，Gate 立即保持 blocked；
+- producer 不支持单 dataset staging；
+- 必须进一步按 entity、batch、日期区间或文件片段拆分，或必须优化/修改 producer 才能满足 180 秒；
+- D3、D4、D5、D6 四个 staging 不能在正式发布前全部完成并独立验证；
 - 需要修改冻结设计才能继续；
 - Gate 1A-P staging 或发布后的 D3–D6 source/target bytes 与发布前不完全相同；
 - Gate 1A-P 所在平台无法提供同文件系统的原子 dataset-directory exchange；
