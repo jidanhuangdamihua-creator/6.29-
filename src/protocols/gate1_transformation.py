@@ -96,6 +96,27 @@ def _frame_digest(frame: pd.DataFrame) -> str:
     return _digest(payload)
 
 
+def canonical_digest(value: object) -> str:
+    """Return the Gate 1 canonical JSON digest for an identity payload."""
+
+    return _digest(value)
+
+
+def normalized_frame_digest(frame: pd.DataFrame) -> str:
+    """Digest a frame by logical values, column order, and dtypes, not parquet bytes."""
+
+    return _frame_digest(_as_frame(frame, label="canonical content"))
+
+
+def validate_proof_digest(proof: Mapping[str, object]) -> None:
+    """Fail closed unless ``proof_digest`` binds every other proof field."""
+
+    payload = dict(proof)
+    declared = payload.pop("proof_digest", None)
+    if not isinstance(declared, str) or declared != _digest(payload):
+        raise Gate1Failure("PROOF_DIGEST", "proof digest does not bind its payload")
+
+
 def _as_frame(value: pd.DataFrame, *, label: str) -> pd.DataFrame:
     if not isinstance(value, pd.DataFrame):
         raise Gate1Failure("FRAME_TYPE", f"{label} must be a pandas DataFrame")
@@ -279,7 +300,7 @@ class AvailabilityResolver:
             "D2": set(_DATE_FIELDS) | {"PROMO", "Promo"},
             "D3": set(_DATE_FIELDS) | set(D3_FORBIDDEN_MODEL) | {"SchoolHoliday"},
             "D4": set(_DATE_FIELDS) | set(D4_APPROVED_FUTURE) | set(D4_AUDIT_ONLY),
-            "D5": set(_DATE_FIELDS) | {"onpromotion", "transactions", "oil_price", "is_holiday", "week"},
+            "D5": set(_DATE_FIELDS) | {"perishable", "onpromotion", "transactions", "oil_price", "is_holiday", "week"},
             "D6": set(_DATE_FIELDS) | set(D6_CALENDAR_OUTPUTS) | set(D6_CALENDAR_INPUTS) | {"sell_price"},
         }
         if field not in known_by_dataset.get(dataset, set()):
@@ -296,6 +317,7 @@ class AvailabilityResolver:
             ("D5", "transactions"): ("favorita transactions", "exclude forecast", "history missing=0"),
             ("D5", "oil_price"): ("favorita oil.csv", "prior-only lag-one", "prior-only ffill"),
             ("D5", "onpromotion"): ("favorita train/test", "benchmark future-known", "missing=0"),
+            ("D5", "perishable"): ("favorita items.csv", "static-known", "missing=fail"),
             ("D6", "sell_price"): ("m5 sell_prices.csv", "exact-key benchmark future-known", "missing=fail"),
         }
         authority, forecast_rule, missing_rule = rules.get(
@@ -497,7 +519,11 @@ class ForecastBlindProducer:
             raise Gate1Failure("GENERIC_FILL", "generic fill provenance is forbidden")
         registry = SchemaRegistry()
         allowed = set(registry.allowed(dataset, "forecast"))
-        worker_columns = [column for column in source.columns if column in allowed and column != "sales"]
+        worker_columns = [
+            column
+            for column in registry.allowed(dataset, "forecast")
+            if column in source.columns and column != "sales"
+        ]
         worker = source.loc[:, worker_columns].copy()
         audit_columns = [column for column in source.columns if column not in set(worker_columns)]
         audit = source.loc[:, audit_columns].copy()
@@ -559,9 +585,24 @@ class SafeTargetViewOperator:
         history_frame = _add_date_fields(_as_frame(history, label=f"{dataset} history view"))
         forecast_frame = _add_date_fields(_as_frame(forecast, label=f"{dataset} forecast view"))
         registry = SchemaRegistry()
-        worker = forecast_frame.loc[:, [c for c in forecast_frame.columns if c in registry.allowed(dataset, "worker") and c != "sales"]].copy()
-        knn_allowed = set(registry.allowed(dataset, "knn"))
-        knn = history_frame.loc[:, [c for c in history_frame.columns if c in knn_allowed]].copy()
+        worker = forecast_frame.loc[:, [
+            column
+            for column in registry.allowed(dataset, "worker")
+            if column in forecast_frame.columns and column != "sales"
+        ]].copy()
+        knn = history_frame.loc[:, [
+            column
+            for column in registry.allowed(dataset, "knn")
+            if column in history_frame.columns
+        ]].copy()
+        predictor = get_predictor_schema(dataset)
+        knn_schema = get_knn_schema(dataset)
+        for column in worker.columns:
+            if column != "date":
+                worker[column] = worker[column].astype(predictor.field(column).dtype)
+        for column in knn.columns:
+            if column != "date":
+                knn[column] = knn[column].astype(knn_schema.field(column).dtype)
         forecast_view = worker.copy(deep=True)
         label_truth = forecast_frame.loc[:, [c for c in forecast_frame.columns if c in {"date", "sales"}]].copy()
         evaluator_truth = forecast_frame.copy(deep=True)
@@ -730,6 +771,7 @@ class FormalPreflight:
         missing = sorted(required - set(proof))
         if missing:
             raise Gate1Failure("PROOF_INCOMPLETE", f"proof is missing: {missing}")
+        validate_proof_digest(proof)
         return {"status": "passed", "contract_digest": CONTRACT_DIGEST, "checks": 13}
 
 

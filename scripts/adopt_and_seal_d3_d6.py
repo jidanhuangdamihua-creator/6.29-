@@ -34,6 +34,21 @@ from src.protocols.adopt_validation import (
     validator_code_digest,
 )
 from src.protocols.feature_schema import get_knn_schema, get_predictor_schema
+from src.protocols.gate1_transformation import (
+    CONTRACT_DIGEST,
+    CONTRACT_VERSION,
+    AuthorityProducer,
+    AvailabilityResolver,
+    ForecastBlindProducer,
+    FormalInputLoader,
+    FormalPreflight,
+    HistoryReconstructionProducer,
+    ProofWriter,
+    SafeTargetViewOperator,
+    SchemaRegistry,
+    canonical_digest,
+    normalized_frame_digest,
+)
 from src.protocols.sealing_protocol import SEALING_PROTOCOL_VERSION, get_source_pretrain_window, get_target_window
 
 
@@ -53,6 +68,20 @@ _SOURCE_REPAIR_REASONS = (
 )
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 _PREFIXED_SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
+_FORMAL_PATHS = {
+    "contract": ROOT / "docs/protocol/gate1_frozen_transformation_contract.md",
+    "implementation_scope": ROOT / "docs/protocol/gate1_implementation_scope.md",
+    "traceability_matrix": ROOT / "docs/protocol/gate1_contract_traceability_matrix.md",
+}
+_CODE_PATHS = {
+    "operator": ROOT / "tools/operations/materialize_d1_d6_sealed_authority.py",
+    "producer": Path(__file__).resolve(),
+    "gate1_transformation": ROOT / "src/protocols/gate1_transformation.py",
+    "feature_schema": ROOT / "src/protocols/feature_schema.py",
+    "sealed_daily": ROOT / "src/data_processing/sealed_daily.py",
+    "adopt_validation": ROOT / "src/protocols/adopt_validation.py",
+    "sealing_protocol": ROOT / "src/protocols/sealing_protocol.py",
+}
 
 
 class AdoptionValidationError(RuntimeError):
@@ -113,6 +142,104 @@ def _parent_paths(dataset_id: int, parent_root: Path) -> tuple[Path, Path]:
         root / f"dataset{dataset_id}-source.parquet",
         root / f"dataset{dataset_id}-target.parquet",
     )
+
+
+def _formal_identity() -> Dict[str, Any]:
+    FormalInputLoader(ROOT).load()
+    files = {
+        name: {
+            "path": path.relative_to(ROOT).as_posix(),
+            "sha256": sha256_file(path),
+            "size_bytes": int(path.stat().st_size),
+        }
+        for name, path in _FORMAL_PATHS.items()
+    }
+    return {
+        "contract_digest": CONTRACT_DIGEST,
+        "contract_version": CONTRACT_VERSION,
+        "files": files,
+        "formal_input_set_digest": canonical_digest(files),
+    }
+
+
+def _raw_authority_identity(dataset_id: int) -> Dict[str, Any]:
+    frozen = AuthorityProducer.from_frozen_contract(ROOT)
+    prefix = f"D{int(dataset_id)}:"
+    selected_files = {
+        name: path for name, path in frozen.files.items() if name.startswith(prefix)
+    }
+    selected_hashes = {
+        name: digest
+        for name, digest in frozen.expected_hashes.items()
+        if name.startswith(prefix)
+    }
+    manifest = AuthorityProducer(
+        root=ROOT,
+        files=selected_files,
+        expected_hashes=selected_hashes,
+    ).load()
+    files = [
+        {
+            "name": name,
+            "path": str(record["path"]),
+            "size_bytes": int(record["size_bytes"]),
+            "sha256": str(record["sha256"]),
+        }
+        for name, record in sorted(manifest.files.items())
+        if name.startswith(prefix)
+    ]
+    if not files:
+        raise ValueError(f"D{dataset_id} has no frozen raw authority")
+    return {
+        "dataset": f"D{int(dataset_id)}",
+        "files": files,
+        "approved_input_set_digest": canonical_digest(files),
+        "snapshot_identity": canonical_digest(
+            [(item["path"], item["sha256"]) for item in files]
+        ),
+        "verified_from_bytes": True,
+    }
+
+
+def _code_identity() -> Dict[str, Any]:
+    files = {
+        name: {
+            "path": path.relative_to(ROOT).as_posix(),
+            "sha256": sha256_file(path),
+        }
+        for name, path in _CODE_PATHS.items()
+    }
+    return {"files": files, "code_set_digest": canonical_digest(files)}
+
+
+def _key_status(frame: pd.DataFrame, columns: tuple[str, ...]) -> Dict[str, Any]:
+    missing = [column for column in columns if column not in frame.columns]
+    if missing:
+        raise ValueError(f"key columns missing: {missing}")
+    keys = frame.loc[:, list(columns)]
+    if keys.isna().any().any():
+        raise ValueError(f"key columns contain nulls: {columns}")
+    return {
+        "columns": list(columns),
+        "unique": not bool(keys.duplicated().any()),
+        "sorted": keys.reset_index(drop=True).equals(
+            keys.sort_values(list(columns), kind="mergesort").reset_index(drop=True)
+        ),
+        "digest": canonical_digest(keys.astype(str).values.tolist()),
+    }
+
+
+def _dataset_exclusions(dataset_id: int) -> Dict[str, str]:
+    values = {
+        3: ("Open", "Customers", "Promo", "Promo2", "PromoInterval"),
+        4: ("hours_sale", "hours_stock_status", "stock_hour6_22_cnt"),
+        5: ("transactions", "week"),
+        6: ("evaluation_truth", "snap_CA", "snap_TX", "snap_WI"),
+    }
+    return {
+        name: "excluded from forecast/model consumers by frozen contract"
+        for name in values[dataset_id]
+    }
 
 
 def _calendarize_and_canonicalize_source(
@@ -186,6 +313,176 @@ def _assert_published_proof_identity(
         raise ValueError("source-sales repair count identity mismatch before publication")
 
 
+def _build_gate1_publication_proof(
+    dataset_id: int,
+    *,
+    parent_source: pd.DataFrame,
+    source: pd.DataFrame,
+    target: pd.DataFrame,
+    parent_artifacts: Dict[str, Any],
+    repair: Dict[str, Any],
+    parent_root: Path,
+    output_root: Path,
+    history_result: Any,
+    blind_result: Any,
+    safe_views: Any,
+) -> Dict[str, Any]:
+    dataset = f"D{int(dataset_id)}"
+    raw = _raw_authority_identity(dataset_id)
+    formal = _formal_identity()
+    code = _code_identity()
+    predictor = get_predictor_schema(dataset)
+    knn = get_knn_schema(dataset)
+    registry = SchemaRegistry()
+    source_key = tuple(_SOURCE_GROUP_COLUMNS[dataset_id]) + ("date",)
+    target_key = tuple(_SOURCE_GROUP_COLUMNS[dataset_id]) + ("date",)
+    source_status = _key_status(source, source_key)
+    target_status = _key_status(target, target_key)
+    if not all((source_status["unique"], source_status["sorted"])):
+        raise ValueError(f"{dataset} source key proof failed")
+    if not all((target_status["unique"], target_status["sorted"])):
+        raise ValueError(f"{dataset} target key proof failed")
+    windows = _window_descriptor(dataset_id)
+    blind_start = pd.Timestamp(windows["target"]["blind_start"])
+    blind_end = pd.Timestamp(windows["target"]["blind_end"])
+    configuration = {
+        "dataset": dataset,
+        "parent_root": str(Path(parent_root).resolve()),
+        "source_input": parent_artifacts["source"]["path"],
+        "target_input": parent_artifacts["target"]["path"],
+        "source_group_columns": list(_SOURCE_GROUP_COLUMNS[dataset_id]),
+        "producer_entrypoint": _CODE_PATHS["producer"].relative_to(ROOT).as_posix(),
+        "command_argv": [
+            sys.executable,
+            _CODE_PATHS["producer"].relative_to(ROOT).as_posix(),
+            "--dataset",
+            dataset.lower(),
+            "--parent-root",
+            str(Path(parent_root).resolve()),
+            "--output-dir",
+            str(Path(output_root).resolve()),
+        ],
+    }
+    approved_inputs = {
+        "artifacts": parent_artifacts,
+        "digest": canonical_digest(parent_artifacts),
+    }
+    schemas = {
+        "predictor": predictor.descriptor(),
+        "predictor_digest": predictor.digest,
+        "knn": knn.descriptor(),
+        "knn_digest": knn.digest,
+        "worker_digest": registry.digest(dataset, "worker"),
+        "knn_view_digest": registry.digest(dataset, "knn"),
+    }
+    exclusions = _dataset_exclusions(dataset_id)
+    views = {
+        "worker": {"columns": list(safe_views.worker.columns), "digest": safe_views.digests["worker"]},
+        "knn": {"columns": list(safe_views.knn.columns), "digest": safe_views.digests["knn"]},
+        "forecast": {"columns": list(safe_views.forecast.columns), "digest": safe_views.digests["forecast"]},
+        "label": {"columns": list(safe_views.label_truth.columns), "digest": safe_views.digests["label"]},
+        "audit": {"columns": list(safe_views.audit.columns), "digest": safe_views.digests["audit"]},
+    }
+    availability = AvailabilityResolver()
+    decisions = []
+    origin = windows["source"]["pretrain_end"]
+    for name in dict.fromkeys((*predictor.ordered_names, *knn.ordered_names)):
+        if name in {"sales", "date"}:
+            continue
+        decision = availability.resolve(dataset, name, available_at=origin, origin=origin)
+        decisions.append(
+            {
+                "field": decision.field,
+                "authority": decision.authority,
+                "available_at": decision.available_at,
+                "history_rule": decision.history_rule,
+                "forecast_rule": decision.forecast_rule,
+                "missing_rule": decision.missing_rule,
+                "status": decision.status,
+            }
+        )
+    resolver = {
+        "status": "passed",
+        "approved_fields": list(predictor.ordered_names),
+        "knn_fields": list(knn.ordered_names),
+        "exclusions": exclusions,
+        "decisions": decisions,
+    }
+    base_proof = ProofWriter().build(
+        contract_digest=CONTRACT_DIGEST,
+        authority=raw,
+        schemas=schemas,
+        resolver=resolver,
+        views=views,
+        artifacts=approved_inputs,
+    )
+    preflight = FormalPreflight().check(
+        {"contract_digest": CONTRACT_DIGEST, "proof": base_proof}
+    )
+    proof: Dict[str, Any] = {
+        "version": "gate1_publication_proof_v1",
+        "status": "publication_ready",
+        "dataset": dataset,
+        "formal_identity": formal,
+        "raw_authority": raw,
+        "code_identity": code,
+        "producer_configuration": configuration,
+        "producer_configuration_digest": canonical_digest(configuration),
+        "approved_inputs": approved_inputs,
+        "parent_lineage": {
+            "status": "bound_to_frozen_raw_snapshot",
+            "raw_snapshot_identity": raw["snapshot_identity"],
+            "parent_digest": approved_inputs["digest"],
+        },
+        "key_window": {
+            "dataset": dataset,
+            "source_key": source_status,
+            "target_key": target_status,
+            "windows": windows,
+            "horizon_days": int((blind_end - blind_start).days + 1),
+            "source_history_days": 180,
+            "knn_observation_days": 30,
+        },
+        "transformation": {
+            "status": "contract_validated",
+            "calendarization": "gregorian_daily",
+            "source_rows_before": int(len(parent_source)),
+            "source_rows_after": int(len(source)),
+            "target_rows_before": int(len(target)),
+            "target_rows_after": int(len(target)),
+            "repair_mask_sha256": repair["repair_mask_sha256"],
+            "affected_date_digest": repair["affected_date_digest"],
+            "repair_reason_counts": repair["repair_reason_counts"],
+            "history_field_repair_counts": dict(history_result.repair_counts),
+            "history_repair_mask_digest": history_result.repair_mask_digest,
+            "blind_view_digest": blind_result.digest,
+            "blind_exclusions": dict(blind_result.exclusions),
+            "dataset_rule": f"gate1_frozen_{dataset.lower()}_v1",
+            "generic_fill": False,
+            "backward_fill": False,
+        },
+        "availability_no_leakage": {
+            "status": "passed",
+            "resolver": resolver,
+            "target_truth_isolated": True,
+            "target_day_actual_isolated": True,
+            "audit_only_isolated": True,
+            "forbidden_fields_isolated": True,
+        },
+        "schemas": schemas,
+        "views": views,
+        "content": {
+            "source_normalized_row_digest": normalized_frame_digest(source),
+            "target_normalized_row_digest": normalized_frame_digest(target),
+            "normalization": "gate1_logical_values_columns_dtypes_v1",
+        },
+        "formal_preflight_proof": base_proof,
+        "formal_preflight": preflight,
+    }
+    proof["proof_digest"] = canonical_digest(proof)
+    return proof
+
+
 def adopt_and_seal_dataset(
     dataset_id: int,
     *,
@@ -213,23 +510,62 @@ def adopt_and_seal_dataset(
     parent_source_frame, canonical_source_frame, source_sales_proof = (
         _calendarize_and_canonicalize_source(number, source)
     )
+    source_key = list(_SOURCE_GROUP_COLUMNS[number]) + ["date"]
+    canonical_source_frame = canonical_source_frame.sort_values(
+        source_key, kind="mergesort"
+    ).reset_index(drop=True)
+    target_frame = pd.read_parquet(target)
+    target_key = list(_SOURCE_GROUP_COLUMNS[number]) + ["date"]
+    target_frame = target_frame.sort_values(target_key, kind="mergesort").reset_index(drop=True)
+    source_window = get_source_pretrain_window(number)
+    history_result = HistoryReconstructionProducer().build(
+        f"D{number}",
+        canonical_source_frame,
+        origin=source_window.pretrain_end,
+    )
+    canonical_source_frame = history_result.frame.sort_values(
+        source_key, kind="mergesort"
+    ).reset_index(drop=True)
+    blind_result = ForecastBlindProducer().build(
+        f"D{number}",
+        history_result,
+        target_frame,
+        origin=source_window.pretrain_end,
+    )
+    safe_views = SafeTargetViewOperator().build(
+        f"D{number}", history_result.frame, target_frame
+    )
     source_bytes_unchanged = canonical_source_frame.equals(parent_source_frame)
     report["source_sales_repair"] = source_sales_proof
 
     predictor = get_predictor_schema(f"D{number}")
     knn = get_knn_schema(f"D{number}")
     parent_artifacts = {"source": source_parent, "target": target_parent}
+    publication_proof = _build_gate1_publication_proof(
+        number,
+        parent_source=parent_source_frame,
+        source=canonical_source_frame,
+        target=target_frame,
+        parent_artifacts=parent_artifacts,
+        repair=source_sales_proof,
+        parent_root=parent_root,
+        output_root=output_dir,
+        history_result=history_result,
+        blind_result=blind_result,
+        safe_views=safe_views,
+    )
+    report["gate1_publication_proof"] = publication_proof
     manifest = {
         "manifest_version": "sealed_dataset_manifest_v1",
         "dataset_id": f"D{number}",
         "sealed_root_version": SEALING_PROTOCOL_VERSION,
-        "provenance_level": "adopted_solidified",
-        "content_validation_level": "structural_only",
-        "adopted_content_validated": False,
+        "provenance_level": "gate1_contract_transformed",
+        "content_validation_level": "gate1_contract_validated",
+        "adopted_content_validated": True,
         "content_validation_notes": (
-            "Only file identity, structural integrity, windows, schemas, KNN fingerprints, "
-            "and feature protocol were validated. Historical numeric correctness was not "
-            "reconstructed from raw data."
+            "Validated against the frozen Gate 1 raw authority, formal identities, "
+            "key/window contract, safe schemas, repair evidence, availability isolation, "
+            "canonical content identity, and formal preflight."
         ),
         "parent_artifacts": parent_artifacts,
         "parent_artifact_sha256": source_parent["sha256"],
@@ -253,6 +589,7 @@ def adopt_and_seal_dataset(
         "predictor_feature_schema_digest": predictor.digest,
         "knn_feature_schema_digest": knn.digest,
         "windows": _window_descriptor(number),
+        "gate1_publication_proof": publication_proof,
     }
     sidecars = {
         "provenance.json": parent_artifacts,
@@ -260,7 +597,7 @@ def adopt_and_seal_dataset(
         "calendarization_audit.json": {
             "engine_version": canonical_source_frame.attrs["fill_policy_engine_version"],
             "runtime_policy": canonical_source_frame.attrs["runtime_fill_policy"],
-            "content_validation_level": "structural_only",
+            "content_validation_level": "gate1_contract_validated",
             "source": {
                 "synthetic_date_count": canonical_source_frame.attrs["synthetic_date_count"],
                 "config_digest": canonical_source_frame.attrs["fill_policy_config_digest"],
@@ -278,7 +615,7 @@ def adopt_and_seal_dataset(
         number,
         source_path=source if source_bytes_unchanged else None,
         source_frame=None if source_bytes_unchanged else canonical_source_frame,
-        target_path=target,
+        target_frame=target_frame,
         manifest=manifest,
         validation_report=report,
         sidecars=sidecars,

@@ -16,6 +16,8 @@ from src.data_processing.sealed_daily import (
     canonicalize_source_sales,
 )
 from src.protocols.sealing_protocol import get_source_pretrain_window
+from src.protocols.gate1_transformation import canonical_digest
+from tools.operations import materialize_d1_d6_sealed_authority as gate1x_operator
 
 
 def _d2_long_frame(dates: pd.DatetimeIndex) -> pd.DataFrame:
@@ -42,11 +44,38 @@ _REPAIR_REASONS = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _stub_frozen_raw_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+    def identity(dataset_id: int) -> dict:
+        records = gate1x_operator._frozen_raw_records(dataset_id)
+        files = [
+            {
+                "name": f"D{dataset_id}:{record['path']}",
+                "path": record["path"],
+                "size_bytes": 1,
+                "sha256": record["sha256"],
+            }
+            for record in records
+        ]
+        return {
+            "dataset": f"D{dataset_id}",
+            "files": files,
+            "approved_input_set_digest": canonical_digest(files),
+            "snapshot_identity": canonical_digest(
+                [(item["path"], item["sha256"]) for item in files]
+            ),
+            "verified_from_bytes": True,
+        }
+
+    monkeypatch.setattr(adoption, "_raw_authority_identity", identity)
+
+
 def _write_d3_adopted_pair(
     root: Path,
     *,
     source_dates: pd.DatetimeIndex,
     source_sales: list[float],
+    dataset_id: int = 3,
 ) -> tuple[Path, Path, pd.DataFrame]:
     source = root / "dataset3-source.parquet"
     target = root / "dataset3-target.parquet"
@@ -62,7 +91,7 @@ def _write_d3_adopted_pair(
             "sales": source_sales,
         }
     )
-    target_dates = pd.date_range("2015-01-03", periods=3, freq="D")
+    target_dates = pd.date_range(source_dates.max() + pd.Timedelta(days=1), periods=3, freq="D")
     target_frame = pd.DataFrame(
         {
             "entity_id": ["10"] * len(target_dates),
@@ -75,6 +104,32 @@ def _write_d3_adopted_pair(
             "sales": [10.0, 11.0, 12.0],
         }
     )
+    for frame in (source_frame, target_frame):
+        if dataset_id == 3:
+            frame["SchoolHoliday"] = 0
+        elif dataset_id == 4:
+            frame["activity_flag"] = 1
+            frame["discount"] = 0.0
+            frame["holiday_flag"] = 0
+            frame["precpt"] = 0.0
+            frame["avg_temperature"] = 20.0
+            frame["avg_humidity"] = 50.0
+            frame["avg_wind_level"] = 1.0
+        elif dataset_id == 5:
+            frame["perishable"] = 1
+            frame["onpromotion"] = 0
+            frame["oil_price"] = 50.0
+            frame["is_holiday"] = 0
+        elif dataset_id == 6:
+            frame["weekday"] = "Monday"
+            frame["wday"] = 1
+            frame["wm_yr_wk"] = 1
+            frame["event_name_1"] = "none"
+            frame["event_type_1"] = "none"
+            frame["event_name_2"] = "none"
+            frame["event_type_2"] = "none"
+            frame["snap"] = 0
+            frame["sell_price"] = 1.0
     source_frame.to_parquet(source, index=False)
     target_frame.to_parquet(target, index=False)
     return source, target, source_frame
@@ -193,7 +248,7 @@ def test_d2_raw_rebuild_publishes_approved_june_calendar_row(tmp_path: Path) -> 
     assert june_2.iloc[0]["promo"] == 0
 
 
-def test_adoption_records_parent_identity_and_structural_only_disclosure(tmp_path: Path) -> None:
+def test_adoption_records_parent_identity_and_contract_publication_proof(tmp_path: Path) -> None:
     source = tmp_path / "dataset3-source.parquet"
     target = tmp_path / "dataset3-target.parquet"
     source_frame = pd.DataFrame(
@@ -203,9 +258,14 @@ def test_adoption_records_parent_identity_and_structural_only_disclosure(tmp_pat
             "item_id": [1, 1],
             "date": pd.date_range("2015-01-01", periods=2, freq="D"),
             "sales": [1.0, 2.0],
+            "SchoolHoliday": [0, 0],
         }
     )
-    target_frame = source_frame.assign(entity_id="10", store_id=10)
+    target_frame = source_frame.assign(
+        entity_id="10",
+        store_id=10,
+        date=pd.date_range("2015-02-02", periods=len(source_frame), freq="D"),
+    )
     source_frame.to_parquet(source, index=False)
     target_frame.to_parquet(target, index=False)
 
@@ -217,9 +277,13 @@ def test_adoption_records_parent_identity_and_structural_only_disclosure(tmp_pat
     )
 
     manifest = json.loads((dataset_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["provenance_level"] == "adopted_solidified"
-    assert manifest["content_validation_level"] == "structural_only"
-    assert manifest["adopted_content_validated"] is False
+    assert manifest["provenance_level"] == "gate1_contract_transformed"
+    assert manifest["content_validation_level"] == "gate1_contract_validated"
+    assert manifest["adopted_content_validated"] is True
+    proof = manifest["gate1_publication_proof"]
+    assert proof["status"] == "publication_ready"
+    assert proof["formal_preflight"]["status"] == "passed"
+    assert proof["availability_no_leakage"]["target_day_actual_isolated"] is True
     assert manifest["parent_artifacts"]["source"]["sha256"]
     assert manifest["parent_artifacts"]["source"]["size_bytes"] == source.stat().st_size
     assert manifest["parent_artifacts"]["source"]["first_seen_at"] is None
@@ -255,6 +319,7 @@ def test_d3_d6_adoption_calls_real_calendarization_and_canonicalization_once(
         tmp_path,
         source_dates=source_dates,
         source_sales=source_sales,
+        dataset_id=dataset_id,
     )
     calls = {"calendarize": 0, "canonicalize": 0}
     call_order: list[str] = []
@@ -301,7 +366,7 @@ def test_d3_d6_adoption_calls_real_calendarization_and_canonicalization_once(
     assert sidecar == manifest_proof == report_proof
 
 
-def test_d3_adoption_zero_repair_proof_is_real_stable_and_preserves_parent_bytes(
+def test_d3_zero_repair_proof_is_stable_while_history_view_is_reconstructed(
     tmp_path: Path,
 ) -> None:
     source_dates = pd.date_range("2014-08-06", "2015-02-01", freq="D")
@@ -335,9 +400,13 @@ def test_d3_adoption_zero_repair_proof_is_real_stable_and_preserves_parent_bytes
     _assert_complete_repair_proof(first_proof)
     assert first_proof == first_manifest_proof == first_report_proof
     assert first_proof == second_proof == second_manifest_proof == second_report_proof
-    pd.testing.assert_frame_equal(pd.read_parquet(first / "source.parquet"), parent_frame)
-    assert (first / "source.parquet").read_bytes() == source.read_bytes()
-    assert (second / "source.parquet").read_bytes() == source.read_bytes()
+    rebuilt = pd.read_parquet(first / "source.parquet")
+    assert {"year", "month", "day"}.issubset(rebuilt.columns)
+    assert rebuilt["sales"].tolist() == parent_frame["sales"].tolist()
+    assert (first / "source.parquet").read_bytes() != source.read_bytes()
+    assert pd.read_parquet(first / "source.parquet").equals(
+        pd.read_parquet(second / "source.parquet")
+    )
 
 
 @pytest.mark.parametrize(
