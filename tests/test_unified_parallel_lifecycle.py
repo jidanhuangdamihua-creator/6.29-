@@ -18,6 +18,30 @@ def _identity(commit: str = "abc123", digest: str = "a" * 64) -> CodeIdentity:
     return CodeIdentity(commit, False, digest)
 
 
+@pytest.fixture(autouse=True)
+def compliant_preflight_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        unified,
+        "validate_formal_entry_preflight",
+        lambda **_kwargs: {"status": "ready", "failure_codes": []},
+    )
+
+
+def test_prepare_calls_preflight_and_blocks_before_run_creation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_root = tmp_path / "blocked"
+    preflight = Mock(return_value={"status": "blocked", "failure_codes": ["SCHEMA_MISMATCH"]})
+    monkeypatch.setattr(unified, "validate_formal_entry_preflight", preflight)
+
+    with pytest.raises(RuntimeError, match="blocked before attempt creation"):
+        unified.prepare_formal_run(run_root, resume=False)
+
+    preflight.assert_called_once_with(run_id="blocked")
+    assert not run_root.exists()
+
+
 def test_build_run_plan_locks_60_unique_seed_bundles_and_identity(tmp_path: Path) -> None:
     identity = _identity()
 

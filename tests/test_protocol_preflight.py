@@ -14,6 +14,7 @@ from scripts.validate_d1_d6_protocol_inputs import (
     PARQUET_DIR,
     build_preflight_reports,
     resolve_parquet_dir,
+    validate_predictor_preflight,
     validate_protocol_frames,
 )
 
@@ -27,11 +28,18 @@ def _rows(domain, item, *, group_col=None, group_value=None, periods=35):
         "entity_id": str(domain),
         "store_id": str(domain),
         "item_id": str(item),
-        "date": pd.date_range("2020-01-01", periods=periods, freq="D"),
+        "date": pd.date_range(
+            "2019-08-04" if periods == 180 else "2020-01-01",
+            periods=periods,
+            freq="D",
+        ),
         "sales": np.full(periods, sales_value, dtype=float),
     }
     if group_col:
         payload[group_col] = group_value
+    if group_col == "family":
+        payload["onpromotion"] = 0.0
+        payload["oil_price"] = 40.0
     return pd.DataFrame(payload)
 
 
@@ -39,8 +47,8 @@ class ProtocolPreflightTest(unittest.TestCase):
     def test_multi_target_preflight_prepares_source_pool_once(self) -> None:
         source = pd.concat(
             [
-                _rows("S1", "I2", group_col="family", group_value="F1", periods=30),
-                _rows("S2", "I2", group_col="family", group_value="F1", periods=30),
+                _rows("S1", "I2", group_col="family", group_value="F1", periods=180),
+                _rows("S2", "I2", group_col="family", group_value="F1", periods=180),
             ],
             ignore_index=True,
         )
@@ -75,16 +83,16 @@ class ProtocolPreflightTest(unittest.TestCase):
         self.assertEqual({report["status"] for report in reports}, {"passed"})
 
     def test_preflight_exclusions_are_bounded_with_complete_counts(self) -> None:
-        frames = [_rows("S0", "VALID", group_col="family", group_value="F1", periods=30)]
+        frames = [_rows("S0", "VALID", group_col="family", group_value="F1", periods=180)]
         for index in range(25):
             incomplete = _rows(
                 f"S{index + 1}",
                 f"I{index}",
                 group_col="family",
                 group_value="F1",
-                periods=30,
+                periods=180,
             )
-            frames.append(incomplete.iloc[1:].copy())
+            frames.append(incomplete[incomplete["date"] != pd.Timestamp("2020-01-01")].copy())
         reports = build_preflight_reports(
             pd.concat(frames, ignore_index=True),
             _rows("T", "TARGET", group_col="family", group_value="F1"),
@@ -169,7 +177,7 @@ class ProtocolPreflightTest(unittest.TestCase):
 
     def test_complete_d1_and_cross_store_d5_pass(self) -> None:
         d1_source = pd.concat(
-            [_rows(store, item, periods=30) for store in range(1, 4) for item in range(1, 10)]
+            [_rows(store, item, periods=180) for store in range(1, 4) for item in range(1, 10)]
         )
         d1 = validate_protocol_frames(
             d1_source,
@@ -195,8 +203,8 @@ class ProtocolPreflightTest(unittest.TestCase):
 
         d5_source = pd.concat(
             [
-                _rows("S1", "I2", group_col="family", group_value="F1", periods=30),
-                _rows("S2", "I2", group_col="family", group_value="F1", periods=30),
+                _rows("S1", "I2", group_col="family", group_value="F1", periods=180),
+                _rows("S2", "I2", group_col="family", group_value="F1", periods=180),
             ]
         )
         d5 = validate_protocol_frames(
@@ -211,6 +219,29 @@ class ProtocolPreflightTest(unittest.TestCase):
         )
         self.assertEqual(d5["status"], "passed")
         self.assertEqual(d5["candidate_count"], 2)
+
+        predictor = pd.DataFrame(
+            {
+                "date": [pd.Timestamp("2020-01-01")],
+                "sales": [1.0],
+                "year": [2020],
+                "month": [1],
+                "day": [1],
+                "perishable": [0],
+                "onpromotion": [0],
+                "oil_price": [40.0],
+                "is_holiday": [0],
+            }
+        )
+        self.assertEqual(
+            validate_predictor_preflight(predictor, dataset_id="D5")["status"],
+            "passed",
+        )
+        predictor_failure = validate_predictor_preflight(
+            predictor.drop(columns="oil_price"), dataset_id="D5"
+        )
+        self.assertEqual(predictor_failure["status"], "failed")
+        self.assertEqual(predictor_failure["failure_code"], "PREDICTOR_SCHEMA_FAILURE")
 
 
 if __name__ == "__main__":

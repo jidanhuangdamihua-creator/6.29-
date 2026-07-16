@@ -56,8 +56,10 @@ class RunOutputIsolationTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 aggregate_d1_d6_results._parse_args()
 
-    def test_unified_runner_dry_run_is_directly_executable(self) -> None:
+    def test_unified_runner_dry_run_fails_closed_on_old_sealed_schema(self) -> None:
         project_root = Path(__file__).resolve().parents[1]
+        runs_root = project_root / "outputs" / "runs"
+        before = set(runs_root.iterdir()) if runs_root.is_dir() else set()
         completed = subprocess.run(
             [
                 sys.executable,
@@ -72,7 +74,8 @@ class RunOutputIsolationTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("[D1-without-s42]", completed.stdout)
-        self.assertIn("[D1-with-s46]", completed.stdout)
-        self.assertIn("[FORMAL PLAN] cells=10 unique=10", completed.stdout)
+        self.assertNotEqual(completed.returncode, 0)
+        combined = completed.stdout + completed.stderr
+        self.assertRegex(combined, "PREDICTOR_SCHEMA_MISMATCH|KNN_SCHEMA_MISMATCH")
+        after = set(runs_root.iterdir()) if runs_root.is_dir() else set()
+        self.assertEqual(before, after)

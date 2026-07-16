@@ -119,7 +119,7 @@ def test_d5_loader_returns_explicit_report_and_preserves_tuple_api(tmp_path: Pat
         dataset_id=5,
         parquet_dir=parquet_dir,
         windows=windows,
-        source_history_days=300,
+        source_history_days=180,
         expected_dates=expected_dates,
         d5_authorities=authorities,
     )
@@ -139,7 +139,7 @@ def test_d5_loader_returns_explicit_report_and_preserves_tuple_api(tmp_path: Pat
         dataset_id=5,
         parquet_dir=parquet_dir,
         windows=windows,
-        source_history_days=300,
+        source_history_days=180,
         expected_dates=expected_dates,
         d5_authorities=authorities,
     )
@@ -160,7 +160,7 @@ def test_runner_loads_authorities_once_and_passes_window_dates(monkeypatch) -> N
         raw_dir=Path("raw"),
         parquet_dir=Path("parquet"),
         windows={"dataset_id": 5, "train_start": "2017-01-17", "test_end": "2017-08-15"},
-        source_history_days=300,
+        source_history_days=180,
     )
 
     assert result is load_result

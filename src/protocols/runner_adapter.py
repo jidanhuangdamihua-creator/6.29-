@@ -7,6 +7,7 @@ from typing import Sequence, Tuple
 import pandas as pd
 
 from .candidate_pool import PreparedDailySequencePool
+from .feature_schema import get_knn_schema, get_predictor_schema
 from .sealing_protocol import SourcePretrainWindow
 from .experiment_protocol import (
     EXTENDED_TRACK,
@@ -61,6 +62,28 @@ def _available_keys(frame: pd.DataFrame, group_cols: Sequence[str]) -> Tuple[Tup
         for row in frame.loc[:, list(group_cols)].drop_duplicates().itertuples(index=False, name=None)
     }
     return tuple(sorted(keys))
+
+
+def validate_predictor_safe_view(
+    frame: pd.DataFrame,
+    *,
+    dataset_id: object,
+    passthrough_cols: Sequence[str] = ("date",),
+) -> None:
+    """Fail closed on predictor schema independently of KNN selection."""
+    schema = get_predictor_schema(dataset_id)
+    expected = set(schema.ordered_names)
+    columns = set(str(column) for column in frame.columns)
+    missing = sorted(expected - columns)
+    if missing:
+        raise ProtocolViolation(f"PREDICTOR_SCHEMA_FAILURE: missing predictor fields: {missing}")
+    allowed = expected | {str(column) for column in passthrough_cols}
+    extra = sorted(columns - allowed)
+    if extra:
+        raise ProtocolViolation(f"PREDICTOR_SCHEMA_FAILURE: unexpected predictor fields: {extra}")
+    unavailable = tuple(frame.attrs.get("availability_failures", ()))
+    if unavailable:
+        raise ProtocolViolation(f"AVAILABILITY_FAILURE: {unavailable!r}")
 
 
 def _strict_raw_candidates(
@@ -338,6 +361,8 @@ def configure_protocol_frames(
         "scaler_fit_scope": "target_and_candidate_legal_observed_values",
         "source_alignment_mode": "exact_knn_observed_dates",
         "information_sharing_scenario": normalized_scenario,
+        "knn_schema_digest": get_knn_schema(protocol.dataset_id).digest,
+        "predictor_schema_digest": get_predictor_schema(protocol.dataset_id).digest,
     }
     source.attrs = {**source_df.attrs, **metadata}
     target.attrs = {**target_df.attrs, **metadata}

@@ -21,6 +21,7 @@ from src.utils.d4_d6_runtime import (
 
 
 OBSERVED_DATES = pd.date_range("2024-01-01", periods=30, freq="D")
+SOURCE_DATES = pd.date_range(OBSERVED_DATES[0] - pd.Timedelta(days=150), periods=180, freq="D")
 TARGET_DATES = pd.date_range("2024-01-01", periods=31, freq="D")
 
 
@@ -38,7 +39,9 @@ def _rows(
             "first_category_id": 15,
             "second_category_id": second_category_id,
             "date": dates,
-            "sales": np.arange(len(dates), dtype=float) + float(product_id),
+            "sales": np.asarray(
+                [(date - OBSERVED_DATES[0]).days for date in dates], dtype=float
+            ) + float(product_id),
         }
     )
 
@@ -46,13 +49,13 @@ def _rows(
 def _configured_d4_without_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
     source = pd.concat(
         [
-            _rows(166, 259, 30, OBSERVED_DATES),
-            _rows(166, 260, 20, OBSERVED_DATES),
-            _rows(166, 261, 40, OBSERVED_DATES),
-            _rows(166, 262, 50, OBSERVED_DATES[:29]),
-            _rows(167, 258, 60, OBSERVED_DATES),
-            _rows(167, 263, 70, OBSERVED_DATES),
-            _rows(168, 264, 80, OBSERVED_DATES),
+            _rows(166, 259, 30, SOURCE_DATES),
+            _rows(166, 260, 20, SOURCE_DATES),
+            _rows(166, 261, 40, SOURCE_DATES),
+            _rows(166, 262, 50, SOURCE_DATES.delete(-1)),
+            _rows(167, 258, 60, SOURCE_DATES),
+            _rows(167, 263, 70, SOURCE_DATES),
+            _rows(168, 264, 80, SOURCE_DATES),
         ],
         ignore_index=True,
     )

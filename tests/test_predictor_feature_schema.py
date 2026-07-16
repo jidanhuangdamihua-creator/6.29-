@@ -61,29 +61,24 @@ def test_forbidden_dynamic_and_identifier_fields_never_enter_predictors() -> Non
         "D2": {"promo", "brand_id", "item_id", "entity_id"},
         "D3": {"Customers", "Open", "Promo", "store_id", "region"},
         "D4": {
+            "hours_sale",
+            "hours_stock_status",
             "stock_hour6_22_cnt",
-            "activity_flag",
-            "discount",
-            "precpt",
-            "avg_temperature",
-            "avg_humidity",
-            "avg_wind_level",
             "city_id",
             "store_id",
             "product_id",
             "first_category_id",
         },
         "D5": {
-            "onpromotion",
             "transactions",
-            "oil_price",
+            "week",
             "store_nbr",
             "item_nbr",
             "class",
             "cluster",
             "family",
         },
-        "D6": {"sell_price", "item_id", "dept_id", "cat_id", "store_id", "state_id"},
+        "D6": {"item_id", "dept_id", "cat_id", "store_id", "state_id"},
     }
     for dataset_id, names in forbidden.items():
         assert names.isdisjoint(get_predictor_schema(dataset_id).ordered_names)
@@ -91,20 +86,45 @@ def test_forbidden_dynamic_and_identifier_fields_never_enter_predictors() -> Non
     d5 = get_predictor_schema("D5")
     assert "perishable" in d5.ordered_names
     assert d5.field("perishable").role is FeatureRole.STATIC_KNOWN
+    assert {"onpromotion", "oil_price", "is_holiday"}.issubset(d5.ordered_names)
+    assert "week" not in d5.ordered_names
+
+    d4 = get_predictor_schema("D4")
+    assert {
+        "activity_flag",
+        "discount",
+        "holiday_flag",
+        "precpt",
+        "avg_temperature",
+        "avg_humidity",
+        "avg_wind_level",
+    }.issubset(d4.ordered_names)
+
+    d6 = get_predictor_schema("D6")
+    assert {
+        "sell_price",
+        "weekday",
+        "wday",
+        "wm_yr_wk",
+        "event_name_1",
+        "event_type_1",
+        "event_name_2",
+        "event_type_2",
+        "snap",
+    }.issubset(d6.ordered_names)
 
 
 def test_knn_schemas_are_separate_ordered_and_fully_classified() -> None:
     assert get_knn_schema("D1").ordered_names == ("sales",)
     assert get_knn_schema("D2").ordered_names == ("sales", "promo")
-    assert get_knn_schema("D3").ordered_names == ("sales", "Customers", "Open", "Promo")
+    assert get_knn_schema("D3").ordered_names == ("sales",)
     assert get_knn_schema("D4").ordered_names == ("sales",)
     assert get_knn_schema("D5").ordered_names == (
         "sales",
         "onpromotion",
-        "transactions",
         "oil_price",
     )
-    assert get_knn_schema("D6").ordered_names == ("sales", "sell_price")
+    assert get_knn_schema("D6").ordered_names == ("sales",)
 
     d4 = get_knn_schema("D4")
     assert all(
@@ -120,7 +140,9 @@ def test_knn_schemas_are_separate_ordered_and_fully_classified() -> None:
 def test_rfe_mask_preserves_full_schema_shape_and_sales() -> None:
     schema = get_predictor_schema("D5")
     full = PredictorFeatureMask.full(schema)
-    rfe = PredictorFeatureMask.from_selected_names(schema, ("sales", "month", "perishable"))
+    rfe = PredictorFeatureMask.from_selected_names(
+        schema, ("sales", "month", "perishable", "onpromotion")
+    )
 
     assert len(full.values) == schema.dimension
     assert len(rfe.values) == schema.dimension
@@ -138,3 +160,6 @@ def test_rfe_mask_preserves_full_schema_shape_and_sales() -> None:
 
     with pytest.raises(ValueError, match="sales"):
         PredictorFeatureMask(schema.digest, (False,) * schema.dimension, schema.ordered_names)
+
+    with pytest.raises(ValueError, match="unknown predictor fields"):
+        PredictorFeatureMask.from_selected_names(schema, ("sales", "transactions"))

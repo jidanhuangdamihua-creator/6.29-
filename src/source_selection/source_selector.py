@@ -22,7 +22,7 @@ import pandas as pd
 from src.data_processing.data_preprocessing import infer_source_selection_feature_columns
 from src.constants import D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
 from src.protocols.candidate_pool import prepare_daily_sequence_pool, select_daily_sequence_sources
-from src.protocols.feature_schema import get_knn_schema, get_predictor_schema
+from src.protocols.feature_schema import get_knn_schema
 from src.protocols.experiment_protocol import (
     PROTOCOL_VERSION,
     ProtocolViolation,
@@ -109,9 +109,7 @@ class SourceSelector:
             )
         protocol = get_experiment_protocol(target_df.attrs["protocol_dataset_id"])
         knn_schema = get_knn_schema(protocol.dataset_id)
-        predictor_schema = get_predictor_schema(protocol.dataset_id)
         frozen_knn_cols = knn_schema.ordered_names
-        frozen_model_cols = predictor_schema.ordered_names
         prepared_pool = source_df.attrs.get("prepared_daily_sequence_pool")
         if prepared_pool is None:
             prepared_pool = prepare_daily_sequence_pool(
@@ -122,7 +120,7 @@ class SourceSelector:
                 pretrain_start=target_df.attrs["source_pretrain_start"],
                 pretrain_end=target_df.attrs["source_pretrain_end"],
                 knn_feature_cols=frozen_knn_cols,
-                required_feature_cols=frozen_model_cols,
+                required_feature_cols=frozen_knn_cols,
             )
         result = select_daily_sequence_sources(
             target_df=target_df,
@@ -135,7 +133,6 @@ class SourceSelector:
             group_cols=configured_group_cols,
             observed_start=target_df.attrs["knn_observed_start"],
             feature_cols=frozen_knn_cols,
-            model_feature_cols=frozen_model_cols,
             knn_schema_digest=knn_schema.digest,
             k=k,
         )
@@ -145,7 +142,7 @@ class SourceSelector:
             provenance_source_df,
             training_start=result.source_window_start,
             training_end=result.source_window_end,
-            model_feature_cols=frozen_model_cols,
+            model_feature_cols=frozen_knn_cols,
         )
         tensor_provenance = tuple(
             build_cnn_tensor_provenance(
@@ -202,8 +199,8 @@ class SourceSelector:
             "requested_feature_cols": list(frozen_knn_cols),
             "representation": protocol.knn_representation,
             "knn_representation": protocol.knn_representation,
-            "scaling": "none_raw_canonical_float64",
-            "scaler_fit_scope": "not_applicable",
+            "scaling": "global_minmax_legal_observed_values",
+            "scaler_fit_scope": "target_and_candidate_legal_observed_values",
             "knn_observed_start": result.observed_start,
             "knn_observed_end": result.observed_end,
             "protocol_observed_start": target_df.attrs["protocol_observed_start"],

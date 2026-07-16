@@ -13,6 +13,7 @@ from src.protocols.experiment_protocol import ProtocolViolation, get_experiment_
 
 
 DATES = pd.date_range("2020-01-01", periods=30, freq="D")
+SOURCE_DATES = pd.date_range(DATES[0] - pd.Timedelta(days=150), periods=180, freq="D")
 FUTURE_DATES = pd.date_range("2020-01-31", periods=5, freq="D")
 
 
@@ -30,12 +31,13 @@ def _target(values: np.ndarray, *, include_future: bool = True) -> pd.DataFrame:
 
 
 def _source(key: tuple[str, str], values: np.ndarray, future: float = 2000.0) -> pd.DataFrame:
+    history = np.r_[np.full(150, float(values[0])), values.astype(float)]
     observed = pd.DataFrame(
         {
             "store": key[0],
             "item": key[1],
-            "date": DATES,
-            "sales": values.astype(float),
+            "date": SOURCE_DATES,
+            "sales": history,
         }
     )
     after = pd.DataFrame(
@@ -128,15 +130,14 @@ class DailyKnnProtocolTest(unittest.TestCase):
         incomplete = self.source[
             ~((self.source["store"] == "S2") & (self.source["date"] == DATES[0]))
         ]
-        selection = _select(self.target, incomplete, k=3)
-        self.assertEqual(len(selection.entries), 3)
-        repaired = next(
-            entry for entry in selection.entries if entry.source_key == ("S2", "I2")
-        )
-        self.assertTrue(repaired.source_repair_digest)
+        with self.assertRaisesRegex(ProtocolViolation, "valid candidates=2.*required K=3"):
+            _select(self.target, incomplete, k=3)
 
     def test_duplicate_source_date_fails(self) -> None:
-        duplicated = pd.concat([self.source, self.source.iloc[[0]]], ignore_index=True)
+        duplicate_row = self.source[
+            (self.source["store"] == "S1") & (self.source["date"] == DATES[0])
+        ].iloc[[0]]
+        duplicated = pd.concat([self.source, duplicate_row], ignore_index=True)
         with self.assertRaisesRegex(ProtocolViolation, "valid candidates.*required K=3"):
             _select(self.target, duplicated, k=3)
 

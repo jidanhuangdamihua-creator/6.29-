@@ -15,6 +15,7 @@ from src.protocols.experiment_protocol import ProtocolViolation, get_experiment_
 
 
 DATES = pd.date_range("2020-01-01", periods=30, freq="D")
+PRETRAIN_DATES = pd.date_range(DATES[0] - pd.Timedelta(days=150), periods=180, freq="D")
 FUTURE = pd.date_range("2020-01-31", periods=4, freq="D")
 CANDIDATES = (("S1", "I1"), ("S2", "I2"), ("S3", "I3"))
 
@@ -37,8 +38,8 @@ def _source(key: tuple[str, str], value: float) -> pd.DataFrame:
                     "store": key[0],
                     "item": key[1],
                     "family": "F1",
-                    "date": DATES,
-                    "sales": np.full(30, value, dtype=float),
+                    "date": PRETRAIN_DATES,
+                    "sales": np.full(180, value, dtype=float),
                 }
             ),
             pd.DataFrame(
@@ -84,6 +85,8 @@ class PreparedDailySequencePoolTest(unittest.TestCase):
             self.source if source is None else source,
             group_cols=("store", "item"),
             observed_start="2020-01-01",
+            pretrain_start=PRETRAIN_DATES[0],
+            pretrain_end=PRETRAIN_DATES[-1],
             metadata_cols=("family",),
         )
 
@@ -163,16 +166,18 @@ class PreparedDailySequencePoolTest(unittest.TestCase):
 
     def test_mixed_raw_key_types_preserve_protocol_normalization(self) -> None:
         numeric = pd.DataFrame(
-            {"store": 1, "item": 2, "date": DATES, "sales": 1.0}
+            {"store": 1, "item": 2, "date": PRETRAIN_DATES, "sales": 1.0}
         )
         textual = pd.DataFrame(
-            {"store": "1", "item": "2", "date": DATES, "sales": 2.0}
+            {"store": "1", "item": "2", "date": PRETRAIN_DATES, "sales": 2.0}
         )
         mixed = pd.concat([numeric, textual], ignore_index=True)
         pool = prepare_daily_sequence_pool(
             mixed,
             group_cols=("store", "item"),
             observed_start="2020-01-01",
+            pretrain_start=PRETRAIN_DATES[0],
+            pretrain_end=PRETRAIN_DATES[-1],
         )
         self.assertEqual(pool.source_keys, (("1", "2"),))
         self.assertEqual(pool.duplicate_date_keys, frozenset({("1", "2")}))
@@ -214,6 +219,7 @@ class PreparedDailySequencePoolTest(unittest.TestCase):
                 {
                     "source_key": ("S2", "I2"),
                     "reason": "missing_observed_dates",
+                    "reasons": ("missing_observed_dates",),
                     "missing_dates": ("2020-01-01",),
                 },
             ),
@@ -221,16 +227,27 @@ class PreparedDailySequencePoolTest(unittest.TestCase):
         with self.assertRaisesRegex(ProtocolViolation, "valid candidates=2.*required K=3"):
             _select(self.target, missing.iloc[0:0], pool=self._pool(missing), k=3)
 
-        duplicate = pd.concat([self.source, self.source.iloc[[0]]], ignore_index=True)
-        with self.assertRaisesRegex(ProtocolViolation, "duplicate observed dates"):
-            _select(self.target, duplicate.iloc[0:0], pool=self._pool(duplicate))
+        duplicate_row = self.source[
+            (self.source["store"] == "S1") & (self.source["date"] == DATES[0])
+        ].iloc[[0]]
+        duplicate = pd.concat([self.source, duplicate_row], ignore_index=True)
+        duplicate_result = _select(
+            self.target, duplicate.iloc[0:0], pool=self._pool(duplicate)
+        )
+        self.assertEqual(duplicate_result.excluded_candidates[0]["reason"], "duplicate_source_date")
+        with self.assertRaisesRegex(ProtocolViolation, "valid candidates=2.*required K=3"):
+            _select(self.target, duplicate.iloc[0:0], pool=self._pool(duplicate), k=3)
 
         nonfinite = self.source.copy()
         nonfinite.loc[
             (nonfinite["store"] == "S1") & (nonfinite["date"] == DATES[0]), "sales"
-        ] = np.nan
-        with self.assertRaisesRegex(ProtocolViolation, "non-finite"):
-            _select(self.target, nonfinite.iloc[0:0], pool=self._pool(nonfinite))
+        ] = np.inf
+        nonfinite_result = _select(
+            self.target, nonfinite.iloc[0:0], pool=self._pool(nonfinite)
+        )
+        self.assertEqual(nonfinite_result.excluded_candidates[0]["reason"], "source_sales_infinity")
+        with self.assertRaisesRegex(ProtocolViolation, "valid candidates=2.*required K=3"):
+            _select(self.target, nonfinite.iloc[0:0], pool=self._pool(nonfinite), k=3)
 
 
 if __name__ == "__main__":

@@ -50,31 +50,33 @@ def _select(source: pd.DataFrame, *, k: int = 1):
         group_cols=("store_id", "item_id"),
         observed_start=KNN_DATES[0],
         feature_cols=("sales",),
-        model_feature_cols=("sales", "year", "month", "week", "day", "holiday_flag"),
         k=k,
     )
 
 
-def test_complete_180_days_are_validated_before_last_30_day_knn() -> None:
+def test_predictor_only_fields_do_not_change_knn_identity() -> None:
     source = pd.concat([_source(("S1", "I1"), 0.0), _source(("S2", "I2"), 10.0)])
-    source.loc[
-        (source["store_id"] == "S1") & (source["date"] == SOURCE_DATES[0]),
+    baseline = _select(source)
+    changed = source.copy()
+    changed.loc[
+        (changed["store_id"] == "S1") & (changed["date"] == SOURCE_DATES[0]),
         "holiday_flag",
     ] = np.nan
 
-    selection = _select(source)
+    selection = _select(changed)
 
-    assert selection.ordered_source_keys == (("S2", "I2"),)
+    assert selection.ordered_source_keys == baseline.ordered_source_keys
+    np.testing.assert_array_equal(selection.distances, baseline.distances)
+    np.testing.assert_array_equal(selection.weights, baseline.weights)
+    assert selection.candidate_pool_digest == baseline.candidate_pool_digest
+    assert selection.selection_identity_digest == baseline.selection_identity_digest
+    assert selection.source_training_digest == baseline.source_training_digest
     assert selection.source_window_start == SOURCE_DATES[0].strftime("%Y-%m-%d")
     assert selection.source_window_end == SOURCE_DATES[-1].strftime("%Y-%m-%d")
     assert selection.knn_window_start == KNN_DATES[0].strftime("%Y-%m-%d")
     assert selection.knn_window_end == KNN_DATES[-1].strftime("%Y-%m-%d")
     assert selection.entries[0].vector_shape == (30, 1)
-    assert any(
-        item["source_key"] == ("S1", "I1")
-        and item["reason"] == "unresolved_required_feature"
-        for item in selection.excluded_candidates
-    )
+    assert selection.excluded_candidates == ()
 
 
 def test_first_150_day_mutation_changes_training_digest_but_not_knn() -> None:

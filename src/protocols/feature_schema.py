@@ -456,38 +456,64 @@ def _calendar(name: str) -> PredictorFeature:
     return _feature(name, FeatureRole.FUTURE_KNOWN, dtype="int64", transform="identity")
 
 
-def _base_fields() -> Tuple[PredictorFeature, ...]:
-    return (
-        _feature("sales", FeatureRole.TARGET_SIGNAL),
-        _calendar("year"),
-        _calendar("month"),
-        _calendar("week"),
-        _calendar("day"),
-    )
+def _date_fields(*, include_week: bool = False) -> Tuple[PredictorFeature, ...]:
+    fields = (_calendar("year"), _calendar("month"))
+    if include_week:
+        fields += (_calendar("week"),)
+    return fields + (_calendar("day"),)
+
+
+def _future(name: str, *, dtype: str = "float64") -> PredictorFeature:
+    return _feature(name, FeatureRole.FUTURE_KNOWN, dtype=dtype, transform="identity")
 
 
 _PREDICTOR_SCHEMAS: Mapping[str, PredictorFeatureSchema] = MappingProxyType(
     {
-        "D1": PredictorFeatureSchema("D1", _base_fields()),
-        "D2": PredictorFeatureSchema("D2", _base_fields()),
-        "D3": PredictorFeatureSchema("D3", _base_fields() + (_calendar("SchoolHoliday"),)),
-        "D4": PredictorFeatureSchema("D4", _base_fields() + (_calendar("holiday_flag"),)),
+        "D1": PredictorFeatureSchema("D1", (_feature("sales", FeatureRole.TARGET_SIGNAL),) + _date_fields(include_week=True)),
+        "D2": PredictorFeatureSchema("D2", (_feature("sales", FeatureRole.TARGET_SIGNAL),) + _date_fields(include_week=True)),
+        "D3": PredictorFeatureSchema(
+            "D3",
+            (_feature("sales", FeatureRole.TARGET_SIGNAL),)
+            + _date_fields()
+            + (_calendar("SchoolHoliday"),),
+        ),
+        "D4": PredictorFeatureSchema(
+            "D4",
+            (_feature("sales", FeatureRole.TARGET_SIGNAL),)
+            + _date_fields()
+            + tuple(
+                _future(name, dtype="int64" if name in {"activity_flag", "holiday_flag"} else "float64")
+                for name in (
+                    "activity_flag", "discount", "holiday_flag", "precpt",
+                    "avg_temperature", "avg_humidity", "avg_wind_level",
+                )
+            ),
+        ),
         "D5": PredictorFeatureSchema(
             "D5",
-            _base_fields()
+            (_feature("sales", FeatureRole.TARGET_SIGNAL),)
+            + _date_fields()
             + (
                 _feature("perishable", FeatureRole.STATIC_KNOWN, dtype="int64", transform="identity"),
+                _future("onpromotion", dtype="int64"),
+                _future("oil_price"),
                 _calendar("is_holiday"),
             ),
         ),
         "D6": PredictorFeatureSchema(
             "D6",
-            _base_fields()
+            (_feature("sales", FeatureRole.TARGET_SIGNAL),)
+            + _date_fields()
             + (
-                _calendar("weekday"),
-                _calendar("is_event_1"),
-                _calendar("is_event_2"),
+                _future("weekday", dtype="object"),
+                _future("wday", dtype="int64"),
+                _future("wm_yr_wk", dtype="int64"),
+                _future("event_name_1", dtype="object"),
+                _future("event_type_1", dtype="object"),
+                _future("event_name_2", dtype="object"),
+                _future("event_type_2", dtype="object"),
                 _calendar("snap"),
+                _future("sell_price"),
             ),
         ),
     }
@@ -510,24 +536,15 @@ _KNN_SCHEMAS: Mapping[str, KnnFeatureSchema] = MappingProxyType(
         "D2": KnnFeatureSchema("D2", (_knn_field("sales"), _knn_field("promo"))),
         "D3": KnnFeatureSchema(
             "D3",
-            (
-                _knn_field("sales"),
-                _knn_field("Customers"),
-                _knn_field("Open"),
-                _knn_field("Promo"),
-            ),
+            (_knn_field("sales"),),
         ),
         "D4": KnnFeatureSchema(
             "D4",
             (
                 _knn_field("sales"),
+                _knn_field("hours_sale", _AUDIT),
+                _knn_field("hours_stock_status", _AUDIT),
                 _knn_field("stock_hour6_22_cnt", _AUDIT),
-                _knn_field("activity_flag", _AUDIT),
-                _knn_field("discount", _AUDIT),
-                _knn_field("precpt", _AUDIT),
-                _knn_field("avg_temperature", _AUDIT),
-                _knn_field("avg_humidity", _AUDIT),
-                _knn_field("avg_wind_level", _AUDIT),
                 _knn_field("hours_sale_sum_leakage_risk", _AUDIT),
                 _knn_field("hours_sale_max_leakage_risk", _AUDIT),
                 _knn_field("hours_sale_nonzero_hours_leakage_risk", _AUDIT),
@@ -541,11 +558,10 @@ _KNN_SCHEMAS: Mapping[str, KnnFeatureSchema] = MappingProxyType(
             (
                 _knn_field("sales"),
                 _knn_field("onpromotion"),
-                _knn_field("transactions"),
                 _knn_field("oil_price"),
             ),
         ),
-        "D6": KnnFeatureSchema("D6", (_knn_field("sales"), _knn_field("sell_price"))),
+        "D6": KnnFeatureSchema("D6", (_knn_field("sales"),)),
     }
 )
 
@@ -610,12 +626,25 @@ _CALENDAR_RULES = {
     "week": "date.isocalendar().week",
     "day": "date.day",
     "weekday": "sealed_calendar.weekday",
+    "wday": "sealed_calendar.wday",
+    "wm_yr_wk": "sealed_calendar.wm_yr_wk",
     "SchoolHoliday": "sealed_calendar.school_holiday",
     "holiday_flag": "sealed_calendar.holiday_flag",
     "is_holiday": "sealed_calendar.is_holiday",
-    "is_event_1": "sealed_calendar.primary_event_present",
-    "is_event_2": "sealed_calendar.secondary_event_present",
+    "event_name_1": "sealed_calendar.event_name_1",
+    "event_type_1": "sealed_calendar.event_type_1",
+    "event_name_2": "sealed_calendar.event_name_2",
+    "event_type_2": "sealed_calendar.event_type_2",
     "snap": "sealed_calendar.snap_schedule",
+    "activity_flag": "benchmark.activity_flag",
+    "discount": "benchmark.discount",
+    "precpt": "benchmark.precpt",
+    "avg_temperature": "benchmark.avg_temperature",
+    "avg_humidity": "benchmark.avg_humidity",
+    "avg_wind_level": "benchmark.avg_wind_level",
+    "onpromotion": "benchmark.onpromotion",
+    "oil_price": "prior_day_or_earlier.oil_price",
+    "sell_price": "benchmark.sell_price_exact_key",
 }
 
 

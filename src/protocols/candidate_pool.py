@@ -566,6 +566,11 @@ def prepare_daily_sequence_pool(
             indexed[column] = value
         canonical_input = indexed.reset_index(drop=True)
         reasons = list(ineligible_reasons.get(key, ()))
+        if missing_mask.any():
+            reasons.append(
+                "missing_observed_dates" if missing_mask[-30:].any()
+                else "missing_source_history_dates"
+            )
         try:
             canonical, repair = canonicalize_source_sales(
                 canonical_input,
@@ -730,9 +735,9 @@ def select_daily_sequence_sources(
     normalized_features = tuple(str(column) for column in feature_cols)
     if not normalized_features or normalized_features[0] != "sales":
         raise ProtocolViolation("feature_cols must start with sales in frozen KNN order")
-    normalized_model_features = tuple(
-        dict.fromkeys(str(column) for column in (model_feature_cols or normalized_features))
-    )
+    # Candidate eligibility is defined exclusively by the frozen KNN safe
+    # view. Predictor completeness belongs to the independent model preflight.
+    normalized_model_features = normalized_features
     if not isinstance(k, int) or isinstance(k, bool) or k <= 0:
         raise ProtocolViolation("K must be a positive integer")
     normalized_scenario = normalize_scenario(scenario)
@@ -781,11 +786,11 @@ def select_daily_sequence_sources(
     )
     pool.validate_for(group_cols=group_cols, required_dates=required_dates)
     if pool.pretrain_dates != tuple(pd.date_range(pretrain_start, pretrain_end).strftime("%Y-%m-%d")):
-        raise ProtocolViolation("prepared pool source pretrain dates differ from exact 180-day window")
+        raise ProtocolViolation("WINDOW_FAILURE: prepared pool source pretrain dates differ from exact 180-day window")
     if pool.knn_feature_cols != normalized_features:
-        raise ProtocolViolation("prepared pool KNN feature order differs from frozen schema")
+        raise ProtocolViolation("KNN_SCHEMA_FAILURE: prepared pool KNN feature order differs from frozen schema")
     if pool.required_feature_cols != normalized_model_features:
-        raise ProtocolViolation("prepared pool model feature order differs from predictor schema")
+        raise ProtocolViolation("KNN_SCHEMA_FAILURE: prepared pool required fields differ from frozen KNN schema")
 
     valid_keys = []
     raw_vectors = []
@@ -843,8 +848,14 @@ def select_daily_sequence_sources(
     scaler_values = np.concatenate((target_vector, source_matrix.reshape(-1)))
     scaler_min = float(np.min(scaler_values))
     scaler_max = float(np.max(scaler_values))
-    scaled_sources = source_matrix.copy()
-    distances = np.linalg.norm(source_matrix - target_vector, axis=1).astype(np.float64)
+    if scaler_max == scaler_min:
+        scaled_sources = np.zeros_like(source_matrix)
+        scaled_target = np.zeros_like(target_vector)
+    else:
+        scale = np.float64(scaler_max - scaler_min)
+        scaled_sources = (source_matrix - np.float64(scaler_min)) / scale
+        scaled_target = (target_vector - np.float64(scaler_min)) / scale
+    distances = np.linalg.norm(scaled_sources - scaled_target, axis=1).astype(np.float64)
     ranked = rank_source_distances(
         valid_keys,
         distances,

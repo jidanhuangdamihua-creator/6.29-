@@ -13,6 +13,7 @@ from src.source_selection.source_selector import SourceSelector
 class SourceSelectorSharedProtocolTest(unittest.TestCase):
     def setUp(self) -> None:
         dates = pd.date_range("2020-01-01", periods=35, freq="D")
+        source_dates = pd.date_range(dates[0] - pd.Timedelta(days=150), periods=180, freq="D")
         self.target = pd.DataFrame(
             {
                 "store_id": "T1",
@@ -30,8 +31,8 @@ class SourceSelectorSharedProtocolTest(unittest.TestCase):
                         "store_id": store,
                         "item_id": item,
                         "second_category_id": category,
-                        "date": dates,
-                        "sales": np.r_[np.full(30, value), np.full(5, future)],
+                        "date": source_dates,
+                        "sales": np.full(180, value),
                         "identifier_feature": identifier,
                     }
                 )
@@ -135,6 +136,7 @@ class SourceSelectorSharedProtocolTest(unittest.TestCase):
         self,
     ) -> None:
         dates = pd.date_range("2020-01-01", periods=35, freq="D")
+        source_dates = pd.date_range(dates[0] - pd.Timedelta(days=150), periods=180, freq="D")
         target = pd.DataFrame(
             {
                 "store_id": "T1",
@@ -151,8 +153,8 @@ class SourceSelectorSharedProtocolTest(unittest.TestCase):
                         "store_id": store,
                         "item_id": item,
                         "family": family,
-                        "date": dates,
-                        "sales": np.full(35, value),
+                        "date": source_dates,
+                        "sales": np.full(180, value),
                     }
                 )
                 for store, item, family, value in (
@@ -163,6 +165,10 @@ class SourceSelectorSharedProtocolTest(unittest.TestCase):
             ],
             ignore_index=True,
         )
+        source["onpromotion"] = 0.0
+        source["oil_price"] = 40.0
+        target["onpromotion"] = 0.0
+        target["oil_price"] = 40.0
         source, target = configure_protocol_frames(
             source,
             target,

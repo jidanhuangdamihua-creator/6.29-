@@ -10,6 +10,7 @@ from src.source_selection.source_selector import SourceSelector
 
 def test_d4_d6_audit_uses_production_digest_and_daily_representation() -> None:
     dates = pd.date_range("2020-01-01", periods=35, freq="D")
+    source_dates = pd.date_range(dates[0] - pd.Timedelta(days=150), periods=180, freq="D")
     target = pd.DataFrame(
         {
             "store_nbr": "S1",
@@ -17,6 +18,8 @@ def test_d4_d6_audit_uses_production_digest_and_daily_representation() -> None:
             "family": "F1",
             "date": dates,
             "sales": np.r_[np.zeros(30), np.ones(5)],
+            "onpromotion": 0.0,
+            "oil_price": 40.0,
         }
     )
     source = pd.concat(
@@ -26,8 +29,10 @@ def test_d4_d6_audit_uses_production_digest_and_daily_representation() -> None:
                     "store_nbr": store,
                     "item_nbr": item,
                     "family": "F1",
-                    "date": dates[:30],
+                    "date": source_dates,
                     "sales": value,
+                    "onpromotion": 0.0,
+                    "oil_price": 40.0,
                 }
             )
             for store, item, value in (("S1", "I2", 1.0), ("S2", "I2", 2.0))
@@ -52,6 +57,6 @@ def test_d4_d6_audit_uses_production_digest_and_daily_representation() -> None:
     digest_input = result["meta"]["candidate_pool_digest_input"]
 
     assert result["meta"]["representation"] == "daily_sales_flattened_30d"
-    assert result["meta"]["feature_cols"] == ["sales"]
+    assert result["meta"]["feature_cols"] == ["sales", "onpromotion", "oil_price"]
     assert result["meta"]["candidate_pool_digest"] == build_candidate_pool_digest(**digest_input)
     assert result["meta"]["selected_sources_runtime"] == result["sources"]

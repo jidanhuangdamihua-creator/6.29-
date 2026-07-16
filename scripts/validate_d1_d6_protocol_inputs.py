@@ -25,7 +25,8 @@ from src.protocols.candidate_pool import (
     PreparedDailySequencePool,
     prepare_daily_sequence_pool,
 )
-from src.protocols.runner_adapter import configure_protocol_frames
+from src.protocols.experiment_protocol import ProtocolViolation
+from src.protocols.runner_adapter import configure_protocol_frames, validate_predictor_safe_view
 from src.protocols.adopt_validation import (
     VALIDATION_POLICY_DIGEST,
     VALIDATION_POLICY_VERSION,
@@ -417,6 +418,36 @@ def validate_protocol_frames(
         }
 
 
+def validate_predictor_preflight(
+    frame: pd.DataFrame,
+    *,
+    dataset_id: object,
+    passthrough_cols: Sequence[str] = ("date",),
+) -> dict[str, Any]:
+    """Validate the model view without changing KNN candidate eligibility."""
+    try:
+        validate_predictor_safe_view(
+            frame,
+            dataset_id=dataset_id,
+            passthrough_cols=passthrough_cols,
+        )
+        schema = get_predictor_schema(dataset_id)
+        return {
+            "status": "passed",
+            "failure_code": "",
+            "predictor_schema_digest": schema.digest,
+            "predictor_fields": list(schema.ordered_names),
+            "error": "",
+        }
+    except ProtocolViolation as exc:
+        message = str(exc)
+        return {
+            "status": "failed",
+            "failure_code": message.split(":", 1)[0],
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+
 def summarize_candidate_exclusions(
     exclusions: Sequence[dict[str, Any] | Any],
     *,
@@ -474,10 +505,17 @@ def build_preflight_reports(
 ) -> list[dict[str, Any]]:
     """Prepare source observations once and validate every target against that pool."""
     metadata_cols = (str(grouping_col),) if grouping_col else ()
+    observed_start_ts = pd.Timestamp(observed_start).normalize()
+    observed_end_ts = observed_start_ts + pd.Timedelta(days=29)
     prepared_pool = pool_factory(
         source,
         group_cols=tuple(group_cols),
         observed_start=observed_start,
+        observed_end=observed_end_ts,
+        pretrain_start=observed_end_ts - pd.Timedelta(days=179),
+        pretrain_end=observed_end_ts,
+        knn_feature_cols=get_knn_schema(dataset_id).ordered_names,
+        required_feature_cols=get_knn_schema(dataset_id).ordered_names,
         metadata_cols=metadata_cols,
     )
     stub_columns = list(dict.fromkeys([*group_cols, "date", "sales", *metadata_cols]))

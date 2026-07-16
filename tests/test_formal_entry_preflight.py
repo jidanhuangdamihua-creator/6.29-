@@ -9,13 +9,28 @@ import scripts.run_unified_d1_d6 as unified
 from scripts.validate_d1_d6_protocol_inputs import validate_formal_entry_preflight
 
 
-def test_repository_sealed_root_passes_layered_preflight() -> None:
+def _compliant_preflight(**kwargs):
+    report = validate_formal_entry_preflight(run_id=str(kwargs.get("run_id", "fixture")))
+    report["status"] = "ready"
+    report["failure_codes"] = []
+    report["checks"] = {name: True for name in report["checks"]}
+    for state in report["dataset_states"]:
+        state["state"] = "sealed"
+        state["failure_codes"] = []
+    return report
+
+
+def test_repository_old_sealed_root_fails_closed_on_frozen_schema() -> None:
     report = validate_formal_entry_preflight(run_id="contract-test")
 
-    assert report["status"] == "ready"
+    assert report["status"] == "blocked"
     assert len(report["dataset_states"]) == 6
-    assert {item["state"] for item in report["dataset_states"]} == {"sealed"}
-    assert report["failure_codes"] == []
+    assert any(
+        code.endswith("PREDICTOR_SCHEMA_MISMATCH")
+        or code.endswith("KNN_SCHEMA_MISMATCH")
+        for code in report["failure_codes"]
+    )
+    assert report["checks"]["six_dataset_seals"] is False
 
 
 def test_missing_dataset_blocks_globally_but_preserves_per_dataset_evidence(
@@ -52,10 +67,17 @@ def test_blocked_preflight_creates_neither_run_directory_nor_attempt(
 
 def test_formal_dry_run_resolves_complete_read_only_protocol_summary(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     run_root = tmp_path / "dry-run-must-not-exist"
     tasks = unified.build_tasks(None, smoke=False, run_dir=run_root)
 
+    calls = []
+    monkeypatch.setattr(
+        unified,
+        "validate_formal_entry_preflight",
+        lambda **kwargs: calls.append(kwargs) or _compliant_preflight(**kwargs),
+    )
     report = unified.build_formal_dry_run_report(tasks, run_root=run_root)
 
     assert report["preflight_status"] == "ready"
@@ -120,15 +142,18 @@ def test_formal_dry_run_resolves_complete_read_only_protocol_summary(
     assert report["schema_digests"]["artifact_registry"]
     assert report["schema_digests"]["result_registry"]
     assert not run_root.exists()
+    assert calls == [{"run_id": run_root.name}]
 
 
 def test_print_formal_dry_run_is_canonical_json_and_creates_no_output(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     run_root = tmp_path / "dry-run-must-not-exist"
     tasks = unified.build_tasks(None, smoke=False, run_dir=run_root)
 
+    monkeypatch.setattr(unified, "validate_formal_entry_preflight", _compliant_preflight)
     unified.print_dry_run(tasks, run_root=run_root)
 
     output = capsys.readouterr().out

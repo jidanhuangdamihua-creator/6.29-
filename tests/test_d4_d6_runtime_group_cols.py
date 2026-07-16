@@ -22,6 +22,7 @@ def test_shared_selector_records_physical_group_keys(
     grouping_col: str,
 ) -> None:
     dates = pd.date_range("2020-01-01", periods=35, freq="D")
+    source_dates = pd.date_range(dates[0] - pd.Timedelta(days=150), periods=180, freq="D")
     target = pd.DataFrame(
         {
             group_cols[0]: "T1",
@@ -38,7 +39,7 @@ def test_shared_selector_records_physical_group_keys(
                     group_cols[0]: store,
                     group_cols[1]: item,
                     grouping_col: "G1",
-                    "date": dates[:30],
+                    "date": source_dates,
                     "sales": value,
                 }
             )
@@ -46,6 +47,11 @@ def test_shared_selector_records_physical_group_keys(
         ],
         ignore_index=True,
     )
+    if dataset_id == 5:
+        source["onpromotion"] = 0.0
+        source["oil_price"] = 40.0
+        target["onpromotion"] = 0.0
+        target["oil_price"] = 40.0
     source, target = configure_protocol_frames(
         source,
         target,

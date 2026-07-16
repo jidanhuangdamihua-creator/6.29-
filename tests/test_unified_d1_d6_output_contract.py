@@ -69,7 +69,7 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
                 run_full_paper_experiments._should_sync_latest_results_copy()
             )
 
-    def test_parallel_runner_dry_run_prints_twelve_mode_workers(self):
+    def test_parallel_runner_dry_run_blocks_on_old_sealed_schema(self):
         runner = ROOT / "scripts" / "parallel_runner.sh"
         self.assertTrue(runner.is_file(), "parallel runner script is missing")
 
@@ -81,15 +81,11 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertIn("[FORMAL PLAN] cells=60 unique=60", completed.stdout)
-        mode_lines = [
-            line for line in completed.stdout.splitlines() if line.startswith("[MODE]")
-        ]
-        self.assertEqual(12, len(mode_lines))
-        self.assertEqual(12, len(set(mode_lines)))
-        self.assertRegex(completed.stdout, r"outputs/runs/\d{8}_\d{6}_formal/d1_without")
-        self.assertNotRegex(completed.stdout, r"d[1-6]_(?:with|without)/d[1-6]_(?:with|without)")
+        self.assertNotEqual(0, completed.returncode)
+        self.assertRegex(
+            completed.stdout + completed.stderr,
+            r"PREDICTOR_SCHEMA_MISMATCH|KNN_SCHEMA_MISMATCH",
+        )
 
     def test_parallel_runner_has_no_thread_limits_or_aggregation(self):
         runner = ROOT / "scripts" / "parallel_runner.sh"
@@ -228,7 +224,7 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
                 run_unified_d1_d6.main()
         resolve_root.assert_not_called()
 
-    def test_parallel_mode_runner_dry_run_prints_bounded_60_bundle_plan(self):
+    def test_parallel_mode_runner_dry_run_blocks_on_old_sealed_schema(self):
         runner = ROOT / "scripts" / "parallel_mode_runner.sh"
         self.assertTrue(runner.is_file(), "parallel mode runner script is missing")
 
@@ -244,13 +240,13 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertIn("MAX_JOBS=6", completed.stdout)
-        self.assertIn("D5_MAX_JOBS=1", completed.stdout)
-        self.assertIn("[FORMAL PLAN] cells=60 unique=60", completed.stdout)
-        self.assertEqual(12, completed.stdout.count("[MODE]"))
+        self.assertNotEqual(0, completed.returncode)
+        self.assertRegex(
+            completed.stdout + completed.stderr,
+            r"PREDICTOR_SCHEMA_MISMATCH|KNN_SCHEMA_MISMATCH",
+        )
 
-    def test_parallel_mode_runner_dry_run_honors_max_jobs_override(self):
+    def test_parallel_mode_runner_override_still_cannot_bypass_preflight(self):
         runner = ROOT / "scripts" / "parallel_mode_runner.sh"
         self.assertTrue(runner.is_file(), "parallel mode runner script is missing")
 
@@ -266,8 +262,11 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertIn("MAX_JOBS=12", completed.stdout)
+        self.assertNotEqual(0, completed.returncode)
+        self.assertRegex(
+            completed.stdout + completed.stderr,
+            r"PREDICTOR_SCHEMA_MISMATCH|KNN_SCHEMA_MISMATCH",
+        )
 
     def test_d4_alignment_uses_reference_dataset_to_error_columns_and_keeps_source_trace(self):
         raw = pd.DataFrame(
