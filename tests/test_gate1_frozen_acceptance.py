@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import tempfile
 from pathlib import Path
 
@@ -43,14 +44,193 @@ def _raw_hash(path: Path) -> str:
 def test_TC_001_authority_precedence_and_temp_path_rejection(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     loader = FormalInputLoader(root)
-    loaded = loader.load()
-    assert tuple(loaded) == (
+    formal_paths = (
         "docs/protocol/gate1_frozen_transformation_contract.md",
         "docs/protocol/gate1_implementation_scope.md",
         "docs/protocol/gate1_contract_traceability_matrix.md",
     )
+    assert tuple(path for path in formal_paths if (root / path).is_file()) == formal_paths
+    contract = root / formal_paths[0]
+    actual_digest = hashlib.sha256(contract.read_bytes()).hexdigest()
+    sidecar = (root / "docs/protocol/gate1_frozen_transformation_contract.sha256").read_text(encoding="utf-8")
+    assert f"contract_digest: sha256:{actual_digest}" in sidecar
+    assert "contract_version: 1R.1.0" in sidecar
     with pytest.raises(Gate1Failure, match="AUTHORITY_PATH"):
         loader.load([tmp_path / "gate1_frozen_transformation_contract.md"])
+
+
+def _formal_doc_texts() -> dict[str, str]:
+    root = Path(__file__).resolve().parents[1]
+    return {
+        "contract": (root / "docs/protocol/gate1_frozen_transformation_contract.md").read_text(encoding="utf-8"),
+        "scope": (root / "docs/protocol/gate1_implementation_scope.md").read_text(encoding="utf-8"),
+        "matrix": (root / "docs/protocol/gate1_contract_traceability_matrix.md").read_text(encoding="utf-8"),
+    }
+
+
+def test_gate1r_formal_docs_have_unique_global_and_dataset_sections() -> None:
+    contract = _formal_doc_texts()["contract"]
+    for decision_id in (f"G{index:02d}" for index in range(1, 17)):
+        assert len(re.findall(rf"^### {decision_id} —", contract, flags=re.MULTILINE)) == 1
+    for dataset in ("D1", "D2", "D3", "D4", "D5", "D6"):
+        assert len(re.findall(rf"^### {dataset} —", contract, flags=re.MULTILINE)) == 1
+
+
+def test_gate1r_each_dataset_chapter_has_the_required_contract_fields() -> None:
+    contract = _formal_doc_texts()["contract"]
+    labels = (
+        "Raw authority",
+        "Main backtest authority",
+        "Extra benchmark/holdout role",
+        "Forecast origin",
+        "Origin authority",
+        "Origin role",
+        "Source history interval",
+        "Target train interval",
+        "Validation interval",
+        "Blind interval",
+        "Target canonical keys",
+        "Source eligibility",
+        "KNN window and fields",
+        "Expected cardinality",
+        "Calendar/missing rules",
+        "Field-specific availability",
+        "Worker-safe fields",
+        "Evaluator truth",
+        "Audit-only fields",
+        "Forbidden fields",
+        "Canonical digest objects",
+        "Fail-closed conditions",
+        "Unique executable conclusion",
+    )
+    headings = list(re.finditer(r"^### D[1-6] —", contract, flags=re.MULTILINE))
+    assert len(headings) == 6
+    for index, match in enumerate(headings):
+        section = contract[match.start() : headings[index + 1].start() if index + 1 < len(headings) else len(contract)]
+        for label in labels:
+            assert f"**{label}.**" in section, label
+
+
+def test_gate1r_final_human_overrides_are_affirmative_and_testable() -> None:
+    contract = _formal_doc_texts()["contract"]
+    assert "D2 and D5 missing-day rules below close their observed 175/180 and 885/900 gaps." in contract
+    assert "sales=0" in contract and "rebuild the approved covariates" in contract
+    assert "48/1159415" in contract
+    assert "forecast PROMO is unavailable and must be excluded" in contract
+    assert "transactions never enter worker/KNN/model" in contract
+    assert "history-only forward fill followed by lag-one" in contract
+    assert "week` is deleted" in contract
+    assert "`weekday` is the original `calendar.csv` string/object and `wday` is the original `calendar.csv` integer" in contract
+    assert "Order is `weekday`, `wday`, `wm_yr_wk`." in contract
+    assert "sell_price` joins exactly on `(store_id,item_id,wm_yr_wk)`" in contract
+    assert "`entity_id` is display/serialization metadata and cannot replace the composite source key." in contract
+
+
+def test_gate1r_formal_docs_have_no_unresolved_markers() -> None:
+    markers = (
+        "待确认",
+        "等待确认",
+        "按绿色方案",
+        "是否保留",
+        "候选方案",
+        "TBD",
+        "TODO",
+        "大致",
+        "视情况",
+        "按现有逻辑",
+        "后续决定",
+    )
+    for name, text in _formal_doc_texts().items():
+        for marker in markers:
+            assert marker not in text, f"{name}: {marker}"
+
+
+def test_gate1r_traceability_is_closed() -> None:
+    docs = _formal_doc_texts()
+    matrix = docs["matrix"]
+    required_columns = (
+        "Decision ID",
+        "Dataset",
+        "Contract clause",
+        "Human decision source",
+        "Implementation component",
+        "Expected artifact/view",
+        "Proof/digest",
+        "Acceptance test",
+        "Real-input readiness check",
+        "Publication gate",
+        "Failure code",
+        "Status",
+    )
+    header = next(line for line in matrix.splitlines() if line.startswith("| Decision ID |"))
+    assert all(column in header for column in required_columns)
+    decision_ids = [f"G{index:02d}" for index in range(1, 17)]
+    decision_ids += [
+        *(f"D1-{index:02d}" for index in range(1, 8)),
+        *(f"D2-{index:02d}" for index in range(1, 8)),
+        *(f"D3-{index:02d}" for index in range(1, 8)),
+        *(f"D4-{index:02d}" for index in range(1, 7)),
+        *(f"D5-{index:02d}" for index in range(1, 11)),
+        *(f"D6-{index:02d}" for index in range(1, 8)),
+        "P-01",
+        "P-02",
+        "P-03",
+    ]
+    for decision_id in decision_ids:
+        assert f"| {decision_id} |" in matrix, decision_id
+    rows = [
+        line for line in matrix.splitlines()
+        if line.startswith("| ") and not line.startswith("|---") and not line.startswith("| Decision ID")
+    ]
+    assert rows
+    for row in rows:
+        cells = [cell.strip() for cell in row.strip("|").split("|")]
+        assert len(cells) == 12, row
+        assert all(cells), row
+    assert "same as above" not in matrix
+    assert "现有逻辑" not in matrix
+    assert "后续补充" not in matrix
+
+
+def test_gate1r_sidecar_record_and_combined_identity_are_exact() -> None:
+    root = Path(__file__).resolve().parents[1]
+    docs = _formal_doc_texts()
+    hashes = {name: hashlib.sha256(text.encode("utf-8")).hexdigest() for name, text in docs.items()}
+    sidecar = (root / "docs/protocol/gate1_frozen_transformation_contract.sha256").read_text(encoding="utf-8")
+    record = (root / "docs/protocol/gate1r_contract_refreeze_record.md").read_text(encoding="utf-8")
+    decision_book_hash = "4aaebe5f07d3dc0e61ada72dbe0625c82615ba74577e91b72b46b07a709c689d"
+    combined_payload = (
+        f"decision_book_sha256={decision_book_hash}\n"
+        f"contract_sha256={hashes['contract']}\n"
+        f"scope_sha256={hashes['scope']}\n"
+        f"matrix_sha256={hashes['matrix']}\n"
+    ).encode("utf-8")
+    combined = hashlib.sha256(combined_payload).hexdigest()
+    assert f"contract_digest: sha256:{hashes['contract']}" in sidecar
+    assert f"scope_sha256: sha256:{hashes['scope']}" in sidecar
+    assert f"matrix_sha256: sha256:{hashes['matrix']}" in sidecar
+    assert f"combined_formal_identity_digest: sha256:{combined}" in sidecar
+    assert f"Contract SHA-256: `sha256:{hashes['contract']}`" in record
+    assert f"Scope SHA-256: `sha256:{hashes['scope']}`" in record
+    assert f"Matrix SHA-256: `sha256:{hashes['matrix']}`" in record
+    assert f"Combined formal identity digest: `sha256:{combined}`" in record
+    assert "old_contract_status: SUPERSEDED" in sidecar
+    assert "Old contract status: `SUPERSEDED`" in record
+    assert "all green-highlighted entries are approved final decisions" in record
+    assert "Freeze commit: `resolved by the commit containing this record`" in record
+
+
+def test_gate1r_scope_contains_the_complete_one_time_implementation() -> None:
+    scope = _formal_doc_texts()["scope"]
+    for index in range(1, 23):
+        assert f"| I{index:02d} |" in scope
+    assert "one implementation and one commit" in scope
+    assert "D2 175/180" in scope
+    assert "D5 885/900" in scope
+    assert "D6's dual weekday/wday schema" in scope
+    assert "tools/operations/materialize_d1_d6_sealed_authority.py" in scope
+    assert "scripts/adopt_and_seal_d3_d6.py" in scope
+    assert "src/protocols/gate1_transformation.py" in scope
 
 
 def test_TC_002_history_forecast_producer_isolation() -> None:

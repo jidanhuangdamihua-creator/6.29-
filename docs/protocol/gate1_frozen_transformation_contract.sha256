@@ -1,6 +1,16 @@
 algorithm: SHA-256
 contract_file: docs/protocol/gate1_frozen_transformation_contract.md
-contract_version: 1.0.0
+contract_version: 1R.1.0
 canonical_bytes: exact UTF-8 bytes with LF line endings
 excluded_from_hash: this sidecar file
-contract_digest: sha256:b145028c2b3f8314e66fc73be9795269644d016a7a1cf258a9f62f1b7443d09e
+contract_digest: sha256:85713b9d13cae3c017c4856b6a0f42a49d6074aebbb729171d60b95baa42eb74
+old_contract_digest: sha256:b145028c2b3f8314e66fc73be9795269644d016a7a1cf258a9f62f1b7443d09e
+old_contract_status: SUPERSEDED
+decision_book_sha256: sha256:4aaebe5f07d3dc0e61ada72dbe0625c82615ba74577e91b72b46b07a709c689d
+scope_file: docs/protocol/gate1_implementation_scope.md
+scope_sha256: sha256:98107929ea310e7fc304d2631803092e68c01e51fa992da96a3c3118b628eeb4
+matrix_file: docs/protocol/gate1_contract_traceability_matrix.md
+matrix_sha256: sha256:80545e2739dacdedfd8e60857bd8828dbf2102db37fc310ae4fc994b194e1da3
+combined_formal_identity_rule: sha256 over decision_book_sha256, contract_sha256, scope_sha256, matrix_sha256 LF records in that order
+combined_formal_identity_digest: sha256:3d11fef7b4edeb9fc804cc61455095b59e2c995afda11ba7d2c2a8afed7000e6
+refreeze_record: docs/protocol/gate1r_contract_refreeze_record.md
