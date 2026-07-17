@@ -234,7 +234,6 @@ _PROTOCOLS = {
             None,
             "category",
             require_same_group=False,
-            excluded_candidate_key_fields=("product_id",),
             domain_filter_scope="target_only",
         ),
         formal_target_keys=(

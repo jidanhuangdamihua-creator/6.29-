@@ -161,7 +161,7 @@ class Dataset4RegenerateRuntimeProtocolParityTest(unittest.TestCase):
                     "selected_count": 3,
                     "observed_days": 30,
                     "require_same_group": False,
-                    "excluded_candidate_key_fields": ["product_id"],
+                    "excluded_candidate_key_fields": [],
                 }
             },
         )
@@ -228,7 +228,9 @@ class Dataset4RegenerateRuntimeProtocolParityTest(unittest.TestCase):
         self.assertEqual(_key_set(runtime["meta"]["eligible_candidate_keys"]), _key_set(regenerated["meta"]["eligible_candidate_keys"]))
         self.assertIn(("167", "263"), _key_set(regenerated["meta"]["eligible_candidate_keys"]))
         self.assertIn(("168", "264"), _key_set(regenerated["meta"]["eligible_candidate_keys"]))
-        self.assertNotIn(("167", "258"), _key_set(regenerated["meta"]["eligible_candidate_keys"]))
+        self.assertIn(("167", "258"), _key_set(regenerated["meta"]["eligible_candidate_keys"]))
+        self.assertEqual(runtime["meta"]["eligible_candidate_count"], 7)
+        self.assertEqual(runtime["meta"]["valid_30d_candidate_count"], 6)
         self.assertEqual(_source_keys(runtime), _source_keys(regenerated))
         self.assertEqual(
             runtime["meta"]["source_skip_diagnostics"],

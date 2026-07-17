@@ -175,7 +175,7 @@ class Dataset4CandidateProtocolTest(unittest.TestCase):
         self.assertLess(len(after), len(source))
         self.assertTrue(config["domain_filter_applied_to_source"])
 
-    def test_shared_d4_protocol_uses_product_not_second_category_for_eligibility(
+    def test_shared_d4_protocol_uses_full_entity_key_not_second_category_for_eligibility(
         self,
     ) -> None:
         identities = (
@@ -202,8 +202,64 @@ class Dataset4CandidateProtocolTest(unittest.TestCase):
                 SAME_STORE_DIFFERENT_CATEGORY_KEY,
                 SAME_STORE_SAME_CATEGORY_KEY,
                 CROSS_STORE_DIFFERENT_CATEGORY_KEY,
+                CROSS_STORE_SAME_PRODUCT_KEY,
             ),
         )
+
+    def test_d4_excludes_only_exact_full_key_and_preserves_candidate_order(self) -> None:
+        identities = (
+            SourceIdentity(("396", "258")),
+            SourceIdentity(("166", "601")),
+            SourceIdentity(("166", "258")),
+            SourceIdentity(("200", "258")),
+            SourceIdentity(("166", "432")),
+        )
+
+        candidate_keys = build_candidate_keys(
+            get_experiment_protocol("D4"),
+            "with",
+            ("166", "258"),
+            identities,
+        )
+
+        self.assertEqual(
+            candidate_keys,
+            (
+                ("166", "432"),
+                ("166", "601"),
+                ("200", "258"),
+                ("396", "258"),
+            ),
+        )
+        self.assertNotIn(("166", "258"), candidate_keys)
+        self.assertIn(("396", "258"), candidate_keys)
+        self.assertIn(("166", "432"), candidate_keys)
+        self.assertEqual(
+            set(candidate_keys).intersection({("166", "258")}),
+            set(),
+        )
+
+    def test_d4_multiple_targets_exclude_only_each_exact_full_key(self) -> None:
+        target_keys = (("166", "258"), ("166", "432"), ("200", "258"))
+        identities = tuple(SourceIdentity(key) for key in target_keys) + (
+            SourceIdentity(("396", "258")),
+            SourceIdentity(("166", "601")),
+        )
+        protocol = get_experiment_protocol("D4")
+
+        candidate_keys_by_target = {
+            target_key: build_candidate_keys(protocol, "with", target_key, identities)
+            for target_key in target_keys
+        }
+
+        for target_key, candidate_keys in candidate_keys_by_target.items():
+            self.assertNotIn(target_key, candidate_keys)
+            self.assertEqual(
+                set(candidate_keys).intersection({target_key}),
+                set(),
+            )
+        self.assertIn(("396", "258"), candidate_keys_by_target[("166", "258")])
+        self.assertIn(("166", "432"), candidate_keys_by_target[("166", "258")])
 
     def test_d5_still_excludes_different_group_candidates(self) -> None:
         target = _rows(166, 258, 20, DATES).assign(family="F1")
@@ -249,14 +305,14 @@ class Dataset4CandidateProtocolTest(unittest.TestCase):
             candidate["second_category_id"].iloc[0], target["second_category_id"].iloc[0]
         )
 
-    def test_with_allows_cross_store_different_second_category_but_not_same_product(
+    def test_with_allows_cross_store_candidates_including_same_product(
         self,
     ) -> None:
         candidate_keys = _candidate_keys(scenario="with")
 
         self.assertIn(CROSS_STORE_DIFFERENT_CATEGORY_KEY, candidate_keys)
         self.assertNotIn(TARGET_KEY, candidate_keys)
-        self.assertNotIn(CROSS_STORE_SAME_PRODUCT_KEY, candidate_keys)
+        self.assertIn(CROSS_STORE_SAME_PRODUCT_KEY, candidate_keys)
         source, target = _d4_frames()
         candidate = source[(source["store_id"] == 167) & (source["product_id"] == 260)]
         self.assertNotEqual(candidate["store_id"].iloc[0], target["store_id"].iloc[0])
@@ -265,6 +321,11 @@ class Dataset4CandidateProtocolTest(unittest.TestCase):
         )
         self.assertNotEqual(
             candidate["second_category_id"].iloc[0], target["second_category_id"].iloc[0]
+        )
+
+        self.assertEqual(
+            set(candidate_keys).intersection({TARGET_KEY}),
+            set(),
         )
 
     def test_prepared_pool_does_not_restore_second_category_restriction(
