@@ -25,6 +25,7 @@ from src.protocols.gate1_transformation import (
     rebuild_d2_wide_frame,
     slice_dataset_roles,
     source_pool_candidates,
+    stream_source_history_candidates,
 )
 
 
@@ -152,6 +153,30 @@ def test_source_pool_rules_are_frozen() -> None:
     assert source_pool_candidates("D2", "with-sharing") == (1, 2, 3)
     assert source_pool_candidates("D3", "without-sharing") == tuple(range(1, 10))
     assert 10 not in source_pool_candidates("D3", "with-sharing")
+
+
+def test_d5_source_stream_proof_calendarizes_only_approved_candidate_window(tmp_path: Path) -> None:
+    spec = dataset_contract("D5")
+    missing = pd.Timestamp("2016-12-25")
+    dates = pd.date_range(spec.source_history_start, spec.source_history_end).difference(pd.DatetimeIndex([missing]))
+    source = _frame(("store_nbr", "item_nbr"), (49, 999999), dates, family="GROCERY I")
+    source_path = tmp_path / "d5-source.parquet"
+    source.to_parquet(source_path, index=False)
+    target = _frame(("store_nbr", "item_nbr"), (48, 364606), pd.DatetimeIndex([spec.origin]), family="GROCERY I")
+
+    with pytest.raises(Gate1Failure, match="SOURCE_ENTITY_MISSING"):
+        stream_source_history_candidates("D5", source_path, "with-sharing", target_frame=target)
+
+    proof = stream_source_history_candidates(
+        "D5",
+        source_path,
+        "with-sharing",
+        target_frame=target,
+        allow_approved_calendarization=True,
+    )
+    assert proof["complete_candidate_keys"] == [["49", "999999"]]
+    assert proof["calendarization"]["repaired_rows"] == 1
+    assert proof["calendarization"]["calendarized_rows"] == 180
 
 
 def test_proof_writer_and_formal_preflight_require_all_layers() -> None:

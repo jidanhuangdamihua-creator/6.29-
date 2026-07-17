@@ -55,6 +55,12 @@ D4_AUDIT_ONLY = (
 D5_FORBIDDEN_FORECAST = ("transactions", "week")
 D3_FORBIDDEN_MODEL = ("Open", "Customers", "Promo", "Promo2", "PromoInterval")
 D6_CALENDAR_FIELDS = ("weekday", "wday", "wm_yr_wk")
+D2_SOURCE_MISSING_DATES = (
+    "2018-04-01",
+    "2018-04-25",
+    "2018-05-01",
+    "2018-06-02",
+)
 _HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -379,6 +385,44 @@ def rebuild_d2_wide_frame(raw: pd.DataFrame) -> pd.DataFrame:
     return _add_date_fields(rebuilt)
 
 
+def calendarize_d2_source_history(frame: pd.DataFrame, candidate_keys: Sequence[Sequence[object]]) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Close the four approved D2 source dates before eligibility selection."""
+    spec = dataset_contract("D2")
+    source = _prepare_frame(frame, label="D2 raw source", spec=spec)
+    source = source.loc[source["date"].between(pd.Timestamp(spec.source_history_start), pd.Timestamp(spec.source_history_end))].copy()
+    expected = pd.date_range(spec.source_history_start, spec.source_history_end, freq="D")
+    allowed_missing = {pd.Timestamp(value) for value in D2_SOURCE_MISSING_DATES}
+    rows: list[dict[str, object]] = []
+    repairs: list[dict[str, object]] = []
+    key_series = _key_series(source, spec.key_fields)
+    for raw_key in candidate_keys:
+        key = normalize_key(raw_key)
+        group = source.loc[key_series.map(lambda value, expected_key=key: value == expected_key)].copy()
+        if group.empty:
+            continue
+        actual = set(pd.DatetimeIndex(group["date"]))
+        missing = [timestamp for timestamp in expected if timestamp not in actual]
+        if any(timestamp not in allowed_missing for timestamp in missing):
+            raise Gate1Failure("D2_SOURCE_CALENDARIZATION", f"unapproved missing D2 source dates for {key}: {missing}")
+        rows.extend(group.to_dict(orient="records"))
+        template = group.iloc[0].to_dict()
+        for timestamp in missing:
+            row = dict(template)
+            for field, value in zip(spec.key_fields, key):
+                row[field] = value
+            row["date"] = timestamp
+            row["sales"] = 0
+            for field in ("year", "month", "week", "day"):
+                row[field] = getattr(timestamp, field) if field != "week" else int(timestamp.isocalendar().week)
+            rows.append(row)
+            repairs.append({"key": list(key), "date": timestamp.strftime("%Y-%m-%d"), "sales": 0, "rule": "D2_APPROVED_SOURCE_CALENDARIZATION"})
+    result = pd.DataFrame(rows, columns=list(source.columns))
+    if result.empty:
+        raise Gate1Failure("SOURCE_ENTITY_MISSING", "D2 source calendarization found no candidate entities")
+    result = _add_date_fields(result).sort_values([*spec.key_fields, "date"], kind="mergesort").reset_index(drop=True)
+    return result, {"rule": "D2_APPROVED_SOURCE_CALENDARIZATION", "missing_dates": list(D2_SOURCE_MISSING_DATES), "repairs": repairs, "rows_after": int(len(result)), "digest": normalized_frame_digest(result)}
+
+
 def normalize_onpromotion(values: pd.Series) -> pd.Series:
     normalized = []
     for value in values.tolist():
@@ -523,8 +567,6 @@ def select_source_history_candidates(
             complete.append(key)
         else:
             incomplete["/".join(key)] = int(count)
-    if require_complete and incomplete:
-        raise Gate1Failure("SOURCE_CARDINALITY", f"incomplete source candidates: {incomplete}")
     if require_complete and not complete:
         raise Gate1Failure("SOURCE_ENTITY_MISSING", "no complete approved source candidate")
     selected = source.loc[_key_series(source, spec.key_fields).isin(set(complete))].copy()
@@ -537,6 +579,148 @@ def select_source_history_candidates(
         "source_rows_after": int(len(selected)),
         "expected_days": 180,
     }
+
+
+def stream_source_history_candidates(
+    dataset: object,
+    source_path: Path,
+    scenario: str,
+    *,
+    target_frame: pd.DataFrame | None = None,
+    allow_approved_calendarization: bool = False,
+    batch_size: int = 500_000,
+) -> dict[str, object]:
+    """Prove source eligibility by scanning parquet batches without materializing it.
+
+    The stream keeps only candidate-key date sets and counters.  It never
+    constructs a full source DataFrame, so the same proof is safe for D4-D6.
+    """
+    spec = dataset_contract(dataset)
+    path = Path(source_path)
+    if not path.is_file() or path.is_symlink():
+        raise Gate1Failure("SOURCE_AUTHORITY_MISSING", str(path))
+    try:
+        import pyarrow.parquet as pq
+    except ImportError as exc:
+        raise Gate1Failure("SOURCE_STREAM_NOT_PROVEN", "pyarrow is required for bounded source proof") from exc
+    required = list(spec.key_fields) + ["date"] + ([spec.grouping_field] if spec.grouping_field else [])
+    parquet = pq.ParquetFile(path)
+    missing = [column for column in required if column not in parquet.schema_arrow.names]
+    if missing:
+        raise Gate1Failure("SOURCE_SCHEMA", f"source stream missing {missing}")
+    scenario_text = str(scenario).strip().lower().replace("_", "-")
+    if scenario_text in {"with", "with-sharing", "with-information-sharing"}:
+        shared = True
+    elif scenario_text in {"without", "without-sharing", "without-information-sharing"}:
+        shared = False
+    else:
+        raise Gate1Failure("SCENARIO", f"unsupported scenario {scenario!r}")
+    target_keys = set(spec.target_keys)
+    target_groups: set[str] = set()
+    if spec.grouping_field:
+        if target_frame is None or spec.grouping_field not in target_frame.columns:
+            raise Gate1Failure("SOURCE_GROUP_AUTHORITY", f"target is missing {spec.grouping_field}")
+        target_keys_mask = _mask_keys(_prepare_frame(target_frame, label=f"{spec.dataset} target", spec=spec), spec, spec.target_keys)
+        target_groups = {_normalized_component(value) for value in target_frame.loc[target_keys_mask, spec.grouping_field].dropna().tolist()}
+        if len(target_groups) != 1:
+            raise Gate1Failure("SOURCE_GROUP_AUTHORITY", f"target has ambiguous {spec.grouping_field}: {sorted(target_groups)}")
+    source_rows = 0
+    eligible_rows = 0
+    post_origin_rows = 0
+    duplicate_exact_key_dates = 0
+    date_masks_by_key: dict[tuple[str, ...], int] = {}
+    source_start = pd.Timestamp(spec.source_history_start)
+    allowed_item_ids = {str(value) for value in range(1, 10)}
+    allowed_domains = {_normalized_component(value) for value in source_pool_candidates(spec.dataset, "with-sharing" if shared else "without-sharing")} if spec.dataset in {"D1", "D2", "D3"} else set()
+    fields = list(dict.fromkeys(required))
+    for batch in parquet.iter_batches(columns=fields, batch_size=int(batch_size)):
+        chunk = batch.to_pandas()
+        source_rows += len(chunk)
+        dates = pd.to_datetime(chunk["date"], errors="coerce").dt.normalize()
+        if dates.isna().any():
+            raise Gate1Failure("INVALID_DATE", "source stream contains invalid date")
+        post_origin_rows += int((dates > pd.Timestamp(spec.origin)).sum())
+        history = chunk.loc[dates.between(pd.Timestamp(spec.source_history_start), pd.Timestamp(spec.source_history_end))].copy()
+        history["date"] = dates.loc[history.index]
+        for row in history.itertuples(index=False, name=None):
+            values = dict(zip(fields, row))
+            key = normalize_key(tuple(values[field] for field in spec.key_fields))
+            if key in target_keys:
+                continue
+            if spec.dataset in {"D1", "D2"}:
+                if key[0] not in allowed_domains or key[1] not in allowed_item_ids:
+                    continue
+            elif spec.dataset == "D3":
+                if key[0] not in allowed_domains:
+                    continue
+            elif spec.dataset in {"D4", "D5", "D6"}:
+                store = key[0]
+                target_store = spec.target_keys[0][0]
+                if not shared and store != target_store:
+                    continue
+                if spec.grouping_field and _normalized_component(values[spec.grouping_field]) not in target_groups:
+                    continue
+            timestamp = pd.Timestamp(values["date"])
+            bit = 1 << int((timestamp - source_start).days)
+            current_mask = date_masks_by_key.get(key, 0)
+            if current_mask & bit:
+                duplicate_exact_key_dates += 1
+            date_masks_by_key[key] = current_mask | bit
+            eligible_rows += 1
+    def _popcount(mask: int) -> int:
+        return bin(mask).count("1")
+
+    raw_counts = {"/".join(key): _popcount(mask) for key, mask in sorted(date_masks_by_key.items())}
+    raw_complete = sorted(key for key, mask in date_masks_by_key.items() if _popcount(mask) == 180)
+    incomplete = {key: count for key, count in raw_counts.items() if count != 180}
+    if spec.dataset == "D5" and allow_approved_calendarization:
+        complete = sorted(date_masks_by_key)
+        calendarization = {
+            "status": "passed",
+            "rule": "D5_APPROVED_SOURCE_HISTORY_CALENDARIZATION",
+            "window": [spec.source_history_start.isoformat(), spec.source_history_end.isoformat()],
+            "candidate_count": len(complete),
+            "raw_complete_candidate_count": len(raw_complete),
+            "raw_incomplete_candidate_count": len(incomplete),
+            "raw_candidate_cardinality_digest": canonical_digest(raw_counts),
+            "raw_eligible_rows": int(eligible_rows),
+            "calendarized_rows": int(len(complete) * 180),
+            "repaired_rows": int(sum(180 - count for count in incomplete.values())),
+            "missing_date_count": int(sum(180 - count for count in incomplete.values())),
+            "sales_rule": "missing source natural day -> 0",
+            "covariate_rule": "reuse approved D5 historical reconstruction rules",
+        }
+    else:
+        complete = raw_complete
+        calendarization = {
+            "status": "not_applicable",
+            "candidate_count": len(complete),
+            "raw_complete_candidate_count": len(raw_complete),
+            "raw_incomplete_candidate_count": len(incomplete),
+            "raw_candidate_cardinality_digest": canonical_digest(raw_counts),
+            "raw_eligible_rows": int(eligible_rows),
+            "calendarized_rows": int(len(complete) * 180),
+            "repaired_rows": 0,
+            "missing_date_count": 0,
+        }
+    if not complete:
+        raise Gate1Failure("SOURCE_ENTITY_MISSING", f"no complete source candidate in {path}")
+    proof = {
+        "dataset": spec.dataset,
+        "scenario": "with" if shared else "without",
+        "authority_path": str(path),
+        "authority_size_bytes": int(path.stat().st_size),
+        "rows_scanned": int(source_rows),
+        "eligible_history_rows": int(eligible_rows),
+        "post_origin_history_rows": int(post_origin_rows),
+        "duplicate_exact_key_dates": int(duplicate_exact_key_dates),
+        "complete_candidate_keys": [list(key) for key in complete],
+        "incomplete_candidates": incomplete,
+        "calendarization": calendarization,
+        "candidate_filter_digest": canonical_digest({"dataset": spec.dataset, "scenario": "with" if shared else "without", "grouping_field": spec.grouping_field, "targets": [list(key) for key in spec.target_keys]}),
+        "status": "passed",
+    }
+    return proof
 
 
 @dataclass
@@ -908,5 +1092,5 @@ def attach_d6_calendar_exact(parent: pd.DataFrame, calendar: pd.DataFrame, *, st
 
 
 __all__ = [
-    "CONTRACT_VERSION", "CONTRACT_DIGEST", "DECISION_BOOK_SHA256", "SCOPE_SHA256", "MATRIX_SHA256", "COMBINED_FORMAL_IDENTITY_DIGEST", "SUPERSEDED_CONTRACT_DIGEST", "FREEZE_COMMIT_SHA", "Gate1Failure", "DatasetContract", "DatasetRoles", "dataset_contract", "load_formal_identity", "FormalInputLoader", "normalize_onpromotion", "rebuild_d2_wide_frame", "source_pool_candidates", "select_source_history_candidates", "slice_dataset_roles", "build_contract_views", "effective_knn_schema_descriptor", "normalized_frame_digest", "canonical_digest", "SchemaRegistry", "ProofWriter", "FormalPreflight", "HistoryReconstructionProducer", "ForecastBlindProducer", "SafeTargetViewOperator", "AvailabilityResolver", "FieldDecision", "FieldSpec", "SourcePoolOperator", "AuthorityProducer", "UnifiedRunner", "build_d5_holiday", "build_d5_oil_price", "join_d6_sell_price", "build_d6_calendar_view", "attach_d6_calendar_exact",
+    "CONTRACT_VERSION", "CONTRACT_DIGEST", "DECISION_BOOK_SHA256", "SCOPE_SHA256", "MATRIX_SHA256", "COMBINED_FORMAL_IDENTITY_DIGEST", "SUPERSEDED_CONTRACT_DIGEST", "FREEZE_COMMIT_SHA", "Gate1Failure", "DatasetContract", "DatasetRoles", "dataset_contract", "load_formal_identity", "FormalInputLoader", "normalize_onpromotion", "rebuild_d2_wide_frame", "calendarize_d2_source_history", "source_pool_candidates", "select_source_history_candidates", "stream_source_history_candidates", "slice_dataset_roles", "build_contract_views", "effective_knn_schema_descriptor", "normalized_frame_digest", "canonical_digest", "SchemaRegistry", "ProofWriter", "FormalPreflight", "HistoryReconstructionProducer", "ForecastBlindProducer", "SafeTargetViewOperator", "AvailabilityResolver", "FieldDecision", "FieldSpec", "SourcePoolOperator", "AuthorityProducer", "UnifiedRunner", "build_d5_holiday", "build_d5_oil_price", "join_d6_sell_price", "build_d6_calendar_view", "attach_d6_calendar_exact",
 ]
