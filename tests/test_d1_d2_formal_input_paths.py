@@ -42,7 +42,7 @@ def _captured_formal_input_paths(
 
 
 def test_d1_d2_formal_runner_uses_protocol_derived_parquets() -> None:
-    expected_root = Path("数据集/派生数据/d1d2_protocol_v1")
+    expected_root = Path("数据集/固化数据")
     solidified_paths = _full_runner_solidified_paths()
 
     for dataset_name, dataset_id in (("Dataset1", 1), ("Dataset2", 2)):
