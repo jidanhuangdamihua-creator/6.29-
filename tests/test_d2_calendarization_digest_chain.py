@@ -4,7 +4,7 @@ from src.protocols.candidate_pool import build_candidate_pool_digest
 from src.source_selection.source_selector import SourceSelector
 
 from tests.test_d2_source_calendarization_integration import (
-    _d2_source_with_four_missing_dates,
+    _d2_source_precalendarized,
     _d2_target_after_observed_window,
 )
 from src.protocols.runner_adapter import configure_protocol_frames
@@ -12,7 +12,7 @@ from src.protocols.runner_adapter import configure_protocol_frames
 
 def _configured_d2_frames():
     return configure_protocol_frames(
-        _d2_source_with_four_missing_dates(),
+        _d2_source_precalendarized(),
         _d2_target_after_observed_window(),
         dataset_id="D2",
         scenario="with",

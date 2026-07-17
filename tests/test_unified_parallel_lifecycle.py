@@ -314,6 +314,9 @@ def test_main_dispatches_prepare_operation(
         ),
     )
     monkeypatch.setattr(unified, "prepare_formal_run", prepare)
+    monkeypatch.setattr(
+        unified, "run_formal_preflight", lambda _root: {"preflight_status": "ready"}
+    )
 
     unified.main()
 
@@ -340,6 +343,9 @@ def test_main_dispatches_mode_worker_operation(
         ),
     )
     monkeypatch.setattr(unified, "execute_mode_worker", worker)
+    monkeypatch.setattr(
+        unified, "run_formal_preflight", lambda _root: {"preflight_status": "ready"}
+    )
 
     unified.main()
 
@@ -366,6 +372,9 @@ def test_main_dispatches_aggregate_operation(
         ),
     )
     monkeypatch.setattr(unified, "aggregate_prepared_run", aggregate)
+    monkeypatch.setattr(
+        unified, "run_formal_preflight", lambda _root: {"preflight_status": "ready"}
+    )
 
     unified.main()
 

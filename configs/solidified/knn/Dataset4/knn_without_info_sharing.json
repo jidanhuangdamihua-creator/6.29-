@@ -556,6 +556,8 @@
         ]
       },
       "selection_result_digest": "426aedd61c0748c02bed086b862c25a3df8a54101b5ae1171c393350f73664c4",
+      "source_pool_fingerprint": "421d90f0213967a36c1b6d5cace64ff8c73424ffa68abbf6b740f12be797ec2e",
+      "consumer_fingerprint": "f56294416199219e654353cc80f34d2503b3a771d95a8f963cfd67573f639063",
       "selected_sources_runtime": [
         {
           "source_rank": 1,
@@ -1528,13 +1530,29 @@
       "domain_filter_applied_to_source": false,
       "source_pool_entity_count": 15982,
       "require_same_group": false,
-      "excluded_candidate_key_fields": [
-        "product_id"
-      ],
+      "excluded_candidate_key_fields": [],
       "target_domain_filter": {
         "column": "first_category_id",
         "value": 15
-      }
+      },
+      "d4_validation_proof": {
+        "entity_key_fields": [
+          "store_id",
+          "product_id"
+        ],
+        "exact_target_tuple": [
+          "166",
+          "258"
+        ],
+        "exact_target_tuple_excluded": true,
+        "cross_store_same_product_available_count": 0,
+        "cross_store_same_product_retained_count": 0,
+        "same_store_other_product_retained_count": 49,
+        "cross_store_other_product_retained_count": 0,
+        "candidate_digest_verified": true,
+        "consumer_fingerprint_verified": true
+      },
+      "d4_validation_proof_digest": "fb9666f4dc779041b7627dd72d6f425dfebbdb3ad25f6a175ba66f50b6f79386"
     },
     "166_432": {
       "selection_authority": "shared_protocol",
@@ -1786,6 +1804,8 @@
         ]
       },
       "selection_result_digest": "a642de6ede6a27949ab7293ad74702af7fe7e94584898b293442827fbd63b616",
+      "source_pool_fingerprint": "827f592cf96574181d73c2340739a24f9204dc183613439450ed52511ff02e65",
+      "consumer_fingerprint": "77358e913dba5f8e5497184b4ed9df176e943c00099c479a2eac26417268aee4",
       "selected_sources_runtime": [
         {
           "source_rank": 1,
@@ -2758,13 +2778,29 @@
       "domain_filter_applied_to_source": false,
       "source_pool_entity_count": 15982,
       "require_same_group": false,
-      "excluded_candidate_key_fields": [
-        "product_id"
-      ],
+      "excluded_candidate_key_fields": [],
       "target_domain_filter": {
         "column": "first_category_id",
         "value": 15
-      }
+      },
+      "d4_validation_proof": {
+        "entity_key_fields": [
+          "store_id",
+          "product_id"
+        ],
+        "exact_target_tuple": [
+          "166",
+          "432"
+        ],
+        "exact_target_tuple_excluded": true,
+        "cross_store_same_product_available_count": 0,
+        "cross_store_same_product_retained_count": 0,
+        "same_store_other_product_retained_count": 49,
+        "cross_store_other_product_retained_count": 0,
+        "candidate_digest_verified": true,
+        "consumer_fingerprint_verified": true
+      },
+      "d4_validation_proof_digest": "35faf5b7da44acfc9460cc4b6c49e001f2a13f445532bf39756a6ba05eec3f57"
     },
     "166_433": {
       "selection_authority": "shared_protocol",
@@ -3016,6 +3052,8 @@
         ]
       },
       "selection_result_digest": "c1a6f28286b81bd21c4f2cdd6e246c234cffac020fe6d103c8062cf67537dde3",
+      "source_pool_fingerprint": "f1d575571cb46cbe6cfa86b36211df5dd06717d367cfc1aca2126e72606b0a19",
+      "consumer_fingerprint": "77835e907e7f30cc0e6430ff90e84003bf5c4d7b6e3b0919734f23aa3d24fc35",
       "selected_sources_runtime": [
         {
           "source_rank": 1,
@@ -3988,13 +4026,29 @@
       "domain_filter_applied_to_source": false,
       "source_pool_entity_count": 15982,
       "require_same_group": false,
-      "excluded_candidate_key_fields": [
-        "product_id"
-      ],
+      "excluded_candidate_key_fields": [],
       "target_domain_filter": {
         "column": "first_category_id",
         "value": 15
-      }
+      },
+      "d4_validation_proof": {
+        "entity_key_fields": [
+          "store_id",
+          "product_id"
+        ],
+        "exact_target_tuple": [
+          "166",
+          "433"
+        ],
+        "exact_target_tuple_excluded": true,
+        "cross_store_same_product_available_count": 0,
+        "cross_store_same_product_retained_count": 0,
+        "same_store_other_product_retained_count": 49,
+        "cross_store_other_product_retained_count": 0,
+        "candidate_digest_verified": true,
+        "consumer_fingerprint_verified": true
+      },
+      "d4_validation_proof_digest": "e0ab360ef06686a6f825c1342ea2e0729ba1799cbafda6b2fdced182a98b017b"
     },
     "166_313": {
       "selection_authority": "shared_protocol",
@@ -4246,6 +4300,8 @@
         ]
       },
       "selection_result_digest": "bc52c3509cad07c69c2afb03b3ec66f662ae5211e8904e88ae01fb4328c023d8",
+      "source_pool_fingerprint": "97b73fab3834f4bd32adda1badc8105c77499f137fa6ea2e6ccb35aad7948642",
+      "consumer_fingerprint": "b737526d43c47a8ea97842d320041a0d6613940b80b578e613a66a1350c11167",
       "selected_sources_runtime": [
         {
           "source_rank": 1,
@@ -5218,13 +5274,29 @@
       "domain_filter_applied_to_source": false,
       "source_pool_entity_count": 15982,
       "require_same_group": false,
-      "excluded_candidate_key_fields": [
-        "product_id"
-      ],
+      "excluded_candidate_key_fields": [],
       "target_domain_filter": {
         "column": "first_category_id",
         "value": 15
-      }
+      },
+      "d4_validation_proof": {
+        "entity_key_fields": [
+          "store_id",
+          "product_id"
+        ],
+        "exact_target_tuple": [
+          "166",
+          "313"
+        ],
+        "exact_target_tuple_excluded": true,
+        "cross_store_same_product_available_count": 0,
+        "cross_store_same_product_retained_count": 0,
+        "same_store_other_product_retained_count": 49,
+        "cross_store_other_product_retained_count": 0,
+        "candidate_digest_verified": true,
+        "consumer_fingerprint_verified": true
+      },
+      "d4_validation_proof_digest": "e42a33a56953d3ba95851682ec49c9b58c749598cfb8010b0d9c3d8d429dd023"
     },
     "166_311": {
       "selection_authority": "shared_protocol",
@@ -5476,6 +5548,8 @@
         ]
       },
       "selection_result_digest": "3bf294c1df9296cd4c1786cfac18f2580b7241946f84ada8ac07fa8e185aa68b",
+      "source_pool_fingerprint": "41fcb24fc930f487679f8955772c51041ed303552b1f960e6a05a279361e4d9d",
+      "consumer_fingerprint": "9eef112b00b8013ab01bae76e9ae293d06ff0c80136161476bc4341d6d974d84",
       "selected_sources_runtime": [
         {
           "source_rank": 1,
@@ -6448,13 +6522,78 @@
       "domain_filter_applied_to_source": false,
       "source_pool_entity_count": 15982,
       "require_same_group": false,
-      "excluded_candidate_key_fields": [
-        "product_id"
-      ],
+      "excluded_candidate_key_fields": [],
       "target_domain_filter": {
         "column": "first_category_id",
         "value": 15
-      }
+      },
+      "d4_validation_proof": {
+        "entity_key_fields": [
+          "store_id",
+          "product_id"
+        ],
+        "exact_target_tuple": [
+          "166",
+          "311"
+        ],
+        "exact_target_tuple_excluded": true,
+        "cross_store_same_product_available_count": 0,
+        "cross_store_same_product_retained_count": 0,
+        "same_store_other_product_retained_count": 49,
+        "cross_store_other_product_retained_count": 0,
+        "candidate_digest_verified": true,
+        "consumer_fingerprint_verified": true
+      },
+      "d4_validation_proof_digest": "da5355ae67e51d498e5d53efe24091ee47bc5f0f1e5869d2ab67b91e7150c7f4"
     }
+  },
+  "d4_manifest_identity": {
+    "identity_version": "d4_exact_composite_key_v1",
+    "dataset_id": "D4",
+    "scenario": "without",
+    "entity_key_fields": [
+      "store_id",
+      "product_id"
+    ],
+    "source_parquet_sha256": "17a1fa5bd1dddfd46bda2a6922ff7821aee2a7e79deca58a94ff7bf20821f7ef",
+    "target_parquet_sha256": "f0b83798ea265c6b79f09487903404c7c75acfcac2657f53e989ef59588e5946",
+    "target_consumers": {
+      "166_258": {
+        "candidate_pool_digest": "7940a1c51eee067b1bcd5868aee2cf70c53be1aaa9e54dec49c826873658206a",
+        "selection_result_digest": "426aedd61c0748c02bed086b862c25a3df8a54101b5ae1171c393350f73664c4",
+        "source_pool_fingerprint": "421d90f0213967a36c1b6d5cace64ff8c73424ffa68abbf6b740f12be797ec2e",
+        "consumer_fingerprint": "f56294416199219e654353cc80f34d2503b3a771d95a8f963cfd67573f639063",
+        "validation_proof_digest": "fb9666f4dc779041b7627dd72d6f425dfebbdb3ad25f6a175ba66f50b6f79386"
+      },
+      "166_311": {
+        "candidate_pool_digest": "db984d919608e4e6a7d149c7248d35f4215d7774d2615b3654134855f1edfdfc",
+        "selection_result_digest": "3bf294c1df9296cd4c1786cfac18f2580b7241946f84ada8ac07fa8e185aa68b",
+        "source_pool_fingerprint": "41fcb24fc930f487679f8955772c51041ed303552b1f960e6a05a279361e4d9d",
+        "consumer_fingerprint": "9eef112b00b8013ab01bae76e9ae293d06ff0c80136161476bc4341d6d974d84",
+        "validation_proof_digest": "da5355ae67e51d498e5d53efe24091ee47bc5f0f1e5869d2ab67b91e7150c7f4"
+      },
+      "166_313": {
+        "candidate_pool_digest": "762c2bda76dec4510af014ce0475a862a5f4748e9df95db5225660f387e359bb",
+        "selection_result_digest": "bc52c3509cad07c69c2afb03b3ec66f662ae5211e8904e88ae01fb4328c023d8",
+        "source_pool_fingerprint": "97b73fab3834f4bd32adda1badc8105c77499f137fa6ea2e6ccb35aad7948642",
+        "consumer_fingerprint": "b737526d43c47a8ea97842d320041a0d6613940b80b578e613a66a1350c11167",
+        "validation_proof_digest": "e42a33a56953d3ba95851682ec49c9b58c749598cfb8010b0d9c3d8d429dd023"
+      },
+      "166_432": {
+        "candidate_pool_digest": "286d273987e7ff2ac98e0e53b44539c5a8a2901d786ac5afceb1d024f6abee91",
+        "selection_result_digest": "a642de6ede6a27949ab7293ad74702af7fe7e94584898b293442827fbd63b616",
+        "source_pool_fingerprint": "827f592cf96574181d73c2340739a24f9204dc183613439450ed52511ff02e65",
+        "consumer_fingerprint": "77358e913dba5f8e5497184b4ed9df176e943c00099c479a2eac26417268aee4",
+        "validation_proof_digest": "35faf5b7da44acfc9460cc4b6c49e001f2a13f445532bf39756a6ba05eec3f57"
+      },
+      "166_433": {
+        "candidate_pool_digest": "6be3acdca16cea9ad34356ed69866a10d2fa9810b3585fe0fb405c069e12b559",
+        "selection_result_digest": "c1a6f28286b81bd21c4f2cdd6e246c234cffac020fe6d103c8062cf67537dde3",
+        "source_pool_fingerprint": "f1d575571cb46cbe6cfa86b36211df5dd06717d367cfc1aca2126e72606b0a19",
+        "consumer_fingerprint": "77835e907e7f30cc0e6430ff90e84003bf5c4d7b6e3b0919734f23aa3d24fc35",
+        "validation_proof_digest": "e0ab360ef06686a6f825c1342ea2e0729ba1799cbafda6b2fdced182a98b017b"
+      }
+    },
+    "manifest_identity_digest": "372596182ec34f64b68455f8d70efabe4153cb7d1233a8fef7d56ac17ee61ea4"
   }
 }

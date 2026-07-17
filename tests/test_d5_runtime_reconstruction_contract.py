@@ -117,7 +117,8 @@ def test_d5_loader_returns_explicit_report_and_preserves_tuple_api(tmp_path: Pat
 
     loaded = load_parquet_source_target_with_diagnostics(
         dataset_id=5,
-        parquet_dir=parquet_dir,
+        source_path=parquet_dir / "dataset5-source.parquet",
+        target_path=parquet_dir / "dataset5-target.parquet",
         windows=windows,
         source_history_days=300,
         expected_dates=expected_dates,
@@ -137,7 +138,8 @@ def test_d5_loader_returns_explicit_report_and_preserves_tuple_api(tmp_path: Pat
 
     source_df, target_df = load_parquet_source_target(
         dataset_id=5,
-        parquet_dir=parquet_dir,
+        source_path=parquet_dir / "dataset5-source.parquet",
+        target_path=parquet_dir / "dataset5-target.parquet",
         windows=windows,
         source_history_days=300,
         expected_dates=expected_dates,
@@ -158,7 +160,8 @@ def test_runner_loads_authorities_once_and_passes_window_dates(monkeypatch) -> N
 
     result = d5_runner.load_d5_runtime_inputs(
         raw_dir=Path("raw"),
-        parquet_dir=Path("parquet"),
+        source_path=Path("parquet/source.parquet"),
+        target_path=Path("parquet/target.parquet"),
         windows={"dataset_id": 5, "train_start": "2017-01-17", "test_end": "2017-08-15"},
         source_history_days=300,
     )

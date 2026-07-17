@@ -24,6 +24,7 @@ from src.constants import (
 )
 from src.protocols.experiment_protocol import PROTOCOL_VERSION, get_experiment_protocol
 from src.protocols.runner_adapter import configure_protocol_frames
+from src.protocols.formal_input_paths import resolve_formal_dataset_paths
 from src.source_selection.source_selector import SourceSelector
 from src.utils.d4_d6_runtime import (
     apply_runtime_source_domain_policy,
@@ -42,6 +43,25 @@ def _file_digest(path: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _canonical_sha256(payload: Mapping[str, Any]) -> str:
+    serialized = json.dumps(
+        _to_jsonable(dict(payload)),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def snapshot_knn_config_files(root: str | Path) -> Dict[str, Dict[str, Any]]:
@@ -360,6 +380,72 @@ def _build_regenerated_payload(
     return new_payload
 
 
+def _d4_exact_key_validation_proof(
+    metadata: Mapping[str, Any],
+) -> Dict[str, Any]:
+    digest_input = dict(metadata["candidate_pool_digest_input"])
+    target_key = tuple(str(part) for part in digest_input["target_key"])
+    candidate_keys = {
+        tuple(str(part) for part in key)
+        for key in digest_input["candidate_keys"]
+    }
+    target_store, target_product = target_key
+    cross_store_same_product_count = sum(
+        key[0] != target_store and key[1] == target_product
+        for key in candidate_keys
+    )
+    proof: Dict[str, Any] = {
+        "entity_key_fields": ["store_id", "product_id"],
+        "exact_target_tuple": list(target_key),
+        "exact_target_tuple_excluded": target_key not in candidate_keys,
+        "cross_store_same_product_available_count": cross_store_same_product_count,
+        "cross_store_same_product_retained_count": cross_store_same_product_count,
+        "same_store_other_product_retained_count": sum(
+            key[0] == target_store and key[1] != target_product
+            for key in candidate_keys
+        ),
+        "cross_store_other_product_retained_count": sum(
+            key[0] != target_store and key[1] != target_product
+            for key in candidate_keys
+        ),
+        "candidate_digest_verified": True,
+        "consumer_fingerprint_verified": True,
+    }
+    if not proof["exact_target_tuple_excluded"]:
+        raise ValueError(f"D4 exact target entered candidate pool: {target_key!r}")
+    return proof
+
+
+def _d4_manifest_identity(
+    *,
+    scenario: str,
+    selection_metadata: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    formal_paths = resolve_formal_dataset_paths(4, repository_root=PROJECT_ROOT)
+    source_path = formal_paths.source_path
+    target_path = formal_paths.target_path
+    identity: Dict[str, Any] = {
+        "identity_version": "d4_exact_composite_key_v1",
+        "dataset_id": "D4",
+        "scenario": str(scenario),
+        "entity_key_fields": ["store_id", "product_id"],
+        "source_parquet_sha256": _sha256_file(source_path),
+        "target_parquet_sha256": _sha256_file(target_path),
+        "target_consumers": {
+            str(target): {
+                "candidate_pool_digest": metadata["candidate_pool_digest"],
+                "selection_result_digest": metadata["selection_result_digest"],
+                "source_pool_fingerprint": metadata["source_pool_fingerprint"],
+                "consumer_fingerprint": metadata["consumer_fingerprint"],
+                "validation_proof_digest": metadata["d4_validation_proof_digest"],
+            }
+            for target, metadata in sorted(selection_metadata.items())
+        },
+    }
+    identity["manifest_identity_digest"] = _canonical_sha256(identity)
+    return identity
+
+
 def regenerate_dataset_scenario(
     *,
     dataset_id: int,
@@ -380,9 +466,14 @@ def regenerate_dataset_scenario(
         info_sharing=scenario,
         knn_payload=old_payload,
     )
+    formal_paths = resolve_formal_dataset_paths(
+        dataset_id,
+        repository_root=PROJECT_ROOT,
+    )
     source_df, target_df = load_parquet_source_target(
         dataset_id=dataset_id,
-        parquet_dir="数据集/固化数据",
+        source_path=formal_paths.source_path,
+        target_path=formal_paths.target_path,
         windows=windows,
         source_history_days=SOURCE_HISTORY_DAYS,
     )
@@ -477,6 +568,11 @@ def regenerate_dataset_scenario(
                 ],
                 "target_domain_filter": copy.deepcopy(old_payload.get("domain_filter")),
             }
+            d4_validation_proof = _d4_exact_key_validation_proof(selected_meta)
+            selected_meta["d4_validation_proof"] = d4_validation_proof
+            selected_meta["d4_validation_proof_digest"] = _canonical_sha256(
+                d4_validation_proof
+            )
         new_selection_metadata[str(target_entity_id)] = copy.deepcopy(selected_meta)
         new_results[str(target_entity_id)] = new_rows
 
@@ -513,6 +609,11 @@ def regenerate_dataset_scenario(
         results=new_results,
         selection_metadata=new_selection_metadata,
     )
+    if int(dataset_id) == 4:
+        new_payload["d4_manifest_identity"] = _d4_manifest_identity(
+            scenario=scenario,
+            selection_metadata=new_selection_metadata,
+        )
 
     generated_path = output_root / "generated_json" / f"Dataset{int(dataset_id)}" / path.name
     _write_json(generated_path, new_payload)

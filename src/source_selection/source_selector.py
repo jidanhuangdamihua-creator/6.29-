@@ -21,7 +21,11 @@ import pandas as pd
 
 from src.data_processing.data_preprocessing import infer_source_selection_feature_columns
 from src.constants import D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
-from src.protocols.candidate_pool import select_daily_sequence_sources
+from src.protocols.candidate_pool import (
+    build_consumer_fingerprint,
+    build_source_pool_fingerprint,
+    select_daily_sequence_sources,
+)
 from src.protocols.d2_source_calendarization import build_d2_sealed_identity
 from src.protocols.experiment_protocol import (
     PROTOCOL_VERSION,
@@ -206,6 +210,24 @@ class SourceSelector:
             for key in eligible_candidate_keys
             if tuple(key) not in excluded_candidate_keys
         ]
+        source_pool_fingerprint = build_source_pool_fingerprint(
+            protocol_version=protocol.protocol_version,
+            dataset_id=protocol.dataset_id,
+            scenario=target_df.attrs["protocol_scenario"],
+            target_key=target_df.attrs["protocol_target_key"],
+            group_cols=configured_group_cols,
+            candidate_keys=eligible_candidate_keys,
+        )
+        consumer_fingerprint = build_consumer_fingerprint(
+            protocol_version=protocol.protocol_version,
+            dataset_id=protocol.dataset_id,
+            scenario=target_df.attrs["protocol_scenario"],
+            target_key=target_df.attrs["protocol_target_key"],
+            source_pool_fingerprint=source_pool_fingerprint,
+            candidate_pool_digest=result.candidate_pool_digest,
+            selection_result_digest=result.selection_result_digest,
+            ordered_top_k=sources,
+        )
         meta = {
             "selection_authority": "shared_protocol",
             "selection_path": "shared_protocol",
@@ -234,6 +256,8 @@ class SourceSelector:
             "candidate_pool_digest": result.candidate_pool_digest,
             "candidate_pool_digest_input": dict(result.candidate_pool_digest_input),
             "selection_result_digest": result.selection_result_digest,
+            "source_pool_fingerprint": source_pool_fingerprint,
+            "consumer_fingerprint": consumer_fingerprint,
             "selected_sources_runtime": list(sources),
             "source_skip_diagnostics": excluded,
             "candidate_source_count": len(target_df.attrs["protocol_candidate_keys"]),

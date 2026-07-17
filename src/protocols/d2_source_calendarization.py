@@ -70,22 +70,22 @@ class D2SourceCalendarizationReport:
 def _canonical_value(value: object) -> object:
     if value is None or value is pd.NA:
         return None
-    if isinstance(value, pd.Timestamp):
-        return value.normalize().strftime("%Y-%m-%dT%H:%M:%S")
-    if isinstance(value, date):
-        return value.isoformat()
     if isinstance(value, np.generic):
         value = value.item()
-    if isinstance(value, float):
-        if not np.isfinite(value):
-            raise ProtocolViolation("D2 digest received a non-finite value")
-        return format(value, ".17g")
     try:
         missing = pd.isna(value)
     except (TypeError, ValueError):
         missing = False
     if isinstance(missing, (bool, np.bool_)) and bool(missing):
         return None
+    if isinstance(value, pd.Timestamp):
+        return value.normalize().strftime("%Y-%m-%dT%H:%M:%S")
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, float):
+        if not np.isfinite(value):
+            raise ProtocolViolation("D2 digest received a non-finite value")
+        return format(value, ".17g")
     if isinstance(value, (str, int, bool)):
         return value
     return str(value)
@@ -313,6 +313,106 @@ def calendarize_d2_source_frame(
             "d2_synthetic_source_entity_date_keys": report.to_dict()[
                 "synthetic_entity_date_keys"
             ],
+            "d2_source_calendarization_report": report.to_dict(),
+        }
+    )
+    return result, report
+
+
+def verify_d2_source_frame(
+    source_slice: pd.DataFrame,
+    *,
+    candidate_keys: Iterable[Sequence[object]],
+) -> tuple[pd.DataFrame, D2SourceCalendarizationReport]:
+    """Verify an already-calendarized D2 source without adding or changing rows."""
+
+    _assert_source_role(source_slice)
+    if source_slice.attrs.get("d2_source_slicing_complete") is not True:
+        raise ProtocolViolation("D2 source verification requires completed source slicing")
+    required = (*D2_SOURCE_GROUP_COLS, "date", "sales")
+    missing_columns = [column for column in required if column not in source_slice.columns]
+    if missing_columns:
+        raise ProtocolViolation(f"D2 sealed source missing columns: {missing_columns}")
+
+    candidates = tuple(normalize_source_key(key) for key in candidate_keys)
+    if not candidates or len(set(candidates)) != len(candidates):
+        raise ProtocolViolation("D2 source candidate keys must be non-empty and unique")
+
+    source = source_slice.copy()
+    source["date"] = pd.to_datetime(source["date"], errors="coerce").dt.normalize()
+    if source["date"].isna().any():
+        raise ProtocolViolation("D2 sealed source contains invalid date")
+    if source.duplicated([*D2_SOURCE_GROUP_COLS, "date"]).any():
+        raise ProtocolViolation("D2 sealed source contains duplicate entity/date keys")
+    numeric_sales = pd.to_numeric(source["sales"], errors="coerce")
+    if numeric_sales.isna().any() or not np.isfinite(numeric_sales.to_numpy(dtype=np.float64)).all():
+        raise ProtocolViolation("D2 sealed source sales contain non-finite values")
+    source["sales"] = numeric_sales.astype(float)
+
+    source_keys = _normalize_frame_keys(source)
+    actual_keys = set(source_keys.tolist())
+    missing_entities = sorted(set(candidates).difference(actual_keys))
+    if missing_entities:
+        raise ProtocolViolation(f"D2 sealed source candidate entity missing: {missing_entities!r}")
+
+    rows: list[dict[str, object]] = []
+    for candidate in candidates:
+        entity = source.loc[source_keys.map(lambda key: key == candidate)].copy()
+        actual_dates = pd.DatetimeIndex(entity["date"])
+        missing_dates = tuple(_EXPECTED_DATES.difference(actual_dates))
+        if missing_dates:
+            rendered = [timestamp.strftime("%Y-%m-%d") for timestamp in missing_dates]
+            raise ProtocolViolation(
+                f"D2 sealed source does not cover exact 180 days: {rendered!r}"
+            )
+        frozen_dates = entity.loc[entity["date"].isin(_ALLOWED_MISSING_DATES), "sales"]
+        if not frozen_dates.eq(0).all():
+            raise ProtocolViolation("D2 sealed source frozen-date sales must be zero")
+        rows.extend(entity.to_dict(orient="records"))
+
+    result = pd.DataFrame(rows, columns=list(source.columns))
+    result["date"] = pd.to_datetime(result["date"], errors="raise").dt.normalize()
+    result["sales"] = pd.to_numeric(result["sales"], errors="raise").astype(float)
+    result = result.sort_values([*D2_SOURCE_GROUP_COLS, "date"], kind="mergesort").reset_index(drop=True)
+    result.attrs = source_slice.attrs.copy()
+
+    canonical_frame = _canonical_frame(result)
+    source_payload = {
+        "rule_version": D2_SOURCE_CALENDARIZATION_RULE_VERSION,
+        "source_interval": [
+            D2_SOURCE_INTERVAL_START.isoformat(),
+            D2_SOURCE_INTERVAL_END.isoformat(),
+        ],
+        "candidate_keys": [list(key) for key in sorted(candidates)],
+        "synthetic_entity_date_keys": [],
+        "frame": canonical_frame,
+    }
+    source_authority_digest = _sha256_payload(source_payload)
+    consumer_frame_fingerprint = _sha256_payload(
+        {
+            "consumer": "d2_source_completeness_knn_v1",
+            "rule_version": D2_SOURCE_CALENDARIZATION_RULE_VERSION,
+            "source_authority_digest": source_authority_digest,
+            "frame": canonical_frame,
+        }
+    )
+    report = D2SourceCalendarizationReport(
+        rule_version=D2_SOURCE_CALENDARIZATION_RULE_VERSION,
+        source_interval_start=D2_SOURCE_INTERVAL_START.isoformat(),
+        source_interval_end=D2_SOURCE_INTERVAL_END.isoformat(),
+        source_entity_keys=tuple(sorted(candidates)),
+        synthetic_entity_date_keys=(),
+        synthetic_row_count=0,
+        source_authority_digest=source_authority_digest,
+        consumer_frame_fingerprint=consumer_frame_fingerprint,
+    )
+    result.attrs.update(
+        {
+            "d2_source_calendarization_rule_version": report.rule_version,
+            "d2_source_authority_digest": report.source_authority_digest,
+            "d2_consumer_frame_fingerprint": report.consumer_frame_fingerprint,
+            "d2_synthetic_source_row_count": 0,
+            "d2_synthetic_source_entity_date_keys": [],
             "d2_source_calendarization_report": report.to_dict(),
         }
     )

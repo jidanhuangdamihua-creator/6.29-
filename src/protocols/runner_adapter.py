@@ -9,8 +9,8 @@ import pandas as pd
 from .candidate_pool import PreparedDailySequencePool
 from .d2_source_calendarization import (
     D2_SOURCE_CALENDARIZATION_RULE_VERSION,
-    calendarize_d2_source_frame,
     slice_d2_source_frame,
+    verify_d2_source_frame,
 )
 from .experiment_protocol import (
     EXTENDED_TRACK,
@@ -301,10 +301,22 @@ def configure_protocol_frames(
             raise ProtocolViolation("source frame contains invalid dates")
         if protocol.dataset_id == "D2":
             source.attrs.setdefault("split_role", "source")
-            source_slice = slice_d2_source_frame(source)
-            source, report = calendarize_d2_source_frame(
-                source_slice,
+            sealed_source = source.copy()
+            verified_source, report = verify_d2_source_frame(
+                slice_d2_source_frame(sealed_source),
                 candidate_keys=candidates,
+            )
+            source_keys = source.loc[:, list(normalized_group_cols)].apply(
+                lambda row: normalize_source_key(tuple(row.tolist())),
+                axis=1,
+            )
+            source = source.loc[source_keys.isin(set(candidates))].copy()
+            source.attrs = {**sealed_source.attrs, **verified_source.attrs}
+            source.attrs.update(
+                {
+                    "d2_source_verification_frame_fingerprint": report.consumer_frame_fingerprint,
+                    "d2_source_verified_candidate_row_count": int(len(verified_source)),
+                }
             )
             d2_calendarization_metadata = {
                 "d2_source_calendarization_rule_version": report.rule_version,

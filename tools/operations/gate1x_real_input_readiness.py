@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from functools import lru_cache
 import hashlib
 import json
 import sys
-from typing import Any
+from typing import Any, Mapping
 
 import pandas as pd
 
@@ -25,14 +26,29 @@ from src.protocols.gate1_transformation import (  # noqa: E402
     Gate1Failure,
     SchemaRegistry,
     build_d6_calendar_view,
-    calendarize_d2_source_history,
+    canonical_digest,
     dataset_contract,
     load_formal_identity,
-    normalized_frame_digest,
-    rebuild_d2_wide_frame,
     slice_dataset_roles,
     select_source_history_candidates,
     stream_source_history_candidates,
+)
+from src.protocols.d2_source_calendarization import (  # noqa: E402
+    D2_FROZEN_SOURCE_CANDIDATE_KEYS,
+    D2_SOURCE_MISSING_DATES,
+    slice_d2_source_frame,
+    verify_d2_source_frame,
+)
+from src.protocols.formal_input_paths import (  # noqa: E402
+    formal_dataset_identity,
+    formal_input_paths,
+    resolve_formal_dataset_paths,
+)
+from src.constants import SOURCE_HISTORY_DAYS  # noqa: E402
+from src.protocols.candidate_pool import (  # noqa: E402
+    build_candidate_pool_digest,
+    build_consumer_fingerprint,
+    build_source_pool_fingerprint,
 )
 
 
@@ -40,7 +56,7 @@ PARQUET_DIR = ROOT / "数据集" / "固化数据"
 RAW_DIR = ROOT / "数据集" / "原始数据"
 RAW_INPUTS = {
     1: (RAW_DIR / "Dataset 1/train.csv", RAW_DIR / "Dataset 1/test.csv"),
-    2: (RAW_DIR / "Dataset 2/hierarchical_sales_data.csv",),
+    2: (),
     3: (RAW_DIR / "Dataset 3 rossmann-store-sales/train.csv", RAW_DIR / "Dataset 3 rossmann-store-sales/test.csv"),
     4: (RAW_DIR / "Dataset 4叮咚数据集/train_sample_100.csv",),
     5: (RAW_DIR / "Dataset 5Favorita/train.csv", RAW_DIR / "Dataset 5Favorita/test.csv", RAW_DIR / "Dataset 5Favorita/oil.csv", RAW_DIR / "Dataset 5Favorita/holidays_events.csv"),
@@ -68,19 +84,128 @@ def _parquet_meta(path: Path) -> dict[str, object]:
     return record
 
 
+def resolve_readiness_formal_input_identity(
+    dataset_id: int,
+    *,
+    repository_root: Path = ROOT,
+) -> dict[str, object]:
+    return formal_dataset_identity(
+        resolve_formal_dataset_paths(
+            dataset_id,
+            repository_root=repository_root,
+        )
+    )
+
+
 def _target_frame(root: Path, dataset: int) -> pd.DataFrame:
-    path = root / "数据集" / "固化数据" / f"dataset{dataset}-target.parquet"
-    return pd.read_parquet(path)
+    return pd.read_parquet(formal_input_paths(root, dataset)["target"])
 
 
 def _source_frame(root: Path, dataset: int) -> pd.DataFrame | None:
-    path = root / "数据集" / "固化数据" / f"dataset{dataset}-source.parquet"
     if dataset == 2:
-        raw_path = root / "数据集" / "原始数据" / "Dataset 2/hierarchical_sales_data.csv"
-        return rebuild_d2_wide_frame(pd.read_csv(raw_path))
+        return pd.read_parquet(formal_input_paths(root, dataset)["source"])
     if dataset <= 3:
-        return pd.read_parquet(path)
+        return pd.read_parquet(formal_input_paths(root, dataset)["source"])
     return None
+
+
+@lru_cache(maxsize=None)
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+@lru_cache(maxsize=None)
+def _load_json_file(path: Path) -> dict[str, object]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _verify_d2_sealed_identity(root: Path, source_path: Path, target_path: Path) -> dict[str, object]:
+    directory = source_path.parent
+    manifest_path = directory / "manifest.json"
+    if not manifest_path.is_file() or manifest_path.is_symlink():
+        raise Gate1Failure("D2_SEALED_IDENTITY", f"missing D2 manifest: {manifest_path}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    expected = {
+        "source": (source_path, 48654, "466391bb7e89067663d2d8f882834819896620c56bbbdc1959b81df938080ab2"),
+        "target": (target_path, 1802, "fbfe0df5a5624504b00a8ea701ca7dd250ab46232d29f82473dcf4d0df712588"),
+    }
+    artifacts: dict[str, object] = {}
+    expected_schema_fingerprints = manifest.get("schema_fingerprints", {})
+    for role, (path, expected_rows, expected_hash) in expected.items():
+        if not path.is_file() or path.is_symlink():
+            raise Gate1Failure("D2_SEALED_IDENTITY", f"missing D2 {role}: {path}")
+        meta = _parquet_meta(path)
+        actual_hash = _sha256_file(path)
+        artifact = manifest.get("artifacts", {}).get(role, {})
+        if actual_hash != expected_hash or artifact.get("sha256") != expected_hash:
+            raise Gate1Failure("D2_SEALED_IDENTITY", f"D2 {role} parquet hash mismatch")
+        if meta.get("row_count") != expected_rows or artifact.get("row_count") != expected_rows:
+            raise Gate1Failure("D2_SEALED_IDENTITY", f"D2 {role} row count mismatch")
+        if artifact.get("path") != path.name or artifact.get("size_bytes") != path.stat().st_size:
+            raise Gate1Failure("D2_SEALED_IDENTITY", f"D2 {role} manifest artifact mismatch")
+        schema_path = directory / f"{role}_schema.json"
+        if not schema_path.is_file() or schema_path.is_symlink():
+            raise Gate1Failure("D2_SEALED_IDENTITY", f"missing D2 {role} schema sidecar")
+        schema_sidecar = json.loads(schema_path.read_text(encoding="utf-8"))
+        schema_frame = pd.read_parquet(path)
+        schema_payload = {
+            "column_order": list(schema_frame.columns),
+            "columns": [
+                {
+                    "name": str(column),
+                    "pandas_dtype": str(schema_frame[column].dtype),
+                    "null_count": int(schema_frame[column].isna().sum()),
+                }
+                for column in schema_frame.columns
+            ],
+        }
+        schema_digest = canonical_digest(schema_payload)
+        if schema_sidecar.get("row_count") != expected_rows or schema_sidecar.get("parquet_sha256") != expected_hash:
+            raise Gate1Failure("D2_SEALED_IDENTITY", f"D2 {role} schema identity mismatch")
+        if schema_sidecar.get("schema_digest") != schema_digest or expected_schema_fingerprints.get(role) != schema_digest:
+            raise Gate1Failure("D2_SEALED_IDENTITY", f"D2 {role} schema fingerprint mismatch")
+        artifacts[role] = {
+            "path": str(path),
+            "row_count": expected_rows,
+            "sha256": actual_hash,
+            "size_bytes": int(path.stat().st_size),
+            "schema_fields": meta.get("schema_fields", []),
+            "schema_digest": schema_digest,
+        }
+
+    zero_dates: dict[str, dict[str, object]] = {}
+    for role, (path, _expected_rows, _expected_hash) in expected.items():
+        frame = pd.read_parquet(path, columns=["date", "sales"])
+        dates = pd.to_datetime(frame["date"], errors="raise").dt.normalize()
+        zero_dates[role] = {
+            date_text: {
+                "rows": int((dates == pd.Timestamp(date_text)).sum()),
+                "sales_zero": bool(frame.loc[dates == pd.Timestamp(date_text), "sales"].eq(0).all()),
+            }
+            for date_text in D2_SOURCE_MISSING_DATES
+        }
+    expected_date_rows = {"source": 27, "target": 1}
+    if any(
+        item[date_text]["rows"] != expected_date_rows[role]
+        or not item[date_text]["sales_zero"]
+        for role, item in zero_dates.items()
+        for date_text in D2_SOURCE_MISSING_DATES
+    ):
+        raise Gate1Failure("D2_SEALED_IDENTITY", "D2 frozen dates are missing or sales are not all zero")
+    return {
+        "status": "passed",
+        "manifest_path": str(manifest_path),
+        "manifest_version": manifest.get("manifest_version"),
+        "artifacts": artifacts,
+        "precalendarized": True,
+        "runtime_calendarization": False,
+        "verified_zero_sales_dates": list(D2_SOURCE_MISSING_DATES),
+        "zero_date_evidence": zero_dates,
+    }
 
 
 def _source_post_origin(path: Path, origin: object) -> int | None:
@@ -127,14 +252,200 @@ def _d6_target_with_calendar(root: Path, target: pd.DataFrame) -> pd.DataFrame:
     return target.drop(columns=[column for column in ("weekday", "wday", "wm_yr_wk", "snap") if column in target.columns], errors="ignore").merge(view, on="date", how="left", validate="many_to_one")
 
 
+def _verify_d4_consumer_authority(
+    root: Path,
+    *,
+    target_key: tuple[str, str],
+    scenario: str,
+    candidate_keys: list[tuple[str, str]],
+) -> dict[str, object]:
+    authority_path = (
+        root
+        / "configs"
+        / "solidified"
+        / "knn"
+        / "Dataset4"
+        / f"knn_{scenario}_info_sharing.json"
+    )
+    payload = _load_json_file(authority_path)
+    target_id = "_".join(target_key)
+    metadata = payload.get("selection_metadata", {}).get(target_id)
+    if not isinstance(metadata, dict):
+        raise Gate1Failure(
+            "D4_STALE_SELECTION_AUTHORITY",
+            f"missing D4 {scenario} metadata for {target_id}",
+        )
+    digest_input = metadata.get("candidate_pool_digest_input")
+    if not isinstance(digest_input, dict):
+        raise Gate1Failure(
+            "D4_STALE_SELECTION_AUTHORITY",
+            f"missing D4 candidate digest input for {target_id}",
+        )
+    authority_candidates = sorted(
+        tuple(str(part) for part in key)
+        for key in digest_input.get("candidate_keys", [])
+    )
+    expected_candidates = sorted(candidate_keys)
+    if authority_candidates != expected_candidates:
+        raise Gate1Failure(
+            "D4_PATH_PARITY_MISMATCH",
+            f"readiness/formal consumer candidate mismatch for {scenario}/{target_id}",
+        )
+    candidate_digest = build_candidate_pool_digest(**digest_input)
+    if candidate_digest != metadata.get("candidate_pool_digest"):
+        raise Gate1Failure(
+            "D4_STALE_SELECTION_AUTHORITY",
+            f"candidate digest mismatch for {scenario}/{target_id}",
+        )
+    source_pool_fingerprint = build_source_pool_fingerprint(
+        protocol_version=metadata["protocol_version"],
+        dataset_id="D4",
+        scenario=scenario,
+        target_key=target_key,
+        group_cols=("store_id", "product_id"),
+        candidate_keys=expected_candidates,
+    )
+    if source_pool_fingerprint != metadata.get("source_pool_fingerprint"):
+        raise Gate1Failure(
+            "D4_STALE_SELECTION_AUTHORITY",
+            f"source pool fingerprint mismatch for {scenario}/{target_id}",
+        )
+    selected_sources = metadata.get("selected_sources_runtime")
+    if not isinstance(selected_sources, list):
+        raise Gate1Failure(
+            "D4_STALE_SELECTION_AUTHORITY",
+            f"missing selected consumer sources for {scenario}/{target_id}",
+        )
+    consumer_fingerprint = build_consumer_fingerprint(
+        protocol_version=metadata["protocol_version"],
+        dataset_id="D4",
+        scenario=scenario,
+        target_key=target_key,
+        source_pool_fingerprint=source_pool_fingerprint,
+        candidate_pool_digest=candidate_digest,
+        selection_result_digest=metadata["selection_result_digest"],
+        ordered_top_k=selected_sources,
+    )
+    if consumer_fingerprint != metadata.get("consumer_fingerprint"):
+        raise Gate1Failure(
+            "D4_STALE_SELECTION_AUTHORITY",
+            f"consumer fingerprint mismatch for {scenario}/{target_id}",
+        )
+    target_store, target_product = target_key
+    candidate_set = set(expected_candidates)
+    cross_store_same_product_count = sum(
+        key[0] != target_store and key[1] == target_product
+        for key in candidate_set
+    )
+    proof = {
+        "entity_key_fields": ["store_id", "product_id"],
+        "exact_target_tuple": list(target_key),
+        "exact_target_tuple_excluded": target_key not in candidate_set,
+        "cross_store_same_product_available_count": cross_store_same_product_count,
+        "cross_store_same_product_retained_count": cross_store_same_product_count,
+        "same_store_other_product_retained_count": sum(
+            key[0] == target_store and key[1] != target_product
+            for key in candidate_set
+        ),
+        "cross_store_other_product_retained_count": sum(
+            key[0] != target_store and key[1] != target_product
+            for key in candidate_set
+        ),
+        "candidate_digest_verified": True,
+        "consumer_fingerprint_verified": True,
+    }
+    if not proof["exact_target_tuple_excluded"]:
+        raise Gate1Failure(
+            "D4_PRODUCT_ONLY_CANDIDATE_EXCLUSION",
+            f"exact D4 target entered candidate pool for {scenario}/{target_id}",
+        )
+    if scenario == "with" and not (
+        proof["cross_store_same_product_retained_count"] > 0
+        and proof["same_store_other_product_retained_count"] > 0
+        and proof["cross_store_other_product_retained_count"] > 0
+    ):
+        raise Gate1Failure(
+            "D4_READINESS_SEMANTIC_PROOF_MISSING",
+            f"D4 exact-key behavior matrix is incomplete for {target_id}",
+        )
+    stored_proof = metadata.get("d4_validation_proof")
+    if stored_proof != proof or metadata.get(
+        "d4_validation_proof_digest"
+    ) != canonical_digest(proof):
+        raise Gate1Failure(
+            "D4_READINESS_SEMANTIC_PROOF_MISSING",
+            f"D4 validation proof mismatch for {scenario}/{target_id}",
+        )
+    manifest = payload.get("d4_manifest_identity")
+    if not isinstance(manifest, dict):
+        raise Gate1Failure(
+            "D4_STALE_SELECTION_AUTHORITY",
+            f"missing D4 manifest identity for {scenario}",
+        )
+    manifest_payload = {
+        key: value
+        for key, value in manifest.items()
+        if key != "manifest_identity_digest"
+    }
+    if (
+        manifest.get("scenario") != scenario
+        or manifest.get("entity_key_fields") != ["store_id", "product_id"]
+        or manifest.get("source_parquet_sha256")
+        != _sha256_file(
+            resolve_formal_dataset_paths(4, repository_root=root).source_path
+        )
+        or manifest.get("target_parquet_sha256")
+        != _sha256_file(
+            resolve_formal_dataset_paths(4, repository_root=root).target_path
+        )
+        or manifest.get("manifest_identity_digest")
+        != canonical_digest(manifest_payload)
+    ):
+        raise Gate1Failure(
+            "D4_STALE_SELECTION_AUTHORITY",
+            f"D4 manifest identity mismatch for {scenario}",
+        )
+    manifest_consumer = manifest.get("target_consumers", {}).get(target_id)
+    expected_manifest_consumer = {
+        "candidate_pool_digest": candidate_digest,
+        "selection_result_digest": metadata["selection_result_digest"],
+        "source_pool_fingerprint": source_pool_fingerprint,
+        "consumer_fingerprint": consumer_fingerprint,
+        "validation_proof_digest": metadata["d4_validation_proof_digest"],
+    }
+    if manifest_consumer != expected_manifest_consumer:
+        raise Gate1Failure(
+            "D4_STALE_SELECTION_AUTHORITY",
+            f"D4 manifest consumer mismatch for {scenario}/{target_id}",
+        )
+    return {
+        "status": "passed",
+        "scenario": scenario,
+        "target_key": list(target_key),
+        "candidate_count": len(expected_candidates),
+        "candidate_pool_digest": candidate_digest,
+        "selection_result_digest": metadata["selection_result_digest"],
+        "source_pool_fingerprint": source_pool_fingerprint,
+        "consumer_fingerprint": consumer_fingerprint,
+        "validation_proof_digest": metadata["d4_validation_proof_digest"],
+        "manifest_identity_digest": manifest["manifest_identity_digest"],
+        "exact_key_proof": proof,
+    }
+
+
 def _base_report(root: Path, parent_root: Path, old_root: Path, dataset: int, identity: Mapping[str, object] | None) -> dict[str, object]:
     spec = dataset_contract(dataset)
-    source_path = root / "数据集" / "固化数据" / f"dataset{dataset}-source.parquet"
-    target_path = root / "数据集" / "固化数据" / f"dataset{dataset}-target.parquet"
+    input_paths = formal_input_paths(root, dataset)
+    source_path = input_paths["source"]
+    target_path = input_paths["target"]
     target_keys = [list(key) for key in spec.target_keys]
     return {
         "formal_identity": dict(identity or {"contract_digest": CONTRACT_DIGEST, "combined_formal_identity_digest": COMBINED_FORMAL_IDENTITY_DIGEST}),
         "dataset": f"D{dataset}",
+        "formal_input": resolve_readiness_formal_input_identity(
+            dataset,
+            repository_root=root,
+        ),
         "raw_inputs": [_file_record(path) for path in RAW_INPUTS[dataset]],
         "parent_inputs": {"source": _parquet_meta(parent_root / source_path.relative_to(root)), "target": _parquet_meta(parent_root / target_path.relative_to(root))},
         "old_sealed_inputs": {"source": _parquet_meta(old_root / source_path.relative_to(root)), "target": _parquet_meta(old_root / target_path.relative_to(root))},
@@ -164,7 +475,7 @@ def _base_report(root: Path, parent_root: Path, old_root: Path, dataset: int, id
         "audit_fields": [],
         "field_exclusions": {},
         "cardinality": {},
-        "proof_inputs_available": {"formal_identity": identity is not None, "raw_authority": False, "parent": False, "views": False, "calendarization": False, "field_specific_repairs": False},
+        "proof_inputs_available": {"formal_identity": identity is not None, "raw_authority": False, "sealed_identity": False, "parent": False, "views": False, "calendarization": False, "field_specific_repairs": False},
         "status": "failed",
         "failure_code": None,
     }
@@ -174,7 +485,9 @@ def _dataset_report(root: Path, parent_root: Path, old_root: Path, dataset_id: i
     try:
         spec = dataset_contract(dataset_id)
         report = _base_report(root, parent_root, old_root, dataset_id, identity)
-        source_path = root / "数据集" / "固化数据" / f"dataset{dataset_id}-source.parquet"
+        input_paths = formal_input_paths(root, dataset_id)
+        source_path = input_paths["source"]
+        target_path = input_paths["target"]
         target = _target_frame(root, dataset_id)
         if dataset_id == 6:
             target = _d6_target_with_calendar(root, target)
@@ -194,30 +507,84 @@ def _dataset_report(root: Path, parent_root: Path, old_root: Path, dataset_id: i
             report["source_entities"] = [list(key) for key in sorted({tuple(str(value) for value in row) for row in source.loc[:, list(spec.key_fields)].drop_duplicates().itertuples(index=False, name=None)})]
             try:
                 if dataset_id == 2:
-                    candidate_keys = tuple((str(brand), str(item)) for brand in range(1, 4) for item in range(1, 10))
-                    source, calendar_proof = calendarize_d2_source_history(source, candidate_keys)
+                    sealed_identity = _verify_d2_sealed_identity(root, source_path, target_path)
+                    source.attrs = source.attrs.copy()
+                    source.attrs["split_role"] = "source"
+                    source, calendar_proof = verify_d2_source_frame(
+                        slice_d2_source_frame(source),
+                        candidate_keys=D2_FROZEN_SOURCE_CANDIDATE_KEYS,
+                    )
                     selected, source_proof = select_source_history_candidates(spec.dataset, source, "with-sharing", require_complete=True)
-                    source_proof["authority"] = "raw:D2/hierarchical_sales_data.csv"
-                    source_proof["calendarization"] = calendar_proof
+                    source_proof["authority"] = "sealed:D2/source.parquet"
+                    source_proof["calendarization"] = {**calendar_proof.to_dict(), "status": "verified_precalendarized", "runtime_calendarization": False}
+                    source_proof["sealed_identity"] = sealed_identity
+                    report["sealed_identity"] = sealed_identity
+                    report["proof_inputs_available"].update({"raw_authority": False, "sealed_identity": True, "calendarization": True})
                 else:
                     selected, source_proof = select_source_history_candidates(spec.dataset, source, "with-sharing", require_complete=True)
                 report["source_selection"] = source_proof
-                report["proof_inputs_available"].update({"raw_authority": True, "source_eligibility": True, "bounded_stream": True})
+                report["proof_inputs_available"].update({"raw_authority": dataset_id != 2, "source_eligibility": True, "bounded_stream": True})
                 report["source_entities"] = source_proof.get("candidate_keys", report["source_entities"])
             except Gate1Failure as exc:
                 report["failure_code"] = exc.code
                 report["error"] = str(exc)
         else:
-            source_proof = stream_source_history_candidates(
-                spec.dataset,
-                source_path,
-                "with-sharing",
-                target_frame=target,
-                allow_approved_calendarization=(dataset_id == 5),
-            )
-            report["source_selection"] = source_proof
-            report["source_entities"] = source_proof["complete_candidate_keys"]
-            report["post_origin_history_rows"] = source_proof["post_origin_history_rows"]
+            if dataset_id == 4:
+                source_proof = stream_source_history_candidates(
+                    spec.dataset,
+                    source_path,
+                    "with-sharing",
+                    target_frame=target,
+                    current_target_key=spec.target_keys[0],
+                    source_history_days=SOURCE_HISTORY_DAYS,
+                )
+                universe = {
+                    tuple(str(part) for part in key)
+                    for key in source_proof[
+                        "available_source_keys_before_target_exclusion"
+                    ]
+                }
+                per_target: dict[str, object] = {}
+                for raw_target_key in spec.target_keys:
+                    target_key = tuple(str(part) for part in raw_target_key)
+                    target_id = "/".join(target_key)
+                    scenario_reports: dict[str, object] = {}
+                    for scenario in ("without", "with"):
+                        candidates = sorted(
+                            key
+                            for key in universe
+                            if key != target_key
+                            and (scenario == "with" or key[0] == target_key[0])
+                        )
+                        scenario_reports[scenario] = _verify_d4_consumer_authority(
+                            root,
+                            target_key=target_key,
+                            scenario=scenario,
+                            candidate_keys=candidates,
+                        )
+                    per_target[target_id] = scenario_reports
+                report["source_selection"] = {
+                    "status": "passed",
+                    "entity_key_fields": list(spec.key_fields),
+                    "exclusion_scope": "current_exact_target_tuple_only",
+                    "targets": per_target,
+                    "stream_proof": source_proof,
+                }
+                report["source_entities"] = [list(key) for key in sorted(universe)]
+                report["post_origin_history_rows"] = source_proof[
+                    "post_origin_history_rows"
+                ]
+            else:
+                source_proof = stream_source_history_candidates(
+                    spec.dataset,
+                    source_path,
+                    "with-sharing",
+                    target_frame=target,
+                    allow_approved_calendarization=(dataset_id == 5),
+                )
+                report["source_selection"] = source_proof
+                report["source_entities"] = source_proof["complete_candidate_keys"]
+                report["post_origin_history_rows"] = source_proof["post_origin_history_rows"]
             report["proof_inputs_available"].update({"raw_authority": True, "source_eligibility": True, "bounded_stream": True})
         if report["duplicate_exact_keys"]:
             report["failure_code"] = "DUPLICATE_EXACT_KEY_DATE"
@@ -229,7 +596,13 @@ def _dataset_report(root: Path, parent_root: Path, old_root: Path, dataset_id: i
         return {"dataset": f"D{dataset_id}", "status": "failed", "failure_code": getattr(exc, "code", "READINESS_ERROR"), "error": f"{type(exc).__name__}: {exc}"}
 
 
-def run_readiness(*, root: Path = ROOT, parent_root: Path | None = None, old_sealed_root: Path | None = None) -> dict[str, object]:
+def run_readiness(
+    *,
+    root: Path = ROOT,
+    parent_root: Path | None = None,
+    old_sealed_root: Path | None = None,
+    require_deployment: bool = False,
+) -> dict[str, object]:
     root = Path(root).resolve()
     parent_root = Path(parent_root or root).resolve()
     old_sealed_root = Path(old_sealed_root or root).resolve()
@@ -245,8 +618,72 @@ def run_readiness(*, root: Path = ROOT, parent_root: Path | None = None, old_sea
             item["status"] = "failed"
             item["failure_code"] = "FORMAL_IDENTITY"
             item["error"] = identity_error
+    deployment_error: tuple[str, str] | None = None
+    if require_deployment and not identity_error:
+        try:
+            from src.protocols.formal_deployment_manifest import (
+                canonical_json_bytes,
+                sha256_bytes,
+                validate_deployment_manifest,
+            )
+
+            preflight = validate_deployment_manifest(root)
+            manifest = preflight["manifest"]
+            proofs = preflight["proofs"]
+            for item in datasets:
+                dataset = str(item["dataset"])
+                entry = manifest["datasets"][dataset]
+                proof = proofs[dataset]
+                base_digest = sha256_bytes(canonical_json_bytes(item))
+                if base_digest != proof["readiness_proof_digest"]:
+                    item["status"] = "failed"
+                    item["failure_code"] = "READINESS_PROOF_MISMATCH"
+                item.update(
+                    {
+                        "source_path": entry["source"]["path"],
+                        "target_path": entry["target"]["path"],
+                        "source_sha256": entry["source"]["sha256"],
+                        "target_sha256": entry["target"]["sha256"],
+                        "source_size": entry["source"]["size_bytes"],
+                        "target_size": entry["target"]["size_bytes"],
+                        "source_schema_digest": entry["source_schema_digest"],
+                        "target_schema_digest": entry["target_schema_digest"],
+                        "consumer_fingerprint": entry["consumer_fingerprint"],
+                        "proof_digest": proof["proof_identity_sha256"],
+                        "formal_identity_match": proof["formal_identity"] == manifest["formal_identity"],
+                        "manifest_identity_match": proof["consumer_fingerprint"] == entry["consumer_fingerprint"],
+                    }
+                )
+                if not item["formal_identity_match"] or not item["manifest_identity_match"]:
+                    item["status"] = "failed"
+                    item["failure_code"] = "MANIFEST_IDENTITY_MISMATCH"
+        except Exception as exc:
+            deployment_error = (
+                str(getattr(exc, "code", "FINAL_PREFLIGHT_NOT_READY")),
+                f"{type(exc).__name__}: {exc}",
+            )
+            for item in datasets:
+                item["status"] = "failed"
+                item["failure_code"] = deployment_error[0]
+                item["error"] = deployment_error[1]
     failures = [item for item in datasets if item.get("status") != "passed"]
-    return {"status": "passed" if not failures else "failed", "failure_code": None if not failures else failures[0].get("failure_code"), "formal_identity": identity or {"status": "failed", "error": identity_error}, "datasets": datasets, "read_only": True, "writes_performed": False, "producer_calls_performed": 0, "private_build_created": False, "deployment_created": False, "manifest_candidate_created": False}
+    ready = len(datasets) - len(failures)
+    status = "passed" if not failures else "failed"
+    return {
+        "status": status,
+        "preflight_status": "ready" if status == "passed" else "blocked",
+        "datasets_ready": ready,
+        "datasets_total": 6,
+        "failure_code": None if not failures else failures[0].get("failure_code"),
+        "formal_identity": identity or {"status": "failed", "error": identity_error},
+        "datasets": datasets,
+        "read_only": True,
+        "writes_performed": False,
+        "producer_calls_performed": 0,
+        "private_build_created": False,
+        "deployment_created": False,
+        "manifest_candidate_created": False,
+    }
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -260,7 +697,12 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    report = run_readiness(root=args.root, parent_root=args.parent_root, old_sealed_root=args.old_sealed_root)
+    report = run_readiness(
+        root=args.root,
+        parent_root=args.parent_root,
+        old_sealed_root=args.old_sealed_root,
+        require_deployment=True,
+    )
     print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
     return 0 if report["status"] == "passed" else 1
 

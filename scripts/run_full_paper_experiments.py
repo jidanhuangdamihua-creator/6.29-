@@ -49,6 +49,10 @@ from src.utils.result_schema import (
     normalize_information_sharing_contract as _normalize_information_sharing_contract,
 )
 from src.protocols.runner_adapter import configure_protocol_frames
+from src.protocols.formal_input_paths import (
+    require_explicit_formal_paths,
+    resolve_formal_dataset_paths,
+)
 from src.protocols.rolling_origin import build_sample_manifest
 from src.protocols.reproducibility import set_protocol_seed
 from src.protocols.experiment_protocol import (
@@ -101,23 +105,27 @@ STRICT_KNN_OBSERVED_START = {
     "Dataset3": "2015-01-03",
 }
 FORMAL_DATASET_PATHS = {
-    "Dataset1": "数据集/原始数据/Dataset 1/train.csv",
-    "Dataset2": "数据集/原始数据/Dataset 2/hierarchical_sales_data.csv",
-    "Dataset3": "数据集/原始数据/Dataset 3.csv",
+    f"Dataset{dataset_id}": str(
+        resolve_formal_dataset_paths(dataset_id, repository_root=ROOT).source_path
+    )
+    for dataset_id in range(1, 4)
 }
 SOLIDIFIED_DATASET_PATHS = {
-    "Dataset1": {
-        "source": "数据集/固化数据/dataset1-source.parquet",
-        "target": "数据集/固化数据/dataset1-target.parquet",
-    },
-    "Dataset2": {
-        "source": "数据集/固化数据/dataset2-source.parquet",
-        "target": "数据集/固化数据/dataset2-target.parquet",
-    },
-    "Dataset3": {
-        "source": "数据集/固化数据/dataset3-source.parquet",
-        "target": "数据集/固化数据/dataset3-target.parquet",
-    },
+    f"Dataset{dataset_id}": {
+        "source": str(
+            resolve_formal_dataset_paths(
+                dataset_id,
+                repository_root=ROOT,
+            ).source_path
+        ),
+        "target": str(
+            resolve_formal_dataset_paths(
+                dataset_id,
+                repository_root=ROOT,
+            ).target_path
+        ),
+    }
+    for dataset_id in range(1, 4)
 }
 FORMAL_LR = 1e-4
 FORMAL_EPOCHS = 50
@@ -479,13 +487,27 @@ def _cfg_get(cfg: Dict[str, Any], path: str, default: Any) -> Any:
     return cur
 
 
-def _solidified_paths_for_dataset(dataset_name: str) -> Dict[str, Path]:
+def _solidified_paths_for_dataset(
+    dataset_name: str,
+    *,
+    explicit_paths: Optional[Dict[str, Path]] = None,
+) -> Dict[str, Path]:
     if dataset_name not in SOLIDIFIED_DATASET_PATHS:
         raise ValueError(f"No solidified parquet paths configured for {dataset_name}")
-    return {
-        split: ROOT / rel_path
-        for split, rel_path in SOLIDIFIED_DATASET_PATHS[dataset_name].items()
-    }
+    dataset_id = int(dataset_name.removeprefix("Dataset"))
+    if explicit_paths is not None:
+        resolved = require_explicit_formal_paths(
+            dataset_id,
+            source_path=explicit_paths["source"],
+            target_path=explicit_paths["target"],
+            repository_root=ROOT,
+        )
+    else:
+        resolved = resolve_formal_dataset_paths(
+            dataset_id,
+            repository_root=ROOT,
+        )
+    return {"source": resolved.source_path, "target": resolved.target_path}
 
 
 def _strict_target_split_days(dataset_name: str, cfg: Dict[str, Any]) -> Dict[str, int]:
@@ -663,9 +685,13 @@ def _load_solidified_base_data(
     cfg: Dict[str, Any],
     strict_paper_mode: bool,
     strict_paper_split: bool,
+    explicit_paths: Optional[Dict[str, Path]] = None,
 ) -> Dict[str, pd.DataFrame]:
     """Load D1-D3 from solidified source/target parquet without CSV preprocessing."""
-    paths = _solidified_paths_for_dataset(dataset_name)
+    paths = _solidified_paths_for_dataset(
+        dataset_name,
+        explicit_paths=explicit_paths,
+    )
     source_df = pd.read_parquet(paths["source"])
     target_df = pd.read_parquet(paths["target"])
 
@@ -698,6 +724,7 @@ def _prepare_runner_base_data(
     verbose_mode: str,
     strict_paper_mode: bool,
     strict_paper_split: bool,
+    explicit_paths: Optional[Dict[str, Path]] = None,
 ) -> Dict[str, pd.DataFrame]:
     if dataset_name in SOLIDIFIED_DATASET_PATHS:
         return _load_solidified_base_data(
@@ -705,6 +732,7 @@ def _prepare_runner_base_data(
             cfg=cfg,
             strict_paper_mode=strict_paper_mode,
             strict_paper_split=strict_paper_split,
+            explicit_paths=explicit_paths,
         )
     return prepare_base_data_for_experiments(
         dataset_name=dataset_name,
@@ -1606,6 +1634,8 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--horizon", type=int, choices=[1, 2, 3, 4, 5], default=1)
     parser.add_argument("--seed", type=int, choices=[42, 43, 44, 45, 46], default=42)
+    parser.add_argument("--formal-source-path", type=Path, default=None)
+    parser.add_argument("--formal-target-path", type=Path, default=None)
     return parser.parse_args()
 
 
@@ -1970,6 +2000,28 @@ def main() -> None:
     args = _parse_args()
     verbose_mode = str(args.verbose_mode).lower()
     selected_datasets = _resolve_selected_datasets(args.only_dataset)
+    if (args.formal_source_path is None) != (args.formal_target_path is None):
+        raise SystemExit(
+            "FORMAL_INPUT_RESOLVER_PARITY_MISMATCH: source and target must be provided together"
+        )
+    explicit_paths_by_dataset: Dict[str, Dict[str, Path]] = {}
+    if args.formal_source_path is not None:
+        if len(selected_datasets) != 1:
+            raise SystemExit(
+                "FORMAL_INPUT_RESOLVER_PARITY_MISMATCH: explicit paths require one dataset"
+            )
+        dataset_name = selected_datasets[0]
+        dataset_id = int(dataset_name.removeprefix("Dataset"))
+        resolved = require_explicit_formal_paths(
+            dataset_id,
+            source_path=args.formal_source_path,
+            target_path=args.formal_target_path,
+            repository_root=ROOT,
+        )
+        explicit_paths_by_dataset[dataset_name] = {
+            "source": resolved.source_path,
+            "target": resolved.target_path,
+        }
     info_sharing_scenario = _info_sharing_cli_to_scenario(args.info_sharing)
 
     set_verbose_mode(verbose_mode)
@@ -2054,6 +2106,7 @@ def main() -> None:
                 verbose_mode=verbose_mode,
                 strict_paper_mode=strict_paper_mode,
                 strict_paper_split=strict_paper_split,
+                explicit_paths=explicit_paths_by_dataset.get(dataset_name),
             )
 
         dataset_target_metadata = (

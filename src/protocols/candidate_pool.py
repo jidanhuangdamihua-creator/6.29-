@@ -124,6 +124,33 @@ def build_candidate_pool_digest(
     return _sha256_payload(payload)
 
 
+def build_source_pool_fingerprint(
+    *,
+    protocol_version: object,
+    dataset_id: object,
+    scenario: object,
+    target_key: Sequence[object],
+    group_cols: Sequence[object],
+    candidate_keys: Iterable[Sequence[object]],
+) -> str:
+    """Bind the exact ordered composite-key candidate identity for one target."""
+
+    normalized_candidates = [normalize_source_key(key) for key in candidate_keys]
+    if len(set(normalized_candidates)) != len(normalized_candidates):
+        raise ProtocolViolation("source pool fingerprint contains duplicate source keys")
+    normalized_candidates.sort()
+    return _sha256_payload(
+        {
+            "protocol_version": str(protocol_version).strip(),
+            "dataset_id": str(dataset_id).strip().upper(),
+            "scenario": normalize_scenario(scenario),
+            "target_key": list(normalize_source_key(target_key)),
+            "group_cols": [str(column).strip() for column in group_cols],
+            "candidate_keys": [list(key) for key in normalized_candidates],
+        }
+    )
+
+
 @dataclass(frozen=True)
 class RankedDistance:
     source_key: SourceKey
@@ -255,6 +282,44 @@ def build_selection_result_digest(
         ],
     }
     return _sha256_payload(payload)
+
+
+def build_consumer_fingerprint(
+    *,
+    protocol_version: object,
+    dataset_id: object,
+    scenario: object,
+    target_key: Sequence[object],
+    source_pool_fingerprint: object,
+    candidate_pool_digest: object,
+    selection_result_digest: object,
+    ordered_top_k: Sequence[Mapping[str, Any]],
+) -> str:
+    """Bind the exact candidate authority and ordered formal-consumer result."""
+
+    normalized_top_k = []
+    for row in ordered_top_k:
+        normalized_top_k.append(
+            {
+                "source_rank": int(row["source_rank"]),
+                "source_key": list(normalize_source_key(row["source_key"])),
+                "distance": _float_text(float(row["distance"])),
+                "weight": _float_text(float(row["weight"])),
+                "tie_group": int(row["tie_group"]),
+            }
+        )
+    return _sha256_payload(
+        {
+            "protocol_version": str(protocol_version).strip(),
+            "dataset_id": str(dataset_id).strip().upper(),
+            "scenario": normalize_scenario(scenario),
+            "target_key": list(normalize_source_key(target_key)),
+            "source_pool_fingerprint": str(source_pool_fingerprint),
+            "candidate_pool_digest": str(candidate_pool_digest),
+            "selection_result_digest": str(selection_result_digest),
+            "ordered_top_k": normalized_top_k,
+        }
+    )
 
 
 def _normalize_key_column(series: pd.Series) -> np.ndarray:

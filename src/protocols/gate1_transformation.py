@@ -549,14 +549,23 @@ def select_source_history_candidates(
     scenario: str,
     *,
     require_complete: bool = True,
+    current_target_key: Sequence[object] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
     spec = dataset_contract(dataset)
     source = _prepare_frame(source_frame, label=f"{spec.dataset} source", spec=spec)
     source = source.loc[source["date"].between(pd.Timestamp(spec.source_history_start), pd.Timestamp(spec.source_history_end))].copy()
     source = source.loc[_domain_mask(source, spec, scenario)].copy()
-    if spec.dataset in {"D4", "D5", "D6"}:
+    if spec.dataset in {"D5", "D6"}:
         source = source.loc[_same_group_mask(source, spec)].copy()
     target_set = set(spec.target_keys)
+    if spec.dataset == "D4" and current_target_key is not None:
+        normalized_current_target = normalize_key(current_target_key)
+        if normalized_current_target not in target_set:
+            raise Gate1Failure(
+                "TARGET_SCOPE",
+                f"D4 current target is not frozen: {normalized_current_target!r}",
+            )
+        target_set = {normalized_current_target}
     source = source.loc[~_key_series(source, spec.key_fields).isin(target_set)].copy()
     counts = source.groupby(list(spec.key_fields), dropna=False)["date"].nunique()
     complete = []
@@ -578,6 +587,7 @@ def select_source_history_candidates(
         "source_rows_before": int(len(source_frame)),
         "source_rows_after": int(len(selected)),
         "expected_days": 180,
+        "excluded_target_keys": [list(key) for key in sorted(target_set)],
     }
 
 
@@ -587,7 +597,9 @@ def stream_source_history_candidates(
     scenario: str,
     *,
     target_frame: pd.DataFrame | None = None,
+    current_target_key: Sequence[object] | None = None,
     allow_approved_calendarization: bool = False,
+    source_history_days: int = 180,
     batch_size: int = 500_000,
 ) -> dict[str, object]:
     """Prove source eligibility by scanning parquet batches without materializing it.
@@ -616,8 +628,17 @@ def stream_source_history_candidates(
     else:
         raise Gate1Failure("SCENARIO", f"unsupported scenario {scenario!r}")
     target_keys = set(spec.target_keys)
+    if spec.dataset == "D4" and current_target_key is not None:
+        normalized_current_target = normalize_key(current_target_key)
+        if normalized_current_target not in target_keys:
+            raise Gate1Failure(
+                "TARGET_SCOPE",
+                f"D4 current target is not frozen: {normalized_current_target!r}",
+            )
+        target_keys = {normalized_current_target}
     target_groups: set[str] = set()
-    if spec.grouping_field:
+    requires_same_group = spec.dataset in {"D5", "D6"}
+    if requires_same_group and spec.grouping_field:
         if target_frame is None or spec.grouping_field not in target_frame.columns:
             raise Gate1Failure("SOURCE_GROUP_AUTHORITY", f"target is missing {spec.grouping_field}")
         target_keys_mask = _mask_keys(_prepare_frame(target_frame, label=f"{spec.dataset} target", spec=spec), spec, spec.target_keys)
@@ -629,7 +650,12 @@ def stream_source_history_candidates(
     post_origin_rows = 0
     duplicate_exact_key_dates = 0
     date_masks_by_key: dict[tuple[str, ...], int] = {}
-    source_start = pd.Timestamp(spec.source_history_start)
+    expected_history_days = int(source_history_days)
+    if expected_history_days <= 0:
+        raise Gate1Failure("HISTORY_WINDOW", "source_history_days must be positive")
+    source_start = pd.Timestamp(spec.origin) - pd.Timedelta(
+        days=expected_history_days - 1
+    )
     allowed_item_ids = {str(value) for value in range(1, 10)}
     allowed_domains = {_normalized_component(value) for value in source_pool_candidates(spec.dataset, "with-sharing" if shared else "without-sharing")} if spec.dataset in {"D1", "D2", "D3"} else set()
     fields = list(dict.fromkeys(required))
@@ -640,12 +666,16 @@ def stream_source_history_candidates(
         if dates.isna().any():
             raise Gate1Failure("INVALID_DATE", "source stream contains invalid date")
         post_origin_rows += int((dates > pd.Timestamp(spec.origin)).sum())
-        history = chunk.loc[dates.between(pd.Timestamp(spec.source_history_start), pd.Timestamp(spec.source_history_end))].copy()
+        history = chunk.loc[
+            dates.between(source_start, pd.Timestamp(spec.source_history_end))
+        ].copy()
         history["date"] = dates.loc[history.index]
         for row in history.itertuples(index=False, name=None):
             values = dict(zip(fields, row))
             key = normalize_key(tuple(values[field] for field in spec.key_fields))
-            if key in target_keys:
+            if key in target_keys and not (
+                spec.dataset == "D4" and current_target_key is not None
+            ):
                 continue
             if spec.dataset in {"D1", "D2"}:
                 if key[0] not in allowed_domains or key[1] not in allowed_item_ids:
@@ -658,7 +688,7 @@ def stream_source_history_candidates(
                 target_store = spec.target_keys[0][0]
                 if not shared and store != target_store:
                     continue
-                if spec.grouping_field and _normalized_component(values[spec.grouping_field]) not in target_groups:
+                if requires_same_group and spec.grouping_field and _normalized_component(values[spec.grouping_field]) not in target_groups:
                     continue
             timestamp = pd.Timestamp(values["date"])
             bit = 1 << int((timestamp - source_start).days)
@@ -667,26 +697,39 @@ def stream_source_history_candidates(
                 duplicate_exact_key_dates += 1
             date_masks_by_key[key] = current_mask | bit
             eligible_rows += 1
+    available_date_masks_by_key = dict(date_masks_by_key)
+    for target_key in target_keys:
+        date_masks_by_key.pop(target_key, None)
+
     def _popcount(mask: int) -> int:
         return bin(mask).count("1")
 
+    eligible_rows = sum(_popcount(mask) for mask in date_masks_by_key.values())
     raw_counts = {"/".join(key): _popcount(mask) for key, mask in sorted(date_masks_by_key.items())}
-    raw_complete = sorted(key for key, mask in date_masks_by_key.items() if _popcount(mask) == 180)
-    incomplete = {key: count for key, count in raw_counts.items() if count != 180}
+    raw_complete = sorted(
+        key
+        for key, mask in date_masks_by_key.items()
+        if _popcount(mask) == expected_history_days
+    )
+    incomplete = {
+        key: count
+        for key, count in raw_counts.items()
+        if count != expected_history_days
+    }
     if spec.dataset == "D5" and allow_approved_calendarization:
         complete = sorted(date_masks_by_key)
         calendarization = {
             "status": "passed",
             "rule": "D5_APPROVED_SOURCE_HISTORY_CALENDARIZATION",
-            "window": [spec.source_history_start.isoformat(), spec.source_history_end.isoformat()],
+            "window": [source_start.date().isoformat(), spec.source_history_end.isoformat()],
             "candidate_count": len(complete),
             "raw_complete_candidate_count": len(raw_complete),
             "raw_incomplete_candidate_count": len(incomplete),
             "raw_candidate_cardinality_digest": canonical_digest(raw_counts),
             "raw_eligible_rows": int(eligible_rows),
-            "calendarized_rows": int(len(complete) * 180),
-            "repaired_rows": int(sum(180 - count for count in incomplete.values())),
-            "missing_date_count": int(sum(180 - count for count in incomplete.values())),
+            "calendarized_rows": int(len(complete) * expected_history_days),
+            "repaired_rows": int(sum(expected_history_days - count for count in incomplete.values())),
+            "missing_date_count": int(sum(expected_history_days - count for count in incomplete.values())),
             "sales_rule": "missing source natural day -> 0",
             "covariate_rule": "reuse approved D5 historical reconstruction rules",
         }
@@ -699,7 +742,7 @@ def stream_source_history_candidates(
             "raw_incomplete_candidate_count": len(incomplete),
             "raw_candidate_cardinality_digest": canonical_digest(raw_counts),
             "raw_eligible_rows": int(eligible_rows),
-            "calendarized_rows": int(len(complete) * 180),
+            "calendarized_rows": int(len(complete) * expected_history_days),
             "repaired_rows": 0,
             "missing_date_count": 0,
         }
@@ -715,11 +758,45 @@ def stream_source_history_candidates(
         "post_origin_history_rows": int(post_origin_rows),
         "duplicate_exact_key_dates": int(duplicate_exact_key_dates),
         "complete_candidate_keys": [list(key) for key in complete],
+        "eligible_candidate_keys": [list(key) for key in sorted(date_masks_by_key)],
+        "available_source_keys_before_target_exclusion": [
+            list(key) for key in sorted(available_date_masks_by_key)
+        ],
         "incomplete_candidates": incomplete,
         "calendarization": calendarization,
-        "candidate_filter_digest": canonical_digest({"dataset": spec.dataset, "scenario": "with" if shared else "without", "grouping_field": spec.grouping_field, "targets": [list(key) for key in spec.target_keys]}),
+        "source_history_days": expected_history_days,
+        "candidate_filter_digest": canonical_digest({"dataset": spec.dataset, "scenario": "with" if shared else "without", "grouping_field": spec.grouping_field if requires_same_group else None, "targets": [list(key) for key in sorted(target_keys)]}),
+        "excluded_target_keys": [list(key) for key in sorted(target_keys)],
         "status": "passed",
     }
+    if spec.dataset == "D4" and len(target_keys) == 1:
+        target_store, target_product = next(iter(target_keys))
+        eligible_keys = sorted(date_masks_by_key)
+        cross_store_same_product_count = sum(
+            key[0] != target_store and key[1] == target_product
+            for key in eligible_keys
+        )
+        proof["exact_key_proof"] = {
+            "entity_key_fields": list(spec.key_fields),
+            "exact_target_tuple": [target_store, target_product],
+            "exact_target_tuple_excluded": (target_store, target_product)
+            not in date_masks_by_key,
+            "other_formal_targets_retained": [
+                list(key)
+                for key in spec.target_keys
+                if key != (target_store, target_product) and key in date_masks_by_key
+            ],
+            "cross_store_same_product_available_count": cross_store_same_product_count,
+            "cross_store_same_product_retained_count": cross_store_same_product_count,
+            "same_store_other_product_retained_count": sum(
+                key[0] == target_store and key[1] != target_product
+                for key in eligible_keys
+            ),
+            "cross_store_other_product_retained_count": sum(
+                key[0] != target_store and key[1] != target_product
+                for key in eligible_keys
+            ),
+        }
     return proof
 
 

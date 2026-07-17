@@ -1,0 +1,580 @@
+{
+  "consumer_fingerprint": "6915c42158857c08e8fbac64ddb103dfcd1a1ec8a4928a76c6acf200123d8a84",
+  "consumer_fingerprint_input": {
+    "code_inventory_digest": "b791257c9dbeafe45a6d7bcd2040db1ce89b14c7d083e85bb6e8a4f49200087b",
+    "dataset_id": "D2",
+    "readiness_proof_digest": "839e707d4b7029ddceb9f0cd2ad05d80bf4363b6880bd919a974c07f490d8807",
+    "source_schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f",
+    "source_sha256": "466391bb7e89067663d2d8f882834819896620c56bbbdc1959b81df938080ab2",
+    "target_schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086",
+    "target_sha256": "fbfe0df5a5624504b00a8ea701ca7dd250ab46232d29f82473dcf4d0df712588"
+  },
+  "dataset_id": "D2",
+  "dataset_manifest_identity": {
+    "path": "dataset2/manifest.json",
+    "sha256": "80674e823ff7b628ce0bee804e05ae04338c267941f3ab75a1efc3f145217abf"
+  },
+  "dataset_root": "dataset2",
+  "dataset_specific": {
+    "frozen_dates": [
+      "2018-04-01",
+      "2018-04-25",
+      "2018-05-01",
+      "2018-06-02"
+    ],
+    "runtime_calendarization": false,
+    "sales_zero": true,
+    "sealed_identity": {
+      "artifacts": {
+        "source": {
+          "path": "dataset2/source.parquet",
+          "row_count": 48654,
+          "schema_digest": "e7c59c5f751ae614699a31f710e3091f3b96b2b6f50c3ecd6f00f1ad157749f7",
+          "schema_fields": [
+            "date",
+            "brand_id",
+            "item_id",
+            "sales",
+            "promo",
+            "entity_id",
+            "year",
+            "month",
+            "week",
+            "day"
+          ],
+          "sha256": "466391bb7e89067663d2d8f882834819896620c56bbbdc1959b81df938080ab2",
+          "size_bytes": 126978
+        },
+        "target": {
+          "path": "dataset2/target.parquet",
+          "row_count": 1802,
+          "schema_digest": "77c0bbba1525b2dc78cbe3225f757017e008d707e43acfd914f4c6c42c361746",
+          "schema_fields": [
+            "date",
+            "brand_id",
+            "item_id",
+            "sales",
+            "promo",
+            "entity_id",
+            "year",
+            "month",
+            "week",
+            "day"
+          ],
+          "sha256": "fbfe0df5a5624504b00a8ea701ca7dd250ab46232d29f82473dcf4d0df712588",
+          "size_bytes": 24984
+        }
+      },
+      "manifest_path": "dataset2/manifest.json",
+      "manifest_version": "sealed_dataset_manifest_v1",
+      "precalendarized": true,
+      "runtime_calendarization": false,
+      "status": "passed",
+      "verified_zero_sales_dates": [
+        "2018-04-01",
+        "2018-04-25",
+        "2018-05-01",
+        "2018-06-02"
+      ],
+      "zero_date_evidence": {
+        "source": {
+          "2018-04-01": {
+            "rows": 27,
+            "sales_zero": true
+          },
+          "2018-04-25": {
+            "rows": 27,
+            "sales_zero": true
+          },
+          "2018-05-01": {
+            "rows": 27,
+            "sales_zero": true
+          },
+          "2018-06-02": {
+            "rows": 27,
+            "sales_zero": true
+          }
+        },
+        "target": {
+          "2018-04-01": {
+            "rows": 1,
+            "sales_zero": true
+          },
+          "2018-04-25": {
+            "rows": 1,
+            "sales_zero": true
+          },
+          "2018-05-01": {
+            "rows": 1,
+            "sales_zero": true
+          },
+          "2018-06-02": {
+            "rows": 1,
+            "sales_zero": true
+          }
+        }
+      }
+    },
+    "source_entities_per_date": 27,
+    "target_entities_per_date": 1,
+    "zero_date_evidence": {
+      "source": {
+        "2018-04-01": {
+          "rows": 27,
+          "sales_zero": true
+        },
+        "2018-04-25": {
+          "rows": 27,
+          "sales_zero": true
+        },
+        "2018-05-01": {
+          "rows": 27,
+          "sales_zero": true
+        },
+        "2018-06-02": {
+          "rows": 27,
+          "sales_zero": true
+        }
+      },
+      "target": {
+        "2018-04-01": {
+          "rows": 1,
+          "sales_zero": true
+        },
+        "2018-04-25": {
+          "rows": 1,
+          "sales_zero": true
+        },
+        "2018-05-01": {
+          "rows": 1,
+          "sales_zero": true
+        },
+        "2018-06-02": {
+          "rows": 1,
+          "sales_zero": true
+        }
+      }
+    }
+  },
+  "date_key": "date",
+  "date_range": {
+    "source": [
+      "2018-01-02",
+      "2018-06-30"
+    ],
+    "target": [
+      "2018-06-01",
+      "2018-12-27"
+    ]
+  },
+  "entity_count": {
+    "source": 27,
+    "target": 1
+  },
+  "entity_key": [
+    "brand_id",
+    "item_id"
+  ],
+  "formal_identity": {
+    "combined_identity_sha256": "sha256:3d11fef7b4edeb9fc804cc61455095b59e2c995afda11ba7d2c2a8afed7000e6",
+    "contract_sha256": "sha256:85713b9d13cae3c017c4856b6a0f42a49d6074aebbb729171d60b95baa42eb74",
+    "decision_book_sha256": "sha256:4aaebe5f07d3dc0e61ada72dbe0625c82615ba74577e91b72b46b07a709c689d",
+    "freeze_commit": "9eb50948241dad2f01d6854ca3cb4bf4e9c363d7",
+    "matrix_sha256": "sha256:80545e2739dacdedfd8e60857bd8828dbf2102db37fc310ae4fc994b194e1da3",
+    "scope_sha256": "sha256:98107929ea310e7fc304d2631803092e68c01e51fa992da96a3c3118b628eeb4"
+  },
+  "key_date_uniqueness": {
+    "consumer_duplicate_exact_keys": 0,
+    "status": "passed"
+  },
+  "proof_identity_sha256": "0f923f84cdc5f82b8918e6c0aa72c1e63fa74639360fa90f35cc13922707a3d2",
+  "readiness_proof_digest": "839e707d4b7029ddceb9f0cd2ad05d80bf4363b6880bd919a974c07f490d8807",
+  "readiness_result": {
+    "failure_code": null,
+    "status": "passed"
+  },
+  "row_count": {
+    "source": 48654,
+    "target": 1802
+  },
+  "schema_version": "d1_d6_formal_proof_v1",
+  "source": {
+    "dtypes": {
+      "brand_id": "int64",
+      "date": "timestamp[ns]",
+      "day": "double",
+      "entity_id": "string",
+      "item_id": "int64",
+      "month": "double",
+      "promo": "double",
+      "sales": "double",
+      "week": "double",
+      "year": "double"
+    },
+    "mtime_ns": 1784287890489214078,
+    "nullable": {
+      "brand_id": true,
+      "date": true,
+      "day": true,
+      "entity_id": true,
+      "item_id": true,
+      "month": true,
+      "promo": true,
+      "sales": true,
+      "week": true,
+      "year": true
+    },
+    "ordered_columns": [
+      "date",
+      "brand_id",
+      "item_id",
+      "sales",
+      "promo",
+      "entity_id",
+      "year",
+      "month",
+      "week",
+      "day"
+    ],
+    "path": "数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet",
+    "rows": 48654,
+    "schema": {
+      "columns": [
+        {
+          "dtype": "timestamp[ns]",
+          "name": "date",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "brand_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "item_id",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "sales",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "promo",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "entity_id",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "year",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "month",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "week",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "day",
+          "nullable": true
+        }
+      ],
+      "date_column": "date",
+      "key_columns": [
+        "brand_id",
+        "item_id"
+      ],
+      "role": "source",
+      "schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f"
+    },
+    "schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f",
+    "sha256": "466391bb7e89067663d2d8f882834819896620c56bbbdc1959b81df938080ab2",
+    "size_bytes": 126978
+  },
+  "source_schema": {
+    "columns": [
+      {
+        "dtype": "timestamp[ns]",
+        "name": "date",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "brand_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "item_id",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "sales",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "promo",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "entity_id",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "year",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "month",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "week",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "day",
+        "nullable": true
+      }
+    ],
+    "date_column": "date",
+    "key_columns": [
+      "brand_id",
+      "item_id"
+    ],
+    "role": "source",
+    "schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f"
+  },
+  "supporting_proof_files": [
+    {
+      "path": "dataset2/calendarization_audit.json",
+      "sha256": "f32541ba70100adb6c9a8c73e03dc14fea4b4bdd32f7fd3086a1fc195e59dff0",
+      "size_bytes": 1430
+    },
+    {
+      "path": "dataset2/knn_schema.json",
+      "sha256": "86f86b3adc637b24b856c58e5dc8bbf6d1cfe5bde52f254b2338bec4a9f422f1",
+      "size_bytes": 771
+    },
+    {
+      "path": "dataset2/manifest.json",
+      "sha256": "80674e823ff7b628ce0bee804e05ae04338c267941f3ab75a1efc3f145217abf",
+      "size_bytes": 3642
+    },
+    {
+      "path": "dataset2/predictor_schema.json",
+      "sha256": "1015715a2d2e0cfe73e5d0238f033de3802bed92c77958cd5ea817a6948555d5",
+      "size_bytes": 841
+    },
+    {
+      "path": "dataset2/provenance.json",
+      "sha256": "9ba9834877b6681fb85f81c0dd694a16b6b58fe287c68d55fd9cada5dced8d3a",
+      "size_bytes": 832
+    },
+    {
+      "path": "dataset2/source_sales_canonicalization.json",
+      "sha256": "73b4b85a12573bdb2393379c33a88331bdf0ef142a4bfc916a379bb6f9cea245",
+      "size_bytes": 681
+    },
+    {
+      "path": "dataset2/source_schema.json",
+      "sha256": "f1ae721c4892dd7025e4e84a4b4988fd7e232a17d886d6109d546574208c07ec",
+      "size_bytes": 1238
+    },
+    {
+      "path": "dataset2/target_schema.json",
+      "sha256": "a1dc21591e39248a0120eeef331f0d21dad68022b151295acc691c399ddbbaa2",
+      "size_bytes": 1232
+    },
+    {
+      "path": "dataset2/validation_report.json",
+      "sha256": "7d92167df3455590e7c2296792e96c2339da2f1ea9dd1710a89b97a9cb4b1268",
+      "size_bytes": 1343
+    }
+  ],
+  "target": {
+    "dtypes": {
+      "brand_id": "int64",
+      "date": "timestamp[ns]",
+      "day": "double",
+      "entity_id": "string",
+      "item_id": "int64",
+      "month": "double",
+      "promo": "double",
+      "sales": "double",
+      "week": "double",
+      "year": "double"
+    },
+    "mtime_ns": 1784287890563147085,
+    "nullable": {
+      "brand_id": true,
+      "date": true,
+      "day": true,
+      "entity_id": true,
+      "item_id": true,
+      "month": true,
+      "promo": true,
+      "sales": true,
+      "week": true,
+      "year": true
+    },
+    "ordered_columns": [
+      "date",
+      "brand_id",
+      "item_id",
+      "sales",
+      "promo",
+      "entity_id",
+      "year",
+      "month",
+      "week",
+      "day"
+    ],
+    "path": "数据集/固化数据/d1_d6_sealed_v1/dataset2/target.parquet",
+    "rows": 1802,
+    "schema": {
+      "columns": [
+        {
+          "dtype": "timestamp[ns]",
+          "name": "date",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "brand_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "item_id",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "sales",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "promo",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "entity_id",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "year",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "month",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "week",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "day",
+          "nullable": true
+        }
+      ],
+      "date_column": "date",
+      "key_columns": [
+        "brand_id",
+        "item_id"
+      ],
+      "role": "target",
+      "schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086"
+    },
+    "schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086",
+    "sha256": "fbfe0df5a5624504b00a8ea701ca7dd250ab46232d29f82473dcf4d0df712588",
+    "size_bytes": 24984
+  },
+  "target_schema": {
+    "columns": [
+      {
+        "dtype": "timestamp[ns]",
+        "name": "date",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "brand_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "item_id",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "sales",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "promo",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "entity_id",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "year",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "month",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "week",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "day",
+        "nullable": true
+      }
+    ],
+    "date_column": "date",
+    "key_columns": [
+      "brand_id",
+      "item_id"
+    ],
+    "role": "target",
+    "schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086"
+  }
+}

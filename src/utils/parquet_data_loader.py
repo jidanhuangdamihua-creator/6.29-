@@ -363,18 +363,18 @@ def _coerce_known_model_candidate_columns(df: pd.DataFrame, *, dataset_id: int, 
 
 def load_parquet_source_target_with_diagnostics(
     dataset_id: int,
-    parquet_dir: str | Path,
+    source_path: str | Path,
+    target_path: str | Path,
     windows: Dict[str, Any],
     source_history_days: int | None = None,
     *,
     expected_dates: pd.DatetimeIndex | None = None,
     d5_authorities: D5AuthorityBundle | None = None,
 ) -> ParquetSourceTargetLoad:
-    """Load D4-D6 fixed source/target parquet files only."""
-    parquet_root = Path(parquet_dir)
-    source_path = parquet_root / f"dataset{int(dataset_id)}-source.parquet"
-    target_path = parquet_root / f"dataset{int(dataset_id)}-target.parquet"
-    if not source_path.exists() or not target_path.exists():
+    """Load the explicit resolver-selected D4-D6 parquet files only."""
+    source_path = Path(source_path)
+    target_path = Path(target_path)
+    if not source_path.is_file() or not target_path.is_file():
         raise FileNotFoundError(
             f"Missing solidified parquet paths: source={source_path} target={target_path}"
         )
@@ -434,7 +434,8 @@ def load_parquet_source_target_with_diagnostics(
 
 def load_parquet_source_target(
     dataset_id: int,
-    parquet_dir: str | Path,
+    source_path: str | Path,
+    target_path: str | Path,
     windows: Dict[str, Any],
     source_history_days: int | None = None,
     *,
@@ -444,7 +445,8 @@ def load_parquet_source_target(
     """Compatibility tuple wrapper around the diagnostics-returning loader."""
     loaded = load_parquet_source_target_with_diagnostics(
         dataset_id=dataset_id,
-        parquet_dir=parquet_dir,
+        source_path=source_path,
+        target_path=target_path,
         windows=windows,
         source_history_days=source_history_days,
         expected_dates=expected_dates,

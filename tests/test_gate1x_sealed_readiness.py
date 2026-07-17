@@ -136,6 +136,45 @@ def test_d4_schema_excludes_hourly_and_stock_fields() -> None:
     assert SchemaRegistry().allowed("D4", "knn") == ("date", "sales")
 
 
+def test_d4_readiness_stream_excludes_only_current_exact_target(tmp_path: Path) -> None:
+    spec = dataset_contract("D4")
+    dates = pd.date_range(spec.source_history_start, spec.source_history_end)
+    source = pd.concat(
+        [
+            _frame(spec.key_fields, (166, 258), dates, second_category_id=20),
+            _frame(spec.key_fields, (168, 258), dates, second_category_id=99),
+            _frame(spec.key_fields, (166, 432), dates, second_category_id=30),
+            _frame(spec.key_fields, (168, 432), dates, second_category_id=40),
+        ],
+        ignore_index=True,
+    )
+    source_path = tmp_path / "d4-source.parquet"
+    source.to_parquet(source_path, index=False)
+    target = _frame(
+        spec.key_fields,
+        (166, 258),
+        pd.DatetimeIndex([pd.Timestamp(spec.origin)]),
+        second_category_id=20,
+    )
+
+    proof = stream_source_history_candidates(
+        "D4",
+        source_path,
+        "with-sharing",
+        target_frame=target,
+        current_target_key=(166, 258),
+    )
+    candidate_keys = {tuple(key) for key in proof["eligible_candidate_keys"]}
+    assert ("166", "258") not in candidate_keys
+    assert ("168", "258") in candidate_keys
+    assert ("166", "432") in candidate_keys
+    assert ("168", "432") in candidate_keys
+    exact = proof["exact_key_proof"]
+    assert exact["cross_store_same_product_available_count"] == 1
+    assert exact["cross_store_same_product_retained_count"] == 1
+    assert ["166", "432"] in exact["other_formal_targets_retained"]
+
+
 def test_d6_calendar_preserves_weekday_wday_order_and_exact_price_join() -> None:
     calendar = pd.DataFrame({"date": pd.to_datetime(["2015-01-01"]), "weekday": ["Thursday"], "wday": [5], "wm_yr_wk": [1], "snap_CA": [1]})
     view = build_d6_calendar_view(calendar, store_state="CA")
