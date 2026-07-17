@@ -7,6 +7,11 @@ from typing import Sequence, Tuple
 import pandas as pd
 
 from .candidate_pool import PreparedDailySequencePool
+from .d2_source_calendarization import (
+    D2_SOURCE_CALENDARIZATION_RULE_VERSION,
+    calendarize_d2_source_frame,
+    slice_d2_source_frame,
+)
 from .experiment_protocol import (
     EXTENDED_TRACK,
     STRICT_PAPER_TRACK,
@@ -287,20 +292,61 @@ def configure_protocol_frames(
 
     window = protocol.observation_window(observed_start)
     cutoff = pd.Timestamp(window.source_observation_cutoff).normalize()
+    d2_calendarization_metadata = {}
     if prepared_pool is None:
         source = source_df.copy()
+        source.attrs = source_df.attrs.copy()
         source_dates = pd.to_datetime(source["date"], errors="coerce").dt.normalize()
         if source_dates.isna().any():
             raise ProtocolViolation("source frame contains invalid dates")
-        source = source.loc[source_dates <= cutoff].copy()
-        if source.empty:
-            raise ProtocolViolation("source frame is empty at source_observation_cutoff")
+        if protocol.dataset_id == "D2":
+            source.attrs.setdefault("split_role", "source")
+            source_slice = slice_d2_source_frame(source)
+            source, report = calendarize_d2_source_frame(
+                source_slice,
+                candidate_keys=candidates,
+            )
+            d2_calendarization_metadata = {
+                "d2_source_calendarization_rule_version": report.rule_version,
+                "d2_source_authority_digest": report.source_authority_digest,
+                "d2_consumer_frame_fingerprint": report.consumer_frame_fingerprint,
+                "d2_synthetic_source_row_count": report.synthetic_row_count,
+                "d2_source_calendarization_report": report.to_dict(),
+            }
+        else:
+            source = source.loc[source_dates <= cutoff].copy()
+            if source.empty:
+                raise ProtocolViolation("source frame is empty at source_observation_cutoff")
     else:
         prepared_pool.validate_for(
             group_cols=normalized_group_cols,
             required_dates=pd.date_range(window.knn_observed_start, window.knn_observed_end),
         )
         source = source_df.iloc[0:0].copy()
+        if protocol.dataset_id == "D2":
+            required_d2_attrs = (
+                "d2_source_calendarization_rule_version",
+                "d2_source_authority_digest",
+                "d2_consumer_frame_fingerprint",
+                "d2_source_calendarization_report",
+            )
+            missing_d2_attrs = [
+                name for name in required_d2_attrs if name not in source_df.attrs
+            ]
+            if missing_d2_attrs:
+                raise ProtocolViolation(
+                    "D2 prepared pool is missing calendarization metadata: "
+                    f"{missing_d2_attrs!r}"
+                )
+            d2_calendarization_metadata = {
+                name: source_df.attrs[name]
+                for name in required_d2_attrs
+            }
+            if (
+                d2_calendarization_metadata["d2_source_calendarization_rule_version"]
+                != D2_SOURCE_CALENDARIZATION_RULE_VERSION
+            ):
+                raise ProtocolViolation("D2 source calendarization rule version is unsupported")
     target = target_df.copy()
     target_dates = pd.to_datetime(target["date"], errors="coerce").dt.normalize()
     if target_dates.isna().any():
@@ -333,6 +379,7 @@ def configure_protocol_frames(
         "source_alignment_mode": "exact_knn_observed_dates",
         "information_sharing_scenario": normalized_scenario,
     }
+    metadata.update(d2_calendarization_metadata)
     source.attrs = {**source_df.attrs, **metadata}
     target.attrs = {**target_df.attrs, **metadata}
     if prepared_pool is not None:

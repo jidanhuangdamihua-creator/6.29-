@@ -21,6 +21,12 @@ from src.protocols.candidate_pool import (
     PreparedDailySequencePool,
     prepare_daily_sequence_pool,
 )
+from src.protocols.d2_source_calendarization import (
+    D2_FROZEN_SOURCE_CANDIDATE_KEYS,
+    calendarize_d2_source_frame,
+    slice_d2_source_frame,
+)
+from src.protocols.experiment_protocol import normalize_scenario
 from src.protocols.runner_adapter import configure_protocol_frames
 from src.source_selection.source_selector import SourceSelector
 
@@ -210,14 +216,34 @@ def build_preflight_reports(
 ) -> list[dict[str, Any]]:
     """Prepare source observations once and validate every target against that pool."""
     metadata_cols = (str(grouping_col),) if grouping_col else ()
+    source_for_pool = source
+    if str(dataset_id).strip().upper() in {"D2", "DATASET2", "2"}:
+        source_for_pool = source.copy()
+        source_for_pool.attrs = source.attrs.copy()
+        source_for_pool.attrs.setdefault("split_role", "source")
+        normalized_scenario = normalize_scenario(scenario)
+        d2_candidate_keys = (
+            D2_FROZEN_SOURCE_CANDIDATE_KEYS
+            if normalized_scenario == "with"
+            else tuple(
+                key
+                for key in D2_FROZEN_SOURCE_CANDIDATE_KEYS
+                if key[0] == "1"
+            )
+        )
+        source_for_pool, _ = calendarize_d2_source_frame(
+            slice_d2_source_frame(source_for_pool),
+            candidate_keys=d2_candidate_keys,
+        )
     prepared_pool = pool_factory(
-        source,
+        source_for_pool,
         group_cols=tuple(group_cols),
         observed_start=observed_start,
         metadata_cols=metadata_cols,
     )
     stub_columns = list(dict.fromkeys([*group_cols, "date", "sales", *metadata_cols]))
     source_stub = pd.DataFrame(columns=stub_columns)
+    source_stub.attrs = source_for_pool.attrs.copy()
     reports = []
     for target_key, target_group in _target_groups(target, group_cols):
         report = validate_protocol_frames(

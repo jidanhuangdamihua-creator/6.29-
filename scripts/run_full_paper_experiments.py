@@ -1353,6 +1353,18 @@ def run_experiment(
         "selection_result_digest": method_meta.get(
             "selection_result_digest", NOT_APPLICABLE
         ),
+        "d2_source_calendarization_rule_version": method_meta.get(
+            "d2_source_calendarization_rule_version", NOT_APPLICABLE
+        ),
+        "d2_source_authority_digest": method_meta.get(
+            "d2_source_authority_digest", NOT_APPLICABLE
+        ),
+        "d2_consumer_frame_fingerprint": method_meta.get(
+            "d2_consumer_frame_fingerprint", NOT_APPLICABLE
+        ),
+        "d2_sealed_identity": method_meta.get(
+            "d2_sealed_identity", NOT_APPLICABLE
+        ),
         "cnn_provenance_validated": method_meta.get(
             "cnn_provenance_validated", method_name == "No-TL"
         ),

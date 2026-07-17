@@ -52,12 +52,15 @@ def _canonical_candidate_pool_input(
     observed_start: object,
     observed_end: object,
     feature_cols: Sequence[object],
+    calendarization_rule_version: object | None = None,
+    source_authority_digest: object | None = None,
+    consumer_frame_fingerprint: object | None = None,
 ) -> Dict[str, Any]:
     normalized_candidates = [normalize_source_key(key) for key in candidate_keys]
     if len(set(normalized_candidates)) != len(normalized_candidates):
         raise ProtocolViolation("candidate pool contains duplicate source keys")
     normalized_candidates.sort()
-    return {
+    payload = {
         "protocol_version": str(protocol_version).strip(),
         "dataset_id": str(dataset_id).strip().upper(),
         "scenario": normalize_scenario(scenario),
@@ -68,6 +71,24 @@ def _canonical_candidate_pool_input(
         "observed_end": _iso_date(observed_end),
         "feature_cols": [str(column).strip() for column in feature_cols],
     }
+    identity_values = (
+        calendarization_rule_version,
+        source_authority_digest,
+        consumer_frame_fingerprint,
+    )
+    if any(value is not None for value in identity_values):
+        if any(value is None for value in identity_values):
+            raise ProtocolViolation(
+                "D2 candidate digest requires complete source calendarization identity"
+            )
+        payload.update(
+            {
+                "calendarization_rule_version": str(calendarization_rule_version),
+                "source_authority_digest": str(source_authority_digest),
+                "consumer_frame_fingerprint": str(consumer_frame_fingerprint),
+            }
+        )
+    return payload
 
 
 def build_candidate_pool_digest(
@@ -80,6 +101,9 @@ def build_candidate_pool_digest(
     observed_start: object,
     observed_end: object,
     feature_cols: Sequence[object],
+    calendarization_rule_version: object | None = None,
+    source_authority_digest: object | None = None,
+    consumer_frame_fingerprint: object | None = None,
 ) -> str:
     """Return the one production SHA-256 digest for a candidate pool."""
 
@@ -93,6 +117,9 @@ def build_candidate_pool_digest(
         observed_start,
         observed_end,
         feature_cols,
+        calendarization_rule_version,
+        source_authority_digest,
+        consumer_frame_fingerprint,
     )
     return _sha256_payload(payload)
 
@@ -548,6 +575,23 @@ def select_daily_sequence_sources(
     if "sales" not in target_df.columns:
         raise ProtocolViolation("target dataframe requires sales column")
 
+    calendarization_rule_version = source_df.attrs.get(
+        "d2_source_calendarization_rule_version"
+    )
+    source_authority_digest = source_df.attrs.get("d2_source_authority_digest")
+    consumer_frame_fingerprint = source_df.attrs.get("d2_consumer_frame_fingerprint")
+    if protocol.dataset_id == "D2" and any(
+        value is None
+        for value in (
+            calendarization_rule_version,
+            source_authority_digest,
+            consumer_frame_fingerprint,
+        )
+    ):
+        raise ProtocolViolation(
+            "D2 source calendarization identity is required before KNN"
+        )
+
     window = protocol.observation_window(observed_start)
     observed_start_iso = window.knn_observed_start.isoformat()
     observed_end_iso = window.knn_observed_end.isoformat()
@@ -660,6 +704,9 @@ def select_daily_sequence_sources(
         observed_start_iso,
         observed_end_iso,
         tuple(feature_cols),
+        calendarization_rule_version,
+        source_authority_digest,
+        consumer_frame_fingerprint,
     )
     candidate_digest = _sha256_payload(digest_input)
     selection_digest = build_selection_result_digest(

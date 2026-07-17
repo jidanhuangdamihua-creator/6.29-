@@ -22,6 +22,7 @@ import pandas as pd
 from src.data_processing.data_preprocessing import infer_source_selection_feature_columns
 from src.constants import D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
 from src.protocols.candidate_pool import select_daily_sequence_sources
+from src.protocols.d2_source_calendarization import build_d2_sealed_identity
 from src.protocols.experiment_protocol import (
     PROTOCOL_VERSION,
     ProtocolViolation,
@@ -105,6 +106,28 @@ class SourceSelector:
                 f"selector group_cols differ from protocol: {tuple(group_cols)!r} != {configured_group_cols!r}"
             )
         protocol = get_experiment_protocol(target_df.attrs["protocol_dataset_id"])
+        d2_identity_fields = (
+            "d2_source_calendarization_rule_version",
+            "d2_source_authority_digest",
+            "d2_consumer_frame_fingerprint",
+        )
+        d2_sealed_identity = None
+        if protocol.dataset_id == "D2":
+            missing_d2_identity = [
+                name
+                for name in d2_identity_fields
+                if name not in source_df.attrs or name not in target_df.attrs
+            ]
+            if missing_d2_identity:
+                raise ProtocolViolation(
+                    "D2 selector is missing calendarization identity: "
+                    f"{missing_d2_identity!r}"
+                )
+            for name in d2_identity_fields:
+                if source_df.attrs[name] != target_df.attrs[name]:
+                    raise ProtocolViolation(
+                        f"D2 source/target calendarization identity mismatch: {name}"
+                    )
         prepared_pool = source_df.attrs.get("prepared_daily_sequence_pool")
         result = select_daily_sequence_sources(
             target_df=target_df,
@@ -149,6 +172,16 @@ class SourceSelector:
                 provenance,
                 provenance_source_df,
                 group_cols=configured_group_cols,
+            )
+        if protocol.dataset_id == "D2":
+            d2_sealed_identity = build_d2_sealed_identity(
+                rule_version=source_df.attrs["d2_source_calendarization_rule_version"],
+                source_authority_digest=source_df.attrs["d2_source_authority_digest"],
+                consumer_frame_fingerprint=source_df.attrs[
+                    "d2_consumer_frame_fingerprint"
+                ],
+                candidate_pool_digest=result.candidate_pool_digest,
+                selection_result_digest=result.selection_result_digest,
             )
         sources = [
             {
@@ -222,6 +255,21 @@ class SourceSelector:
                 int(item.input_tensor.shape[0]) for item in tensor_provenance
             ],
         }
+        if protocol.dataset_id == "D2":
+            meta.update(
+                {
+                    "d2_source_calendarization_rule_version": source_df.attrs[
+                        "d2_source_calendarization_rule_version"
+                    ],
+                    "d2_source_authority_digest": source_df.attrs[
+                        "d2_source_authority_digest"
+                    ],
+                    "d2_consumer_frame_fingerprint": source_df.attrs[
+                        "d2_consumer_frame_fingerprint"
+                    ],
+                    "d2_sealed_identity": d2_sealed_identity,
+                }
+            )
         return {"meta": meta, "sources": sources}
 
     @staticmethod
