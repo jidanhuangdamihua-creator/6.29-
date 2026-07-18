@@ -447,7 +447,7 @@
     },
     {
       "path": "src/protocols/runner_adapter.py",
-      "sha256": "29cb7a07704b1646d756a08e14d76bb35fa0537d0b2bbaa457478a7abd75402e"
+      "sha256": "bbfeae097761f466a74a40b8aac544d9f7e02e686f4757e16d285ff6079ea717"
     },
     {
       "path": "src/results/__init__.py",
@@ -626,6 +626,6 @@
       "sha256": "a8a1d6a43c87f01fc8ad010f594b7f51bf353d9788fd8a1d4b824f7325aa053c"
     }
   ],
-  "inventory_sha256": "119b252b9349a9b395b7a0036de1a5c7548f4d5ee0ef54f5107175d6505de8ab",
+  "inventory_sha256": "d8bb5afacf97d709d05a2a7626aa255bda3af87fdc77ed912505abd73119fc6e",
   "schema_version": "d1_d6_code_inventory_v1"
 }
