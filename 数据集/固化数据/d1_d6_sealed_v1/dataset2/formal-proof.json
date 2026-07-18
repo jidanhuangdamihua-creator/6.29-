@@ -1,7 +1,7 @@
 {
-  "consumer_fingerprint": "6915c42158857c08e8fbac64ddb103dfcd1a1ec8a4928a76c6acf200123d8a84",
+  "consumer_fingerprint": "78ceac80753affcc141cdfa6fb646ec4696ac3d3b93cd6b67d26b4e035dc9f81",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "b791257c9dbeafe45a6d7bcd2040db1ce89b14c7d083e85bb6e8a4f49200087b",
+    "code_inventory_digest": "119b252b9349a9b395b7a0036de1a5c7548f4d5ee0ef54f5107175d6505de8ab",
     "dataset_id": "D2",
     "readiness_proof_digest": "839e707d4b7029ddceb9f0cd2ad05d80bf4363b6880bd919a974c07f490d8807",
     "source_schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f",
@@ -22,6 +22,89 @@
       "2018-05-01",
       "2018-06-02"
     ],
+    "knn_selection_authority": {
+      "authority_digest": "f2aa5f521545c32a5699502e94a5c12388bd2af7741413ad5eda6c7315de77ec",
+      "knn_frame_authority": "configured_observed_frame",
+      "observed_window": {
+        "boundary": "inclusive",
+        "observed_days": 30,
+        "observed_end": "2018-06-30",
+        "observed_start": "2018-06-01",
+        "origin": "2018-06-30"
+      },
+      "protocol_version": "d1_d6_protocol_v1",
+      "scenario_files": {
+        "with": {
+          "candidate_pool_digest": "6c0aa0ccb450998fa219e2eb6e39f84539b9edbc199d073e46f2d34716814f05",
+          "feature_cols": [
+            "sales"
+          ],
+          "knn_frame_authority": "configured_observed_frame",
+          "observed_window": {
+            "boundary": "inclusive",
+            "observed_days": 30,
+            "observed_end": "2018-06-30",
+            "observed_start": "2018-06-01",
+            "origin": "2018-06-30"
+          },
+          "path": "configs/solidified/knn/Dataset2/knn_with_info_sharing.json",
+          "protocol_version": "d1_d6_protocol_v1",
+          "selection_authority": "shared_protocol",
+          "selection_digest": "92b653dc155b5ad449de1237ff90d65b4f76283993fc64c124ba987aec70a6e3",
+          "selection_result_digest": "92b653dc155b5ad449de1237ff90d65b4f76283993fc64c124ba987aec70a6e3",
+          "sha256": "16a2530ba3d7d4d74e83f63847910224aa1159e8cabd9d945c47e2c1bed6b3c0",
+          "source_frame_digest": "105cf59a21174cfd0cd06cb0d15a5595884dcac9e531262e410e2aaae9bbbd27",
+          "source_frame_max_date": "2018-06-30",
+          "source_frame_min_date": "2018-06-01",
+          "target_frame_digest": "64fdea45e1b77322d44864b03ee02eb8d293c7f86cd5accf27305a6e3fd61994",
+          "target_frame_max_date": "2018-06-30",
+          "target_frame_min_date": "2018-06-01"
+        },
+        "without": {
+          "candidate_pool_digest": "f763ad1e0d5b8bf1cf510fdd1f99a62930589ee497cc0cf6da2824a66e91b65c",
+          "feature_cols": [
+            "sales"
+          ],
+          "knn_frame_authority": "configured_observed_frame",
+          "observed_window": {
+            "boundary": "inclusive",
+            "observed_days": 30,
+            "observed_end": "2018-06-30",
+            "observed_start": "2018-06-01",
+            "origin": "2018-06-30"
+          },
+          "path": "configs/solidified/knn/Dataset2/knn_without_info_sharing.json",
+          "protocol_version": "d1_d6_protocol_v1",
+          "selection_authority": "shared_protocol",
+          "selection_digest": "cfbc8521094b5dd87b6b626578d80730821ae8be155d8fe3eb9dbf3a64d046fe",
+          "selection_result_digest": "cfbc8521094b5dd87b6b626578d80730821ae8be155d8fe3eb9dbf3a64d046fe",
+          "sha256": "350b41550eba731f8d48d0fc0b03916f0fc02b5c3cffdc13c5c0f341866d3f31",
+          "source_frame_digest": "4c8373f15e225a58518cc5c22bc924925a177d5469457398ac92489ecff1491d",
+          "source_frame_max_date": "2018-06-30",
+          "source_frame_min_date": "2018-06-01",
+          "target_frame_digest": "64fdea45e1b77322d44864b03ee02eb8d293c7f86cd5accf27305a6e3fd61994",
+          "target_frame_max_date": "2018-06-30",
+          "target_frame_min_date": "2018-06-01"
+        }
+      },
+      "selection_authority": "shared_protocol",
+      "target_scenario_matrix": {
+        "with": {
+          "candidate_pool_digest": "6c0aa0ccb450998fa219e2eb6e39f84539b9edbc199d073e46f2d34716814f05",
+          "selection_digest": "92b653dc155b5ad449de1237ff90d65b4f76283993fc64c124ba987aec70a6e3",
+          "selection_result_digest": "92b653dc155b5ad449de1237ff90d65b4f76283993fc64c124ba987aec70a6e3",
+          "source_frame_digest": "105cf59a21174cfd0cd06cb0d15a5595884dcac9e531262e410e2aaae9bbbd27",
+          "target_frame_digest": "64fdea45e1b77322d44864b03ee02eb8d293c7f86cd5accf27305a6e3fd61994"
+        },
+        "without": {
+          "candidate_pool_digest": "f763ad1e0d5b8bf1cf510fdd1f99a62930589ee497cc0cf6da2824a66e91b65c",
+          "selection_digest": "cfbc8521094b5dd87b6b626578d80730821ae8be155d8fe3eb9dbf3a64d046fe",
+          "selection_result_digest": "cfbc8521094b5dd87b6b626578d80730821ae8be155d8fe3eb9dbf3a64d046fe",
+          "source_frame_digest": "4c8373f15e225a58518cc5c22bc924925a177d5469457398ac92489ecff1491d",
+          "target_frame_digest": "64fdea45e1b77322d44864b03ee02eb8d293c7f86cd5accf27305a6e3fd61994"
+        }
+      }
+    },
     "runtime_calendarization": false,
     "sales_zero": true,
     "sealed_identity": {
@@ -187,7 +270,7 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "0f923f84cdc5f82b8918e6c0aa72c1e63fa74639360fa90f35cc13922707a3d2",
+  "proof_identity_sha256": "c54bb515348bd6e6f22bec5defb6a31aaa194f2ef6f41e09e2e5518c1a298059",
   "readiness_proof_digest": "839e707d4b7029ddceb9f0cd2ad05d80bf4363b6880bd919a974c07f490d8807",
   "readiness_result": {
     "failure_code": null,

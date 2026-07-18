@@ -1,21 +1,21 @@
 {
-  "file_count": 155,
+  "file_count": 156,
   "files": [
     {
       "path": "configs/solidified/knn/Dataset1/knn_with_info_sharing.json",
-      "sha256": "f75a9d46d586d73626793b6d455176759a2501377151191ff2402c1b94b5c7f4"
+      "sha256": "ae9a9436c5062ba542f399c8b83761c57d30b63416d1fb78d7e30d69877c752d"
     },
     {
       "path": "configs/solidified/knn/Dataset1/knn_without_info_sharing.json",
-      "sha256": "c6fb3ea753f1b00b254e79fbbd061d85c0648b8940bd0c2f1cba9c02c8b92892"
+      "sha256": "f4e78f40cd72c8e6fc7ce3d72773c3ec023b6c22ae39867788ca41fcd4683813"
     },
     {
       "path": "configs/solidified/knn/Dataset2/knn_with_info_sharing.json",
-      "sha256": "8327dbc2a13b83f9818ec6d94a8f8381aa5d0ef7c71f3ed8fe3d43374e0150fd"
+      "sha256": "16a2530ba3d7d4d74e83f63847910224aa1159e8cabd9d945c47e2c1bed6b3c0"
     },
     {
       "path": "configs/solidified/knn/Dataset2/knn_without_info_sharing.json",
-      "sha256": "c81fed17f071cb78c2920b025a5bcedae9f5a443f13043fc1b46c8b52aeebfeb"
+      "sha256": "350b41550eba731f8d48d0fc0b03916f0fc02b5c3cffdc13c5c0f341866d3f31"
     },
     {
       "path": "configs/solidified/knn/Dataset3/knn_with_info_sharing.json",
@@ -183,7 +183,7 @@
     },
     {
       "path": "scripts/regenerate_solidified_knn.py",
-      "sha256": "2e8aa3510a0a9d66d681ddb4c5ddfd9505bbf792eeeea0c846aebbaa5bae6c91"
+      "sha256": "54a3f25391708e5db6203737ab635ccc81539007c3555b631d9c062d6821e833"
     },
     {
       "path": "scripts/run_d4_d6_only.py",
@@ -211,7 +211,7 @@
     },
     {
       "path": "scripts/run_full_paper_experiments.py",
-      "sha256": "15e00ce7630bf788b7581e832d1a04213796bbcf508f3c1303a10b7057c15675"
+      "sha256": "ea458708b6300a2da2b5b98e19c69a084b95d101e8093e83b55d0ae26abcb91d"
     },
     {
       "path": "scripts/run_main_experiment.py",
@@ -271,7 +271,7 @@
     },
     {
       "path": "scripts/validate_d1_d6_protocol_inputs.py",
-      "sha256": "f9fc72c49fb1c15d66a99179e1992878934ae8df4d37aa98bdc5c2e1eb8df012"
+      "sha256": "d7c014bde549a30dea6c856d72135be646f91578c5696bbbdf861c5fce660f3e"
     },
     {
       "path": "scripts/validate_metric_alignment.py",
@@ -327,7 +327,7 @@
     },
     {
       "path": "src/constants.py",
-      "sha256": "0b0118420302d18a5df4ecf266ac202c313238a54accb083e2f6946da4a78ba7"
+      "sha256": "9347f0467adbfdcf85eb86e3a2d14b88f77c6e7903cb0aaf93ac743e122b3b88"
     },
     {
       "path": "src/data_processing/__init__.py",
@@ -407,7 +407,7 @@
     },
     {
       "path": "src/protocols/candidate_pool.py",
-      "sha256": "16c91d0d831781128e3ce2bee37ef587622a5fd73849b161548dec2b99d43efc"
+      "sha256": "25001181a9317662fe3b70149497506697908aae18d73709ba690a1a9180e6e5"
     },
     {
       "path": "src/protocols/d2_source_calendarization.py",
@@ -415,11 +415,11 @@
     },
     {
       "path": "src/protocols/experiment_protocol.py",
-      "sha256": "9c453f05eab8e927b79ce4149cd11ba36ab9173c69c11338d175c8e508ee6b09"
+      "sha256": "c6f1344bbfb841f8b15264a96cb47540d276167e0f5a721f13862cdc7b85a403"
     },
     {
       "path": "src/protocols/formal_deployment_manifest.py",
-      "sha256": "5e89f173b229b989b8037ac7d4d5c6c5840ea1ee372c59c875564b8b28b00f51"
+      "sha256": "a66e090724f8f65f96f5ace45303738b6a36fcf9ffd94c1fe6eec60a86e2c341"
     },
     {
       "path": "src/protocols/formal_input_paths.py",
@@ -428,6 +428,10 @@
     {
       "path": "src/protocols/gate1_transformation.py",
       "sha256": "4c17c59c5feb4a892029e8df1bf4b9d549872b7b3e1d01fb3da5b30ec93ca038"
+    },
+    {
+      "path": "src/protocols/knn_frames.py",
+      "sha256": "c846fb358d9cd9455a507d52b51b5049e357f98094ad5d0b26743028bde66fee"
     },
     {
       "path": "src/protocols/provenance.py",
@@ -443,7 +447,7 @@
     },
     {
       "path": "src/protocols/runner_adapter.py",
-      "sha256": "1712671f075f8778cc7c1405b9c9b6ebb57b9f826f49a96afaa79a4bc8c4bf28"
+      "sha256": "29cb7a07704b1646d756a08e14d76bb35fa0537d0b2bbaa457478a7abd75402e"
     },
     {
       "path": "src/results/__init__.py",
@@ -463,7 +467,7 @@
     },
     {
       "path": "src/source_selection/source_selector.py",
-      "sha256": "7aad2bc313fababf41831fa11310ba6080238e556934ea3586fe3c7403b07c9b"
+      "sha256": "22c8a2ead4ff2903b43f3f53a600249a5c35736f2be4a5bc73d49e9b47b1fbc0"
     },
     {
       "path": "src/transfer_methods/__init__.py",
@@ -622,6 +626,6 @@
       "sha256": "a8a1d6a43c87f01fc8ad010f594b7f51bf353d9788fd8a1d4b824f7325aa053c"
     }
   ],
-  "inventory_sha256": "b791257c9dbeafe45a6d7bcd2040db1ce89b14c7d083e85bb6e8a4f49200087b",
+  "inventory_sha256": "119b252b9349a9b395b7a0036de1a5c7548f4d5ee0ef54f5107175d6505de8ab",
   "schema_version": "d1_d6_code_inventory_v1"
 }

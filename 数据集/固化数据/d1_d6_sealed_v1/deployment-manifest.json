@@ -1,9 +1,119 @@
 {
   "code_inventory": {
-    "file_count": 155,
-    "inventory_sha256": "b791257c9dbeafe45a6d7bcd2040db1ce89b14c7d083e85bb6e8a4f49200087b",
+    "file_count": 156,
+    "inventory_sha256": "119b252b9349a9b395b7a0036de1a5c7548f4d5ee0ef54f5107175d6505de8ab",
     "path": "code-inventory.json",
-    "sha256": "4110e127c2ffae835c87951af5468a3d05505d861dc31506bcc310df043bbc01"
+    "sha256": "ea5d1b57796bf87de67d27a069149611c814fd8dd841ede870e7591da6853210"
+  },
+  "d1_d2_knn_selection_authority": {
+    "D1": {
+      "with": {
+        "candidate_pool_digest": "836518bfcdd652a525786457d6ac8d36467385ba6f9ee09d460ed35abb4aab87",
+        "feature_cols": [
+          "sales"
+        ],
+        "knn_frame_authority": "configured_observed_frame",
+        "observed_window": {
+          "boundary": "inclusive",
+          "observed_days": 30,
+          "observed_end": "2017-06-30",
+          "observed_start": "2017-06-01",
+          "origin": "2017-06-30"
+        },
+        "path": "configs/solidified/knn/Dataset1/knn_with_info_sharing.json",
+        "protocol_version": "d1_d6_protocol_v1",
+        "selection_authority": "shared_protocol",
+        "selection_digest": "d7b6852da95385785402b6d927f52e99e6636de4bec27245aec9f9d0026b28fd",
+        "selection_result_digest": "d7b6852da95385785402b6d927f52e99e6636de4bec27245aec9f9d0026b28fd",
+        "sha256": "ae9a9436c5062ba542f399c8b83761c57d30b63416d1fb78d7e30d69877c752d",
+        "source_frame_digest": "6da36a7c1da4124f8da9835302ad06855e0c294d5fe8babc675c7ad86dd1acbf",
+        "source_frame_max_date": "2017-06-30",
+        "source_frame_min_date": "2017-06-01",
+        "target_frame_digest": "14c8b0b59f9c3014776f8a4ca343ed8b59743c0ee21851d4b40c6fc4fa71ae1c",
+        "target_frame_max_date": "2017-06-30",
+        "target_frame_min_date": "2017-06-01"
+      },
+      "without": {
+        "candidate_pool_digest": "7cee51bf5dec70918fda20c62ce92ee609ebba0a54e3b85a8362d124f22df4bc",
+        "feature_cols": [
+          "sales"
+        ],
+        "knn_frame_authority": "configured_observed_frame",
+        "observed_window": {
+          "boundary": "inclusive",
+          "observed_days": 30,
+          "observed_end": "2017-06-30",
+          "observed_start": "2017-06-01",
+          "origin": "2017-06-30"
+        },
+        "path": "configs/solidified/knn/Dataset1/knn_without_info_sharing.json",
+        "protocol_version": "d1_d6_protocol_v1",
+        "selection_authority": "shared_protocol",
+        "selection_digest": "1b101504df5c7fe4c5fa936be755e6fba4f412c113e05f8c3293e2b8a69c0b68",
+        "selection_result_digest": "1b101504df5c7fe4c5fa936be755e6fba4f412c113e05f8c3293e2b8a69c0b68",
+        "sha256": "f4e78f40cd72c8e6fc7ce3d72773c3ec023b6c22ae39867788ca41fcd4683813",
+        "source_frame_digest": "af1d2b07a65bd4c5af9a1b391df6741c2c51958c15b2444922512d0c46dd8232",
+        "source_frame_max_date": "2017-06-30",
+        "source_frame_min_date": "2017-06-01",
+        "target_frame_digest": "14c8b0b59f9c3014776f8a4ca343ed8b59743c0ee21851d4b40c6fc4fa71ae1c",
+        "target_frame_max_date": "2017-06-30",
+        "target_frame_min_date": "2017-06-01"
+      }
+    },
+    "D2": {
+      "with": {
+        "candidate_pool_digest": "6c0aa0ccb450998fa219e2eb6e39f84539b9edbc199d073e46f2d34716814f05",
+        "feature_cols": [
+          "sales"
+        ],
+        "knn_frame_authority": "configured_observed_frame",
+        "observed_window": {
+          "boundary": "inclusive",
+          "observed_days": 30,
+          "observed_end": "2018-06-30",
+          "observed_start": "2018-06-01",
+          "origin": "2018-06-30"
+        },
+        "path": "configs/solidified/knn/Dataset2/knn_with_info_sharing.json",
+        "protocol_version": "d1_d6_protocol_v1",
+        "selection_authority": "shared_protocol",
+        "selection_digest": "92b653dc155b5ad449de1237ff90d65b4f76283993fc64c124ba987aec70a6e3",
+        "selection_result_digest": "92b653dc155b5ad449de1237ff90d65b4f76283993fc64c124ba987aec70a6e3",
+        "sha256": "16a2530ba3d7d4d74e83f63847910224aa1159e8cabd9d945c47e2c1bed6b3c0",
+        "source_frame_digest": "105cf59a21174cfd0cd06cb0d15a5595884dcac9e531262e410e2aaae9bbbd27",
+        "source_frame_max_date": "2018-06-30",
+        "source_frame_min_date": "2018-06-01",
+        "target_frame_digest": "64fdea45e1b77322d44864b03ee02eb8d293c7f86cd5accf27305a6e3fd61994",
+        "target_frame_max_date": "2018-06-30",
+        "target_frame_min_date": "2018-06-01"
+      },
+      "without": {
+        "candidate_pool_digest": "f763ad1e0d5b8bf1cf510fdd1f99a62930589ee497cc0cf6da2824a66e91b65c",
+        "feature_cols": [
+          "sales"
+        ],
+        "knn_frame_authority": "configured_observed_frame",
+        "observed_window": {
+          "boundary": "inclusive",
+          "observed_days": 30,
+          "observed_end": "2018-06-30",
+          "observed_start": "2018-06-01",
+          "origin": "2018-06-30"
+        },
+        "path": "configs/solidified/knn/Dataset2/knn_without_info_sharing.json",
+        "protocol_version": "d1_d6_protocol_v1",
+        "selection_authority": "shared_protocol",
+        "selection_digest": "cfbc8521094b5dd87b6b626578d80730821ae8be155d8fe3eb9dbf3a64d046fe",
+        "selection_result_digest": "cfbc8521094b5dd87b6b626578d80730821ae8be155d8fe3eb9dbf3a64d046fe",
+        "sha256": "350b41550eba731f8d48d0fc0b03916f0fc02b5c3cffdc13c5c0f341866d3f31",
+        "source_frame_digest": "4c8373f15e225a58518cc5c22bc924925a177d5469457398ac92489ecff1491d",
+        "source_frame_max_date": "2018-06-30",
+        "source_frame_min_date": "2018-06-01",
+        "target_frame_digest": "64fdea45e1b77322d44864b03ee02eb8d293c7f86cd5accf27305a6e3fd61994",
+        "target_frame_max_date": "2018-06-30",
+        "target_frame_min_date": "2018-06-01"
+      }
+    }
   },
   "d4_selection_authority": {
     "exact_key_proof_digest": "de1f29d000e1b509918af8f1b95bafa4cb45fc5e3913ce12093732629b15cd53",
@@ -94,7 +204,7 @@
   },
   "datasets": {
     "D1": {
-      "consumer_fingerprint": "668977b26bde9d7caab40c1fd64d44101d39df206630bae59847e2273360110a",
+      "consumer_fingerprint": "9e2346794de3f052bc3124fea355753b2fb51c7bd5e3a80a7682de563c80c1a5",
       "dataset_directory": "dataset1",
       "dataset_manifest": {
         "path": "dataset1/manifest.json",
@@ -102,8 +212,8 @@
       },
       "formal_proof": {
         "path": "dataset1/formal-proof.json",
-        "proof_identity_sha256": "278af7d04e321e9c79851912d41a72a2f0b67490814a6a2c5d337945f93a9a11",
-        "sha256": "6b5db5ed54c79d17b9d6c0304873485dab2a95ad6d7a84b5a6da84342de917a2"
+        "proof_identity_sha256": "dc0f1a89412c724b37a2fcf0ceb26e4c49b472d77635e9766110a72305405f17",
+        "sha256": "c43c5bc5e162b6aa8be84b7d5e505d8d6e415416e82d31b4a9692bbfe251cfe9"
       },
       "readiness_proof_digest": "86c47cdeda48b1ebe2306d88268f4405adb0be8aea3ec71c77cc5f245d36559e",
       "source": {
@@ -304,7 +414,7 @@
       "target_schema_digest": "6d5c94965593d1ac45d4e7ee5263a3d8a49d6754721744f2861610e2658a2d87"
     },
     "D2": {
-      "consumer_fingerprint": "6915c42158857c08e8fbac64ddb103dfcd1a1ec8a4928a76c6acf200123d8a84",
+      "consumer_fingerprint": "78ceac80753affcc141cdfa6fb646ec4696ac3d3b93cd6b67d26b4e035dc9f81",
       "dataset_directory": "dataset2",
       "dataset_manifest": {
         "path": "dataset2/manifest.json",
@@ -312,8 +422,8 @@
       },
       "formal_proof": {
         "path": "dataset2/formal-proof.json",
-        "proof_identity_sha256": "0f923f84cdc5f82b8918e6c0aa72c1e63fa74639360fa90f35cc13922707a3d2",
-        "sha256": "d404cc88cf57d0e00b3f0bf06722d8af8acdc79be24610feea6f5d723559c332"
+        "proof_identity_sha256": "c54bb515348bd6e6f22bec5defb6a31aaa194f2ef6f41e09e2e5518c1a298059",
+        "sha256": "7d6f0695692fca560e6409e605397a97ad221b45b77b82d563860fcb1d484f61"
       },
       "readiness_proof_digest": "839e707d4b7029ddceb9f0cd2ad05d80bf4363b6880bd919a974c07f490d8807",
       "source": {
@@ -530,7 +640,7 @@
       "target_schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086"
     },
     "D3": {
-      "consumer_fingerprint": "49630f83b270015ffb802819bf4e77b30dade1da6dd1d489ea45ff46b3b8c81a",
+      "consumer_fingerprint": "eb34070d1ff7b49851fe930c3192a6892889bc1c04635b2db57954f58d979cab",
       "dataset_directory": "dataset3",
       "dataset_manifest": {
         "path": "dataset3/manifest.json",
@@ -538,8 +648,8 @@
       },
       "formal_proof": {
         "path": "dataset3/formal-proof.json",
-        "proof_identity_sha256": "db83f8215334fe3f65e0eb20054e50e464006b8c086b6dc01d6b95ddcb576b55",
-        "sha256": "648eefb10314cf053fdde348e55e80b5e6aad876cf7af740febb2d1b3a605b1b"
+        "proof_identity_sha256": "f65948c8571ecaaddb1cf9a4bbcfbd6bee0983c03b36ba1046604366470a28ca",
+        "sha256": "511fa8b15cb3237b916548d309ceb9f0446507556f6a278f3f9ae7b250f4d8c0"
       },
       "readiness_proof_digest": "3660da3c7b15ce3fde26d2dbd8e75cf7db599aa237128eaf04b10af89effcaee",
       "source": {
@@ -818,7 +928,7 @@
       "target_schema_digest": "d72670d88a4f4614f523cbfcd523f3702905dc1b1b47a3e2f4ffc8093653c481"
     },
     "D4": {
-      "consumer_fingerprint": "bc2d13b6f931611dd07cf838f152546c7c696d8fccabeded092d4709d4057bbd",
+      "consumer_fingerprint": "41b5429826b3f5493767342ab9c1f351aec142daf03efed9f0547b3809e84f74",
       "dataset_directory": "dataset4",
       "dataset_manifest": {
         "path": "dataset4/manifest.json",
@@ -826,8 +936,8 @@
       },
       "formal_proof": {
         "path": "dataset4/formal-proof.json",
-        "proof_identity_sha256": "419f6ea7079f80c3ef6fe98cd80db7aa20c8e6d33479e0d14297248a012edd07",
-        "sha256": "9a7fd569d7bfdca78c45c8897a52d83c28830650508e9555c0859bad4d81d1ec"
+        "proof_identity_sha256": "b0ac6dd761efa979acb4a0cf2f607e9e75034a395a805ffebb3869654c10d353",
+        "sha256": "399d17a615510d708d9d805a1c63573cf2f4303e48958c98c5e38f931c6151d4"
       },
       "readiness_proof_digest": "9662cc6877d87af070df991621e25abbd6017665d69e22c3839f8e845bd4863a",
       "source": {
@@ -1348,7 +1458,7 @@
       "target_schema_digest": "943432f68afa3ab8dd3286950566623ce8a6710bbea5ced0cc58cc460ad8f59a"
     },
     "D5": {
-      "consumer_fingerprint": "f706c3056a1e5aebcc44ae106dc012ba7277fac5f6c60dc3c69c834d5828f963",
+      "consumer_fingerprint": "17054f3c2d9069ed5ee042def929160dec81dc1481b5d3ff6f30aafdcbbac5d4",
       "dataset_directory": "dataset5",
       "dataset_manifest": {
         "path": "dataset5/manifest.json",
@@ -1356,8 +1466,8 @@
       },
       "formal_proof": {
         "path": "dataset5/formal-proof.json",
-        "proof_identity_sha256": "9533d8ed967002130d7fbf6e8ccdf85260b3ace23a99b2347be17c40537b5b43",
-        "sha256": "25f1f95fbe1c3415a2a7543b5c087e3415addb7323fc08f99b8b3cafa7df248b"
+        "proof_identity_sha256": "e74a49208aa22c35304a22bf8851a79625186ae263028c4fd5c07a026dc72899",
+        "sha256": "893955bc70b17ac8bf5951119c94ae33ef1c739f01bd3b9c75a6198bd600f45f"
       },
       "readiness_proof_digest": "d7fe0571286374409c98107074f153d4600a9afba1e41166769a303b644c0f5b",
       "source": {
@@ -1750,7 +1860,7 @@
       "target_schema_digest": "5f531ee2175bd9cc93552b5717f769fd794978e97023aef9e6ae959482947032"
     },
     "D6": {
-      "consumer_fingerprint": "08986bedc08680a24051c064b34abcb10866c7100bc137750dbcc74da557ef2d",
+      "consumer_fingerprint": "91768afc3d45488c91981ed5d0d60bb340290b4f7b6a978ae80b0d2a909c7cbe",
       "dataset_directory": "dataset6",
       "dataset_manifest": {
         "path": "dataset6/manifest.json",
@@ -1758,8 +1868,8 @@
       },
       "formal_proof": {
         "path": "dataset6/formal-proof.json",
-        "proof_identity_sha256": "5051fbaac82616e5974a9fdf01b4a133204e9eef092c7f813b554d553c8e1941",
-        "sha256": "6bed8357003a616d440ed6906c3847b8ac90728a514424ab99fc171fad933745"
+        "proof_identity_sha256": "84397ad28bf2e0261442db4b01262cfd0f3152d6ca1de5c9f1a5ff673d98d00e",
+        "sha256": "e335cb21e4a8bb75eeee36e9eab09cfacde9c3c628a649f2cb9ee36325203d08"
       },
       "readiness_proof_digest": "78c354676e24f1bf5fa2c7f8f7c612ccfd9e7ac5e4274a3108be7cd41f6a07e6",
       "source": {
@@ -2193,7 +2303,7 @@
     "scope_sha256": "sha256:98107929ea310e7fc304d2631803092e68c01e51fa992da96a3c3118b628eeb4"
   },
   "publication_state": "authoritative",
-  "root_identity_sha256": "3d30c2bfa1170103d090f539f64c862ebe6d26feca3d1591c2b39e0a562fe79f",
+  "root_identity_sha256": "086823947a17bfea9b997b0584c9f89932768d26b9c4a45d8b61c9b939e1a500",
   "schema_version": "d1_d6_deployment_manifest_v1",
   "sealed_root": "数据集/固化数据/d1_d6_sealed_v1"
 }

@@ -1,7 +1,7 @@
 {
-  "consumer_fingerprint": "668977b26bde9d7caab40c1fd64d44101d39df206630bae59847e2273360110a",
+  "consumer_fingerprint": "9e2346794de3f052bc3124fea355753b2fb51c7bd5e3a80a7682de563c80c1a5",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "b791257c9dbeafe45a6d7bcd2040db1ce89b14c7d083e85bb6e8a4f49200087b",
+    "code_inventory_digest": "119b252b9349a9b395b7a0036de1a5c7548f4d5ee0ef54f5107175d6505de8ab",
     "dataset_id": "D1",
     "readiness_proof_digest": "86c47cdeda48b1ebe2306d88268f4405adb0be8aea3ec71c77cc5f245d36559e",
     "source_schema_digest": "f1961aa4d31543aa1afd9b8e7030b0af3da8f44c63426419bf6daf7af858a45f",
@@ -16,6 +16,89 @@
   },
   "dataset_root": "dataset1",
   "dataset_specific": {
+    "knn_selection_authority": {
+      "authority_digest": "6f540e1ea3e17c402f27647c4349e7c6afac3712d8cb1187107b81e5d32b1ff7",
+      "knn_frame_authority": "configured_observed_frame",
+      "observed_window": {
+        "boundary": "inclusive",
+        "observed_days": 30,
+        "observed_end": "2017-06-30",
+        "observed_start": "2017-06-01",
+        "origin": "2017-06-30"
+      },
+      "protocol_version": "d1_d6_protocol_v1",
+      "scenario_files": {
+        "with": {
+          "candidate_pool_digest": "836518bfcdd652a525786457d6ac8d36467385ba6f9ee09d460ed35abb4aab87",
+          "feature_cols": [
+            "sales"
+          ],
+          "knn_frame_authority": "configured_observed_frame",
+          "observed_window": {
+            "boundary": "inclusive",
+            "observed_days": 30,
+            "observed_end": "2017-06-30",
+            "observed_start": "2017-06-01",
+            "origin": "2017-06-30"
+          },
+          "path": "configs/solidified/knn/Dataset1/knn_with_info_sharing.json",
+          "protocol_version": "d1_d6_protocol_v1",
+          "selection_authority": "shared_protocol",
+          "selection_digest": "d7b6852da95385785402b6d927f52e99e6636de4bec27245aec9f9d0026b28fd",
+          "selection_result_digest": "d7b6852da95385785402b6d927f52e99e6636de4bec27245aec9f9d0026b28fd",
+          "sha256": "ae9a9436c5062ba542f399c8b83761c57d30b63416d1fb78d7e30d69877c752d",
+          "source_frame_digest": "6da36a7c1da4124f8da9835302ad06855e0c294d5fe8babc675c7ad86dd1acbf",
+          "source_frame_max_date": "2017-06-30",
+          "source_frame_min_date": "2017-06-01",
+          "target_frame_digest": "14c8b0b59f9c3014776f8a4ca343ed8b59743c0ee21851d4b40c6fc4fa71ae1c",
+          "target_frame_max_date": "2017-06-30",
+          "target_frame_min_date": "2017-06-01"
+        },
+        "without": {
+          "candidate_pool_digest": "7cee51bf5dec70918fda20c62ce92ee609ebba0a54e3b85a8362d124f22df4bc",
+          "feature_cols": [
+            "sales"
+          ],
+          "knn_frame_authority": "configured_observed_frame",
+          "observed_window": {
+            "boundary": "inclusive",
+            "observed_days": 30,
+            "observed_end": "2017-06-30",
+            "observed_start": "2017-06-01",
+            "origin": "2017-06-30"
+          },
+          "path": "configs/solidified/knn/Dataset1/knn_without_info_sharing.json",
+          "protocol_version": "d1_d6_protocol_v1",
+          "selection_authority": "shared_protocol",
+          "selection_digest": "1b101504df5c7fe4c5fa936be755e6fba4f412c113e05f8c3293e2b8a69c0b68",
+          "selection_result_digest": "1b101504df5c7fe4c5fa936be755e6fba4f412c113e05f8c3293e2b8a69c0b68",
+          "sha256": "f4e78f40cd72c8e6fc7ce3d72773c3ec023b6c22ae39867788ca41fcd4683813",
+          "source_frame_digest": "af1d2b07a65bd4c5af9a1b391df6741c2c51958c15b2444922512d0c46dd8232",
+          "source_frame_max_date": "2017-06-30",
+          "source_frame_min_date": "2017-06-01",
+          "target_frame_digest": "14c8b0b59f9c3014776f8a4ca343ed8b59743c0ee21851d4b40c6fc4fa71ae1c",
+          "target_frame_max_date": "2017-06-30",
+          "target_frame_min_date": "2017-06-01"
+        }
+      },
+      "selection_authority": "shared_protocol",
+      "target_scenario_matrix": {
+        "with": {
+          "candidate_pool_digest": "836518bfcdd652a525786457d6ac8d36467385ba6f9ee09d460ed35abb4aab87",
+          "selection_digest": "d7b6852da95385785402b6d927f52e99e6636de4bec27245aec9f9d0026b28fd",
+          "selection_result_digest": "d7b6852da95385785402b6d927f52e99e6636de4bec27245aec9f9d0026b28fd",
+          "source_frame_digest": "6da36a7c1da4124f8da9835302ad06855e0c294d5fe8babc675c7ad86dd1acbf",
+          "target_frame_digest": "14c8b0b59f9c3014776f8a4ca343ed8b59743c0ee21851d4b40c6fc4fa71ae1c"
+        },
+        "without": {
+          "candidate_pool_digest": "7cee51bf5dec70918fda20c62ce92ee609ebba0a54e3b85a8362d124f22df4bc",
+          "selection_digest": "1b101504df5c7fe4c5fa936be755e6fba4f412c113e05f8c3293e2b8a69c0b68",
+          "selection_result_digest": "1b101504df5c7fe4c5fa936be755e6fba4f412c113e05f8c3293e2b8a69c0b68",
+          "source_frame_digest": "af1d2b07a65bd4c5af9a1b391df6741c2c51958c15b2444922512d0c46dd8232",
+          "target_frame_digest": "14c8b0b59f9c3014776f8a4ca343ed8b59743c0ee21851d4b40c6fc4fa71ae1c"
+        }
+      }
+    },
     "legacy_fallback_used": false,
     "resolver": "formal_input_paths"
   },
@@ -50,7 +133,7 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "278af7d04e321e9c79851912d41a72a2f0b67490814a6a2c5d337945f93a9a11",
+  "proof_identity_sha256": "dc0f1a89412c724b37a2fcf0ceb26e4c49b472d77635e9766110a72305405f17",
   "readiness_proof_digest": "86c47cdeda48b1ebe2306d88268f4405adb0be8aea3ec71c77cc5f245d36559e",
   "readiness_result": {
     "failure_code": null,
