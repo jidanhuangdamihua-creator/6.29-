@@ -4,8 +4,13 @@ import pandas as pd
 import pytest
 
 from src.protocols.experiment_protocol import ProtocolViolation
+from src.protocols.experiment_protocol import PROTOCOL_VERSION
 from src.protocols.knn_frames import get_configured_knn_frame
 from src.protocols.runner_adapter import configure_protocol_frames
+from scripts.regenerate_solidified_knn import (
+    _build_regenerated_payload,
+    _select_d1_d2_shared_protocol,
+)
 from src.source_selection import source_selector as source_selector_module
 from src.source_selection.source_selector import SourceSelector
 
@@ -179,3 +184,69 @@ def test_d1_future_sentinels_do_not_change_any_knn_identity() -> None:
     ):
         assert baseline["meta"][field] == changed["meta"][field]
     assert baseline["sources"] == changed["sources"]
+
+
+@pytest.mark.parametrize("dataset_id", [1, 2])
+def test_regeneration_d1_d2_uses_shared_origin_bounded_selector(dataset_id: int) -> None:
+    source, target = _strict_frames(f"D{dataset_id}")
+    group_cols = ("store_id", "item_id") if dataset_id == 1 else ("brand_id", "item_id")
+    target_entity = target.loc[
+        (target[group_cols[0]].astype(str) == "1")
+        & (target[group_cols[1]].astype(str) == "10")
+    ].copy()
+
+    selected = _select_d1_d2_shared_protocol(
+        dataset_id=dataset_id,
+        source_df=source,
+        target_entity_df=target_entity,
+        scenario="with",
+        feature_cols=("sales",),
+        k=3,
+        group_cols=group_cols,
+    )
+
+    metadata = selected["meta"]
+    assert metadata["selection_authority"] == "shared_protocol"
+    assert metadata["selection_path"] == "shared_protocol"
+    assert metadata["protocol_version"] == PROTOCOL_VERSION
+    assert metadata["knn_observed_start"] == (
+        "2017-06-01" if dataset_id == 1 else "2018-06-01"
+    )
+    assert metadata["knn_observed_end"] == (
+        "2017-06-30" if dataset_id == 1 else "2018-06-30"
+    )
+    assert metadata["feature_cols"] == ["sales"]
+    assert len(metadata["source_frame_digest"]) == 64
+    assert len(metadata["target_frame_digest"]) == 64
+
+
+def test_d1_d2_regenerated_payload_binds_shared_authority() -> None:
+    old_payload = {
+        "dataset_id": 1,
+        "dataset": "D1",
+        "info_sharing": "with",
+        "k": 3,
+        "target_train_window": {"start": "2017-06-05", "end": "2017-06-19"},
+        "group_cols": ["store_id", "item_id"],
+    }
+    metadata = {
+        "selection_authority": "shared_protocol",
+        "protocol_version": PROTOCOL_VERSION,
+        "selection_digest": "a" * 64,
+    }
+
+    regenerated = _build_regenerated_payload(
+        dataset_id=1,
+        old_payload=old_payload,
+        feature_cols=["sales"],
+        feature_info={"selected_features": ["sales"]},
+        source_pool_size=10,
+        results={"1_10": []},
+        selection_metadata={"1_10": metadata},
+    )
+
+    assert regenerated["selection_authority"] == "shared_protocol"
+    assert regenerated["protocol_version"] == PROTOCOL_VERSION
+    assert regenerated["training_selection_authority"] == "shared_protocol_selector"
+    assert regenerated["feature_cols"] == ["sales"]
+    assert regenerated["selection_metadata"] == {"1_10": metadata}

@@ -207,6 +207,14 @@ def _filter_source_for_scenario(
     scenario: str,
     old_payload: Dict[str, Any],
 ) -> SourceDomainPolicyResult:
+    if int(dataset_id) in {1, 2}:
+        return apply_source_domain_policy(
+            source_df,
+            old_payload.get("domain_filter"),
+            information_sharing=scenario,
+            entity_group_cols=old_payload.get("group_cols"),
+            domain_filter_scope="source_pool",
+        )
     if int(dataset_id) not in {4, 5, 6}:
         raise ValueError(f"regeneration only supports D4-D6: dataset_id={dataset_id}")
     if int(dataset_id) == 4:
@@ -272,6 +280,59 @@ def _select_d4_shared_protocol(
     return selected
 
 
+def _select_d1_d2_shared_protocol(
+    *,
+    dataset_id: int,
+    source_df: pd.DataFrame,
+    target_entity_df: pd.DataFrame,
+    scenario: str,
+    feature_cols: Sequence[str],
+    k: int,
+    group_cols: Sequence[str],
+) -> Dict[str, Any]:
+    """Select a D1/D2 target through the origin-bounded shared protocol."""
+    if int(dataset_id) not in {1, 2}:
+        raise ValueError(f"D1/D2 shared regeneration requires dataset_id 1 or 2, got {dataset_id}")
+    protocol = get_experiment_protocol(dataset_id)
+    target_key = protocol.source_pool_rule.target_key
+    if target_key is None:
+        raise ValueError(f"D{dataset_id} has no formal target key")
+    if tuple(group_cols) != tuple(protocol.source_pool_rule.key_fields):
+        raise ValueError(
+            f"D{dataset_id} regeneration group_cols do not match protocol: "
+            f"{tuple(group_cols)!r} != {protocol.source_pool_rule.key_fields!r}"
+        )
+    target_mask = pd.Series(True, index=target_entity_df.index)
+    for column, value in zip(group_cols, target_key):
+        if column not in target_entity_df.columns:
+            raise ValueError(f"D{dataset_id} target frame missing key column: {column}")
+        target_mask &= target_entity_df[column].astype(str).eq(str(value))
+    target_entity_df = target_entity_df.loc[target_mask].copy()
+    if target_entity_df.empty:
+        raise ValueError(f"D{dataset_id} target frame is empty for formal key {target_key!r}")
+
+    configured_source, configured_target = configure_protocol_frames(
+        source_df,
+        target_entity_df,
+        dataset_id=int(dataset_id),
+        scenario=scenario,
+        group_cols=tuple(group_cols),
+        grouping_col=None,
+        observed_start=None,
+    )
+    selected = SourceSelector().select_top_k_sources(
+        target_df=configured_target,
+        source_df=configured_source,
+        feature_cols=feature_cols,
+        k=k,
+        group_cols=tuple(group_cols),
+    )
+    metadata = selected.get("meta", {})
+    if not isinstance(metadata, dict) or metadata.get("selection_path") != "shared_protocol":
+        raise ValueError(f"D{dataset_id} regeneration did not use the shared protocol selector path")
+    return selected
+
+
 def _prepare_d4_runtime_source_pool(
     *,
     source_df: pd.DataFrame,
@@ -310,6 +371,7 @@ def _prepare_d4_runtime_source_pool(
 
 def _build_regenerated_payload(
     *,
+    dataset_id: int | None = None,
     old_payload: Dict[str, Any],
     feature_cols: Sequence[str],
     feature_info: Dict[str, Any],
@@ -356,12 +418,15 @@ def _build_regenerated_payload(
         for key in stable_keys
         if key in old_payload
     }
+    strict_d1_d2 = int(dataset_id) in {1, 2} if dataset_id is not None else False
     new_payload.update(
         {
-            "selection_authority": "runtime",
-            "protocol_version": D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+            "selection_authority": "shared_protocol" if strict_d1_d2 else "runtime",
+            "protocol_version": PROTOCOL_VERSION if strict_d1_d2 else D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
             "results_semantics": "json_top_k_diagnostic_not_training_authority",
-            "training_selection_authority": "runtime_source_selector",
+            "training_selection_authority": (
+                "shared_protocol_selector" if strict_d1_d2 else "runtime_source_selector"
+            ),
             "json_results_used_for": [
                 "target_list",
                 "smoke_or_source_limit_candidate_pool",
@@ -377,6 +442,8 @@ def _build_regenerated_payload(
             "selection_metadata": copy.deepcopy(selection_metadata),
         }
     )
+    if strict_d1_d2:
+        new_payload["knn_frame_authority"] = "configured_observed_frame"
     return new_payload
 
 
@@ -446,6 +513,32 @@ def _d4_manifest_identity(
     return identity
 
 
+def _load_d1_d2_formal_frames(
+    *,
+    dataset_id: int,
+    source_path: Path,
+    target_path: Path,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load D1/D2 source and target parquet frames without legacy window slicing."""
+    source_df = pd.read_parquet(source_path)
+    target_df = pd.read_parquet(target_path)
+    for role, frame in (("source", source_df), ("target", target_df)):
+        if "date" not in frame.columns:
+            raise ValueError(f"D{dataset_id} {role} dataframe requires date column")
+        frame["date"] = pd.to_datetime(frame["date"], errors="coerce").dt.normalize()
+        if frame["date"].isna().any():
+            raise ValueError(f"D{dataset_id} {role} dataframe contains invalid date values")
+        frame.attrs.update(
+            {
+                "dataset_name": f"Dataset{int(dataset_id)}",
+                "split_role": role,
+                "role": role,
+                "solidified_parquet_path": str(source_path if role == "source" else target_path),
+            }
+        )
+    return source_df, target_df
+
+
 def regenerate_dataset_scenario(
     *,
     dataset_id: int,
@@ -460,23 +553,30 @@ def regenerate_dataset_scenario(
         raise ValueError(f"KNN payload dataset_id mismatch: expected={dataset_id}")
     if str(old_payload.get("info_sharing", "")).strip().lower() != str(scenario).strip().lower():
         raise ValueError(f"KNN payload info_sharing mismatch: expected={scenario}")
-    windows = read_dataset_windows(
-        dataset_id,
-        knn_root / f"Dataset{int(dataset_id)}",
-        info_sharing=scenario,
-        knn_payload=old_payload,
-    )
     formal_paths = resolve_formal_dataset_paths(
         dataset_id,
         repository_root=PROJECT_ROOT,
     )
-    source_df, target_df = load_parquet_source_target(
-        dataset_id=dataset_id,
-        source_path=formal_paths.source_path,
-        target_path=formal_paths.target_path,
-        windows=windows,
-        source_history_days=SOURCE_HISTORY_DAYS,
-    )
+    if int(dataset_id) in {1, 2}:
+        source_df, target_df = _load_d1_d2_formal_frames(
+            dataset_id=dataset_id,
+            source_path=formal_paths.source_path,
+            target_path=formal_paths.target_path,
+        )
+    else:
+        windows = read_dataset_windows(
+            dataset_id,
+            knn_root / f"Dataset{int(dataset_id)}",
+            info_sharing=scenario,
+            knn_payload=old_payload,
+        )
+        source_df, target_df = load_parquet_source_target(
+            dataset_id=dataset_id,
+            source_path=formal_paths.source_path,
+            target_path=formal_paths.target_path,
+            windows=windows,
+            source_history_days=SOURCE_HISTORY_DAYS,
+        )
     if int(dataset_id) == 4:
         source_domain_policy = _prepare_d4_runtime_source_pool(
             source_df=source_df,
@@ -500,6 +600,8 @@ def regenerate_dataset_scenario(
         if isinstance(existing_feature_info, dict)
         else []
     ) or list(old_payload.get("feature_cols", []))
+    if int(dataset_id) in {1, 2}:
+        feature_cols = ["sales"]
     if not feature_cols:
         raise ValueError("KNN payload missing required feature_cols")
     missing_features = [
@@ -521,10 +623,30 @@ def regenerate_dataset_scenario(
     new_selection_metadata: Dict[str, Dict[str, Any]] = {}
     diff_rows: List[Dict[str, Any]] = []
     for target_entity_id, old_rows in old_payload.get("results", {}).items():
-        target_entity_df = target_df[target_df["entity_id"].astype(str) == str(target_entity_id)].copy()
+        if int(dataset_id) in {1, 2}:
+            target_key = get_experiment_protocol(dataset_id).source_pool_rule.target_key
+            if target_key is None:
+                raise ValueError(f"D{dataset_id} has no formal target key")
+            target_entity_df = target_df.copy()
+            for column, value in zip(group_cols, target_key):
+                target_entity_df = target_entity_df.loc[
+                    target_entity_df[column].astype(str).eq(str(value))
+                ].copy()
+        else:
+            target_entity_df = target_df[target_df["entity_id"].astype(str) == str(target_entity_id)].copy()
         if target_entity_df.empty:
             raise ValueError(f"KNN target entity missing from runtime target frame: {target_entity_id}")
-        if int(dataset_id) == 4:
+        if int(dataset_id) in {1, 2}:
+            selected = _select_d1_d2_shared_protocol(
+                dataset_id=dataset_id,
+                source_df=source_df,
+                target_entity_df=target_entity_df,
+                scenario=scenario,
+                feature_cols=feature_cols,
+                k=k,
+                group_cols=group_cols,
+            )
+        elif int(dataset_id) == 4:
             selected = _select_d4_shared_protocol(
                 source_df=source_df,
                 target_entity_df=target_entity_df,
@@ -601,6 +723,7 @@ def regenerate_dataset_scenario(
         )
 
     new_payload = _build_regenerated_payload(
+        dataset_id=dataset_id,
         old_payload=old_payload,
         feature_cols=feature_cols,
         feature_info=feature_info,
