@@ -272,16 +272,6 @@ D3_WITHOUT_INFO_SHARING_DOMAIN_FILTER: dict[str, object] = {
     "value": 1,
 }
 
-D1_TARGET_TRAIN_WINDOW: dict[str, str] = {
-    "start": "2017-06-05",
-    "end": "2017-06-19",
-}
-
-D2_TARGET_TRAIN_WINDOW: dict[str, str] = {
-    "start": "2018-06-05",
-    "end": "2018-06-19",
-}
-
 SOLIDIFIED_TARGET_WINDOWS: dict[int, dict[str, str]] = {
     4: {
         "train_start": "2024-12-16",

@@ -57,6 +57,7 @@ from src.protocols.rolling_origin import build_sample_manifest
 from src.protocols.reproducibility import set_protocol_seed
 from src.protocols.experiment_protocol import (
     formal_target_entity_keys,
+    get_experiment_protocol,
     serialize_canonical_target_key,
 )
 from src.utils.run_artifacts import publish_formal_cell_output_frame
@@ -100,8 +101,6 @@ INFO_SHARING_SCENARIOS = [
     "with_information_sharing",
 ]
 STRICT_KNN_OBSERVED_START = {
-    "Dataset1": "2017-06-05",
-    "Dataset2": "2018-06-05",
     "Dataset3": "2015-01-03",
 }
 FORMAL_DATASET_PATHS = {
@@ -1175,7 +1174,11 @@ def run_experiment(
         dataset_id=dataset_name,
         scenario=information_sharing_scenario,
         group_cols=protocol_group_cols,
-        observed_start=STRICT_KNN_OBSERVED_START[dataset_name],
+        observed_start=(
+            None
+            if dataset_name in {"Dataset1", "Dataset2"}
+            else STRICT_KNN_OBSERVED_START[dataset_name]
+        ),
         enforce_formal_target=True,
     )
     target_df.attrs["model_window_size"] = int(exp_cfg["window_size"])
@@ -1839,8 +1842,13 @@ def _build_error_row(
         protocol=protocol,
     )
     exp_cfg = dict((cfg or {}).get("single_experiment", {}) or {})
-    observed_start = pd.Timestamp(STRICT_KNN_OBSERVED_START[dataset_name])
-    observed_end = observed_start + pd.Timedelta(days=29)
+    protocol_window = get_experiment_protocol(int(dataset_name[-1])).observation_window(
+        None
+        if dataset_name in {"Dataset1", "Dataset2"}
+        else STRICT_KNN_OBSERVED_START[dataset_name]
+    )
+    observed_start = pd.Timestamp(protocol_window.knn_observed_start)
+    observed_end = pd.Timestamp(protocol_window.knn_observed_end)
     result = {
         "result_contract_version": RESULT_CONTRACT_VERSION,
         "schema_family": SCHEMA_FAMILY_D1_D3,

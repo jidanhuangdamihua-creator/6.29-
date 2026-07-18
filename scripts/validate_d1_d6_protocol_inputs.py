@@ -29,7 +29,7 @@ from src.protocols.d2_source_calendarization import (
     slice_d2_source_frame,
     verify_d2_source_frame,
 )
-from src.protocols.experiment_protocol import normalize_scenario
+from src.protocols.experiment_protocol import get_experiment_protocol, normalize_scenario
 from src.protocols.runner_adapter import configure_protocol_frames
 from src.protocols.formal_input_paths import (
     formal_dataset_identity,
@@ -53,8 +53,18 @@ def resolve_preflight_formal_input_identity(
 
 
 DATASET_CONFIG = {
-    1: {"group_cols": ("store_id", "item_id"), "observed_start": "2017-06-05"},
-    2: {"group_cols": ("brand_id", "item_id"), "observed_start": "2018-06-05"},
+    1: {
+        "group_cols": ("store_id", "item_id"),
+        "observed_start": get_experiment_protocol(1)
+        .observation_window()
+        .knn_observed_start.isoformat(),
+    },
+    2: {
+        "group_cols": ("brand_id", "item_id"),
+        "observed_start": get_experiment_protocol(2)
+        .observation_window()
+        .knn_observed_start.isoformat(),
+    },
     3: {"group_cols": ("store_id",), "observed_start": "2015-01-03"},
     4: {
         "group_cols": ("store_id", "product_id"),

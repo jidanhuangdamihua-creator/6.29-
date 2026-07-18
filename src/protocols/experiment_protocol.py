@@ -21,6 +21,11 @@ FORMAL_METHODS = (
 FORMAL_PROTOCOL_TRACK = "strict_paper"
 STRICT_PAPER_TRACK = FORMAL_PROTOCOL_TRACK
 EXTENDED_TRACK = "extended"
+D1_D2_KNN_ORIGINS = {
+    "D1": date(2017, 6, 30),
+    "D2": date(2018, 6, 30),
+}
+STRICT_KNN_OBSERVED_DAYS = 30
 
 SourceKey = Tuple[str, ...]
 
@@ -125,6 +130,26 @@ class ObservationWindow:
         end = start + timedelta(days=29)
         return cls(start, end, end)
 
+    @classmethod
+    def from_origin(
+        cls,
+        origin: object,
+        observed_days: int = STRICT_KNN_OBSERVED_DAYS,
+    ) -> "ObservationWindow":
+        if int(observed_days) <= 0:
+            raise ProtocolViolation("observed_days must be positive")
+        end = _as_date(origin)
+        start = end - timedelta(days=int(observed_days) - 1)
+        return cls(start, end, end)
+
+    @property
+    def origin(self) -> date:
+        return self.knn_observed_end
+
+    @property
+    def observed_days(self) -> int:
+        return (self.knn_observed_end - self.knn_observed_start).days + 1
+
     def is_test_date(self, value: object) -> bool:
         return _as_date(value) > self.knn_observed_end
 
@@ -203,7 +228,19 @@ class ExperimentProtocol:
             )
         object.__setattr__(self, "formal_target_keys", normalized)
 
-    def observation_window(self, observed_start: object) -> ObservationWindow:
+    def observation_window(self, observed_start: object | None = None) -> ObservationWindow:
+        if self.dataset_id in D1_D2_KNN_ORIGINS:
+            window = ObservationWindow.from_origin(D1_D2_KNN_ORIGINS[self.dataset_id])
+            if observed_start is not None and _as_date(observed_start) != window.knn_observed_start:
+                raise ProtocolViolation(
+                    f"authoritative {self.dataset_id} KNN window starts at "
+                    f"{window.knn_observed_start.isoformat()}, got {observed_start!r}"
+                )
+            return window
+        if observed_start is None:
+            raise ProtocolViolation(
+                f"{self.dataset_id} observation window requires observed_start"
+            )
         return ObservationWindow.from_start(observed_start)
 
 
