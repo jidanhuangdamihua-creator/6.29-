@@ -412,10 +412,12 @@ class PreparedDailySequencePool:
     required_dates: Tuple[str, ...]
     source_keys: Tuple[SourceKey, ...]
     sales_matrix: np.ndarray
+    feature_matrices: Mapping[str, np.ndarray]
     date_presence_matrix: np.ndarray
     key_to_index: Mapping[SourceKey, int]
     duplicate_date_keys: frozenset[SourceKey]
     nonfinite_sales_keys: frozenset[SourceKey]
+    nonfinite_feature_keys: Mapping[str, frozenset[SourceKey]]
     metadata_by_col: Mapping[str, Mapping[SourceKey, str]]
     keys_by_metadata_value: Mapping[str, Mapping[str, Tuple[SourceKey, ...]]]
 
@@ -464,6 +466,23 @@ class PreparedDailySequencePool:
 
     def selected_sales_frame(self, keys: Sequence[Sequence[object]]) -> pd.DataFrame:
         """Materialize only selected 30-day sales rows for shared provenance checks."""
+        return self.selected_frame(keys, feature_cols=("sales",))
+
+    def selected_frame(
+        self,
+        keys: Sequence[Sequence[object]],
+        *,
+        feature_cols: Sequence[str],
+    ) -> pd.DataFrame:
+        """Materialize selected aligned observations using the declared KNN features."""
+        normalized_features = tuple(str(column) for column in feature_cols)
+        if not normalized_features:
+            raise ProtocolViolation("selected frame requires non-empty feature columns")
+        missing = [column for column in normalized_features if column not in self.feature_matrices]
+        if missing:
+            raise ProtocolViolation(
+                f"prepared pool is missing declared feature columns: {missing!r}"
+            )
         frames = []
         dates = pd.to_datetime(list(self.required_dates))
         for raw_key in keys:
@@ -475,10 +494,11 @@ class PreparedDailySequencePool:
                 column: key[position] for position, column in enumerate(self.group_cols)
             }
             payload["date"] = dates
-            payload["sales"] = self.sales_matrix[index].copy()
+            for column in normalized_features:
+                payload[column] = self.feature_matrices[column][index].copy()
             frames.append(pd.DataFrame(payload))
         if not frames:
-            return pd.DataFrame(columns=[*self.group_cols, "date", "sales"])
+            return pd.DataFrame(columns=[*self.group_cols, "date", *normalized_features])
         return pd.concat(frames, ignore_index=True)
 
 
@@ -489,12 +509,18 @@ def prepare_daily_sequence_pool(
     observed_start: object,
     observed_end: object | None = None,
     metadata_cols: Sequence[str] = (),
+    feature_cols: Sequence[str] | None = None,
 ) -> PreparedDailySequencePool:
-    """Prepare all source keys and their aligned 30-day sales matrix exactly once."""
+    """Prepare all source keys and aligned 30-day feature matrices exactly once."""
     normalized_group_cols = tuple(str(column) for column in group_cols)
     if not normalized_group_cols:
         raise ProtocolViolation("prepared pool group_cols may not be empty")
-    required_columns = [*normalized_group_cols, "date", "sales", *metadata_cols]
+    normalized_features = tuple(
+        str(column) for column in (("sales",) if feature_cols is None else feature_cols)
+    )
+    if not normalized_features or len(set(normalized_features)) != len(normalized_features):
+        raise ProtocolViolation("prepared pool feature columns must be non-empty and unique")
+    required_columns = [*normalized_group_cols, "date", *normalized_features, *metadata_cols]
     missing = [column for column in required_columns if column not in source_df.columns]
     if missing:
         raise ProtocolViolation(f"source dataframe missing prepared-pool columns: {missing}")
@@ -548,7 +574,9 @@ def prepare_daily_sequence_pool(
             )
 
     observed_mask = parsed_dates.isin(required_dates)
-    observed = source_df.loc[observed_mask, [*normalized_group_cols, "sales"]].copy()
+    observed = source_df.loc[
+        observed_mask, [*normalized_group_cols, *normalized_features]
+    ].copy()
     observed["date"] = parsed_dates.loc[observed_mask].to_numpy()
     observed = observed.merge(
         raw_key_table.loc[:, [*normalized_group_cols, "__protocol_key_index__"]],
@@ -556,12 +584,18 @@ def prepare_daily_sequence_pool(
         how="left",
         validate="many_to_one",
     )
-    observed["sales"] = pd.to_numeric(observed["sales"], errors="coerce")
+    for column in normalized_features:
+        observed[column] = pd.to_numeric(observed[column], errors="coerce")
 
     duplicate_rows = observed.duplicated(["__protocol_key_index__", "date"], keep=False)
     duplicate_indices = set(observed.loc[duplicate_rows, "__protocol_key_index__"].astype(int))
-    nonfinite_rows = ~np.isfinite(observed["sales"].to_numpy(dtype=np.float64))
-    nonfinite_indices = set(observed.loc[nonfinite_rows, "__protocol_key_index__"].astype(int))
+    nonfinite_feature_indices: Dict[str, set[int]] = {}
+    for column in normalized_features:
+        nonfinite_rows = ~np.isfinite(observed[column].to_numpy(dtype=np.float64))
+        nonfinite_feature_indices[column] = set(
+            observed.loc[nonfinite_rows, "__protocol_key_index__"].astype(int)
+        )
+    nonfinite_indices = nonfinite_feature_indices.get("sales", set())
 
     first_rows = observed.drop_duplicates(["__protocol_key_index__", "date"], keep="first")
     presence = first_rows.assign(__protocol_date_present__=True).pivot(
@@ -573,20 +607,37 @@ def prepare_daily_sequence_pool(
     date_presence_matrix = presence.notna().to_numpy(dtype=bool, copy=True)
     date_presence_matrix.setflags(write=False)
 
-    pivot = first_rows.pivot(index="__protocol_key_index__", columns="date", values="sales")
-    pivot = pivot.reindex(index=range(len(normalized_keys)), columns=required_dates)
-    sales_matrix = pivot.to_numpy(dtype=np.float64, copy=True)
-    sales_matrix.setflags(write=False)
+    feature_matrices: Dict[str, np.ndarray] = {}
+    for column in normalized_features:
+        pivot = first_rows.pivot(
+            index="__protocol_key_index__", columns="date", values=column
+        )
+        pivot = pivot.reindex(index=range(len(normalized_keys)), columns=required_dates)
+        matrix = pivot.to_numpy(dtype=np.float64, copy=True)
+        matrix.setflags(write=False)
+        feature_matrices[column] = matrix
+    sales_matrix = feature_matrices.get("sales")
+    if sales_matrix is None:
+        raise ProtocolViolation("prepared pool feature columns must include sales")
 
     return PreparedDailySequencePool(
         group_cols=normalized_group_cols,
         required_dates=tuple(required_dates.strftime("%Y-%m-%d")),
         source_keys=normalized_keys,
         sales_matrix=sales_matrix,
+        feature_matrices=MappingProxyType(feature_matrices),
         date_presence_matrix=date_presence_matrix,
         key_to_index=MappingProxyType(key_to_index),
         duplicate_date_keys=frozenset(normalized_keys[index] for index in duplicate_indices),
         nonfinite_sales_keys=frozenset(normalized_keys[index] for index in nonfinite_indices),
+        nonfinite_feature_keys=MappingProxyType(
+            {
+                column: frozenset(
+                    normalized_keys[index] for index in indices
+                )
+                for column, indices in nonfinite_feature_indices.items()
+            }
+        ),
         metadata_by_col=MappingProxyType(metadata_maps),
         keys_by_metadata_value=MappingProxyType(metadata_key_indexes),
     )
@@ -607,6 +658,7 @@ def _exact_observed_vector(
     required_dates: pd.DatetimeIndex,
     *,
     role: str,
+    feature_cols: Sequence[str],
 ) -> np.ndarray:
     observed = frame[frame["date"].isin(required_dates)].sort_values("date")
     if observed["date"].duplicated().any():
@@ -615,10 +667,15 @@ def _exact_observed_vector(
     if not actual_dates.equals(required_dates):
         missing = required_dates.difference(actual_dates).strftime("%Y-%m-%d").tolist()
         raise ProtocolViolation(f"{role} missing observed dates: {missing}")
-    values = observed["sales"].to_numpy(dtype=np.float64)
-    if not np.isfinite(values).all():
-        raise ProtocolViolation(f"{role} observed sales contain non-finite values")
-    return values
+    vectors = []
+    for column in feature_cols:
+        values = pd.to_numeric(observed[column], errors="coerce").to_numpy(dtype=np.float64)
+        if not np.isfinite(values).all():
+            raise ProtocolViolation(
+                f"{role} observed feature {column!r} contains non-finite values"
+            )
+        vectors.append(values)
+    return np.concatenate(vectors).astype(np.float64, copy=False)
 
 
 def select_daily_sequence_sources(
@@ -632,13 +689,18 @@ def select_daily_sequence_sources(
     candidate_keys: Iterable[Sequence[object]],
     group_cols: Sequence[str],
     observed_start: object,
-    feature_cols: Sequence[str] = ("sales",),
+    feature_cols: Sequence[str],
     k: int,
 ) -> SelectionResult:
-    """Select exactly K sources using only aligned legal 30-day sales sequences."""
+    """Select exactly K sources using protocol-declared aligned 30-day features."""
 
-    if tuple(feature_cols) != ("sales",):
-        raise ProtocolViolation("feature_cols must be exactly ('sales',) for strict KNN")
+    declared_features = tuple(protocol.knn_feature_columns)
+    requested_features = tuple(str(column) for column in feature_cols)
+    if requested_features != declared_features:
+        raise ProtocolViolation(
+            f"feature_cols must be exactly the {protocol.dataset_id} protocol KNN features: "
+            f"expected {declared_features!r}, got {requested_features!r}"
+        )
     if not isinstance(k, int) or isinstance(k, bool) or k <= 0:
         raise ProtocolViolation("K must be a positive integer")
     normalized_scenario = normalize_scenario(scenario)
@@ -656,8 +718,20 @@ def select_daily_sequence_sources(
             raise ProtocolViolation(f"source dataframe missing group columns: {missing_group_cols}")
         if "sales" not in source_df.columns:
             raise ProtocolViolation("source dataframe requires sales column")
-    if "sales" not in target_df.columns:
-        raise ProtocolViolation("target dataframe requires sales column")
+    missing_target_features = [
+        column for column in declared_features if column not in target_df.columns
+    ]
+    missing_source_features = [
+        column for column in declared_features if column not in source_df.columns
+    ]
+    if missing_target_features:
+        raise ProtocolViolation(
+            f"target dataframe is missing protocol KNN features: {missing_target_features!r}"
+        )
+    if missing_source_features and prepared_pool is None:
+        raise ProtocolViolation(
+            f"source dataframe is missing protocol KNN features: {missing_source_features!r}"
+        )
 
     calendarization_rule_version = source_df.attrs.get(
         "d2_source_calendarization_rule_version"
@@ -687,13 +761,20 @@ def select_daily_sequence_sources(
         target,
         required_dates,
         role="target",
+        feature_cols=declared_features,
     )
     source_frame_digest = None
     target_frame_digest = None
     if protocol.dataset_id in {"D1", "D2"}:
+        digest_feature_cols = (
+            None if declared_features == ("sales",) else declared_features
+        )
+        digest_ignored_columns = ("promo",) if digest_feature_cols is None else ()
         target_frame_digest = canonical_knn_frame_digest(
             target_legal,
             group_cols=group_cols,
+            feature_cols=digest_feature_cols,
+            ignore_columns=digest_ignored_columns,
         )
         if prepared_pool is None:
             source_prepared = _prepare_dates(source_df, role="source")
@@ -701,12 +782,15 @@ def select_daily_sequence_sources(
                 source_prepared["date"].isin(required_dates)
             ].copy()
         else:
-            source_legal = prepared_pool.selected_sales_frame(
-                [key for key in normalized_candidates if key in prepared_pool.key_to_index]
+            source_legal = prepared_pool.selected_frame(
+                [key for key in normalized_candidates if key in prepared_pool.key_to_index],
+                feature_cols=declared_features,
             )
         source_frame_digest = canonical_knn_frame_digest(
             source_legal,
             group_cols=group_cols,
+            feature_cols=digest_feature_cols,
+            ignore_columns=digest_ignored_columns,
         )
 
     pool = prepared_pool or prepare_daily_sequence_pool(
@@ -714,6 +798,7 @@ def select_daily_sequence_sources(
         group_cols=group_cols,
         observed_start=observed_start_iso,
         observed_end=observed_end_iso,
+        feature_cols=declared_features,
     )
     pool.validate_for(group_cols=group_cols, required_dates=required_dates)
 
@@ -735,14 +820,18 @@ def select_daily_sequence_sources(
                 }
             )
             continue
-        if candidate_key in pool.nonfinite_sales_keys:
-            raise ProtocolViolation(
-                f"source {candidate_key!r} observed sales contain non-finite values"
-            )
+        for column in declared_features:
+            if candidate_key in pool.nonfinite_feature_keys.get(column, frozenset()):
+                raise ProtocolViolation(
+                    f"source {candidate_key!r} observed feature {column!r} "
+                    "contains non-finite values"
+                )
         pool_index = pool.key_to_index.get(candidate_key)
         if pool_index is None:
             raise ProtocolViolation(f"prepared pool key lookup failed for {candidate_key!r}")
-        values = pool.sales_matrix[pool_index]
+        values = np.concatenate(
+            [pool.feature_matrices[column][pool_index] for column in declared_features]
+        ).astype(np.float64, copy=False)
         valid_keys.append(candidate_key)
         raw_vectors.append(values)
 

@@ -25,11 +25,13 @@
     "diagnostics"
   ],
   "feature_cols": [
-    "sales"
+    "sales",
+    "promo"
   ],
   "feature_info": {
     "selected_features": [
-      "sales"
+      "sales",
+      "promo"
     ],
     "modeling_source_features": [
       "sales",
@@ -68,7 +70,11 @@
       "brand_id"
     ],
     "include_sales_in_knn": true,
-    "knn_feature_mode": "paper_available_features_no_ids"
+    "knn_feature_mode": "paper_available_features_no_ids",
+    "knn_feature_columns": [
+      "sales",
+      "promo"
+    ]
   },
   "source_pool_size": 48654,
   "source_domain_policy_diagnostics": {
@@ -99,22 +105,22 @@
     "1_10": [
       {
         "source_entity": "1_4",
-        "distance": 0.3082207001484488,
-        "weight": 0.3442082116032833,
+        "distance": 0.3122498999199199,
+        "weight": 0.34228530050700084,
         "source_brand_id": "1",
         "source_item_id": "4"
       },
       {
         "source_entity": "2_2",
-        "distance": 0.3233129289094391,
-        "weight": 0.32814059275557866,
+        "distance": 0.32475952641916445,
+        "weight": 0.3291005875568084,
         "source_brand_id": "2",
         "source_item_id": "2"
       },
       {
         "source_entity": "3_2",
-        "distance": 0.32379584617471546,
-        "weight": 0.3276511956411381,
+        "distance": 0.32524029578144215,
+        "weight": 0.3286141119361907,
         "source_brand_id": "3",
         "source_item_id": "2"
       }
@@ -132,12 +138,27 @@
         "brand_id",
         "item_id"
       ],
-      "target_signature_dim": 30,
+      "target_signature_dim": 60,
       "feature_cols": [
-        "sales"
+        "sales",
+        "promo"
       ],
+      "knn_feature_columns": [
+        "sales",
+        "promo"
+      ],
+      "historical_feature_columns": [
+        "sales",
+        "promo"
+      ],
+      "forecast_excluded_columns": [
+        "promo"
+      ],
+      "feature_scope": "historical_observed",
+      "max_allowed_date_relation": "date<=origin",
       "requested_feature_cols": [
-        "sales"
+        "sales",
+        "promo"
       ],
       "representation": "daily_sales_flattened_30d",
       "knn_representation": "daily_sales_flattened_30d",
@@ -156,7 +177,7 @@
       "target_test_excluded": true,
       "source_future_excluded": true,
       "source_alignment_mode": "exact_knn_observed_dates",
-      "candidate_pool_digest": "6c0aa0ccb450998fa219e2eb6e39f84539b9edbc199d073e46f2d34716814f05",
+      "candidate_pool_digest": "b5bad690b1c76c76b9e43217dd3dee56c22f6e5891209786c931b186cf99c36b",
       "candidate_pool_digest_input": {
         "protocol_version": "d1_d6_protocol_v1",
         "dataset_id": "D2",
@@ -282,24 +303,25 @@
         "observed_start": "2018-06-01",
         "observed_end": "2018-06-30",
         "feature_cols": [
-          "sales"
+          "sales",
+          "promo"
         ],
         "calendarization_rule_version": "d2_source_calendarization_v1",
         "source_authority_digest": "2a8c59723453302576864b7ae03249a9bb0217e705f14a95091856d2e252d012",
         "consumer_frame_fingerprint": "80eae6b26ca46f001b6c8975bb84b9da631cc1b4a63393ec16fffabaa90a43e1",
-        "source_frame_digest": "105cf59a21174cfd0cd06cb0d15a5595884dcac9e531262e410e2aaae9bbbd27",
-        "target_frame_digest": "64fdea45e1b77322d44864b03ee02eb8d293c7f86cd5accf27305a6e3fd61994"
+        "source_frame_digest": "6007a23b37fac4c0c0dc875da2f6f6243c3bd57e69f4b8dd7d56112274bb8078",
+        "target_frame_digest": "2949980f589d8b2f74ba11119e48b8df54b6a34c0a43673aaff379f8a1f2919d"
       },
-      "selection_result_digest": "92b653dc155b5ad449de1237ff90d65b4f76283993fc64c124ba987aec70a6e3",
-      "selection_digest": "92b653dc155b5ad449de1237ff90d65b4f76283993fc64c124ba987aec70a6e3",
+      "selection_result_digest": "84f1025f9ab9d3ecf68acc085e353655c9c0f5f7ef9bbb1dae294daf23991cdd",
+      "selection_digest": "84f1025f9ab9d3ecf68acc085e353655c9c0f5f7ef9bbb1dae294daf23991cdd",
       "source_frame_min_date": "2018-06-01",
       "source_frame_max_date": "2018-06-30",
       "target_frame_min_date": "2018-06-01",
       "target_frame_max_date": "2018-06-30",
-      "source_frame_digest": "105cf59a21174cfd0cd06cb0d15a5595884dcac9e531262e410e2aaae9bbbd27",
-      "target_frame_digest": "64fdea45e1b77322d44864b03ee02eb8d293c7f86cd5accf27305a6e3fd61994",
+      "source_frame_digest": "6007a23b37fac4c0c0dc875da2f6f6243c3bd57e69f4b8dd7d56112274bb8078",
+      "target_frame_digest": "2949980f589d8b2f74ba11119e48b8df54b6a34c0a43673aaff379f8a1f2919d",
       "source_pool_fingerprint": "cc2402599287f467c85cf7f2a9fa415e07cb3dc7172a16f71482a62d417493cb",
-      "consumer_fingerprint": "55b5ae979060648ba5b5fa103593b9ca40e5927481a2adf2b77f215cc1dc875a",
+      "consumer_fingerprint": "cb4e8306eda532633672ed45ec1604c5d60b188ab1128b8c7fde3bccd7604d31",
       "selected_sources_runtime": [
         {
           "source_rank": 1,
@@ -307,8 +329,8 @@
             "1",
             "4"
           ],
-          "distance": 0.3082207001484488,
-          "weight": 0.3442082116032833,
+          "distance": 0.3122498999199199,
+          "weight": 0.34228530050700084,
           "tie_group": 1,
           "date_start": "2018-06-01",
           "date_end": "2018-06-30"
@@ -319,8 +341,8 @@
             "2",
             "2"
           ],
-          "distance": 0.3233129289094391,
-          "weight": 0.32814059275557866,
+          "distance": 0.32475952641916445,
+          "weight": 0.3291005875568084,
           "tie_group": 2,
           "date_start": "2018-06-01",
           "date_end": "2018-06-30"
@@ -331,8 +353,8 @@
             "3",
             "2"
           ],
-          "distance": 0.32379584617471546,
-          "weight": 0.3276511956411381,
+          "distance": 0.32524029578144215,
+          "weight": 0.3286141119361907,
           "tie_group": 3,
           "date_start": "2018-06-01",
           "date_end": "2018-06-30"
@@ -592,8 +614,12 @@
       "d2_source_calendarization_rule_version": "d2_source_calendarization_v1",
       "d2_source_authority_digest": "2a8c59723453302576864b7ae03249a9bb0217e705f14a95091856d2e252d012",
       "d2_consumer_frame_fingerprint": "80eae6b26ca46f001b6c8975bb84b9da631cc1b4a63393ec16fffabaa90a43e1",
-      "d2_sealed_identity": "d68686a8c932f35e10f3be5c76601e806aac6ba86f905e47bc069c7806a43279"
+      "d2_sealed_identity": "d7b5923bfb360b2127e7bf4bd897a434d524db7967f0c246233e073d16b7f870"
     }
   },
-  "knn_frame_authority": "configured_observed_frame"
+  "knn_frame_authority": "configured_observed_frame",
+  "knn_feature_columns": [
+    "sales",
+    "promo"
+  ]
 }

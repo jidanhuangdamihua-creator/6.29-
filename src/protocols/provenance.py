@@ -186,8 +186,14 @@ def extract_selected_source_slices(
     missing_features = [column for column in model_feature_cols if column not in source_df.columns]
     if missing_features:
         raise ProtocolViolation(f"source dataframe missing model features: {missing_features}")
-    if "sales" not in source_df.columns:
-        raise ProtocolViolation("source dataframe requires sales for KNN provenance")
+    knn_feature_cols = tuple(selection.feature_cols)
+    missing_knn_features = [
+        column for column in knn_feature_cols if column not in source_df.columns
+    ]
+    if missing_knn_features:
+        raise ProtocolViolation(
+            f"source dataframe missing KNN features: {missing_knn_features}"
+        )
 
     start = pd.Timestamp(training_start).normalize()
     cutoff = pd.Timestamp(selection.source_observation_cutoff).normalize()
@@ -229,8 +235,17 @@ def extract_selected_source_slices(
         knn_rows = sliced[
             sliced["date"].between(observed_start, observed_end, inclusive="both")
         ]
-        raw_sales = knn_rows["sales"].to_numpy(dtype=np.float64)
-        if not np.array_equal(raw_sales, np.asarray(entry.raw_vector, dtype=np.float64)):
+        raw_vector = np.concatenate(
+            [
+                pd.to_numeric(knn_rows[column], errors="coerce").to_numpy(dtype=np.float64)
+                for column in knn_feature_cols
+            ]
+        )
+        if not np.isfinite(raw_vector).all():
+            raise ProtocolViolation(
+                f"selected source {entry.source_key!r} KNN features contain non-finite values"
+            )
+        if not np.array_equal(raw_vector, np.asarray(entry.raw_vector, dtype=np.float64)):
             raise ProtocolViolation(
                 f"selected source {entry.source_key!r} KNN vector differs from raw slice"
             )

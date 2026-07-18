@@ -69,7 +69,10 @@
       "store_id"
     ],
     "include_sales_in_knn": true,
-    "knn_feature_mode": "paper_available_features_no_ids"
+    "knn_feature_mode": "paper_available_features_no_ids",
+    "knn_feature_columns": [
+      "sales"
+    ]
   },
   "source_pool_size": 49302,
   "source_domain_policy_diagnostics": {
@@ -137,6 +140,15 @@
       "feature_cols": [
         "sales"
       ],
+      "knn_feature_columns": [
+        "sales"
+      ],
+      "historical_feature_columns": [
+        "sales"
+      ],
+      "forecast_excluded_columns": [],
+      "feature_scope": "historical_observed",
+      "max_allowed_date_relation": "date<=origin",
       "requested_feature_cols": [
         "sales"
       ],
@@ -589,5 +601,8 @@
       ]
     }
   },
-  "knn_frame_authority": "configured_observed_frame"
+  "knn_frame_authority": "configured_observed_frame",
+  "knn_feature_columns": [
+    "sales"
+  ]
 }

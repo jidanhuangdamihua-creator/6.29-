@@ -210,22 +210,30 @@ def configure_protocol_frames(
     if "date" not in source_df.columns or "date" not in target_df.columns:
         raise ProtocolViolation("protocol frames require date columns")
     window = protocol.observation_window(observed_start)
+    knn_feature_columns = tuple(protocol.knn_feature_columns)
+    digest_feature_columns = (
+        None if knn_feature_columns == ("sales",) else knn_feature_columns
+    )
+    digest_ignored_columns = ("promo",) if digest_feature_columns is None else ()
     if prepared_pool is None:
         source_knn_candidate_frame = build_observed_knn_frame(
             source_df,
             window=window,
             role="source",
             group_cols=normalized_group_cols,
+            feature_cols=knn_feature_columns,
         )
     else:
-        source_knn_candidate_frame = prepared_pool.selected_sales_frame(
-            prepared_pool.source_keys
+        source_knn_candidate_frame = prepared_pool.selected_frame(
+            prepared_pool.source_keys,
+            feature_cols=knn_feature_columns,
         )
     target_knn_frame = build_observed_knn_frame(
         target_df,
         window=window,
         role="target",
         group_cols=normalized_group_cols,
+        feature_cols=knn_feature_columns,
     )
     require_static_target = (
         protocol.track == STRICT_PAPER_TRACK
@@ -400,9 +408,13 @@ def configure_protocol_frames(
             window=window,
             role="source",
             group_cols=normalized_group_cols,
+            feature_cols=knn_feature_columns,
         )
     else:
-        source_knn_frame = prepared_pool.selected_sales_frame(candidates)
+        source_knn_frame = prepared_pool.selected_frame(
+            candidates,
+            feature_cols=knn_feature_columns,
+        )
         source_knn_frame.attrs = source.attrs.copy()
     metadata = {
         "selection_authority": "shared_protocol",
@@ -430,6 +442,11 @@ def configure_protocol_frames(
         "scaling": "global_minmax_legal_observed_values",
         "scaler_fit_scope": "target_and_candidate_legal_observed_values",
         "source_alignment_mode": "exact_knn_observed_dates",
+        "knn_feature_columns": list(knn_feature_columns),
+        "historical_feature_columns": list(knn_feature_columns),
+        "forecast_excluded_columns": ["promo"] if protocol.dataset_id == "D2" else [],
+        "feature_scope": "historical_observed",
+        "max_allowed_date_relation": "date<=origin",
         "information_sharing_scenario": normalized_scenario,
         "source_frame_min_date": source_knn_frame["date"].min().strftime("%Y-%m-%d"),
         "source_frame_max_date": source_knn_frame["date"].max().strftime("%Y-%m-%d"),
@@ -438,10 +455,14 @@ def configure_protocol_frames(
         "source_frame_digest": canonical_knn_frame_digest(
             source_knn_frame,
             group_cols=normalized_group_cols,
+            feature_cols=digest_feature_columns,
+            ignore_columns=digest_ignored_columns,
         ),
         "target_frame_digest": canonical_knn_frame_digest(
             target_knn_frame,
             group_cols=normalized_group_cols,
+            feature_cols=digest_feature_columns,
+            ignore_columns=digest_ignored_columns,
         ),
     }
     metadata.update(d2_calendarization_metadata)
@@ -452,10 +473,20 @@ def configure_protocol_frames(
         **metadata,
         "protocol_knn_observed_frame": source_knn_frame,
     }
+    forecast_consumer = target.loc[target_dates > cutoff].copy()
+    if protocol.dataset_id == "D2":
+        forecast_consumer = forecast_consumer.drop(columns=["promo"], errors="ignore")
+        target.loc[target_dates > cutoff, "promo"] = pd.NA
+    forecast_consumer.attrs = {
+        **metadata,
+        "feature_scope": "forecast_consumer",
+        "forecast_excluded_columns": ["promo"] if protocol.dataset_id == "D2" else [],
+    }
     target.attrs = {
         **target_df.attrs,
         **metadata,
         "protocol_knn_observed_frame": target_knn_frame,
+        "forecast_consumer_frame": forecast_consumer,
     }
     if prepared_pool is not None:
         source.attrs["prepared_daily_sequence_pool"] = prepared_pool

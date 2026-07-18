@@ -58,21 +58,21 @@ D1_D2_KNN = {
     1: {
         "with": {
             "path": "configs/solidified/knn/Dataset1/knn_with_info_sharing.json",
-            "sha256": "ae9a9436c5062ba542f399c8b83761c57d30b63416d1fb78d7e30d69877c752d",
+            "sha256": "03828cc63de28a329fdb32a7bc0f15bd201b962471197c1abe14575c1013666c",
         },
         "without": {
             "path": "configs/solidified/knn/Dataset1/knn_without_info_sharing.json",
-            "sha256": "f4e78f40cd72c8e6fc7ce3d72773c3ec023b6c22ae39867788ca41fcd4683813",
+            "sha256": "cb27e059711375ab4726a9ec1bb3ad1e3da32955e2cd49088183cc1547e68367",
         },
     },
     2: {
         "with": {
             "path": "configs/solidified/knn/Dataset2/knn_with_info_sharing.json",
-            "sha256": "16a2530ba3d7d4d74e83f63847910224aa1159e8cabd9d945c47e2c1bed6b3c0",
+            "sha256": "e22df714542c79240f7ad3f92ff147621d23ab05872364a3c8c2ed0507615ca1",
         },
         "without": {
             "path": "configs/solidified/knn/Dataset2/knn_without_info_sharing.json",
-            "sha256": "350b41550eba731f8d48d0fc0b03916f0fc02b5c3cffdc13c5c0f341866d3f31",
+            "sha256": "6998c89a4f38dfb858f956e249f2eeab6794309e735e6eeedc187b96faabf2a0",
         },
     },
 }
@@ -289,6 +289,9 @@ def frozen_artifact_snapshot(repository_root: Path) -> dict[str, object]:
                 "selection_authority": payload.get("selection_authority"),
                 "protocol_version": payload.get("protocol_version"),
                 "feature_cols": payload.get("feature_cols"),
+                "knn_feature_columns": payload.get(
+                    "knn_feature_columns", payload.get("feature_cols")
+                ),
                 "knn_frame_authority": payload.get("knn_frame_authority"),
                 "selection_metadata": dict(metadata),
             }
@@ -335,7 +338,8 @@ def verify_frozen_snapshot(snapshot: Mapping[str, object]) -> None:
                 or actual.get("sha256") != expected["sha256"]
                 or actual.get("selection_authority") != "shared_protocol"
                 or actual.get("protocol_version") != PROTOCOL_VERSION
-                or actual.get("feature_cols") != ["sales"]
+                or actual.get("knn_feature_columns")
+                != list(get_experiment_protocol(dataset_id).knn_feature_columns)
                 or actual.get("knn_frame_authority") != "configured_observed_frame"
             ):
                 raise DeploymentManifestError(
@@ -463,7 +467,8 @@ def _d1_d2_authority(repository_root: Path, dataset_id: int) -> dict[str, object
         if (
             payload.get("selection_authority") != "shared_protocol"
             or payload.get("protocol_version") != PROTOCOL_VERSION
-            or payload.get("feature_cols") != ["sales"]
+            or payload.get("knn_feature_columns", payload.get("feature_cols"))
+            != list(get_experiment_protocol(dataset_id).knn_feature_columns)
             or payload.get("knn_frame_authority") != "configured_observed_frame"
         ):
             raise DeploymentManifestError("D1_D2_KNN_AUTHORITY_MISMATCH", f"D{dataset_id}/{scenario}")
@@ -489,6 +494,18 @@ def _d1_d2_authority(repository_root: Path, dataset_id: int) -> dict[str, object
             raise DeploymentManifestError(
                 "D1_D2_KNN_WINDOW_MISMATCH", f"D{dataset_id}/{scenario}"
             )
+        expected_features = list(get_experiment_protocol(dataset_id).knn_feature_columns)
+        if (
+            metadata.get("knn_feature_columns") != expected_features
+            or metadata.get("historical_feature_columns") != expected_features
+            or metadata.get("forecast_excluded_columns")
+            != (["promo"] if int(dataset_id) == 2 else [])
+            or metadata.get("feature_scope") != "historical_observed"
+            or metadata.get("max_allowed_date_relation") != "date<=origin"
+        ):
+            raise DeploymentManifestError(
+                "D1_D2_KNN_SCHEMA_MISMATCH", f"D{dataset_id}/{scenario}"
+            )
         digest_fields = (
             "source_frame_digest",
             "target_frame_digest",
@@ -506,6 +523,9 @@ def _d1_d2_authority(repository_root: Path, dataset_id: int) -> dict[str, object
             "selection_authority": payload["selection_authority"],
             "protocol_version": payload["protocol_version"],
             "feature_cols": payload["feature_cols"],
+            "knn_feature_columns": payload.get(
+                "knn_feature_columns", payload["feature_cols"]
+            ),
             "knn_frame_authority": payload["knn_frame_authority"],
             "observed_window": expected_window,
             "source_frame_min_date": metadata.get("source_frame_min_date"),
@@ -533,6 +553,7 @@ def _d1_d2_authority(repository_root: Path, dataset_id: int) -> dict[str, object
         "selection_authority": "shared_protocol",
         "protocol_version": PROTOCOL_VERSION,
         "knn_frame_authority": "configured_observed_frame",
+        "knn_feature_columns": list(get_experiment_protocol(dataset_id).knn_feature_columns),
         "observed_window": {
             "origin": window.origin.isoformat(),
             "observed_start": window.knn_observed_start.isoformat(),

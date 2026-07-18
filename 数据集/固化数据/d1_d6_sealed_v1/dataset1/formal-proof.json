@@ -1,9 +1,9 @@
 {
-  "consumer_fingerprint": "0340ff3d47913d594cc3a5d508e00c7c8c09ebcd71b21c599553414651841ef9",
+  "consumer_fingerprint": "dd9c4142feaaec57f635e8db101d96e1ab7edd3fd75201f8cca7b83ac3268e37",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "d8bb5afacf97d709d05a2a7626aa255bda3af87fdc77ed912505abd73119fc6e",
+    "code_inventory_digest": "3b597f41e832c88cd74ae23462c319a1da917a4f6685dd204a87c2f04dc904d2",
     "dataset_id": "D1",
-    "readiness_proof_digest": "86c47cdeda48b1ebe2306d88268f4405adb0be8aea3ec71c77cc5f245d36559e",
+    "readiness_proof_digest": "f562e0359a848b7e7a518fc509ae45db99e54785e6dcc1493645d418aed2e9d9",
     "source_schema_digest": "f1961aa4d31543aa1afd9b8e7030b0af3da8f44c63426419bf6daf7af858a45f",
     "source_sha256": "18acf992b569f3e01999db2c94a3e85ca5e8fa0c7e760b111dd43825acd3fd08",
     "target_schema_digest": "6d5c94965593d1ac45d4e7ee5263a3d8a49d6754721744f2861610e2658a2d87",
@@ -17,7 +17,10 @@
   "dataset_root": "dataset1",
   "dataset_specific": {
     "knn_selection_authority": {
-      "authority_digest": "6f540e1ea3e17c402f27647c4349e7c6afac3712d8cb1187107b81e5d32b1ff7",
+      "authority_digest": "e7379de2ba60b92ca67f08522bee077cdc1468d044740cee94defec24dea7aff",
+      "knn_feature_columns": [
+        "sales"
+      ],
       "knn_frame_authority": "configured_observed_frame",
       "observed_window": {
         "boundary": "inclusive",
@@ -33,6 +36,9 @@
           "feature_cols": [
             "sales"
           ],
+          "knn_feature_columns": [
+            "sales"
+          ],
           "knn_frame_authority": "configured_observed_frame",
           "observed_window": {
             "boundary": "inclusive",
@@ -46,7 +52,7 @@
           "selection_authority": "shared_protocol",
           "selection_digest": "d7b6852da95385785402b6d927f52e99e6636de4bec27245aec9f9d0026b28fd",
           "selection_result_digest": "d7b6852da95385785402b6d927f52e99e6636de4bec27245aec9f9d0026b28fd",
-          "sha256": "ae9a9436c5062ba542f399c8b83761c57d30b63416d1fb78d7e30d69877c752d",
+          "sha256": "03828cc63de28a329fdb32a7bc0f15bd201b962471197c1abe14575c1013666c",
           "source_frame_digest": "6da36a7c1da4124f8da9835302ad06855e0c294d5fe8babc675c7ad86dd1acbf",
           "source_frame_max_date": "2017-06-30",
           "source_frame_min_date": "2017-06-01",
@@ -57,6 +63,9 @@
         "without": {
           "candidate_pool_digest": "7cee51bf5dec70918fda20c62ce92ee609ebba0a54e3b85a8362d124f22df4bc",
           "feature_cols": [
+            "sales"
+          ],
+          "knn_feature_columns": [
             "sales"
           ],
           "knn_frame_authority": "configured_observed_frame",
@@ -72,7 +81,7 @@
           "selection_authority": "shared_protocol",
           "selection_digest": "1b101504df5c7fe4c5fa936be755e6fba4f412c113e05f8c3293e2b8a69c0b68",
           "selection_result_digest": "1b101504df5c7fe4c5fa936be755e6fba4f412c113e05f8c3293e2b8a69c0b68",
-          "sha256": "f4e78f40cd72c8e6fc7ce3d72773c3ec023b6c22ae39867788ca41fcd4683813",
+          "sha256": "cb27e059711375ab4726a9ec1bb3ad1e3da32955e2cd49088183cc1547e68367",
           "source_frame_digest": "af1d2b07a65bd4c5af9a1b391df6741c2c51958c15b2444922512d0c46dd8232",
           "source_frame_max_date": "2017-06-30",
           "source_frame_min_date": "2017-06-01",
@@ -133,8 +142,8 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "e0e097427d61945eee3238f1fbf962400b70241facb3e8497d396b5470096b16",
-  "readiness_proof_digest": "86c47cdeda48b1ebe2306d88268f4405adb0be8aea3ec71c77cc5f245d36559e",
+  "proof_identity_sha256": "a4ca27d9f8f46e1c1696cf63795a03ba18f75afb6d9fa81b2480babd3bb12d9e",
+  "readiness_proof_digest": "f562e0359a848b7e7a518fc509ae45db99e54785e6dcc1493645d418aed2e9d9",
   "readiness_result": {
     "failure_code": null,
     "status": "passed"

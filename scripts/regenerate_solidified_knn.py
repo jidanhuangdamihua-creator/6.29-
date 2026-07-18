@@ -444,6 +444,7 @@ def _build_regenerated_payload(
     )
     if strict_d1_d2:
         new_payload["knn_frame_authority"] = "configured_observed_frame"
+        new_payload["knn_feature_columns"] = list(feature_cols)
     return new_payload
 
 
@@ -601,7 +602,7 @@ def regenerate_dataset_scenario(
         else []
     ) or list(old_payload.get("feature_cols", []))
     if int(dataset_id) in {1, 2}:
-        feature_cols = ["sales"]
+        feature_cols = list(get_experiment_protocol(dataset_id).knn_feature_columns)
     if not feature_cols:
         raise ValueError("KNN payload missing required feature_cols")
     missing_features = [
@@ -611,6 +612,8 @@ def regenerate_dataset_scenario(
         raise ValueError(f"KNN payload feature_cols missing from runtime frames: {missing_features}")
     feature_info = copy.deepcopy(existing_feature_info) if isinstance(existing_feature_info, dict) else {}
     feature_info["selected_features"] = list(feature_cols)
+    if int(dataset_id) in {1, 2}:
+        feature_info["knn_feature_columns"] = list(feature_cols)
     if "group_cols" not in old_payload:
         raise ValueError("KNN payload missing required protocol field: group_cols")
     group_cols = tuple(old_payload["group_cols"])

@@ -26,6 +26,7 @@ def _d2_source_precalendarized() -> pd.DataFrame:
                         "item_id": item,
                         "entity_id": f"B{brand}",
                         "sales": 0.0 if date in set(_MISSING_DATES) else float(item),
+                        "promo": float(date.day % 2),
                         "year": date.year,
                         "month": date.month,
                         "week": int(date.isocalendar().week),
@@ -45,6 +46,7 @@ def _d2_target_after_observed_window() -> pd.DataFrame:
             "brand_id": [1] * 31,
             "item_id": [10] * 31,
             "sales": [1.0] * 31,
+            "promo": [1.0] * 31,
         }
     )
     target.attrs["split_role"] = "target"

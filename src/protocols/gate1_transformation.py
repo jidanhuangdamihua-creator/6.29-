@@ -19,6 +19,8 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import pandas as pd
 
+from .experiment_protocol import get_experiment_protocol
+
 
 CONTRACT_VERSION = "1R.1.0"
 CONTRACT_DIGEST = "sha256:85713b9d13cae3c017c4856b6a0f42a49d6074aebbb729171d60b95baa42eb74"
@@ -871,7 +873,13 @@ class SchemaRegistry:
             worker = (*common, "onpromotion", "perishable", "oil_price", "is_holiday")
         else:
             worker = (*common, "weekday", "wday", "wm_yr_wk", "snap", "sell_price")
-        return {"worker": tuple(worker), "predictor": tuple(worker), "knn": ("date", "sales"), "source_history": tuple(common), "target_observed": tuple(common), "worker_safe_blind": tuple(worker), "evaluator_truth": tuple(common) + ("sales",), "audit_view": tuple()}
+        protocol = get_experiment_protocol(dataset)
+        knn = (
+            (*spec.key_fields, "date", *protocol.knn_feature_columns)
+            if spec.dataset in {"D1", "D2"}
+            else ("date", "sales")
+        )
+        return {"worker": tuple(worker), "predictor": tuple(worker), "knn": tuple(knn), "source_history": tuple(common), "target_observed": tuple(common), "worker_safe_blind": tuple(worker), "evaluator_truth": tuple(common) + ("sales",), "audit_view": tuple()}
 
     def allowed(self, dataset: object, role: str) -> tuple[str, ...]:
         key = dataset_contract(dataset).dataset
@@ -928,7 +936,17 @@ def _view_descriptor(dataset: str, name: str, frame: pd.DataFrame) -> dict[str, 
 
 def effective_knn_schema_descriptor(dataset: object) -> dict[str, object]:
     spec = dataset_contract(dataset)
-    return {"dataset": spec.dataset, "fields": ["date", "sales"], "exact_key": list(spec.key_fields) + ["date"], "observation_start": spec.knn_start.isoformat(), "observation_end": spec.knn_end.isoformat()}
+    protocol = get_experiment_protocol(dataset)
+    return {
+        "dataset": spec.dataset,
+        "fields": ["date", *protocol.knn_feature_columns],
+        "knn_feature_columns": list(protocol.knn_feature_columns),
+        "feature_scope": "historical_observed",
+        "forecast_excluded_columns": ["promo"] if spec.dataset == "D2" else [],
+        "exact_key": list(spec.key_fields) + ["date"],
+        "observation_start": spec.knn_start.isoformat(),
+        "observation_end": spec.knn_end.isoformat(),
+    }
 
 
 class ProofWriter:

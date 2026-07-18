@@ -111,6 +111,7 @@ class SourceSelector:
                 f"selector group_cols differ from protocol: {tuple(group_cols)!r} != {configured_group_cols!r}"
             )
         protocol = get_experiment_protocol(target_df.attrs["protocol_dataset_id"])
+        knn_feature_columns = tuple(protocol.knn_feature_columns)
         d2_identity_fields = (
             "d2_source_calendarization_rule_version",
             "d2_source_authority_digest",
@@ -135,6 +136,18 @@ class SourceSelector:
                     )
         knn_target_df = get_configured_knn_frame(target_df, "target")
         knn_source_df = get_configured_knn_frame(source_df, "source")
+        for role, frame in (("target", knn_target_df), ("source", knn_source_df)):
+            declared = tuple(frame.attrs.get("knn_feature_columns", ()))
+            if declared != knn_feature_columns:
+                raise ProtocolViolation(
+                    f"{role} configured KNN feature metadata does not match protocol: "
+                    f"expected {knn_feature_columns!r}, got {declared!r}"
+                )
+            missing = [column for column in knn_feature_columns if column not in frame.columns]
+            if missing:
+                raise ProtocolViolation(
+                    f"{role} configured KNN frame is missing protocol features: {missing!r}"
+                )
         for identity_field in d2_identity_fields:
             if identity_field in source_df.attrs:
                 knn_source_df.attrs[identity_field] = source_df.attrs[identity_field]
@@ -161,18 +174,20 @@ class SourceSelector:
             candidate_keys=target_df.attrs["protocol_candidate_keys"],
             group_cols=configured_group_cols,
             observed_start=target_df.attrs["knn_observed_start"],
-            feature_cols=("sales",),
+            feature_cols=knn_feature_columns,
             k=k,
         )
         provenance_source_df = source_df
         if prepared_pool is not None:
-            if tuple(model_feature_cols) != ("sales",):
-                raise ProtocolViolation(
-                    "prepared-pool source provenance currently supports sales-only preflight"
+            if tuple(model_feature_cols) == ("sales",) and knn_feature_columns == ("sales",):
+                provenance_source_df = prepared_pool.selected_sales_frame(
+                    result.ordered_source_keys
                 )
-            provenance_source_df = prepared_pool.selected_sales_frame(
-                result.ordered_source_keys
-            )
+            else:
+                provenance_source_df = prepared_pool.selected_frame(
+                    result.ordered_source_keys,
+                    feature_cols=model_feature_cols,
+                )
         source_slices = extract_selected_source_slices(
             result,
             provenance_source_df,
@@ -255,9 +270,14 @@ class SourceSelector:
             "weight_mode": protocol.weight_mode,
             "distance_metric": "euclidean",
             "group_cols": list(configured_group_cols),
-            "target_signature_dim": 30,
-            "feature_cols": ["sales"],
-            "requested_feature_cols": ["sales"],
+            "target_signature_dim": 30 * len(knn_feature_columns),
+            "feature_cols": list(knn_feature_columns),
+            "knn_feature_columns": list(knn_feature_columns),
+            "historical_feature_columns": list(knn_feature_columns),
+            "forecast_excluded_columns": ["promo"] if protocol.dataset_id == "D2" else [],
+            "feature_scope": "historical_observed",
+            "max_allowed_date_relation": "date<=origin",
+            "requested_feature_cols": list(knn_feature_columns),
             "representation": protocol.knn_representation,
             "knn_representation": protocol.knn_representation,
             "scaling": "global_minmax_legal_observed_values",
@@ -302,7 +322,6 @@ class SourceSelector:
             "eligible_candidate_count": len(eligible_candidate_keys),
             "valid_30d_candidate_count": len(valid_30d_candidate_keys),
             "selected_count": len(sources),
-            "observed_days": len(result.entries[0].raw_vector),
             "skipped_source_count": len(excluded),
             "requested_k": int(k),
             "effective_k": int(k),

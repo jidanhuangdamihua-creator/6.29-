@@ -50,6 +50,7 @@ from src.protocols.candidate_pool import (  # noqa: E402
     build_consumer_fingerprint,
     build_source_pool_fingerprint,
 )
+from src.protocols.experiment_protocol import get_experiment_protocol  # noqa: E402
 
 
 PARQUET_DIR = ROOT / "数据集" / "固化数据"
@@ -121,6 +122,55 @@ def _sha256_file(path: Path) -> str:
 @lru_cache(maxsize=None)
 def _load_json_file(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _verify_d1_d2_knn_readiness(root: Path, dataset_id: int) -> dict[str, object]:
+    """Read and validate the sealed D1/D2 selection manifests without producing them."""
+    protocol = get_experiment_protocol(dataset_id)
+    expected_features = list(protocol.knn_feature_columns)
+    config_root = root / "configs" / "solidified" / "knn" / f"Dataset{dataset_id}"
+    scenarios: dict[str, object] = {}
+    for scenario in ("without", "with"):
+        path = config_root / f"knn_{scenario}_info_sharing.json"
+        if not path.is_file() or path.is_symlink():
+            raise Gate1Failure("KNN_AUTHORITY_MISSING", str(path))
+        payload = _load_json_file(path)
+        actual_features = payload.get("knn_feature_columns", payload.get("feature_cols"))
+        if actual_features != expected_features:
+            raise Gate1Failure(
+                "KNN_SCHEMA_MISMATCH",
+                f"D{dataset_id}/{scenario}: expected {expected_features!r}, got {actual_features!r}",
+            )
+        selection_metadata = payload.get("selection_metadata")
+        if not isinstance(selection_metadata, Mapping):
+            raise Gate1Failure("KNN_METADATA_MISSING", f"D{dataset_id}/{scenario}")
+        for target_id, metadata in selection_metadata.items():
+            if not isinstance(metadata, Mapping):
+                raise Gate1Failure("KNN_METADATA_INVALID", f"D{dataset_id}/{scenario}/{target_id}")
+            if (
+                metadata.get("knn_feature_columns") != expected_features
+                or metadata.get("historical_feature_columns") != expected_features
+                or metadata.get("forecast_excluded_columns")
+                != (["promo"] if dataset_id == 2 else [])
+                or metadata.get("feature_scope") != "historical_observed"
+                or metadata.get("max_allowed_date_relation") != "date<=origin"
+                or metadata.get("knn_observed_end") != protocol.observation_window().origin.isoformat()
+            ):
+                raise Gate1Failure(
+                    "KNN_METADATA_MISMATCH",
+                    f"D{dataset_id}/{scenario}/{target_id}",
+                )
+        scenarios[scenario] = {
+            "path": str(path.relative_to(root)),
+            "knn_feature_columns": expected_features,
+            "selection_metadata_targets": sorted(str(key) for key in selection_metadata),
+        }
+    return {
+        "knn_feature_columns": expected_features,
+        "historical_feature_columns": expected_features,
+        "forecast_excluded_columns": ["promo"] if dataset_id == 2 else [],
+        "scenarios": scenarios,
+    }
 
 
 def _verify_d2_sealed_identity(root: Path, source_path: Path, target_path: Path) -> dict[str, object]:
@@ -435,6 +485,7 @@ def _verify_d4_consumer_authority(
 
 def _base_report(root: Path, parent_root: Path, old_root: Path, dataset: int, identity: Mapping[str, object] | None) -> dict[str, object]:
     spec = dataset_contract(dataset)
+    protocol = get_experiment_protocol(dataset)
     input_paths = formal_input_paths(root, dataset)
     source_path = input_paths["source"]
     target_path = input_paths["target"]
@@ -462,6 +513,16 @@ def _base_report(root: Path, parent_root: Path, old_root: Path, dataset: int, id
         "blind_end": spec.blind_end.isoformat(),
         "knn_start": spec.knn_start.isoformat(),
         "knn_end": spec.knn_end.isoformat(),
+        "knn_feature_columns": list(protocol.knn_feature_columns),
+        "historical_feature_columns": list(protocol.knn_feature_columns),
+        "forecast_excluded_columns": ["promo"] if spec.dataset == "D2" else [],
+        "knn_consumer_schema": {
+            "knn_feature_columns": list(protocol.knn_feature_columns),
+            "historical_feature_columns": list(protocol.knn_feature_columns),
+            "forecast_excluded_columns": ["promo"] if spec.dataset == "D2" else [],
+            "feature_scope": "historical_observed",
+            "max_allowed_date_relation": "date<=origin",
+        },
         "before_rows": {"source": _parquet_meta(source_path).get("row_count"), "target": _parquet_meta(target_path).get("row_count")},
         "after_slicing_rows": {},
         "expected_calendarized_rows": spec.expected_blind_rows,
@@ -499,7 +560,18 @@ def _dataset_report(root: Path, parent_root: Path, old_root: Path, dataset_id: i
         report["cardinality"] = {"target_keys": counts, "worker_safe_blind": calendarized_rows, "evaluator_truth": calendarized_rows, "expected_blind": spec.expected_blind_rows}
         report["evaluator_truth_fields"] = list(target.columns)
         report["audit_fields"] = list(target.columns)
-        report["schema_fields"] = {"worker": report["worker_safe_fields"], "knn": ["date", "sales"]}
+        protocol = get_experiment_protocol(dataset_id)
+        report["schema_fields"] = {
+            "worker": report["worker_safe_fields"],
+            "knn": [*spec.key_fields, "date", *protocol.knn_feature_columns],
+            "forecast_consumer": [
+                column
+                for column in target.columns
+                if column != "promo" or spec.dataset != "D2"
+            ],
+        }
+        if dataset_id in {1, 2}:
+            report["selection_authority"] = _verify_d1_d2_knn_readiness(root, dataset_id)
         report["field_exclusions"] = {"D2": ["PROMO", "promo", "Promo"], "D3": ["Open", "Customers", "Promo"], "D4": [*__import__("src.protocols.gate1_transformation", fromlist=["D4_AUDIT_ONLY"]).D4_AUDIT_ONLY], "D5": ["transactions", "week"], "D6": ["sales"]}.get(spec.dataset, [])
         report["proof_inputs_available"].update({"parent": True, "views": True, "calendarization": True, "field_specific_repairs": True})
         source = _source_frame(root, dataset_id)

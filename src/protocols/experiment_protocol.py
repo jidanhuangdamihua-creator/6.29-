@@ -26,6 +26,8 @@ D1_D2_KNN_ORIGINS = {
     "D2": date(2018, 6, 30),
 }
 STRICT_KNN_OBSERVED_DAYS = 30
+D1_KNN_FEATURES = ("sales",)
+D2_KNN_FEATURES = ("sales", "promo")
 
 SourceKey = Tuple[str, ...]
 
@@ -197,12 +199,21 @@ class ExperimentProtocol:
     horizons: Tuple[int, ...] = FORMAL_HORIZONS
     seeds: Tuple[int, ...] = FORMAL_SEEDS
     knn_representation: str = "daily_sales_flattened_30d"
+    knn_feature_columns: Tuple[str, ...] = D1_KNN_FEATURES
     primary_metric_space: str = "original_sales"
     tie_tolerance: float = 1e-12
     weight_mode: str = "inverse_distance"
     weight_epsilon: float = 1e-8
 
     def __post_init__(self) -> None:
+        feature_columns = tuple(str(column).strip() for column in self.knn_feature_columns)
+        if not feature_columns or any(not column for column in feature_columns):
+            raise ProtocolViolation(f"{self.dataset_id} requires non-empty KNN feature columns")
+        if len(set(feature_columns)) != len(feature_columns):
+            raise ProtocolViolation(f"{self.dataset_id} KNN feature columns must be unique")
+        if "sales" not in feature_columns:
+            raise ProtocolViolation(f"{self.dataset_id} KNN features must include sales")
+        object.__setattr__(self, "knn_feature_columns", feature_columns)
         configured = self.formal_target_keys
         if not configured and self.source_pool_rule.target_key is not None:
             configured = (self.source_pool_rule.target_key,)
@@ -250,18 +261,21 @@ _PROTOCOLS = {
         STRICT_PAPER_TRACK,
         SourcePoolRule(("store_id", "item_id"), ("1", "10")),
         target_display_label="Store1/Item10",
+        knn_feature_columns=D1_KNN_FEATURES,
     ),
     "D2": ExperimentProtocol(
         "D2",
         STRICT_PAPER_TRACK,
         SourcePoolRule(("brand_id", "item_id"), ("1", "10")),
         target_display_label="Brand1/Item10",
+        knn_feature_columns=D2_KNN_FEATURES,
     ),
     "D3": ExperimentProtocol(
         "D3",
         STRICT_PAPER_TRACK,
         SourcePoolRule(("store_id",), ("10",)),
         target_display_label="Store10",
+        knn_feature_columns=("sales",),
     ),
     "D4": ExperimentProtocol(
         "D4",
@@ -280,6 +294,7 @@ _PROTOCOLS = {
             ("166", "313"),
             ("166", "311"),
         ),
+        knn_feature_columns=("sales",),
     ),
     "D5": ExperimentProtocol(
         "D5",
@@ -292,6 +307,7 @@ _PROTOCOLS = {
             ("48", "1349808"),
             ("48", "320682"),
         ),
+        knn_feature_columns=("sales",),
     ),
     "D6": ExperimentProtocol(
         "D6",
@@ -304,6 +320,7 @@ _PROTOCOLS = {
             ("CA_1", "FOODS_3_377"),
             ("CA_1", "FOODS_3_668"),
         ),
+        knn_feature_columns=("sales",),
     ),
 }
 

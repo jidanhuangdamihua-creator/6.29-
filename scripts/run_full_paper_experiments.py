@@ -949,7 +949,7 @@ def _resolve_dataset_feature_cols(
     default_cols = [str(c) for c in cfg.get("features", {}).get("default_feature_cols", ["sales", "year", "month", "week", "day"])]
     per_dataset_defaults: Dict[str, List[str]] = {
         "Dataset1": ["sales", "year", "month", "week", "day"],
-        "Dataset2": ["sales", "year", "month", "week", "day", "promo", "item_id", "brand_code", "entity_id_code"],
+        "Dataset2": ["sales", "year", "month", "week", "day", "item_id", "brand_code", "entity_id_code"],
         "Dataset3": [
             "sales",
             "year",
@@ -997,9 +997,8 @@ def _signature_static_features_for_dataset(
     include_id_static = _use_id_static_features_in_signature(cfg)
 
     if dataset_name == "Dataset2":
-        profile_features = ["promo"]
         id_features = ["brand_code", "entity_id_code", "item_id"]
-        return profile_features + (id_features if include_id_static else [])
+        return id_features if include_id_static else []
     if dataset_name == "Dataset3":
         profile_features = [
             "holiday_promo_profile",

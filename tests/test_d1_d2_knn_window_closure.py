@@ -215,7 +215,8 @@ def test_regeneration_d1_d2_uses_shared_origin_bounded_selector(dataset_id: int)
     assert metadata["knn_observed_end"] == (
         "2017-06-30" if dataset_id == 1 else "2018-06-30"
     )
-    assert metadata["feature_cols"] == ["sales"]
+    assert metadata["feature_cols"] == (["sales"] if dataset_id == 1 else ["sales", "promo"])
+    assert metadata["knn_feature_columns"] == metadata["feature_cols"]
     assert len(metadata["source_frame_digest"]) == 64
     assert len(metadata["target_frame_digest"]) == 64
 

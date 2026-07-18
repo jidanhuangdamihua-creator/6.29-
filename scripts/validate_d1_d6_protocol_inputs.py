@@ -111,12 +111,18 @@ def validate_protocol_frames(
         selection = SourceSelector().select_top_k_sources(
             target,
             source,
-            feature_cols=("sales",),
+            feature_cols=tuple(get_experiment_protocol(dataset_id).knn_feature_columns),
             k=int(k),
             group_cols=tuple(group_cols),
             weight_mode="inverse_distance",
         )
         meta = selection["meta"]
+        protocol_features = tuple(get_experiment_protocol(dataset_id).knn_feature_columns)
+        if tuple(meta.get("knn_feature_columns", ())) != protocol_features:
+            raise ValueError(
+                f"selector KNN features do not match protocol: "
+                f"expected {protocol_features!r}, got {meta.get('knn_feature_columns')!r}"
+            )
         exclusion_summary = summarize_candidate_exclusions(
             meta["source_skip_diagnostics"],
             sample_limit=exclusion_sample_limit,
@@ -208,6 +214,11 @@ def validate_protocol_frames(
             "cnn_provenance_validated": meta["cnn_provenance_validated"],
             "knn_observed_start": target.attrs["knn_observed_start"],
             "knn_observed_end": target.attrs["knn_observed_end"],
+            "knn_feature_columns": list(protocol_features),
+            "historical_feature_columns": list(protocol_features),
+            "forecast_excluded_columns": list(meta.get("forecast_excluded_columns", [])),
+            "feature_scope": "historical_observed",
+            "max_allowed_date_relation": "date<=origin",
             "error": "",
         }
     except Exception as exc:  # preflight must return an auditable failure report
@@ -325,8 +336,18 @@ def build_preflight_reports(
         group_cols=tuple(group_cols),
         observed_start=observed_start,
         metadata_cols=metadata_cols,
+        feature_cols=tuple(get_experiment_protocol(dataset_id).knn_feature_columns),
     )
-    stub_columns = list(dict.fromkeys([*group_cols, "date", "sales", *metadata_cols]))
+    stub_columns = list(
+        dict.fromkeys(
+            [
+                *group_cols,
+                "date",
+                *get_experiment_protocol(dataset_id).knn_feature_columns,
+                *metadata_cols,
+            ]
+        )
+    )
     source_stub = pd.DataFrame(columns=stub_columns)
     source_stub.attrs = source_for_pool.attrs.copy()
     reports = []
@@ -360,7 +381,12 @@ def main() -> None:
     cfg = DATASET_CONFIG[dataset_id]
     source_columns = list(
         dict.fromkeys(
-            [*cfg["group_cols"], "date", "sales", *([cfg["grouping_col"]] if cfg.get("grouping_col") else [])]
+            [
+                *cfg["group_cols"],
+                "date",
+                *get_experiment_protocol(dataset_id).knn_feature_columns,
+                *([cfg["grouping_col"]] if cfg.get("grouping_col") else []),
+            ]
         )
     )
     target_columns = list(source_columns)
