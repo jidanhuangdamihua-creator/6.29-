@@ -211,6 +211,31 @@ def test_code_inventory_is_deterministic_and_self_consistent() -> None:
     deployment.verify_code_inventory(ROOT, first)
 
 
+def test_d1_d2_knn_authority_tracks_real_config_bytes() -> None:
+    snapshot = deployment.frozen_artifact_snapshot(ROOT)
+    authority = snapshot.get("d1_d2_knn")
+    assert isinstance(authority, dict)
+    for dataset_id in (1, 2):
+        dataset_authority = deployment.D1_D2_KNN[dataset_id]
+        actual_dataset = authority[f"D{dataset_id}"]
+        for scenario in ("without", "with"):
+            expected = dataset_authority[scenario]
+            actual = actual_dataset[scenario]
+            assert actual["path"] == expected["path"]
+            assert actual["sha256"] == expected["sha256"]
+            assert actual["selection_authority"] == "shared_protocol"
+            assert actual["protocol_version"] == "d1_d6_protocol_v1"
+
+
+def test_root_manifest_publishes_d1_d2_knn_authority() -> None:
+    manifest = _manifest_payload()
+    authority = manifest.get("d1_d2_knn_selection_authority")
+    assert isinstance(authority, dict)
+    assert set(authority) == {"D1", "D2"}
+    for dataset_id in (1, 2):
+        assert set(authority[f"D{dataset_id}"]) == {"without", "with"}
+
+
 def test_generated_authority_json_contains_no_absolute_paths_or_timestamps() -> None:
     paths = [
         *(SEALED_ROOT / f"dataset{i}" / "formal-proof.json" for i in range(1, 7)),

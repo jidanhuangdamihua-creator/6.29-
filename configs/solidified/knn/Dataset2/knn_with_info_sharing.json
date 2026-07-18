@@ -15,23 +15,21 @@
     "brand_id",
     "item_id"
   ],
-  "source_pool_size": 210366,
+  "selection_authority": "shared_protocol",
+  "protocol_version": "d1_d6_protocol_v1",
+  "results_semantics": "json_top_k_diagnostic_not_training_authority",
+  "training_selection_authority": "shared_protocol_selector",
+  "json_results_used_for": [
+    "target_list",
+    "smoke_or_source_limit_candidate_pool",
+    "diagnostics"
+  ],
   "feature_cols": [
-    "sales",
-    "promo",
-    "year",
-    "month",
-    "week",
-    "day"
+    "sales"
   ],
   "feature_info": {
     "selected_features": [
-      "sales",
-      "promo",
-      "year",
-      "month",
-      "week",
-      "day"
+      "sales"
     ],
     "modeling_source_features": [
       "sales",
@@ -72,29 +70,530 @@
     "include_sales_in_knn": true,
     "knn_feature_mode": "paper_available_features_no_ids"
   },
+  "source_pool_size": 48654,
+  "source_domain_policy_diagnostics": {
+    "knn_json_domain_filter": {
+      "column": "brand_id",
+      "value": 1
+    },
+    "source_domain_filter": null,
+    "source_domain_filter_applied": false,
+    "domain_filter_applied_to_source": false,
+    "domain_filter_scope": "source_pool",
+    "domain_filter_column": "brand_id",
+    "domain_filter_value": 1,
+    "target_domain_validation_passed": null,
+    "source_pool_policy": "",
+    "source_domain_filter_reason": "with_information_sharing_all_source_pool",
+    "source_pool_size_before_filter": 48654,
+    "source_pool_size_after_filter": 48654,
+    "source_pool_rows_before_filter": 48654,
+    "source_pool_rows_after_filter": 48654,
+    "excluded_source_row_count": 0,
+    "source_pool_entities_before_filter": 4,
+    "source_pool_entities_after_filter": 4,
+    "excluded_source_entity_count": 0,
+    "source_domain_filter_error": ""
+  },
   "results": {
     "1_10": [
       {
-        "source_entity": "2_33",
-        "source_brand_id": 2,
-        "source_item_id": 33,
-        "distance": 20.29778313018444,
-        "weight": 0.3487268015640137
+        "source_entity": "1_4",
+        "distance": 0.3082207001484488,
+        "weight": 0.3442082116032833,
+        "source_brand_id": "1",
+        "source_item_id": "4"
       },
       {
-        "source_entity": "1_41",
-        "source_brand_id": 1,
-        "source_item_id": 41,
-        "distance": 21.72556098240043,
-        "weight": 0.325808893763088
+        "source_entity": "2_2",
+        "distance": 0.3233129289094391,
+        "weight": 0.32814059275557866,
+        "source_brand_id": "2",
+        "source_item_id": "2"
       },
       {
-        "source_entity": "4_3",
-        "source_brand_id": 4,
-        "source_item_id": 3,
-        "distance": 21.748563170931547,
-        "weight": 0.3254643046728982
+        "source_entity": "3_2",
+        "distance": 0.32379584617471546,
+        "weight": 0.3276511956411381,
+        "source_brand_id": "3",
+        "source_item_id": "2"
       }
     ]
-  }
+  },
+  "selection_metadata": {
+    "1_10": {
+      "selection_authority": "shared_protocol",
+      "selection_path": "shared_protocol",
+      "protocol_track": "strict_paper",
+      "protocol_version": "d1_d6_protocol_v1",
+      "weight_mode": "inverse_distance",
+      "distance_metric": "euclidean",
+      "group_cols": [
+        "brand_id",
+        "item_id"
+      ],
+      "target_signature_dim": 30,
+      "feature_cols": [
+        "sales"
+      ],
+      "requested_feature_cols": [
+        "sales"
+      ],
+      "representation": "daily_sales_flattened_30d",
+      "knn_representation": "daily_sales_flattened_30d",
+      "scaling": "global_minmax_legal_observed_values",
+      "scaler_fit_scope": "target_and_candidate_legal_observed_values",
+      "knn_observed_start": "2018-06-01",
+      "knn_observed_end": "2018-06-30",
+      "origin": "2018-06-30",
+      "protocol_observed_start": "2018-06-01",
+      "protocol_observed_days": 30,
+      "observed_days": 30,
+      "boundary": "inclusive",
+      "target_observed_start": "2018-06-01",
+      "target_observed_end": "2018-06-30",
+      "source_observation_cutoff": "2018-06-30",
+      "target_test_excluded": true,
+      "source_future_excluded": true,
+      "source_alignment_mode": "exact_knn_observed_dates",
+      "candidate_pool_digest": "6c0aa0ccb450998fa219e2eb6e39f84539b9edbc199d073e46f2d34716814f05",
+      "candidate_pool_digest_input": {
+        "protocol_version": "d1_d6_protocol_v1",
+        "dataset_id": "D2",
+        "scenario": "with",
+        "target_key": [
+          "1",
+          "10"
+        ],
+        "group_cols": [
+          "brand_id",
+          "item_id"
+        ],
+        "candidate_keys": [
+          [
+            "1",
+            "1"
+          ],
+          [
+            "1",
+            "2"
+          ],
+          [
+            "1",
+            "3"
+          ],
+          [
+            "1",
+            "4"
+          ],
+          [
+            "1",
+            "5"
+          ],
+          [
+            "1",
+            "6"
+          ],
+          [
+            "1",
+            "7"
+          ],
+          [
+            "1",
+            "8"
+          ],
+          [
+            "1",
+            "9"
+          ],
+          [
+            "2",
+            "1"
+          ],
+          [
+            "2",
+            "2"
+          ],
+          [
+            "2",
+            "3"
+          ],
+          [
+            "2",
+            "4"
+          ],
+          [
+            "2",
+            "5"
+          ],
+          [
+            "2",
+            "6"
+          ],
+          [
+            "2",
+            "7"
+          ],
+          [
+            "2",
+            "8"
+          ],
+          [
+            "2",
+            "9"
+          ],
+          [
+            "3",
+            "1"
+          ],
+          [
+            "3",
+            "2"
+          ],
+          [
+            "3",
+            "3"
+          ],
+          [
+            "3",
+            "4"
+          ],
+          [
+            "3",
+            "5"
+          ],
+          [
+            "3",
+            "6"
+          ],
+          [
+            "3",
+            "7"
+          ],
+          [
+            "3",
+            "8"
+          ],
+          [
+            "3",
+            "9"
+          ]
+        ],
+        "observed_start": "2018-06-01",
+        "observed_end": "2018-06-30",
+        "feature_cols": [
+          "sales"
+        ],
+        "calendarization_rule_version": "d2_source_calendarization_v1",
+        "source_authority_digest": "2a8c59723453302576864b7ae03249a9bb0217e705f14a95091856d2e252d012",
+        "consumer_frame_fingerprint": "80eae6b26ca46f001b6c8975bb84b9da631cc1b4a63393ec16fffabaa90a43e1",
+        "source_frame_digest": "105cf59a21174cfd0cd06cb0d15a5595884dcac9e531262e410e2aaae9bbbd27",
+        "target_frame_digest": "64fdea45e1b77322d44864b03ee02eb8d293c7f86cd5accf27305a6e3fd61994"
+      },
+      "selection_result_digest": "92b653dc155b5ad449de1237ff90d65b4f76283993fc64c124ba987aec70a6e3",
+      "selection_digest": "92b653dc155b5ad449de1237ff90d65b4f76283993fc64c124ba987aec70a6e3",
+      "source_frame_min_date": "2018-06-01",
+      "source_frame_max_date": "2018-06-30",
+      "target_frame_min_date": "2018-06-01",
+      "target_frame_max_date": "2018-06-30",
+      "source_frame_digest": "105cf59a21174cfd0cd06cb0d15a5595884dcac9e531262e410e2aaae9bbbd27",
+      "target_frame_digest": "64fdea45e1b77322d44864b03ee02eb8d293c7f86cd5accf27305a6e3fd61994",
+      "source_pool_fingerprint": "cc2402599287f467c85cf7f2a9fa415e07cb3dc7172a16f71482a62d417493cb",
+      "consumer_fingerprint": "55b5ae979060648ba5b5fa103593b9ca40e5927481a2adf2b77f215cc1dc875a",
+      "selected_sources_runtime": [
+        {
+          "source_rank": 1,
+          "source_key": [
+            "1",
+            "4"
+          ],
+          "distance": 0.3082207001484488,
+          "weight": 0.3442082116032833,
+          "tie_group": 1,
+          "date_start": "2018-06-01",
+          "date_end": "2018-06-30"
+        },
+        {
+          "source_rank": 2,
+          "source_key": [
+            "2",
+            "2"
+          ],
+          "distance": 0.3233129289094391,
+          "weight": 0.32814059275557866,
+          "tie_group": 2,
+          "date_start": "2018-06-01",
+          "date_end": "2018-06-30"
+        },
+        {
+          "source_rank": 3,
+          "source_key": [
+            "3",
+            "2"
+          ],
+          "distance": 0.32379584617471546,
+          "weight": 0.3276511956411381,
+          "tie_group": 3,
+          "date_start": "2018-06-01",
+          "date_end": "2018-06-30"
+        }
+      ],
+      "source_skip_diagnostics": [],
+      "candidate_source_count": 27,
+      "valid_source_count": 27,
+      "eligible_candidate_keys": [
+        [
+          "1",
+          "1"
+        ],
+        [
+          "1",
+          "2"
+        ],
+        [
+          "1",
+          "3"
+        ],
+        [
+          "1",
+          "4"
+        ],
+        [
+          "1",
+          "5"
+        ],
+        [
+          "1",
+          "6"
+        ],
+        [
+          "1",
+          "7"
+        ],
+        [
+          "1",
+          "8"
+        ],
+        [
+          "1",
+          "9"
+        ],
+        [
+          "2",
+          "1"
+        ],
+        [
+          "2",
+          "2"
+        ],
+        [
+          "2",
+          "3"
+        ],
+        [
+          "2",
+          "4"
+        ],
+        [
+          "2",
+          "5"
+        ],
+        [
+          "2",
+          "6"
+        ],
+        [
+          "2",
+          "7"
+        ],
+        [
+          "2",
+          "8"
+        ],
+        [
+          "2",
+          "9"
+        ],
+        [
+          "3",
+          "1"
+        ],
+        [
+          "3",
+          "2"
+        ],
+        [
+          "3",
+          "3"
+        ],
+        [
+          "3",
+          "4"
+        ],
+        [
+          "3",
+          "5"
+        ],
+        [
+          "3",
+          "6"
+        ],
+        [
+          "3",
+          "7"
+        ],
+        [
+          "3",
+          "8"
+        ],
+        [
+          "3",
+          "9"
+        ]
+      ],
+      "valid_30d_candidate_keys": [
+        [
+          "1",
+          "1"
+        ],
+        [
+          "1",
+          "2"
+        ],
+        [
+          "1",
+          "3"
+        ],
+        [
+          "1",
+          "4"
+        ],
+        [
+          "1",
+          "5"
+        ],
+        [
+          "1",
+          "6"
+        ],
+        [
+          "1",
+          "7"
+        ],
+        [
+          "1",
+          "8"
+        ],
+        [
+          "1",
+          "9"
+        ],
+        [
+          "2",
+          "1"
+        ],
+        [
+          "2",
+          "2"
+        ],
+        [
+          "2",
+          "3"
+        ],
+        [
+          "2",
+          "4"
+        ],
+        [
+          "2",
+          "5"
+        ],
+        [
+          "2",
+          "6"
+        ],
+        [
+          "2",
+          "7"
+        ],
+        [
+          "2",
+          "8"
+        ],
+        [
+          "2",
+          "9"
+        ],
+        [
+          "3",
+          "1"
+        ],
+        [
+          "3",
+          "2"
+        ],
+        [
+          "3",
+          "3"
+        ],
+        [
+          "3",
+          "4"
+        ],
+        [
+          "3",
+          "5"
+        ],
+        [
+          "3",
+          "6"
+        ],
+        [
+          "3",
+          "7"
+        ],
+        [
+          "3",
+          "8"
+        ],
+        [
+          "3",
+          "9"
+        ]
+      ],
+      "eligible_candidate_count": 27,
+      "valid_30d_candidate_count": 27,
+      "selected_count": 3,
+      "skipped_source_count": 0,
+      "requested_k": 3,
+      "effective_k": 3,
+      "scaler_min": 0.0,
+      "scaler_max": 80.0,
+      "cnn_provenance_validated": true,
+      "cnn_provenance_source_keys": [
+        [
+          "1",
+          "4"
+        ],
+        [
+          "2",
+          "2"
+        ],
+        [
+          "3",
+          "2"
+        ]
+      ],
+      "cnn_provenance_sample_counts": [
+        20,
+        20,
+        20
+      ],
+      "d2_source_calendarization_rule_version": "d2_source_calendarization_v1",
+      "d2_source_authority_digest": "2a8c59723453302576864b7ae03249a9bb0217e705f14a95091856d2e252d012",
+      "d2_consumer_frame_fingerprint": "80eae6b26ca46f001b6c8975bb84b9da631cc1b4a63393ec16fffabaa90a43e1",
+      "d2_sealed_identity": "d68686a8c932f35e10f3be5c76601e806aac6ba86f905e47bc069c7806a43279"
+    }
+  },
+  "knn_frame_authority": "configured_observed_frame"
 }

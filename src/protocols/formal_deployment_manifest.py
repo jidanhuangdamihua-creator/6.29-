@@ -31,6 +31,7 @@ from src.protocols.gate1_transformation import (
     dataset_contract,
     load_formal_identity,
 )
+from src.protocols.experiment_protocol import PROTOCOL_VERSION, get_experiment_protocol
 
 
 MANIFEST_SCHEMA_VERSION = "d1_d6_deployment_manifest_v1"
@@ -51,6 +52,29 @@ FROZEN_PARQUETS: dict[int, dict[str, dict[str, object]]] = {
 D4_KNN = {
     "with": {"path": "configs/solidified/knn/Dataset4/knn_with_info_sharing.json", "sha256": "44a332c374f97fce833b284802122f5337f8376a3bc1d70110c0c67debd5db6a"},
     "without": {"path": "configs/solidified/knn/Dataset4/knn_without_info_sharing.json", "sha256": "b61df584146d27c5c4dc154c4d6445ddc298200e888cc186bedb51601091a73e"},
+}
+
+D1_D2_KNN = {
+    1: {
+        "with": {
+            "path": "configs/solidified/knn/Dataset1/knn_with_info_sharing.json",
+            "sha256": "ae9a9436c5062ba542f399c8b83761c57d30b63416d1fb78d7e30d69877c752d",
+        },
+        "without": {
+            "path": "configs/solidified/knn/Dataset1/knn_without_info_sharing.json",
+            "sha256": "f4e78f40cd72c8e6fc7ce3d72773c3ec023b6c22ae39867788ca41fcd4683813",
+        },
+    },
+    2: {
+        "with": {
+            "path": "configs/solidified/knn/Dataset2/knn_with_info_sharing.json",
+            "sha256": "16a2530ba3d7d4d74e83f63847910224aa1159e8cabd9d945c47e2c1bed6b3c0",
+        },
+        "without": {
+            "path": "configs/solidified/knn/Dataset2/knn_without_info_sharing.json",
+            "sha256": "350b41550eba731f8d48d0fc0b03916f0fc02b5c3cffdc13c5c0f341866d3f31",
+        },
+    },
 }
 
 D2_FROZEN_DATES = ("2018-04-01", "2018-04-25", "2018-05-01", "2018-06-02")
@@ -248,7 +272,28 @@ def frozen_artifact_snapshot(repository_root: Path) -> dict[str, object]:
         }
         for scenario, item in D4_KNN.items()
     }
-    return {"datasets": datasets, "d4_knn": knn}
+    strict_knn: dict[str, object] = {}
+    for dataset_id, scenarios in D1_D2_KNN.items():
+        dataset_payload: dict[str, object] = {}
+        for scenario, expected in scenarios.items():
+            path = root / str(expected["path"])
+            payload = _json(path, "D1_D2_KNN_AUTHORITY_UNREADABLE")
+            metadata = payload.get("selection_metadata", {}).get("1_10", {})
+            if not isinstance(metadata, Mapping):
+                raise DeploymentManifestError("D1_D2_KNN_METADATA_MISSING", f"D{dataset_id}/{scenario}")
+            dataset_payload[scenario] = {
+                "path": expected["path"],
+                "sha256": sha256_file(path),
+                "size_bytes": int(path.stat().st_size),
+                "mtime_ns": int(path.stat().st_mtime_ns),
+                "selection_authority": payload.get("selection_authority"),
+                "protocol_version": payload.get("protocol_version"),
+                "feature_cols": payload.get("feature_cols"),
+                "knn_frame_authority": payload.get("knn_frame_authority"),
+                "selection_metadata": dict(metadata),
+            }
+        strict_knn[f"D{dataset_id}"] = dataset_payload
+    return {"datasets": datasets, "d1_d2_knn": strict_knn, "d4_knn": knn}
 
 
 def verify_frozen_snapshot(snapshot: Mapping[str, object]) -> None:
@@ -276,6 +321,26 @@ def verify_frozen_snapshot(snapshot: Mapping[str, object]) -> None:
         actual = knn.get(scenario)
         if not isinstance(actual, Mapping) or actual.get("sha256") != expected["sha256"]:
             raise DeploymentManifestError("D4_KNN_AUTHORITY_MISMATCH", scenario)
+    strict_knn = snapshot.get("d1_d2_knn")
+    if not isinstance(strict_knn, Mapping):
+        raise DeploymentManifestError("D1_D2_KNN_AUTHORITY_MISMATCH")
+    for dataset_id, scenarios in D1_D2_KNN.items():
+        actual_dataset = strict_knn.get(f"D{dataset_id}")
+        if not isinstance(actual_dataset, Mapping):
+            raise DeploymentManifestError("D1_D2_KNN_AUTHORITY_MISMATCH", f"D{dataset_id}")
+        for scenario, expected in scenarios.items():
+            actual = actual_dataset.get(scenario)
+            if (
+                not isinstance(actual, Mapping)
+                or actual.get("sha256") != expected["sha256"]
+                or actual.get("selection_authority") != "shared_protocol"
+                or actual.get("protocol_version") != PROTOCOL_VERSION
+                or actual.get("feature_cols") != ["sales"]
+                or actual.get("knn_frame_authority") != "configured_observed_frame"
+            ):
+                raise DeploymentManifestError(
+                    "D1_D2_KNN_AUTHORITY_MISMATCH", f"D{dataset_id}/{scenario}"
+                )
 
 
 def build_code_inventory(repository_root: Path) -> dict[str, object]:
@@ -384,6 +449,106 @@ def _d4_authority(repository_root: Path, readiness: Mapping[str, object]) -> dic
     }
 
 
+def _d1_d2_authority(repository_root: Path, dataset_id: int) -> dict[str, object]:
+    """Validate and expose the real D1/D2 shared-protocol KNN authorities."""
+    if int(dataset_id) not in D1_D2_KNN:
+        raise DeploymentManifestError("D1_D2_KNN_AUTHORITY_INVALID", str(dataset_id))
+    window = get_experiment_protocol(dataset_id).observation_window()
+    scenarios: dict[str, object] = {}
+    matrix: dict[str, object] = {}
+    root = Path(repository_root)
+    for scenario, expected in D1_D2_KNN[int(dataset_id)].items():
+        path = root / str(expected["path"])
+        payload = _json(path, "D1_D2_KNN_AUTHORITY_UNREADABLE")
+        if (
+            payload.get("selection_authority") != "shared_protocol"
+            or payload.get("protocol_version") != PROTOCOL_VERSION
+            or payload.get("feature_cols") != ["sales"]
+            or payload.get("knn_frame_authority") != "configured_observed_frame"
+        ):
+            raise DeploymentManifestError("D1_D2_KNN_AUTHORITY_MISMATCH", f"D{dataset_id}/{scenario}")
+        metadata_map = payload.get("selection_metadata")
+        metadata = metadata_map.get("1_10") if isinstance(metadata_map, Mapping) else None
+        if not isinstance(metadata, Mapping):
+            raise DeploymentManifestError("D1_D2_KNN_METADATA_MISSING", f"D{dataset_id}/{scenario}")
+        expected_window = {
+            "origin": window.origin.isoformat(),
+            "observed_start": window.knn_observed_start.isoformat(),
+            "observed_end": window.knn_observed_end.isoformat(),
+            "observed_days": window.observed_days,
+            "boundary": "inclusive",
+        }
+        actual_window = {
+            "origin": metadata.get("origin"),
+            "observed_start": metadata.get("knn_observed_start"),
+            "observed_end": metadata.get("knn_observed_end"),
+            "observed_days": metadata.get("observed_days"),
+            "boundary": metadata.get("boundary"),
+        }
+        if actual_window != expected_window:
+            raise DeploymentManifestError(
+                "D1_D2_KNN_WINDOW_MISMATCH", f"D{dataset_id}/{scenario}"
+            )
+        digest_fields = (
+            "source_frame_digest",
+            "target_frame_digest",
+            "candidate_pool_digest",
+            "selection_digest",
+            "selection_result_digest",
+        )
+        if any(not isinstance(metadata.get(field), str) or len(metadata[field]) != 64 for field in digest_fields):
+            raise DeploymentManifestError(
+                "D1_D2_KNN_DIGEST_MISSING", f"D{dataset_id}/{scenario}"
+            )
+        scenario_payload = {
+            "path": expected["path"],
+            "sha256": sha256_file(path),
+            "selection_authority": payload["selection_authority"],
+            "protocol_version": payload["protocol_version"],
+            "feature_cols": payload["feature_cols"],
+            "knn_frame_authority": payload["knn_frame_authority"],
+            "observed_window": expected_window,
+            "source_frame_min_date": metadata.get("source_frame_min_date"),
+            "source_frame_max_date": metadata.get("source_frame_max_date"),
+            "target_frame_min_date": metadata.get("target_frame_min_date"),
+            "target_frame_max_date": metadata.get("target_frame_max_date"),
+            "source_frame_digest": metadata["source_frame_digest"],
+            "target_frame_digest": metadata["target_frame_digest"],
+            "candidate_pool_digest": metadata["candidate_pool_digest"],
+            "selection_digest": metadata["selection_digest"],
+            "selection_result_digest": metadata["selection_result_digest"],
+        }
+        scenarios[scenario] = scenario_payload
+        matrix[scenario] = {
+            key: scenario_payload[key]
+            for key in (
+                "source_frame_digest",
+                "target_frame_digest",
+                "candidate_pool_digest",
+                "selection_digest",
+                "selection_result_digest",
+            )
+        }
+    authority_payload = {
+        "selection_authority": "shared_protocol",
+        "protocol_version": PROTOCOL_VERSION,
+        "knn_frame_authority": "configured_observed_frame",
+        "observed_window": {
+            "origin": window.origin.isoformat(),
+            "observed_start": window.knn_observed_start.isoformat(),
+            "observed_end": window.knn_observed_end.isoformat(),
+            "observed_days": window.observed_days,
+            "boundary": "inclusive",
+        },
+        "scenario_files": scenarios,
+        "target_scenario_matrix": matrix,
+    }
+    return {
+        **authority_payload,
+        "authority_digest": sha256_bytes(canonical_json_bytes(authority_payload)),
+    }
+
+
 def build_formal_proof(
     repository_root: Path,
     dataset_id: int,
@@ -413,7 +578,11 @@ def build_formal_proof(
     target_entities = readiness.get("target_entities", [])
     dataset_specific: dict[str, object] = {}
     if dataset_id == 1:
-        dataset_specific = {"legacy_fallback_used": False, "resolver": "formal_input_paths"}
+        dataset_specific = {
+            "legacy_fallback_used": False,
+            "resolver": "formal_input_paths",
+            "knn_selection_authority": _d1_d2_authority(root, 1),
+        }
     elif dataset_id == 2:
         sealed = readiness.get("sealed_identity")
         sealed_summary = None
@@ -450,6 +619,7 @@ def build_formal_proof(
             "target_entities_per_date": 1,
             "sales_zero": True,
             "sealed_identity": sealed_summary,
+            "knn_selection_authority": _d1_d2_authority(root, 2),
         }
     elif dataset_id == 3:
         dataset_specific = {
@@ -563,6 +733,8 @@ def build_root_manifest(
             "consumer_fingerprint": proof["consumer_fingerprint"],
             "readiness_proof_digest": proof["readiness_proof_digest"],
         }
+    d1 = proofs["D1"]["dataset_specific"]
+    d2 = proofs["D2"]["dataset_specific"]
     d4 = proofs["D4"]["dataset_specific"]
     payload: dict[str, object] = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
@@ -580,6 +752,10 @@ def build_root_manifest(
             "with": d4["scenario_files"]["with"],  # type: ignore[index]
             "without": d4["scenario_files"]["without"],  # type: ignore[index]
             "exact_key_proof_digest": d4["exact_key_proof_digest"],  # type: ignore[index]
+        },
+        "d1_d2_knn_selection_authority": {
+            "D1": d1["knn_selection_authority"]["scenario_files"],  # type: ignore[index]
+            "D2": d2["knn_selection_authority"]["scenario_files"],  # type: ignore[index]
         },
     }
     return {**payload, "root_identity_sha256": sha256_bytes(canonical_json_bytes(payload))}
@@ -674,6 +850,23 @@ def validate_deployment_manifest(
         or d2.get("sales_zero") is not True
     ):
         raise DeploymentManifestError("D2_FROZEN_CLOSURE_MISMATCH")
+    strict_authority = manifest.get("d1_d2_knn_selection_authority")
+    if not isinstance(strict_authority, Mapping):
+        raise DeploymentManifestError("D1_D2_KNN_AUTHORITY_MISMATCH")
+    for dataset_id in (1, 2):
+        proof_authority = proofs[f"D{dataset_id}"]["dataset_specific"].get(  # type: ignore[index]
+            "knn_selection_authority"
+        )
+        if (
+            not isinstance(proof_authority, Mapping)
+            or proof_authority.get("selection_authority") != "shared_protocol"
+            or proof_authority.get("protocol_version") != PROTOCOL_VERSION
+            or proof_authority.get("knn_frame_authority") != "configured_observed_frame"
+            or strict_authority.get(f"D{dataset_id}") != proof_authority.get("scenario_files")
+        ):
+            raise DeploymentManifestError(
+                "D1_D2_KNN_AUTHORITY_MISMATCH", f"D{dataset_id}"
+            )
     d4 = proofs["D4"]["dataset_specific"]  # type: ignore[index]
     if (
         d4.get("entity_key") != ["store_id", "product_id"]
@@ -741,7 +934,7 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
 
 
 __all__ = [
-    "D4_KNN", "EXPECTED_BRANCH", "EXPECTED_HEAD", "FROZEN_PARQUETS",
+    "D1_D2_KNN", "D4_KNN", "EXPECTED_BRANCH", "EXPECTED_HEAD", "FROZEN_PARQUETS",
     "DeploymentManifestError", "atomic_write_bytes", "atomic_write_json",
     "build_code_inventory", "build_formal_proof", "build_root_manifest",
     "canonical_json_bytes", "formal_identity_payload", "frozen_artifact_snapshot",

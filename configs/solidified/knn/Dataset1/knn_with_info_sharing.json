@@ -15,21 +15,21 @@
     "store_id",
     "item_id"
   ],
-  "source_pool_size": 911174,
+  "selection_authority": "shared_protocol",
+  "protocol_version": "d1_d6_protocol_v1",
+  "results_semantics": "json_top_k_diagnostic_not_training_authority",
+  "training_selection_authority": "shared_protocol_selector",
+  "json_results_used_for": [
+    "target_list",
+    "smoke_or_source_limit_candidate_pool",
+    "diagnostics"
+  ],
   "feature_cols": [
-    "sales",
-    "year",
-    "month",
-    "week",
-    "day"
+    "sales"
   ],
   "feature_info": {
     "selected_features": [
-      "sales",
-      "year",
-      "month",
-      "week",
-      "day"
+      "sales"
     ],
     "modeling_source_features": [
       "sales",
@@ -71,29 +71,523 @@
     "include_sales_in_knn": true,
     "knn_feature_mode": "paper_available_features_no_ids"
   },
+  "source_pool_size": 49302,
+  "source_domain_policy_diagnostics": {
+    "knn_json_domain_filter": {
+      "column": "store_id",
+      "value": 1
+    },
+    "source_domain_filter": null,
+    "source_domain_filter_applied": false,
+    "domain_filter_applied_to_source": false,
+    "domain_filter_scope": "source_pool",
+    "domain_filter_column": "store_id",
+    "domain_filter_value": 1,
+    "target_domain_validation_passed": null,
+    "source_pool_policy": "",
+    "source_domain_filter_reason": "with_information_sharing_all_source_pool",
+    "source_pool_size_before_filter": 49302,
+    "source_pool_size_after_filter": 49302,
+    "source_pool_rows_before_filter": 49302,
+    "source_pool_rows_after_filter": 49302,
+    "excluded_source_row_count": 0,
+    "source_pool_entities_before_filter": 3,
+    "source_pool_entities_after_filter": 3,
+    "excluded_source_entity_count": 0,
+    "source_domain_filter_error": ""
+  },
   "results": {
     "1_10": [
       {
         "source_entity": "3_6",
-        "source_store_id": 3,
-        "source_item_id": 6,
-        "distance": 45.27692569068709,
-        "weight": 0.34555053298730615
+        "distance": 0.39990233182615975,
+        "weight": 0.35202465544893563,
+        "source_store_id": "3",
+        "source_item_id": "6"
+      },
+      {
+        "source_entity": "2_9",
+        "distance": 0.4260098296987994,
+        "weight": 0.33045125012630805,
+        "source_store_id": "2",
+        "source_item_id": "9"
       },
       {
         "source_entity": "3_7",
-        "source_store_id": 3,
-        "source_item_id": 7,
-        "distance": 46.561786907291264,
-        "weight": 0.33601514984144554
-      },
-      {
-        "source_entity": "6_15",
-        "source_store_id": 6,
-        "source_item_id": 15,
-        "distance": 49.13247398615299,
-        "weight": 0.3184343171712482
+        "distance": 0.44335369627420496,
+        "weight": 0.31752409442475643,
+        "source_store_id": "3",
+        "source_item_id": "7"
       }
     ]
-  }
+  },
+  "selection_metadata": {
+    "1_10": {
+      "selection_authority": "shared_protocol",
+      "selection_path": "shared_protocol",
+      "protocol_track": "strict_paper",
+      "protocol_version": "d1_d6_protocol_v1",
+      "weight_mode": "inverse_distance",
+      "distance_metric": "euclidean",
+      "group_cols": [
+        "store_id",
+        "item_id"
+      ],
+      "target_signature_dim": 30,
+      "feature_cols": [
+        "sales"
+      ],
+      "requested_feature_cols": [
+        "sales"
+      ],
+      "representation": "daily_sales_flattened_30d",
+      "knn_representation": "daily_sales_flattened_30d",
+      "scaling": "global_minmax_legal_observed_values",
+      "scaler_fit_scope": "target_and_candidate_legal_observed_values",
+      "knn_observed_start": "2017-06-01",
+      "knn_observed_end": "2017-06-30",
+      "origin": "2017-06-30",
+      "protocol_observed_start": "2017-06-01",
+      "protocol_observed_days": 30,
+      "observed_days": 30,
+      "boundary": "inclusive",
+      "target_observed_start": "2017-06-01",
+      "target_observed_end": "2017-06-30",
+      "source_observation_cutoff": "2017-06-30",
+      "target_test_excluded": true,
+      "source_future_excluded": true,
+      "source_alignment_mode": "exact_knn_observed_dates",
+      "candidate_pool_digest": "836518bfcdd652a525786457d6ac8d36467385ba6f9ee09d460ed35abb4aab87",
+      "candidate_pool_digest_input": {
+        "protocol_version": "d1_d6_protocol_v1",
+        "dataset_id": "D1",
+        "scenario": "with",
+        "target_key": [
+          "1",
+          "10"
+        ],
+        "group_cols": [
+          "store_id",
+          "item_id"
+        ],
+        "candidate_keys": [
+          [
+            "1",
+            "1"
+          ],
+          [
+            "1",
+            "2"
+          ],
+          [
+            "1",
+            "3"
+          ],
+          [
+            "1",
+            "4"
+          ],
+          [
+            "1",
+            "5"
+          ],
+          [
+            "1",
+            "6"
+          ],
+          [
+            "1",
+            "7"
+          ],
+          [
+            "1",
+            "8"
+          ],
+          [
+            "1",
+            "9"
+          ],
+          [
+            "2",
+            "1"
+          ],
+          [
+            "2",
+            "2"
+          ],
+          [
+            "2",
+            "3"
+          ],
+          [
+            "2",
+            "4"
+          ],
+          [
+            "2",
+            "5"
+          ],
+          [
+            "2",
+            "6"
+          ],
+          [
+            "2",
+            "7"
+          ],
+          [
+            "2",
+            "8"
+          ],
+          [
+            "2",
+            "9"
+          ],
+          [
+            "3",
+            "1"
+          ],
+          [
+            "3",
+            "2"
+          ],
+          [
+            "3",
+            "3"
+          ],
+          [
+            "3",
+            "4"
+          ],
+          [
+            "3",
+            "5"
+          ],
+          [
+            "3",
+            "6"
+          ],
+          [
+            "3",
+            "7"
+          ],
+          [
+            "3",
+            "8"
+          ],
+          [
+            "3",
+            "9"
+          ]
+        ],
+        "observed_start": "2017-06-01",
+        "observed_end": "2017-06-30",
+        "feature_cols": [
+          "sales"
+        ],
+        "source_frame_digest": "6da36a7c1da4124f8da9835302ad06855e0c294d5fe8babc675c7ad86dd1acbf",
+        "target_frame_digest": "14c8b0b59f9c3014776f8a4ca343ed8b59743c0ee21851d4b40c6fc4fa71ae1c"
+      },
+      "selection_result_digest": "d7b6852da95385785402b6d927f52e99e6636de4bec27245aec9f9d0026b28fd",
+      "selection_digest": "d7b6852da95385785402b6d927f52e99e6636de4bec27245aec9f9d0026b28fd",
+      "source_frame_min_date": "2017-06-01",
+      "source_frame_max_date": "2017-06-30",
+      "target_frame_min_date": "2017-06-01",
+      "target_frame_max_date": "2017-06-30",
+      "source_frame_digest": "6da36a7c1da4124f8da9835302ad06855e0c294d5fe8babc675c7ad86dd1acbf",
+      "target_frame_digest": "14c8b0b59f9c3014776f8a4ca343ed8b59743c0ee21851d4b40c6fc4fa71ae1c",
+      "source_pool_fingerprint": "8a1c8d8599080349db952c7e86ef0471354d19a9beed132af94679afe68db7e4",
+      "consumer_fingerprint": "12269010b6788e37493cbf9308f21c1b577edbbc4aa80b316bedfaf96d9de7bb",
+      "selected_sources_runtime": [
+        {
+          "source_rank": 1,
+          "source_key": [
+            "3",
+            "6"
+          ],
+          "distance": 0.39990233182615975,
+          "weight": 0.35202465544893563,
+          "tie_group": 1,
+          "date_start": "2017-06-01",
+          "date_end": "2017-06-30"
+        },
+        {
+          "source_rank": 2,
+          "source_key": [
+            "2",
+            "9"
+          ],
+          "distance": 0.4260098296987994,
+          "weight": 0.33045125012630805,
+          "tie_group": 2,
+          "date_start": "2017-06-01",
+          "date_end": "2017-06-30"
+        },
+        {
+          "source_rank": 3,
+          "source_key": [
+            "3",
+            "7"
+          ],
+          "distance": 0.44335369627420496,
+          "weight": 0.31752409442475643,
+          "tie_group": 3,
+          "date_start": "2017-06-01",
+          "date_end": "2017-06-30"
+        }
+      ],
+      "source_skip_diagnostics": [],
+      "candidate_source_count": 27,
+      "valid_source_count": 27,
+      "eligible_candidate_keys": [
+        [
+          "1",
+          "1"
+        ],
+        [
+          "1",
+          "2"
+        ],
+        [
+          "1",
+          "3"
+        ],
+        [
+          "1",
+          "4"
+        ],
+        [
+          "1",
+          "5"
+        ],
+        [
+          "1",
+          "6"
+        ],
+        [
+          "1",
+          "7"
+        ],
+        [
+          "1",
+          "8"
+        ],
+        [
+          "1",
+          "9"
+        ],
+        [
+          "2",
+          "1"
+        ],
+        [
+          "2",
+          "2"
+        ],
+        [
+          "2",
+          "3"
+        ],
+        [
+          "2",
+          "4"
+        ],
+        [
+          "2",
+          "5"
+        ],
+        [
+          "2",
+          "6"
+        ],
+        [
+          "2",
+          "7"
+        ],
+        [
+          "2",
+          "8"
+        ],
+        [
+          "2",
+          "9"
+        ],
+        [
+          "3",
+          "1"
+        ],
+        [
+          "3",
+          "2"
+        ],
+        [
+          "3",
+          "3"
+        ],
+        [
+          "3",
+          "4"
+        ],
+        [
+          "3",
+          "5"
+        ],
+        [
+          "3",
+          "6"
+        ],
+        [
+          "3",
+          "7"
+        ],
+        [
+          "3",
+          "8"
+        ],
+        [
+          "3",
+          "9"
+        ]
+      ],
+      "valid_30d_candidate_keys": [
+        [
+          "1",
+          "1"
+        ],
+        [
+          "1",
+          "2"
+        ],
+        [
+          "1",
+          "3"
+        ],
+        [
+          "1",
+          "4"
+        ],
+        [
+          "1",
+          "5"
+        ],
+        [
+          "1",
+          "6"
+        ],
+        [
+          "1",
+          "7"
+        ],
+        [
+          "1",
+          "8"
+        ],
+        [
+          "1",
+          "9"
+        ],
+        [
+          "2",
+          "1"
+        ],
+        [
+          "2",
+          "2"
+        ],
+        [
+          "2",
+          "3"
+        ],
+        [
+          "2",
+          "4"
+        ],
+        [
+          "2",
+          "5"
+        ],
+        [
+          "2",
+          "6"
+        ],
+        [
+          "2",
+          "7"
+        ],
+        [
+          "2",
+          "8"
+        ],
+        [
+          "2",
+          "9"
+        ],
+        [
+          "3",
+          "1"
+        ],
+        [
+          "3",
+          "2"
+        ],
+        [
+          "3",
+          "3"
+        ],
+        [
+          "3",
+          "4"
+        ],
+        [
+          "3",
+          "5"
+        ],
+        [
+          "3",
+          "6"
+        ],
+        [
+          "3",
+          "7"
+        ],
+        [
+          "3",
+          "8"
+        ],
+        [
+          "3",
+          "9"
+        ]
+      ],
+      "eligible_candidate_count": 27,
+      "valid_30d_candidate_count": 27,
+      "selected_count": 3,
+      "skipped_source_count": 0,
+      "requested_k": 3,
+      "effective_k": 3,
+      "scaler_min": 14.0,
+      "scaler_max": 174.0,
+      "cnn_provenance_validated": true,
+      "cnn_provenance_source_keys": [
+        [
+          "3",
+          "6"
+        ],
+        [
+          "2",
+          "9"
+        ],
+        [
+          "3",
+          "7"
+        ]
+      ],
+      "cnn_provenance_sample_counts": [
+        20,
+        20,
+        20
+      ]
+    }
+  },
+  "knn_frame_authority": "configured_observed_frame"
 }
