@@ -17,7 +17,15 @@ from scripts.validate_d1_d6_protocol_inputs import (
 from src.protocols.formal_input_paths import resolve_formal_dataset_paths
 
 
-def _rows(domain, item, *, group_col=None, group_value=None, periods=35):
+def _rows(
+    domain,
+    item,
+    *,
+    group_col=None,
+    group_value=None,
+    periods=35,
+    start="2020-01-01",
+):
     try:
         sales_value = float(item)
     except (TypeError, ValueError):
@@ -26,7 +34,7 @@ def _rows(domain, item, *, group_col=None, group_value=None, periods=35):
         "entity_id": str(domain),
         "store_id": str(domain),
         "item_id": str(item),
-        "date": pd.date_range("2020-01-01", periods=periods, freq="D"),
+        "date": pd.date_range(start, periods=periods, freq="D"),
         "sales": np.full(periods, sales_value, dtype=float),
     }
     if group_col:
@@ -155,15 +163,17 @@ class ProtocolPreflightTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_incomplete_d1_with_pool_reports_missing_keys(self) -> None:
-        source = pd.concat([_rows(1, item, periods=30) for item in range(1, 10)])
-        target = _rows(1, 10)
+        source = pd.concat(
+            [_rows(1, item, periods=30, start="2017-06-01") for item in range(1, 10)]
+        )
+        target = _rows(1, 10, start="2017-06-01")
         report = validate_protocol_frames(
             source,
             target,
             dataset_id="D1",
             scenario="with",
             group_cols=("store_id", "item_id"),
-            observed_start="2020-01-01",
+            observed_start="2017-06-01",
             k=3,
         )
         self.assertEqual(report["status"], "failed")
@@ -171,15 +181,19 @@ class ProtocolPreflightTest(unittest.TestCase):
 
     def test_complete_d1_and_cross_store_d5_pass(self) -> None:
         d1_source = pd.concat(
-            [_rows(store, item, periods=30) for store in range(1, 4) for item in range(1, 10)]
+            [
+                _rows(store, item, periods=30, start="2017-06-01")
+                for store in range(1, 4)
+                for item in range(1, 10)
+            ]
         )
         d1 = validate_protocol_frames(
             d1_source,
-            _rows(1, 10),
+            _rows(1, 10, start="2017-06-01"),
             dataset_id="D1",
             scenario="with",
             group_cols=("store_id", "item_id"),
-            observed_start="2020-01-01",
+            observed_start="2017-06-01",
             k=3,
         )
         self.assertEqual(d1["status"], "passed")

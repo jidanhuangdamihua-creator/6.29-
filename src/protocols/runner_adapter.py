@@ -210,12 +210,17 @@ def configure_protocol_frames(
     if "date" not in source_df.columns or "date" not in target_df.columns:
         raise ProtocolViolation("protocol frames require date columns")
     window = protocol.observation_window(observed_start)
-    source_knn_candidate_frame = build_observed_knn_frame(
-        source_df,
-        window=window,
-        role="source",
-        group_cols=normalized_group_cols,
-    )
+    if prepared_pool is None:
+        source_knn_candidate_frame = build_observed_knn_frame(
+            source_df,
+            window=window,
+            role="source",
+            group_cols=normalized_group_cols,
+        )
+    else:
+        source_knn_candidate_frame = prepared_pool.selected_sales_frame(
+            prepared_pool.source_keys
+        )
     target_knn_frame = build_observed_knn_frame(
         target_df,
         window=window,
