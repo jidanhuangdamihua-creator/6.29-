@@ -47,16 +47,15 @@ def build_observed_knn_frame(
 ) -> pd.DataFrame:
     """Return the inclusive observed copy used by KNN, never the full model frame."""
     parsed_dates = _normalized_dates(frame, role=role)
-    observed = frame.loc[
-        parsed_dates.between(
-            pd.Timestamp(window.knn_observed_start),
-            pd.Timestamp(window.knn_observed_end),
-            inclusive="both",
-        )
-    ].copy()
+    observed_mask = parsed_dates.between(
+        pd.Timestamp(window.knn_observed_start),
+        pd.Timestamp(window.knn_observed_end),
+        inclusive="both",
+    )
+    observed = frame.loc[observed_mask].copy()
     if observed.empty:
         raise ProtocolViolation(f"{role} KNN observed frame is empty")
-    observed["date"] = parsed_dates.loc[observed.index].to_numpy()
+    observed["date"] = parsed_dates.loc[observed_mask].to_numpy()
     observed.attrs = {
         key: value
         for key, value in frame.attrs.items()

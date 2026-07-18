@@ -19,6 +19,7 @@ from .experiment_protocol import (
     normalize_scenario,
     normalize_source_key,
 )
+from .knn_frames import canonical_knn_frame_digest
 
 
 def _iso_date(value: object) -> str:
@@ -55,6 +56,8 @@ def _canonical_candidate_pool_input(
     calendarization_rule_version: object | None = None,
     source_authority_digest: object | None = None,
     consumer_frame_fingerprint: object | None = None,
+    source_frame_digest: object | None = None,
+    target_frame_digest: object | None = None,
 ) -> Dict[str, Any]:
     normalized_candidates = [normalize_source_key(key) for key in candidate_keys]
     if len(set(normalized_candidates)) != len(normalized_candidates):
@@ -88,6 +91,18 @@ def _canonical_candidate_pool_input(
                 "consumer_frame_fingerprint": str(consumer_frame_fingerprint),
             }
         )
+    frame_identity = (source_frame_digest, target_frame_digest)
+    if any(value is not None for value in frame_identity):
+        if any(value is None for value in frame_identity):
+            raise ProtocolViolation(
+                "KNN candidate digest requires both source and target frame digests"
+            )
+        payload.update(
+            {
+                "source_frame_digest": str(source_frame_digest),
+                "target_frame_digest": str(target_frame_digest),
+            }
+        )
     return payload
 
 
@@ -104,6 +119,8 @@ def build_candidate_pool_digest(
     calendarization_rule_version: object | None = None,
     source_authority_digest: object | None = None,
     consumer_frame_fingerprint: object | None = None,
+    source_frame_digest: object | None = None,
+    target_frame_digest: object | None = None,
 ) -> str:
     """Return the one production SHA-256 digest for a candidate pool."""
 
@@ -120,6 +137,8 @@ def build_candidate_pool_digest(
         calendarization_rule_version,
         source_authority_digest,
         consumer_frame_fingerprint,
+        source_frame_digest,
+        target_frame_digest,
     )
     return _sha256_payload(payload)
 
@@ -663,11 +682,32 @@ def select_daily_sequence_sources(
     required_dates = pd.date_range(observed_start_iso, observed_end_iso, freq="D")
 
     target = _prepare_dates(target_df, role="target")
+    target_legal = target.loc[target["date"].isin(required_dates)].copy()
     target_vector = _exact_observed_vector(
         target,
         required_dates,
         role="target",
     )
+    source_frame_digest = None
+    target_frame_digest = None
+    if protocol.dataset_id in {"D1", "D2"}:
+        target_frame_digest = canonical_knn_frame_digest(
+            target_legal,
+            group_cols=group_cols,
+        )
+        if prepared_pool is None:
+            source_prepared = _prepare_dates(source_df, role="source")
+            source_legal = source_prepared.loc[
+                source_prepared["date"].isin(required_dates)
+            ].copy()
+        else:
+            source_legal = prepared_pool.selected_sales_frame(
+                [key for key in normalized_candidates if key in prepared_pool.key_to_index]
+            )
+        source_frame_digest = canonical_knn_frame_digest(
+            source_legal,
+            group_cols=group_cols,
+        )
 
     pool = prepared_pool or prepare_daily_sequence_pool(
         source_df,
@@ -772,6 +812,8 @@ def select_daily_sequence_sources(
         calendarization_rule_version,
         source_authority_digest,
         consumer_frame_fingerprint,
+        source_frame_digest,
+        target_frame_digest,
     )
     candidate_digest = _sha256_payload(digest_input)
     selection_digest = build_selection_result_digest(

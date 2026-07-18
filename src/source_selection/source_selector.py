@@ -32,6 +32,7 @@ from src.protocols.experiment_protocol import (
     ProtocolViolation,
     get_experiment_protocol,
 )
+from src.protocols.knn_frames import get_configured_knn_frame
 from src.protocols.provenance import (
     build_cnn_tensor_provenance,
     extract_selected_source_slices,
@@ -132,10 +133,27 @@ class SourceSelector:
                     raise ProtocolViolation(
                         f"D2 source/target calendarization identity mismatch: {name}"
                     )
+        knn_target_df = get_configured_knn_frame(target_df, "target")
+        knn_source_df = get_configured_knn_frame(source_df, "source")
+        for identity_field in d2_identity_fields:
+            if identity_field in source_df.attrs:
+                knn_source_df.attrs[identity_field] = source_df.attrs[identity_field]
+            if identity_field in target_df.attrs:
+                knn_target_df.attrs[identity_field] = target_df.attrs[identity_field]
+        observed_start = pd.Timestamp(target_df.attrs["knn_observed_start"]).normalize()
+        observed_end = pd.Timestamp(target_df.attrs["knn_observed_end"]).normalize()
+        for role, frame in (("target", knn_target_df), ("source", knn_source_df)):
+            dates = pd.to_datetime(frame["date"], errors="coerce").dt.normalize()
+            if dates.isna().any():
+                raise ProtocolViolation(f"{role} configured KNN frame contains invalid dates")
+            if not dates.between(observed_start, observed_end, inclusive="both").all():
+                raise ProtocolViolation(
+                    f"{role} configured KNN frame contains dates outside the protocol window"
+                )
         prepared_pool = source_df.attrs.get("prepared_daily_sequence_pool")
         result = select_daily_sequence_sources(
-            target_df=target_df,
-            source_df=source_df,
+            target_df=knn_target_df,
+            source_df=knn_source_df,
             prepared_pool=prepared_pool,
             protocol=protocol,
             scenario=target_df.attrs["protocol_scenario"],
@@ -228,6 +246,7 @@ class SourceSelector:
             selection_result_digest=result.selection_result_digest,
             ordered_top_k=sources,
         )
+        candidate_digest_input = dict(result.candidate_pool_digest_input)
         meta = {
             "selection_authority": "shared_protocol",
             "selection_path": "shared_protocol",
@@ -245,8 +264,11 @@ class SourceSelector:
             "scaler_fit_scope": "target_and_candidate_legal_observed_values",
             "knn_observed_start": result.observed_start,
             "knn_observed_end": result.observed_end,
+            "origin": result.observed_end,
             "protocol_observed_start": target_df.attrs["protocol_observed_start"],
             "protocol_observed_days": target_df.attrs["protocol_observed_days"],
+            "observed_days": target_df.attrs["protocol_observed_days"],
+            "boundary": "inclusive",
             "target_observed_start": result.observed_start,
             "target_observed_end": result.observed_end,
             "source_observation_cutoff": result.source_observation_cutoff,
@@ -254,8 +276,21 @@ class SourceSelector:
             "source_future_excluded": True,
             "source_alignment_mode": "exact_knn_observed_dates",
             "candidate_pool_digest": result.candidate_pool_digest,
-            "candidate_pool_digest_input": dict(result.candidate_pool_digest_input),
+            "candidate_pool_digest_input": candidate_digest_input,
             "selection_result_digest": result.selection_result_digest,
+            "selection_digest": result.selection_result_digest,
+            "source_frame_min_date": source_df.attrs["source_frame_min_date"],
+            "source_frame_max_date": source_df.attrs["source_frame_max_date"],
+            "target_frame_min_date": target_df.attrs["target_frame_min_date"],
+            "target_frame_max_date": target_df.attrs["target_frame_max_date"],
+            "source_frame_digest": candidate_digest_input.get(
+                "source_frame_digest",
+                source_df.attrs.get("source_frame_digest", ""),
+            ),
+            "target_frame_digest": candidate_digest_input.get(
+                "target_frame_digest",
+                target_df.attrs.get("target_frame_digest", ""),
+            ),
             "source_pool_fingerprint": source_pool_fingerprint,
             "consumer_fingerprint": consumer_fingerprint,
             "selected_sources_runtime": list(sources),

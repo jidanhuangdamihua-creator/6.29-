@@ -6,6 +6,8 @@ import pytest
 from src.protocols.experiment_protocol import ProtocolViolation
 from src.protocols.knn_frames import get_configured_knn_frame
 from src.protocols.runner_adapter import configure_protocol_frames
+from src.source_selection import source_selector as source_selector_module
+from src.source_selection.source_selector import SourceSelector
 
 
 def _strict_frames(dataset_id: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -104,3 +106,76 @@ def test_configure_protocol_frames_rejects_invalid_dates_before_knn_frame_build(
             group_cols=("store_id", "item_id"),
             observed_start=None,
         )
+
+
+def _select_d1(source: pd.DataFrame, target: pd.DataFrame) -> dict[str, object]:
+    configured_source, configured_target = configure_protocol_frames(
+        source,
+        target,
+        dataset_id="D1",
+        scenario="with",
+        group_cols=("store_id", "item_id"),
+        observed_start=None,
+    )
+    return SourceSelector().select_top_k_sources(
+        configured_target,
+        configured_source,
+        feature_cols=("sales",),
+        k=3,
+        group_cols=("store_id", "item_id"),
+        weight_mode="inverse_distance",
+    )
+
+
+def test_shared_selector_receives_only_the_configured_observed_frames(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source, target = _strict_frames("D1")
+    captured: dict[str, object] = {}
+    original = source_selector_module.select_daily_sequence_sources
+
+    def capture(**kwargs: object):
+        captured.update(kwargs)
+        return original(**kwargs)
+
+    monkeypatch.setattr(
+        source_selector_module,
+        "select_daily_sequence_sources",
+        capture,
+    )
+    selection = _select_d1(source, target)
+
+    captured_source = captured["source_df"]
+    captured_target = captured["target_df"]
+    assert isinstance(captured_source, pd.DataFrame)
+    assert isinstance(captured_target, pd.DataFrame)
+    assert captured_source["date"].min() == pd.Timestamp("2017-06-01")
+    assert captured_source["date"].max() == pd.Timestamp("2017-06-30")
+    assert captured_target["date"].min() == pd.Timestamp("2017-06-01")
+    assert captured_target["date"].max() == pd.Timestamp("2017-06-30")
+    assert not (captured_source["date"] > pd.Timestamp("2017-06-30")).any()
+    assert not (captured_target["date"] > pd.Timestamp("2017-06-30")).any()
+    assert selection["meta"]["boundary"] == "inclusive"
+    assert selection["meta"]["selection_digest"] == selection["meta"]["selection_result_digest"]
+
+
+def test_d1_future_sentinels_do_not_change_any_knn_identity() -> None:
+    source, target = _strict_frames("D1")
+    baseline = _select_d1(source, target)
+    changed_source = source.copy()
+    changed_target = target.copy()
+    future = changed_source["date"] > pd.Timestamp("2017-06-30")
+    changed_source.loc[future, "sales"] = 10**12
+    changed_target.loc[changed_target["date"] > pd.Timestamp("2017-06-30"), "sales"] = -10**12
+
+    changed = _select_d1(changed_source, changed_target)
+
+    for field in (
+        "source_frame_digest",
+        "target_frame_digest",
+        "candidate_pool_digest",
+        "selection_digest",
+        "selection_result_digest",
+    ):
+        assert baseline["meta"][field] == changed["meta"][field]
+    assert baseline["sources"] == changed["sources"]
