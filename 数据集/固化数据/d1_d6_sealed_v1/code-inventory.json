@@ -419,7 +419,7 @@
     },
     {
       "path": "src/protocols/formal_deployment_manifest.py",
-      "sha256": "1ed3a0edd0d1b8a0432c48447883c2bf872049df1305ff6c601ab07b22894528"
+      "sha256": "38e8d69a1b10a7f2a07e1fbda9c6f9e0daf4b886f168418547f11fb8e7465d8e"
     },
     {
       "path": "src/protocols/formal_input_paths.py",
@@ -623,7 +623,7 @@
     },
     {
       "path": "tools/operations/gate1x_real_input_readiness.py",
-      "sha256": "89497ec649063717a0d8265910432c7f22cb2ce899d2090a589bf870e89bb2d2"
+      "sha256": "4ecfc5266b52606523ed907664a8ace1252841346b05daff17c2e33ef9f8c84a"
     },
     {
       "path": "tools/operations/gate1x_unified_acceptance.py",
@@ -634,6 +634,6 @@
       "sha256": "a8a1d6a43c87f01fc8ad010f594b7f51bf353d9788fd8a1d4b824f7325aa053c"
     }
   ],
-  "inventory_sha256": "2a5856446d8667180a4f5d9a3a35689d3480dd1ddd2e09714936fbf9046cd456",
+  "inventory_sha256": "cd831d91e86a1708647de66434f21e06414e204be88e78d796a9c389e2f0d4d4",
   "schema_version": "d1_d6_code_inventory_v1"
 }

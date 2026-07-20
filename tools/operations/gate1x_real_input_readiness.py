@@ -56,6 +56,7 @@ from src.protocols.candidate_pool import (  # noqa: E402
     build_source_pool_fingerprint,
 )
 from src.protocols.experiment_protocol import PROTOCOL_VERSION, get_experiment_protocol  # noqa: E402
+from src.protocols.formal_deployment_manifest import readiness_proof_digest  # noqa: E402
 
 
 PARQUET_DIR = ROOT / "数据集" / "固化数据"
@@ -1003,8 +1004,6 @@ def run_readiness(
     if require_deployment and not identity_error:
         try:
             from src.protocols.formal_deployment_manifest import (
-                canonical_json_bytes,
-                sha256_bytes,
                 validate_deployment_manifest,
             )
 
@@ -1015,7 +1014,7 @@ def run_readiness(
                 dataset = str(item["dataset"])
                 entry = manifest["datasets"][dataset]
                 proof = proofs[dataset]
-                base_digest = sha256_bytes(canonical_json_bytes(item))
+                base_digest = readiness_proof_digest(item, repository_root=root)
                 if base_digest != proof["readiness_proof_digest"]:
                     item["status"] = "failed"
                     item["failure_code"] = "READINESS_PROOF_MISMATCH"

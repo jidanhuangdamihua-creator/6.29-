@@ -12,7 +12,7 @@ import hashlib
 import json
 import os
 from datetime import date
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import subprocess
 from typing import Any, Mapping, Sequence
 
@@ -117,6 +117,119 @@ def canonical_json_bytes(value: object) -> bytes:
         separators=(",", ":"),
         allow_nan=False,
     ).encode("utf-8")
+
+
+READINESS_PROOF_PAYLOAD_SCHEMA_VERSION = "d1_d6_readiness_proof_payload_v1"
+_READINESS_PATH_FIELDS = frozenset(
+    {
+        "authority_path",
+        "code_inventory_path",
+        "dataset_root",
+        "formal_proof_path",
+        "manifest_path",
+        "path",
+        "root_manifest_path",
+        "sealed_root",
+        "source_path",
+        "target_path",
+    }
+)
+_READINESS_FORMAL_PATH_ROOTS = frozenset(
+    {"formal_identity", "formal_input", "sealed_identity", "selection_authority", "source_selection"}
+)
+_READINESS_PATH_OMITTED = object()
+
+
+def _readiness_path_is_formal(path: tuple[str, ...]) -> bool:
+    return bool(path and path[0] in _READINESS_FORMAL_PATH_ROOTS)
+
+
+def _canonical_readiness_path(
+    value: object,
+    *,
+    repository_root: Path,
+    formal: bool,
+) -> str | object:
+    if not isinstance(value, str) or not value:
+        raise DeploymentManifestError("READINESS_PROOF_PATH_INVALID", repr(value))
+    normalized = value.replace("\\", "/")
+    posix = PurePosixPath(normalized)
+    windows = PureWindowsPath(value)
+    if windows.is_absolute() and not posix.is_absolute():
+        if formal:
+            raise DeploymentManifestError("READINESS_PROOF_PATH_INVALID", value)
+        return _READINESS_PATH_OMITTED
+    if posix.is_absolute():
+        try:
+            relative = Path(normalized).resolve(strict=False).relative_to(repository_root)
+        except (OSError, ValueError) as exc:
+            if formal:
+                raise DeploymentManifestError("READINESS_PROOF_PATH_INVALID", value) from exc
+            return _READINESS_PATH_OMITTED
+        return PurePosixPath(*relative.parts).as_posix()
+    if ".." in posix.parts:
+        if formal:
+            raise DeploymentManifestError("READINESS_PROOF_PATH_INVALID", value)
+        return _READINESS_PATH_OMITTED
+    return posix.as_posix()
+
+
+def canonical_readiness_proof_payload(
+    readiness: Mapping[str, object],
+    *,
+    repository_root: Path,
+) -> dict[str, object]:
+    """Build the machine-independent, identity-preserving readiness payload."""
+
+    if not isinstance(readiness, Mapping):
+        raise DeploymentManifestError("READINESS_PROOF_PAYLOAD_INVALID", "mapping required")
+    root = Path(repository_root).resolve(strict=True)
+
+    def normalize(value: object, path: tuple[str, ...]) -> object:
+        if isinstance(value, Mapping):
+            result: dict[str, object] = {}
+            for key, item in value.items():
+                name = str(key)
+                child_path = path + (name,)
+                if name in _READINESS_PATH_FIELDS:
+                    item = _canonical_readiness_path(
+                        item,
+                        repository_root=root,
+                        formal=_readiness_path_is_formal(path),
+                    )
+                    if item is _READINESS_PATH_OMITTED:
+                        continue
+                else:
+                    item = normalize(item, child_path)
+                result[name] = item
+            return result
+        if isinstance(value, list):
+            return [normalize(item, path + (str(index),)) for index, item in enumerate(value)]
+        if isinstance(value, tuple):
+            return [normalize(item, path + (str(index),)) for index, item in enumerate(value)]
+        return value
+
+    return {
+        "schema_version": READINESS_PROOF_PAYLOAD_SCHEMA_VERSION,
+        "readiness": normalize(readiness, ()),
+    }
+
+
+def readiness_proof_digest(
+    readiness: Mapping[str, object],
+    *,
+    repository_root: Path,
+) -> str:
+    """Digest exactly the canonical readiness payload used by proof and preflight."""
+
+    return sha256_bytes(
+        canonical_json_bytes(
+            canonical_readiness_proof_payload(
+                readiness,
+                repository_root=repository_root,
+            )
+        )
+    )
 
 
 def pretty_json_bytes(value: object) -> bytes:
@@ -833,7 +946,7 @@ def build_formal_proof(
     paths = resolve_all_formal_dataset_paths(repository_root=root)[dataset_id - 1]
     spec = dataset_contract(dataset_id)
     identities = snapshot["datasets"][f"D{dataset_id}"]  # type: ignore[index]
-    readiness_digest = sha256_bytes(canonical_json_bytes(readiness))
+    readiness_digest = readiness_proof_digest(readiness, repository_root=root)
     manifest_path = paths.dataset_manifest_path
     consumer_payload = {
         "dataset_id": f"D{dataset_id}",
@@ -1224,8 +1337,9 @@ __all__ = [
     "D1_D2_KNN", "D4_KNN", "D4_D6_KNN", "EXPECTED_BRANCH", "EXPECTED_HEAD", "FROZEN_PARQUETS",
     "DeploymentManifestError", "atomic_write_bytes", "atomic_write_json",
     "build_code_inventory", "build_formal_proof", "build_root_manifest",
-    "canonical_json_bytes", "formal_identity_payload", "frozen_artifact_snapshot",
+    "canonical_json_bytes", "canonical_readiness_proof_payload", "formal_identity_payload",
+    "frozen_artifact_snapshot",
     "load_deployment_manifest", "parquet_identity", "pretty_json_bytes",
-    "repository_identity", "require_repository_identity", "sha256_bytes",
+    "readiness_proof_digest", "repository_identity", "require_repository_identity", "sha256_bytes",
     "sha256_file", "validate_deployment_manifest", "verify_frozen_snapshot",
 ]

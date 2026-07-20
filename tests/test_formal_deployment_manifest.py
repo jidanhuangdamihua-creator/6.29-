@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 from pathlib import Path
+import shutil
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -248,3 +250,134 @@ def test_generated_authority_json_contains_no_absolute_paths_or_timestamps() -> 
         assert "/private/" not in text, path
         assert '"timestamp"' not in text, path
         assert text.endswith("\n") and not text.endswith("\n\n"), path
+
+
+def _readiness_proof_fixture(root: Path) -> dict[str, object]:
+    formal_source = root / "数据集" / "固化数据" / "d1_d6_sealed_v1" / "dataset2" / "source.parquet"
+    formal_target = root / "数据集" / "固化数据" / "d1_d6_sealed_v1" / "dataset2" / "target.parquet"
+    knn_path = root / "configs" / "solidified" / "knn" / "Dataset5" / "knn_with_info_sharing.json"
+    return {
+        "dataset": "D2",
+        "formal_identity": {"combined_formal_identity_digest": "formal-identity"},
+        "formal_input": {
+            "source_path": str(formal_source),
+            "target_path": str(formal_target),
+            "source_sha256": "a" * 64,
+            "target_sha256": "b" * 64,
+        },
+        "raw_inputs": [
+            {"path": str(root / "数据集" / "原始数据" / "input.csv"), "exists": True},
+            {"path": str(root.parent / "temporary-input.csv"), "exists": False},
+        ],
+        "parent_inputs": {
+            "source": {"path": str(root.parent / "parent-root" / formal_source.relative_to(root))},
+            "target": {"path": str(root.parent / "parent-root" / formal_target.relative_to(root))},
+        },
+        "old_sealed_inputs": {
+            "source": {"path": str(root.parent / "old-root" / formal_source.relative_to(root))},
+            "target": {"path": str(root.parent / "old-root" / formal_target.relative_to(root))},
+        },
+        "sealed_identity": {
+            "manifest_path": str(root / "数据集" / "固化数据" / "d1_d6_sealed_v1" / "dataset2" / "manifest.json"),
+            "artifacts": {
+                "source": {"path": str(formal_source), "sha256": "c" * 64},
+                "target": {"path": str(formal_target), "sha256": "d" * 64},
+            },
+        },
+        "selection_authority": {"scenarios": {"with": {"path": str(knn_path), "sha256": "e" * 64}}},
+        "source_selection": {
+            "scenarios": {"with": {"path": str(knn_path), "sha256": "f" * 64}},
+            "stream_proof": {"authority_path": str(formal_source)},
+        },
+        "schema_fields": {"worker": ["date", "sales"]},
+        "source_entities": [["source-1"]],
+        "target_entities": [["target-1"]],
+    }
+
+
+def test_readiness_proof_digest_is_invariant_to_repository_root_and_normalizes_nested_paths(
+    tmp_path: Path,
+) -> None:
+    root_a = tmp_path / "machine-a" / "project"
+    root_b = tmp_path / "machine-b" / "project"
+    root_a.mkdir(parents=True)
+    (root_a / "README.md").write_text("same repository content\n", encoding="utf-8")
+    shutil.copytree(root_a, root_b)
+
+    payload_a = _readiness_proof_fixture(root_a)
+    payload_b = _readiness_proof_fixture(root_b)
+    assert deployment.readiness_proof_digest(payload_a, repository_root=root_a) == deployment.readiness_proof_digest(
+        payload_b, repository_root=root_b
+    )
+
+    canonical = deployment.canonical_readiness_proof_payload(payload_a, repository_root=root_a)
+    readiness = canonical["readiness"]
+    assert readiness["formal_input"]["source_path"] == "数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet"
+    assert readiness["sealed_identity"]["manifest_path"] == "数据集/固化数据/d1_d6_sealed_v1/dataset2/manifest.json"
+    assert readiness["sealed_identity"]["artifacts"]["source"]["path"] == "数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet"
+    assert readiness["raw_inputs"][0]["path"] == "数据集/原始数据/input.csv"
+    assert readiness["source_selection"]["stream_proof"]["authority_path"] == "数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet"
+    assert readiness["selection_authority"]["scenarios"]["with"]["path"] == "configs/solidified/knn/Dataset5/knn_with_info_sharing.json"
+    assert readiness["parent_inputs"] == {"source": {}, "target": {}}
+    assert readiness["old_sealed_inputs"] == {"source": {}, "target": {}}
+    assert readiness["raw_inputs"][1] == {"exists": False}
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    (
+        ("formal_input", "source_sha256", "0" * 64),
+        ("sealed_identity", "manifest_path", "数据集/固化数据/d1_d6_sealed_v1/dataset2/other-manifest.json"),
+        ("selection_authority", "scenarios", {"with": {"path": "configs/changed.json", "sha256": "0" * 64}}),
+        ("formal_identity", "combined_formal_identity_digest", "changed-formal-identity"),
+        ("schema_fields", "worker", ["date", "changed"]),
+        ("target_entities", "0", ["different-target"]),
+    ),
+)
+def test_readiness_proof_digest_changes_for_sensitive_identity(
+    tmp_path: Path, section: str, field: str, value: object
+) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    baseline = _readiness_proof_fixture(root)
+    changed = deepcopy(baseline)
+    if section == "target_entities":
+        changed[section] = value
+    else:
+        changed[section][field] = value  # type: ignore[index]
+    assert deployment.readiness_proof_digest(baseline, repository_root=root) != deployment.readiness_proof_digest(
+        changed, repository_root=root
+    )
+
+
+@pytest.mark.parametrize(
+    "field_path",
+    (
+        ("formal_input", "source_path"),
+        ("sealed_identity", "manifest_path"),
+        ("source_selection", "stream_proof", "authority_path"),
+    ),
+)
+def test_formal_readiness_paths_outside_repository_fail_closed(
+    tmp_path: Path, field_path: tuple[str, ...]
+) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    payload = _readiness_proof_fixture(root)
+    cursor: dict[str, object] = payload
+    for key in field_path[:-1]:
+        cursor = cursor[key]  # type: ignore[assignment,index]
+    cursor[field_path[-1]] = str(tmp_path / "outside" / "authority.json")
+    with pytest.raises(deployment.DeploymentManifestError) as captured:
+        deployment.canonical_readiness_proof_payload(payload, repository_root=root)
+    assert captured.value.code == "READINESS_PROOF_PATH_INVALID"
+
+
+def test_formal_readiness_path_structure_failure_is_fail_closed(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    payload = _readiness_proof_fixture(root)
+    payload["formal_input"]["source_path"] = {"not": "a path"}  # type: ignore[index]
+    with pytest.raises(deployment.DeploymentManifestError) as captured:
+        deployment.canonical_readiness_proof_payload(payload, repository_root=root)
+    assert captured.value.code == "READINESS_PROOF_PATH_INVALID"
