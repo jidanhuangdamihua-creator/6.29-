@@ -8,11 +8,22 @@ from typing import Any, Dict, Tuple
 
 import pandas as pd
 
-from src.constants import D4_D6_RUNTIME_KNN_PROTOCOL_VERSION, SOLIDIFIED_TARGET_WINDOWS
+from src.constants import (
+    D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+    SOLIDIFIED_TARGET_WINDOWS,
+    SOURCE_HISTORY_DAYS,
+)
+from src.protocols.gate1_transformation import dataset_contract
+from src.protocols.experiment_protocol import get_experiment_protocol
+from src.protocols.source_history import (
+    build_exact_source_history_candidate_frame,
+    source_history_frame_digest,
+)
 from src.utils.d5_calendar_reconstruction import (
     D5AuthorityBundle,
     D5ReconstructionReport,
     reconstruct_d5_target_calendar,
+    reconstruct_d5_source_history_calendar,
 )
 
 
@@ -26,6 +37,14 @@ RUNTIME_KNN_WINDOW_ATTRS = (
     "target_observed_end",
     "source_history_start",
     "source_history_end",
+    "source_history_days",
+    "source_history_expected_date_count",
+    "source_history_completeness_policy",
+    "source_history_calendar",
+    "source_history_inclusive_end",
+    "source_history_frame_digest",
+    "source_history_calendarization_rule",
+    "source_history_synthetic_row_count",
     "target_test_excluded",
     "source_future_excluded",
     "source_alignment_mode",
@@ -68,15 +87,18 @@ def derive_d4_d6_runtime_knn_windows(
         raise ValueError(f"runtime KNN windows are only defined for D4-D6: dataset_id={dataset_id}")
     if "train_start" not in windows:
         raise ValueError("D4-D6 runtime KNN windows require train_start")
-    if int(source_history_days) <= 0:
-        raise ValueError("source_history_days must be positive")
+    if int(source_history_days) != SOURCE_HISTORY_DAYS:
+        raise ValueError(
+            "D4-D6 source_history_days must equal the frozen value "
+            f"{SOURCE_HISTORY_DAYS}"
+        )
 
     target_observed_start = pd.to_datetime(windows["train_start"], errors="coerce")
     if pd.isna(target_observed_start):
         raise ValueError(f"Invalid D4-D6 train_start: {windows['train_start']!r}")
     target_observed_start = pd.Timestamp(target_observed_start).normalize()
     target_observed_end = target_observed_start + pd.Timedelta(days=29)
-    source_history_end = target_observed_end
+    source_history_end = pd.Timestamp(dataset_contract(f"D{dataset_id}").origin).normalize()
     source_history_start = source_history_end - pd.Timedelta(days=int(source_history_days) - 1)
 
     return {
@@ -379,7 +401,22 @@ def load_parquet_source_target_with_diagnostics(
             f"Missing solidified parquet paths: source={source_path} target={target_path}"
         )
 
-    source_df = pd.read_parquet(source_path)
+    if source_history_days is None:
+        raise ValueError("D4-D6 runtime KNN requires source_history_days")
+    if int(source_history_days) != SOURCE_HISTORY_DAYS:
+        raise ValueError(
+            "D4-D6 runtime KNN rejects non-frozen source_history_days: "
+            f"{source_history_days!r}"
+        )
+    runtime_windows = dict(windows)
+    runtime_windows.update(
+        derive_d4_d6_runtime_knn_windows(runtime_windows, int(source_history_days))
+    )
+    source_filters = [
+        ("date", ">=", runtime_windows["source_history_start"]),
+        ("date", "<=", runtime_windows["source_history_end"]),
+    ]
+    source_df = pd.read_parquet(source_path, filters=source_filters)
     target_df = pd.read_parquet(target_path)
     source_df = _coerce_known_model_candidate_columns(source_df, dataset_id=dataset_id, role="source")
     target_df = _coerce_known_model_candidate_columns(target_df, dataset_id=dataset_id, role="target")
@@ -390,12 +427,6 @@ def load_parquet_source_target_with_diagnostics(
         if frame["date"].isna().any():
             raise ValueError(f"D4-D6 {role} dataframe contains invalid date values")
 
-    if source_history_days is None:
-        raise ValueError("D4-D6 runtime KNN requires source_history_days")
-    runtime_windows = dict(windows)
-    runtime_windows.update(
-        derive_d4_d6_runtime_knn_windows(runtime_windows, int(source_history_days))
-    )
     source_df = source_df[
         source_df["date"].between(
             runtime_windows["source_history_start"],
@@ -404,7 +435,92 @@ def load_parquet_source_target_with_diagnostics(
         )
     ].copy()
 
+    key_fields = tuple(get_experiment_protocol(dataset_id).source_pool_rule.key_fields)
+    source_history_reconstruction: D5ReconstructionReport | None = None
+    if int(dataset_id) == 5:
+        if d5_authorities is None:
+            raise ValueError("D5 loader requires a preloaded D5AuthorityBundle for source history")
+        source_history_dates = pd.date_range(
+            runtime_windows["source_history_start"],
+            runtime_windows["source_history_end"],
+            freq="D",
+        )
+        source_df, source_history_reconstruction = reconstruct_d5_source_history_calendar(
+            source_df,
+            expected_dates=source_history_dates,
+            authorities=d5_authorities,
+        )
+
+    eligibility = build_exact_source_history_candidate_frame(
+        source_df,
+        key_fields=key_fields,
+        origin=runtime_windows["source_history_end"],
+        source_history_days=int(source_history_days),
+    )
+    source_df = eligibility.candidate_frame
+
+    runtime_windows.update(
+        {
+            "source_history_days": int(source_history_days),
+            "source_history_expected_date_count": eligibility.expected_count,
+            "source_history_completeness_policy": source_df.attrs[
+                "source_history_completeness_policy"
+            ],
+            "source_history_calendar": source_df.attrs["source_history_calendar"],
+            "source_history_inclusive_end": source_df.attrs["source_history_inclusive_end"],
+            "source_history_calendarization_rule": (
+                "D5_APPROVED_SOURCE_HISTORY_CALENDARIZATION"
+                if source_history_reconstruction is not None
+                else "not_applicable"
+            ),
+            "source_history_synthetic_row_count": int(
+                source_history_reconstruction.synthetic_row_count
+                if source_history_reconstruction is not None
+                else 0
+            ),
+            "source_history_frame_digest": source_history_frame_digest(
+                source_df,
+                key_fields=key_fields,
+            ),
+        }
+    )
+
     source_df = attach_window_attrs(source_df, runtime_windows, role="source")
+    source_df.attrs.update(
+        {
+            "source_history_eligibility": {
+                "eligible_keys": [list(key) for key in eligibility.eligible_keys],
+                "incomplete_keys": {
+                    "/".join(key): count
+                    for key, count in eligibility.incomplete_keys.items()
+                },
+                "duplicate_keys": [list(key) for key in eligibility.duplicate_keys],
+                "outside_window_row_count": eligibility.outside_window_row_count,
+            },
+            "source_history_key_fields": list(key_fields),
+            "source_history_calendarization": {
+                "rule": (
+                    "D5_APPROVED_SOURCE_HISTORY_CALENDARIZATION"
+                    if source_history_reconstruction is not None
+                    else "not_applicable"
+                ),
+                "synthetic_row_count": int(
+                    source_history_reconstruction.synthetic_row_count
+                    if source_history_reconstruction is not None
+                    else 0
+                ),
+                "original_row_count": int(
+                    source_history_reconstruction.original_row_count
+                    if source_history_reconstruction is not None
+                    else len(source_df)
+                ),
+            },
+            "source_history_frame_digest": source_history_frame_digest(
+                source_df,
+                key_fields=key_fields,
+            ),
+        }
+    )
     reconstruction: D5ReconstructionReport | None = None
     if int(dataset_id) == 5:
         if expected_dates is None:

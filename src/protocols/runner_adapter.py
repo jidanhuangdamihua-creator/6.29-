@@ -6,6 +6,8 @@ from typing import Sequence, Tuple
 
 import pandas as pd
 
+from src.constants import SOURCE_HISTORY_DAYS
+
 from .candidate_pool import PreparedDailySequencePool
 from .d2_source_calendarization import (
     D2_SOURCE_CALENDARIZATION_RULE_VERSION,
@@ -13,6 +15,7 @@ from .d2_source_calendarization import (
     verify_d2_source_frame,
 )
 from .knn_frames import build_observed_knn_frame, canonical_knn_frame_digest
+from .selection_metadata import build_selection_metadata_contract
 from .experiment_protocol import (
     EXTENDED_TRACK,
     STRICT_PAPER_TRACK,
@@ -442,11 +445,6 @@ def configure_protocol_frames(
         "scaling": "global_minmax_legal_observed_values",
         "scaler_fit_scope": "target_and_candidate_legal_observed_values",
         "source_alignment_mode": "exact_knn_observed_dates",
-        "knn_feature_columns": list(knn_feature_columns),
-        "historical_feature_columns": list(knn_feature_columns),
-        "forecast_excluded_columns": ["promo"] if protocol.dataset_id == "D2" else [],
-        "feature_scope": "historical_observed",
-        "max_allowed_date_relation": "date<=origin",
         "information_sharing_scenario": normalized_scenario,
         "source_frame_min_date": source_knn_frame["date"].min().strftime("%Y-%m-%d"),
         "source_frame_max_date": source_knn_frame["date"].max().strftime("%Y-%m-%d"),
@@ -465,6 +463,37 @@ def configure_protocol_frames(
             ignore_columns=digest_ignored_columns,
         ),
     }
+    metadata.update(build_selection_metadata_contract(protocol, window=window))
+    if protocol.dataset_id in {"D4", "D5", "D6"} and "source_history_days" in source_df.attrs:
+        source_history_fields = (
+            "source_history_days",
+            "source_history_start",
+            "source_history_end",
+            "source_history_expected_date_count",
+            "source_history_completeness_policy",
+            "source_history_calendar",
+            "source_history_inclusive_end",
+            "source_history_calendarization_rule",
+            "source_history_synthetic_row_count",
+            "source_history_frame_digest",
+        )
+        missing_history = [
+            field for field in source_history_fields if field not in source_df.attrs
+        ]
+        if missing_history:
+            raise ProtocolViolation(
+                "D4-D6 source history metadata is incomplete: "
+                f"{missing_history!r}"
+            )
+        if int(source_df.attrs["source_history_days"]) != SOURCE_HISTORY_DAYS:
+            raise ProtocolViolation(
+                "D4-D6 source history must be exactly "
+                f"{SOURCE_HISTORY_DAYS} days"
+            )
+        metadata.update({field: source_df.attrs[field] for field in source_history_fields})
+        metadata["source_history_eligible_keys"] = source_df.attrs.get(
+            "source_history_eligible_keys", []
+        )
     metadata.update(d2_calendarization_metadata)
     source_knn_frame.attrs.update(metadata)
     target_knn_frame.attrs.update(metadata)

@@ -1,9 +1,9 @@
 {
-  "consumer_fingerprint": "b30d7e67940154e24301e2037207edd2e8ab5a994038847e687b3fb70c97d79f",
+  "consumer_fingerprint": "368df48cdd8654c08a8b3ddcc247b1ff65b27689e6532d5edd077fadf6df9c15",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "3b597f41e832c88cd74ae23462c319a1da917a4f6685dd204a87c2f04dc904d2",
+    "code_inventory_digest": "2a5856446d8667180a4f5d9a3a35689d3480dd1ddd2e09714936fbf9046cd456",
     "dataset_id": "D6",
-    "readiness_proof_digest": "4fbf8e66174ea261e3951cc26782fab64813fb1864ce1abac4a20599fbd748ae",
+    "readiness_proof_digest": "d7d9a39bd873e6132715e7ab34cbc540f21b479bd371dc75de00ef27b03aa4bf",
     "source_schema_digest": "d9ced790cfe72d43b3e76b033fbe8f2d92d124a3aa7f631391741ee855fb5932",
     "source_sha256": "12297d9b00a8e40fd9f13966e41aa558fe15e00079f8d0b23477bf4e7c288458",
     "target_schema_digest": "673949680e08ba2b9625d22645d135dadb5e20f96817c9c6382d4e8e39277250",
@@ -16,9 +16,157 @@
   },
   "dataset_root": "dataset6",
   "dataset_specific": {
-    "calendar_event_snap_authority": "frozen_consumer_validation",
-    "resolver_used": true,
-    "sell_price_authority": "frozen_consumer_validation"
+    "authority_digest": "6a820155a8c8a81519c0047aa0a73e5fad3ca449b02cb299d54f328bce212f65",
+    "dataset_id": "D6",
+    "protocol_version": "runtime_knn_windowed_stats_v1",
+    "scenario_files": {
+      "with": {
+        "path": "configs/solidified/knn/Dataset6/knn_with_info_sharing.json",
+        "readiness_digest": "26ba2a24c63722078a42026208c4fe203df02eb39d02b1ac99859c95d760dca7",
+        "sha256": "644d0274e1be12fb369eb4339d20333e2506023ba6974793a9184b1acad8bc94",
+        "source_history_calendar": "Gregorian daily",
+        "source_history_completeness_policy": "exact_expected_date_set",
+        "source_history_days": 180,
+        "source_history_end": "2015-11-24",
+        "source_history_expected_date_count": 180,
+        "source_history_inclusive_end": true,
+        "source_history_start": "2015-05-29",
+        "targets": {
+          "CA_1_FOODS_3_080": {
+            "candidate_pool_digest": "dc18c5ec259f80946249e47d0b4e13bdec82057ec86864e0c045966581c90209",
+            "consumer_frame_digest": "463b159704201b32589337c115c9b0386d78b61edf1b67ffa011f45fb7fb58b9",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "0ab8c820a7a597fe33e6677c175b94e1e706820dca0ae5a74ea93ad6282c53f0",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_080"
+            ]
+          },
+          "CA_1_FOODS_3_377": {
+            "candidate_pool_digest": "ef766adb850eb1d8fbceb1262c0b0cd300227ba87dc3c5e8752384ef8258dabe",
+            "consumer_frame_digest": "546ed9e80959dd62c52c9efa2dcfd1eab6824ac5a40384dacb152a59e20c224e",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "b9f0353bc38e7a241eefa1378ff218fbc53fdea398a40cbc7f13193eef5959b6",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_377"
+            ]
+          },
+          "CA_1_FOODS_3_555": {
+            "candidate_pool_digest": "826f45179a138569c0e3598b2438934fe20149c4ee0b78a2cf595115a2647b3c",
+            "consumer_frame_digest": "242ee751f5f3e6e6c2c055d290062fa85323cf6601eb0fdc7587e701f083653f",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "24a1b65d80e36fe0845f78095f348bedd5c387663535d0c7bf7d7acdd894630b",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_555"
+            ]
+          },
+          "CA_1_FOODS_3_586": {
+            "candidate_pool_digest": "f78cf715bf97992643d10ba727b2a00b23c939c20a8d5d9f730ed103141e4bb6",
+            "consumer_frame_digest": "10a392862ef5d0a94ac32d8f1e520ddc2494c09e21304146c68853a5e41e7be5",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "faa2941cd4db63445bd7d13fb46bcdd07573fbe27e03b9cb71ed97a4412deab6",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_586"
+            ]
+          },
+          "CA_1_FOODS_3_668": {
+            "candidate_pool_digest": "8920e916d87a49c6c74c987e4b77493ff18931207138ff0cb4a7c43c3dbbb01d",
+            "consumer_frame_digest": "a852a87ee6363033b1482020eff20a80c6ea9dcd8c7760157006e5362db0b706",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "ac7bcbf43336146953378bacdbb08f61923c01947dac84f412788d4084aa987f",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_668"
+            ]
+          }
+        }
+      },
+      "without": {
+        "path": "configs/solidified/knn/Dataset6/knn_without_info_sharing.json",
+        "readiness_digest": "00669ee56efe9e66f6b70b835ac30e0d4ce66b3cdac18675dba82c44663ccd3f",
+        "sha256": "acffae486d4742f107236ce58db7156a98fba6978fc469b9ae7b3e53d0bb901a",
+        "source_history_calendar": "Gregorian daily",
+        "source_history_completeness_policy": "exact_expected_date_set",
+        "source_history_days": 180,
+        "source_history_end": "2015-11-24",
+        "source_history_expected_date_count": 180,
+        "source_history_inclusive_end": true,
+        "source_history_start": "2015-05-29",
+        "targets": {
+          "CA_1_FOODS_3_080": {
+            "candidate_pool_digest": "6b38fd8e1551b4a402adb7d6b21af8a6e8a067563d5c32950d8754deb47203af",
+            "consumer_frame_digest": "463b159704201b32589337c115c9b0386d78b61edf1b67ffa011f45fb7fb58b9",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "0ab8c820a7a597fe33e6677c175b94e1e706820dca0ae5a74ea93ad6282c53f0",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_080"
+            ]
+          },
+          "CA_1_FOODS_3_377": {
+            "candidate_pool_digest": "967a95be7d61185b42b6c7899236d7e077af406a530e288b9f2b3e8ef673a059",
+            "consumer_frame_digest": "546ed9e80959dd62c52c9efa2dcfd1eab6824ac5a40384dacb152a59e20c224e",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "b9f0353bc38e7a241eefa1378ff218fbc53fdea398a40cbc7f13193eef5959b6",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_377"
+            ]
+          },
+          "CA_1_FOODS_3_555": {
+            "candidate_pool_digest": "e969caabd8a180019130c19827aaa41add92170858f746193aeb2bf9601a1251",
+            "consumer_frame_digest": "242ee751f5f3e6e6c2c055d290062fa85323cf6601eb0fdc7587e701f083653f",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "24a1b65d80e36fe0845f78095f348bedd5c387663535d0c7bf7d7acdd894630b",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_555"
+            ]
+          },
+          "CA_1_FOODS_3_586": {
+            "candidate_pool_digest": "721a541b5fa98ee5c5761a951a3941e53493d4bdf1667617df87ffdc3edb1300",
+            "consumer_frame_digest": "10a392862ef5d0a94ac32d8f1e520ddc2494c09e21304146c68853a5e41e7be5",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "faa2941cd4db63445bd7d13fb46bcdd07573fbe27e03b9cb71ed97a4412deab6",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_586"
+            ]
+          },
+          "CA_1_FOODS_3_668": {
+            "candidate_pool_digest": "f39945a6fe27381e0a6ddf779128afacf65adeb8f03ccb2a2270daebb3bce5af",
+            "consumer_frame_digest": "a852a87ee6363033b1482020eff20a80c6ea9dcd8c7760157006e5362db0b706",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "ac7bcbf43336146953378bacdbb08f61923c01947dac84f412788d4084aa987f",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_668"
+            ]
+          }
+        }
+      }
+    },
+    "selection_authority": "runtime",
+    "source_history_calendar": "Gregorian daily",
+    "source_history_completeness_policy": "exact_expected_date_set",
+    "source_history_days": 180,
+    "source_history_end": "2015-11-24",
+    "source_history_expected_date_count": 180,
+    "source_history_inclusive_end": true,
+    "source_history_start": "2015-05-29"
   },
   "date_key": "date",
   "date_range": {
@@ -51,8 +199,8 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "eb82feb4c56d6d4ee6d5b3236d0d75fb80a1efbb27a497e40a7541a74f116585",
-  "readiness_proof_digest": "4fbf8e66174ea261e3951cc26782fab64813fb1864ce1abac4a20599fbd748ae",
+  "proof_identity_sha256": "e9b24bff4e5dc2067e0517f5f2600bd3a6bf9f5abcf3036a75ec2ecbe93064ba",
+  "readiness_proof_digest": "d7d9a39bd873e6132715e7ab34cbc540f21b479bd371dc75de00ef27b03aa4bf",
   "readiness_result": {
     "failure_code": null,
     "status": "passed"

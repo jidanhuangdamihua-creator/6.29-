@@ -1,7 +1,9 @@
 # source domain 历史窗口天数，论文固定值
 import json
 
-SOURCE_HISTORY_DAYS = 300
+SOURCE_HISTORY_DAYS = 180
+SOURCE_HISTORY_CALENDAR = "Gregorian daily"
+SOURCE_HISTORY_COMPLETENESS_POLICY = "exact_expected_date_set"
 D4_D6_RUNTIME_KNN_PROTOCOL_VERSION = "runtime_knn_windowed_stats_v1"
 MIXED_METRIC_SPACE = "mixed_metric_space"
 MIXED_METRIC_PROTOCOL_NOTE = (

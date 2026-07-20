@@ -44,13 +44,18 @@ from src.protocols.formal_input_paths import (  # noqa: E402
     formal_input_paths,
     resolve_formal_dataset_paths,
 )
-from src.constants import SOURCE_HISTORY_DAYS  # noqa: E402
+from src.constants import (  # noqa: E402
+    D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+    SOURCE_HISTORY_CALENDAR,
+    SOURCE_HISTORY_COMPLETENESS_POLICY,
+    SOURCE_HISTORY_DAYS,
+)
 from src.protocols.candidate_pool import (  # noqa: E402
     build_candidate_pool_digest,
     build_consumer_fingerprint,
     build_source_pool_fingerprint,
 )
-from src.protocols.experiment_protocol import get_experiment_protocol  # noqa: E402
+from src.protocols.experiment_protocol import PROTOCOL_VERSION, get_experiment_protocol  # noqa: E402
 
 
 PARQUET_DIR = ROOT / "数据集" / "固化数据"
@@ -154,6 +159,8 @@ def _verify_d1_d2_knn_readiness(root: Path, dataset_id: int) -> dict[str, object
                 != (["promo"] if dataset_id == 2 else [])
                 or metadata.get("feature_scope") != "historical_observed"
                 or metadata.get("max_allowed_date_relation") != "date<=origin"
+                or metadata.get("knn_observed_start")
+                != protocol.observation_window().knn_observed_start.isoformat()
                 or metadata.get("knn_observed_end") != protocol.observation_window().origin.isoformat()
             ):
                 raise Gate1Failure(
@@ -170,6 +177,221 @@ def _verify_d1_d2_knn_readiness(root: Path, dataset_id: int) -> dict[str, object
         "historical_feature_columns": expected_features,
         "forecast_excluded_columns": ["promo"] if dataset_id == 2 else [],
         "scenarios": scenarios,
+    }
+
+
+def _date_identity(value: object) -> str:
+    converted = pd.Timestamp(value)
+    if pd.isna(converted):
+        raise Gate1Failure("SOURCE_HISTORY_IDENTITY", f"invalid date {value!r}")
+    return converted.normalize().date().isoformat()
+
+
+def _sha256_identity(value: object, *, field: str) -> str:
+    if not isinstance(value, str) or len(value) != 64:
+        raise Gate1Failure("KNN_DIGEST_MISSING", field)
+    try:
+        int(value, 16)
+    except ValueError as exc:
+        raise Gate1Failure("KNN_DIGEST_INVALID", field) from exc
+    return value
+
+
+def _verify_runtime_knn_metadata(
+    *,
+    dataset_id: int,
+    scenario: str,
+    target_id: str,
+    metadata: Mapping[str, object],
+    payload: Mapping[str, object],
+    expected_candidate_keys: set[tuple[str, ...]] | None = None,
+) -> dict[str, object]:
+    """Verify one persisted D4-D6 selection against the 180-day contract."""
+    spec = dataset_contract(dataset_id)
+    protocol = get_experiment_protocol(dataset_id)
+    expected_features = list(protocol.knn_feature_columns)
+    expected_authority = "shared_protocol" if dataset_id == 4 else "runtime"
+    expected_protocol = PROTOCOL_VERSION if dataset_id == 4 else D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
+    expected_start = spec.source_history_start.isoformat()
+    expected_end = spec.source_history_end.isoformat()
+    if (
+        metadata.get("selection_authority") != expected_authority
+        or metadata.get("protocol_version") != expected_protocol
+        or metadata.get("knn_feature_columns") != expected_features
+        or metadata.get("historical_feature_columns") != expected_features
+        or metadata.get("forecast_excluded_columns") != []
+        or metadata.get("feature_scope") != "historical_observed"
+        or metadata.get("max_allowed_date_relation") != "date<=origin"
+        or _date_identity(metadata.get("knn_observed_start")) != _date_identity(spec.knn_start)
+        or _date_identity(metadata.get("knn_observed_end")) != _date_identity(spec.origin)
+    ):
+        raise Gate1Failure("KNN_METADATA_MISMATCH", f"D{dataset_id}/{scenario}/{target_id}")
+
+    expected_history = {
+        "source_history_days": SOURCE_HISTORY_DAYS,
+        "source_history_expected_date_count": SOURCE_HISTORY_DAYS,
+        "source_history_start": expected_start,
+        "source_history_end": expected_end,
+        "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
+        "source_history_calendar": SOURCE_HISTORY_CALENDAR,
+        "source_history_inclusive_end": True,
+        "source_history_calendarization_rule": (
+            "D5_APPROVED_SOURCE_HISTORY_CALENDARIZATION"
+            if dataset_id == 5
+            else "not_applicable"
+        ),
+    }
+    for field, expected in expected_history.items():
+        actual = metadata.get(field)
+        if field in {"source_history_start", "source_history_end"}:
+            actual = _date_identity(actual)
+        if actual != expected:
+            raise Gate1Failure(
+                "SOURCE_HISTORY_IDENTITY_MISMATCH",
+                f"D{dataset_id}/{scenario}/{target_id}/{field}: {actual!r} != {expected!r}",
+            )
+    _sha256_identity(metadata.get("source_history_frame_digest"), field="source_history_frame_digest")
+    _sha256_identity(metadata.get("consumer_frame_digest"), field="consumer_frame_digest")
+
+    digest_input = metadata.get("candidate_pool_digest_input")
+    if not isinstance(digest_input, Mapping):
+        raise Gate1Failure("KNN_CANDIDATE_DIGEST_INPUT_MISSING", f"D{dataset_id}/{scenario}/{target_id}")
+    digest_history = {
+        "source_history_days": digest_input.get("source_history_days"),
+        "source_history_start": digest_input.get("source_history_start"),
+        "source_history_end": digest_input.get("source_history_end"),
+        "source_history_completeness_policy": digest_input.get("source_history_completeness_policy"),
+        "source_history_frame_digest": digest_input.get("source_history_frame_digest"),
+    }
+    if digest_history != {
+        "source_history_days": SOURCE_HISTORY_DAYS,
+        "source_history_start": expected_start,
+        "source_history_end": expected_end,
+        "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
+        "source_history_frame_digest": metadata.get("source_history_frame_digest"),
+    }:
+        raise Gate1Failure("KNN_CANDIDATE_HISTORY_IDENTITY_MISMATCH", f"D{dataset_id}/{scenario}/{target_id}")
+
+    raw_target_key = digest_input.get("target_key")
+    raw_candidate_keys = digest_input.get("candidate_keys")
+    if not isinstance(raw_target_key, (list, tuple)) or not isinstance(raw_candidate_keys, list):
+        raise Gate1Failure("KNN_CANDIDATE_DIGEST_INPUT_INVALID", f"D{dataset_id}/{scenario}/{target_id}")
+    target_key = tuple(str(part) for part in raw_target_key)
+    candidate_keys = {
+        tuple(str(part) for part in key)
+        for key in raw_candidate_keys
+        if isinstance(key, (list, tuple))
+    }
+    if len(candidate_keys) != len(raw_candidate_keys) or target_key in candidate_keys:
+        raise Gate1Failure("KNN_CANDIDATE_POOL_INVALID", f"D{dataset_id}/{scenario}/{target_id}")
+    if expected_candidate_keys is not None and candidate_keys != expected_candidate_keys:
+        raise Gate1Failure("KNN_PATH_PARITY_MISMATCH", f"D{dataset_id}/{scenario}/{target_id}")
+    try:
+        candidate_digest = build_candidate_pool_digest(**dict(digest_input))
+    except Exception as exc:
+        raise Gate1Failure("KNN_CANDIDATE_DIGEST_INVALID", f"{target_id}: {exc}") from exc
+    if candidate_digest != metadata.get("candidate_pool_digest"):
+        raise Gate1Failure("KNN_CANDIDATE_DIGEST_INVALID", f"D{dataset_id}/{scenario}/{target_id}")
+
+    selected = metadata.get("selected_sources_runtime")
+    if not isinstance(selected, list) or not selected:
+        raise Gate1Failure("KNN_SELECTED_SOURCES_MISSING", f"D{dataset_id}/{scenario}/{target_id}")
+    selected_keys = []
+    for row in selected:
+        if not isinstance(row, Mapping) or not isinstance(row.get("source_key"), (list, tuple)):
+            raise Gate1Failure("KNN_SELECTED_SOURCES_INVALID", f"D{dataset_id}/{scenario}/{target_id}")
+        selected_keys.append(tuple(str(part) for part in row["source_key"]))
+    if any(key not in candidate_keys for key in selected_keys) or len(set(selected_keys)) != len(selected_keys):
+        raise Gate1Failure("KNN_SELECTED_SOURCE_OUTSIDE_POOL", f"D{dataset_id}/{scenario}/{target_id}")
+    requested_k = int(payload.get("k", 0))
+    if (
+        int(metadata.get("selected_count", -1)) != len(selected_keys)
+        or len(selected_keys) != requested_k
+        or int(metadata.get("consumer_frame_rows", -1)) != len(selected_keys) * SOURCE_HISTORY_DAYS
+    ):
+        raise Gate1Failure("KNN_CONSUMER_FRAME_CARDINALITY", f"D{dataset_id}/{scenario}/{target_id}")
+
+    if dataset_id == 4 and ("729", "424") in candidate_keys.union(set(selected_keys)):
+        raise Gate1Failure("D4_INCOMPLETE_CANDIDATE_PRESENT", f"D4/{scenario}/{target_id}")
+    return {
+        "target_key": list(target_key),
+        "candidate_keys": [list(key) for key in sorted(candidate_keys)],
+        "candidate_pool_digest": candidate_digest,
+        "selection_digest": metadata.get("selection_result_digest"),
+        "consumer_frame_digest": metadata.get("consumer_frame_digest"),
+        "consumer_frame_rows": int(metadata["consumer_frame_rows"]),
+        "selected_sources": [list(key) for key in selected_keys],
+        "source_history_frame_digest": metadata.get("source_history_frame_digest"),
+        "source_history_start": expected_start,
+        "source_history_end": expected_end,
+        "source_history_calendarization_rule": metadata.get(
+            "source_history_calendarization_rule", "not_applicable"
+        ),
+    }
+
+
+def _verify_runtime_knn_authority(
+    root: Path,
+    *,
+    dataset_id: int,
+    scenario: str,
+    candidate_universe: set[tuple[str, ...]],
+) -> dict[str, object]:
+    authority_path = (
+        root / "configs" / "solidified" / "knn" / f"Dataset{dataset_id}"
+        / f"knn_{scenario}_info_sharing.json"
+    )
+    if not authority_path.is_file() or authority_path.is_symlink():
+        raise Gate1Failure("KNN_AUTHORITY_MISSING", str(authority_path))
+    payload = _load_json_file(authority_path)
+    expected_top_level = {
+        "source_history_days": SOURCE_HISTORY_DAYS,
+        "source_history_expected_date_count": SOURCE_HISTORY_DAYS,
+        "source_history_start": dataset_contract(dataset_id).source_history_start.isoformat(),
+        "source_history_end": dataset_contract(dataset_id).source_history_end.isoformat(),
+        "source_history_calendar": SOURCE_HISTORY_CALENDAR,
+        "source_history_inclusive_end": True,
+        "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
+        "source_history_calendarization_rule": (
+            "D5_APPROVED_SOURCE_HISTORY_CALENDARIZATION"
+            if dataset_id == 5
+            else "not_applicable"
+        ),
+    }
+    if any(payload.get(field) != value for field, value in expected_top_level.items()):
+        raise Gate1Failure("SOURCE_HISTORY_IDENTITY_MISMATCH", f"D{dataset_id}/{scenario}")
+    metadata_map = payload.get("selection_metadata")
+    if not isinstance(metadata_map, Mapping) or not metadata_map:
+        raise Gate1Failure("KNN_METADATA_MISSING", f"D{dataset_id}/{scenario}")
+    targets: dict[str, object] = {}
+    for target_id, metadata in sorted(metadata_map.items()):
+        if not isinstance(metadata, Mapping):
+            raise Gate1Failure("KNN_METADATA_INVALID", f"D{dataset_id}/{scenario}/{target_id}")
+        raw_target = metadata.get("candidate_pool_digest_input", {}).get("target_key", [])
+        target_key = tuple(str(part) for part in raw_target)
+        expected_candidates = set(candidate_universe)
+        expected_candidates.discard(target_key)
+        targets[str(target_id)] = _verify_runtime_knn_metadata(
+            dataset_id=dataset_id,
+            scenario=scenario,
+            target_id=str(target_id),
+            metadata=metadata,
+            payload=payload,
+            expected_candidate_keys=expected_candidates,
+        )
+    return {
+        "status": "passed",
+        "path": str(authority_path.relative_to(root)),
+        "sha256": _sha256_file(authority_path),
+        "scenario": scenario,
+        "targets": targets,
+        "source_history_days": SOURCE_HISTORY_DAYS,
+        "source_history_start": dataset_contract(dataset_id).source_history_start.isoformat(),
+        "source_history_end": dataset_contract(dataset_id).source_history_end.isoformat(),
+        "source_history_expected_date_count": SOURCE_HISTORY_DAYS,
+        "source_history_calendar": SOURCE_HISTORY_CALENDAR,
+        "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
+        "source_history_inclusive_end": True,
     }
 
 
@@ -318,6 +540,18 @@ def _verify_d4_consumer_authority(
         / f"knn_{scenario}_info_sharing.json"
     )
     payload = _load_json_file(authority_path)
+    expected_top = {
+        "source_history_days": SOURCE_HISTORY_DAYS,
+        "source_history_expected_date_count": SOURCE_HISTORY_DAYS,
+        "source_history_start": dataset_contract(4).source_history_start.isoformat(),
+        "source_history_end": dataset_contract(4).source_history_end.isoformat(),
+        "source_history_calendar": SOURCE_HISTORY_CALENDAR,
+        "source_history_inclusive_end": True,
+        "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
+        "source_history_calendarization_rule": "not_applicable",
+    }
+    if any(payload.get(field) != value for field, value in expected_top.items()):
+        raise Gate1Failure("SOURCE_HISTORY_IDENTITY_MISMATCH", f"D4/{scenario}")
     target_id = "_".join(target_key)
     metadata = payload.get("selection_metadata", {}).get(target_id)
     if not isinstance(metadata, dict):
@@ -325,6 +559,14 @@ def _verify_d4_consumer_authority(
             "D4_STALE_SELECTION_AUTHORITY",
             f"missing D4 {scenario} metadata for {target_id}",
         )
+    runtime_proof = _verify_runtime_knn_metadata(
+        dataset_id=4,
+        scenario=scenario,
+        target_id=target_id,
+        metadata=metadata,
+        payload=payload,
+        expected_candidate_keys=set(candidate_keys),
+    )
     digest_input = metadata.get("candidate_pool_digest_input")
     if not isinstance(digest_input, dict):
         raise Gate1Failure(
@@ -480,6 +722,11 @@ def _verify_d4_consumer_authority(
         "validation_proof_digest": metadata["d4_validation_proof_digest"],
         "manifest_identity_digest": manifest["manifest_identity_digest"],
         "exact_key_proof": proof,
+        "source_history_days": SOURCE_HISTORY_DAYS,
+        "source_history_start": runtime_proof["source_history_start"],
+        "source_history_end": runtime_proof["source_history_end"],
+        "consumer_frame_digest": runtime_proof["consumer_frame_digest"],
+        "consumer_frame_rows": runtime_proof["consumer_frame_rows"],
     }
 
 
@@ -607,15 +854,19 @@ def _dataset_report(root: Path, parent_root: Path, old_root: Path, dataset_id: i
                     source_path,
                     "with-sharing",
                     target_frame=target,
-                    current_target_key=spec.target_keys[0],
                     source_history_days=SOURCE_HISTORY_DAYS,
                 )
                 universe = {
                     tuple(str(part) for part in key)
                     for key in source_proof[
-                        "available_source_keys_before_target_exclusion"
+                        "complete_candidate_keys"
                     ]
                 }
+                if source_proof.get("incomplete_candidates", {}).get("729/424") != 82:
+                    raise Gate1Failure(
+                        "D4_INCOMPLETE_CANDIDATE_FACT_MISMATCH",
+                        "expected D4 729/424 to have exactly 82 legal source-history dates",
+                    )
                 per_target: dict[str, object] = {}
                 for raw_target_key in spec.target_keys:
                     target_key = tuple(str(part) for part in raw_target_key)
@@ -641,6 +892,13 @@ def _dataset_report(root: Path, parent_root: Path, old_root: Path, dataset_id: i
                     "exclusion_scope": "current_exact_target_tuple_only",
                     "targets": per_target,
                     "stream_proof": source_proof,
+                    "729_424": {
+                        "legal_window_dates": source_proof["incomplete_candidates"]["729/424"],
+                        "eligible": False,
+                        "candidate_pool": "absent",
+                        "selection": "absent",
+                        "consumer_frame": "absent",
+                    },
                 }
                 report["source_entities"] = [list(key) for key in sorted(universe)]
                 report["post_origin_history_rows"] = source_proof[
@@ -654,7 +912,24 @@ def _dataset_report(root: Path, parent_root: Path, old_root: Path, dataset_id: i
                     target_frame=target,
                     allow_approved_calendarization=(dataset_id == 5),
                 )
-                report["source_selection"] = source_proof
+                candidate_universe = {
+                    tuple(str(part) for part in key)
+                    for key in source_proof["complete_candidate_keys"]
+                }
+                authority_reports = {}
+                for scenario in ("without", "with"):
+                    authority_reports[scenario] = _verify_runtime_knn_authority(
+                        root,
+                        dataset_id=dataset_id,
+                        scenario=scenario,
+                        candidate_universe=candidate_universe,
+                    )
+                report["source_selection"] = {
+                    "status": "passed",
+                    "candidate_universe": [list(key) for key in sorted(candidate_universe)],
+                    "stream_proof": source_proof,
+                    "scenarios": authority_reports,
+                }
                 report["source_entities"] = source_proof["complete_candidate_keys"]
                 report["post_origin_history_rows"] = source_proof["post_origin_history_rows"]
             report["proof_inputs_available"].update({"raw_authority": True, "source_eligibility": True, "bounded_stream": True})
@@ -666,6 +941,34 @@ def _dataset_report(root: Path, parent_root: Path, old_root: Path, dataset_id: i
         return report
     except Exception as exc:
         return {"dataset": f"D{dataset_id}", "status": "failed", "failure_code": getattr(exc, "code", "READINESS_ERROR"), "error": f"{type(exc).__name__}: {exc}"}
+
+
+def _source_history_static_audit(root: Path) -> dict[str, object]:
+    """Reject production window literals that can resurrect the old 300-day rule."""
+    import re
+
+    patterns = (
+        re.compile(r"SOURCE_HISTORY_DAYS\s*=\s*300"),
+        re.compile(r"source_history_days\s*[:=]\s*300"),
+        re.compile(r"Timedelta\(\s*days\s*=\s*299\s*\)"),
+        re.compile(r"date_range\([^\n]*periods\s*=\s*300"),
+    )
+    violations: list[str] = []
+    for base in (root / "src", root / "scripts", root / "tools" / "operations"):
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*.py")):
+            if path.is_symlink() or "__pycache__" in path.parts:
+                continue
+            text = path.read_text(encoding="utf-8")
+            for pattern in patterns:
+                if pattern.search(text):
+                    violations.append(f"{path.relative_to(root)}:{pattern.pattern}")
+    return {
+        "status": "passed" if not violations else "failed",
+        "source_history_days": SOURCE_HISTORY_DAYS,
+        "violations": violations,
+    }
 
 
 def run_readiness(
@@ -685,6 +988,12 @@ def run_readiness(
         identity = None
         identity_error = str(exc)
     datasets = [_dataset_report(root, parent_root, old_sealed_root, index, identity) for index in range(1, 7)]
+    static_audit = _source_history_static_audit(root)
+    if static_audit["status"] != "passed":
+        for item in datasets:
+            item["status"] = "failed"
+            item["failure_code"] = "SOURCE_HISTORY_STATIC_LITERAL"
+            item["error"] = str(static_audit["violations"])
     if identity_error:
         for item in datasets:
             item["status"] = "failed"
@@ -749,6 +1058,7 @@ def run_readiness(
         "failure_code": None if not failures else failures[0].get("failure_code"),
         "formal_identity": identity or {"status": "failed", "error": identity_error},
         "datasets": datasets,
+        "source_history_static_audit": static_audit,
         "read_only": True,
         "writes_performed": False,
         "producer_calls_performed": 0,

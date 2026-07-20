@@ -31,9 +31,10 @@ def _daily_rows(
     second: object | None,
     *,
     periods: int = 35,
+    start: str = "2020-01-01",
 ) -> pd.DataFrame:
     payload: dict[str, object] = {
-        "date": pd.date_range("2020-01-01", periods=periods, freq="D"),
+        "date": pd.date_range(start, periods=periods, freq="D"),
         "sales": np.ones(periods),
     }
     if second is None:
@@ -47,7 +48,7 @@ def _daily_rows(
 def _d1_source() -> pd.DataFrame:
     return pd.concat(
         [
-            _daily_rows(store, item, periods=30)
+            _daily_rows(store, item, periods=30, start="2017-06-01")
             for store in range(1, 4)
             for item in range(1, 10)
         ],
@@ -61,11 +62,11 @@ def test_d1_static_and_runtime_target_are_the_same_canonical_key() -> None:
 
     _, target = configure_protocol_frames(
         _d1_source(),
-        _daily_rows(1, 10),
+        _daily_rows(1, 10, start="2017-06-01"),
         dataset_id="D1",
         scenario="with",
         group_cols=("store_id", "item_id"),
-        observed_start="2020-01-01",
+        observed_start="2017-06-01",
     )
 
     assert target.attrs["protocol_target_key"] == ("1", "10")
@@ -197,11 +198,11 @@ def test_static_runtime_mismatch_fails_before_candidate_or_training_work() -> No
         with pytest.raises(ProtocolViolation, match="runtime canonical target key"):
             configure_protocol_frames(
                 _d1_source(),
-                _daily_rows("Store1", "Item10"),
+                _daily_rows("Store1", "Item10", start="2017-06-01"),
                 dataset_id="D1",
                 scenario="with",
                 group_cols=("store_id", "item_id"),
-                observed_start="2020-01-01",
+                observed_start="2017-06-01",
             )
 
     candidate_builder.assert_not_called()

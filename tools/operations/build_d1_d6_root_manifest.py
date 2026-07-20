@@ -83,7 +83,7 @@ def build(
     )
 
     before = frozen_artifact_snapshot(root)
-    verify_frozen_snapshot(before)
+    verify_frozen_snapshot(before, repository_root=root)
     identity = formal_identity_payload(root)
     inventory = build_code_inventory(root)
     inventory_bytes = pretty_json_bytes(inventory)

@@ -19,10 +19,14 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.constants import (
     D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+    SOURCE_HISTORY_CALENDAR,
+    SOURCE_HISTORY_COMPLETENESS_POLICY,
     SOLIDIFIED_KNN_ROOT,
     SOURCE_HISTORY_DAYS,
 )
 from src.protocols.experiment_protocol import PROTOCOL_VERSION, get_experiment_protocol
+from src.protocols.gate1_transformation import dataset_contract
+from src.protocols.candidate_pool import prepare_daily_sequence_pool
 from src.protocols.runner_adapter import configure_protocol_frames
 from src.protocols.formal_input_paths import resolve_formal_dataset_paths
 from src.source_selection.source_selector import SourceSelector
@@ -31,9 +35,12 @@ from src.utils.d4_d6_runtime import (
     validate_runtime_target_domain,
 )
 from src.utils.parquet_data_loader import (
+    expected_target_dates_from_windows,
     load_parquet_source_target,
     read_dataset_windows,
 )
+from src.protocols.source_history import source_history_frame_digest
+from src.utils.d5_calendar_reconstruction import load_d5_authorities
 from src.utils.source_domain_filter import SourceDomainPolicyResult, apply_source_domain_policy
 
 
@@ -249,6 +256,7 @@ def _select_d4_shared_protocol(
     feature_cols: Sequence[str],
     k: int,
     group_cols: Sequence[str],
+    prepared_pool: Any | None = None,
 ) -> Dict[str, Any]:
     """Select a Dataset4 target through the formal shared-protocol path."""
     observed_start = target_entity_df.attrs.get(
@@ -266,6 +274,7 @@ def _select_d4_shared_protocol(
         group_cols=group_cols,
         grouping_col=None,
         observed_start=observed_start,
+        prepared_pool=prepared_pool,
     )
     selected = SourceSelector().select_top_k_sources(
         target_df=configured_target,
@@ -273,6 +282,7 @@ def _select_d4_shared_protocol(
         feature_cols=feature_cols,
         k=k,
         group_cols=tuple(group_cols),
+        consumer_source_df=source_df,
     )
     metadata = selected.get("meta", {})
     if not isinstance(metadata, dict) or metadata.get("selection_path") != "shared_protocol":
@@ -419,13 +429,14 @@ def _build_regenerated_payload(
         if key in old_payload
     }
     strict_d1_d2 = int(dataset_id) in {1, 2} if dataset_id is not None else False
+    shared_dataset4 = int(dataset_id) == 4 if dataset_id is not None else False
     new_payload.update(
         {
-            "selection_authority": "shared_protocol" if strict_d1_d2 else "runtime",
-            "protocol_version": PROTOCOL_VERSION if strict_d1_d2 else D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+            "selection_authority": "shared_protocol" if (strict_d1_d2 or shared_dataset4) else "runtime",
+            "protocol_version": PROTOCOL_VERSION if (strict_d1_d2 or shared_dataset4) else D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
             "results_semantics": "json_top_k_diagnostic_not_training_authority",
             "training_selection_authority": (
-                "shared_protocol_selector" if strict_d1_d2 else "runtime_source_selector"
+                "shared_protocol_selector" if (strict_d1_d2 or shared_dataset4) else "runtime_source_selector"
             ),
             "json_results_used_for": [
                 "target_list",
@@ -442,6 +453,61 @@ def _build_regenerated_payload(
             "selection_metadata": copy.deepcopy(selection_metadata),
         }
     )
+    if dataset_id is not None and int(dataset_id) in {4, 5, 6}:
+        history_values = {
+            (
+                metadata.get("source_history_days"),
+                metadata.get("source_history_expected_date_count"),
+                str(pd.Timestamp(metadata.get("source_history_start")).date()),
+                str(pd.Timestamp(metadata.get("source_history_end")).date()),
+                metadata.get("source_history_completeness_policy"),
+                metadata.get("source_history_calendar"),
+                metadata.get("source_history_inclusive_end"),
+                metadata.get("source_history_calendarization_rule", "not_applicable"),
+            )
+            for metadata in selection_metadata.values()
+        }
+        expected_rule = (
+            "D5_APPROVED_SOURCE_HISTORY_CALENDARIZATION"
+            if int(dataset_id) == 5
+            else "not_applicable"
+        )
+        expected_history = {
+            (
+                SOURCE_HISTORY_DAYS,
+                SOURCE_HISTORY_DAYS,
+                dataset_contract(int(dataset_id)).source_history_start.isoformat(),
+                dataset_contract(int(dataset_id)).source_history_end.isoformat(),
+                SOURCE_HISTORY_COMPLETENESS_POLICY,
+                SOURCE_HISTORY_CALENDAR,
+                True,
+                expected_rule,
+            )
+        }
+        if history_values != expected_history:
+            raise ValueError(
+                "D4-D6 regenerated selection metadata has invalid source history identity"
+            )
+        calendarization_rules = {
+            metadata.get("source_history_calendarization_rule", "not_applicable")
+            for metadata in selection_metadata.values()
+        }
+        if len(calendarization_rules) != 1:
+            raise ValueError(
+                "D4-D6 regenerated selection metadata has inconsistent source history calendarization rules"
+            )
+        new_payload.update(
+            {
+                "source_history_days": SOURCE_HISTORY_DAYS,
+                "source_history_expected_date_count": SOURCE_HISTORY_DAYS,
+                "source_history_start": next(iter(history_values))[2],
+                "source_history_end": next(iter(history_values))[3],
+                "source_history_calendar": SOURCE_HISTORY_CALENDAR,
+                "source_history_inclusive_end": True,
+                "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
+                "source_history_calendarization_rule": next(iter(calendarization_rules)),
+            }
+        )
     if strict_d1_d2:
         new_payload["knn_frame_authority"] = "configured_observed_frame"
         new_payload["knn_feature_columns"] = list(feature_cols)
@@ -571,12 +637,23 @@ def regenerate_dataset_scenario(
             info_sharing=scenario,
             knn_payload=old_payload,
         )
+        loader_kwargs: Dict[str, Any] = {}
+        if int(dataset_id) == 5:
+            authorities = load_d5_authorities(
+                PROJECT_ROOT / "数据集" / "原始数据" / "Dataset 5Favorita",
+                use_holidays=True,
+            )
+            loader_kwargs = {
+                "expected_dates": expected_target_dates_from_windows(windows),
+                "d5_authorities": authorities,
+            }
         source_df, target_df = load_parquet_source_target(
             dataset_id=dataset_id,
             source_path=formal_paths.source_path,
             target_path=formal_paths.target_path,
             windows=windows,
             source_history_days=SOURCE_HISTORY_DAYS,
+            **loader_kwargs,
         )
     if int(dataset_id) == 4:
         source_domain_policy = _prepare_d4_runtime_source_pool(
@@ -594,6 +671,25 @@ def regenerate_dataset_scenario(
             old_payload=old_payload,
         )
     source_df = source_domain_policy.frame
+    source_df.attrs = {
+        **source_df.attrs,
+        "information_sharing_scenario": str(scenario),
+    }
+    target_df.attrs = {
+        **target_df.attrs,
+        "information_sharing_scenario": str(scenario),
+    }
+    if "group_cols" not in old_payload:
+        raise ValueError("KNN payload missing required protocol field: group_cols")
+    group_cols = tuple(old_payload["group_cols"])
+    candidate_frame_digest = source_history_frame_digest(
+        source_df,
+        key_fields=group_cols,
+    )
+    source_df.attrs = source_df.attrs.copy()
+    source_df.attrs["source_history_frame_digest"] = candidate_frame_digest
+    target_df.attrs = target_df.attrs.copy()
+    target_df.attrs["source_history_frame_digest"] = candidate_frame_digest
 
     existing_feature_info = old_payload.get("feature_info", {})
     feature_cols = list(
@@ -610,13 +706,22 @@ def regenerate_dataset_scenario(
     ]
     if missing_features:
         raise ValueError(f"KNN payload feature_cols missing from runtime frames: {missing_features}")
+
+    prepared_pool = None
+    if int(dataset_id) == 4:
+        protocol = get_experiment_protocol(dataset_id)
+        pool_feature_cols = tuple(dict.fromkeys(("sales", *feature_cols)))
+        prepared_pool = prepare_daily_sequence_pool(
+            source_df,
+            group_cols=group_cols,
+            observed_start=target_df.attrs["target_observed_start"],
+            feature_cols=pool_feature_cols,
+        )
+
     feature_info = copy.deepcopy(existing_feature_info) if isinstance(existing_feature_info, dict) else {}
     feature_info["selected_features"] = list(feature_cols)
     if int(dataset_id) in {1, 2}:
         feature_info["knn_feature_columns"] = list(feature_cols)
-    if "group_cols" not in old_payload:
-        raise ValueError("KNN payload missing required protocol field: group_cols")
-    group_cols = tuple(old_payload["group_cols"])
     if "k" not in old_payload or int(old_payload["k"]) <= 0:
         raise ValueError("KNN payload requires positive k")
     k = int(old_payload["k"])
@@ -657,6 +762,7 @@ def regenerate_dataset_scenario(
                 feature_cols=feature_cols,
                 k=k,
                 group_cols=group_cols,
+                prepared_pool=prepared_pool,
             )
         else:
             selected = selector.select_top_k_sources(

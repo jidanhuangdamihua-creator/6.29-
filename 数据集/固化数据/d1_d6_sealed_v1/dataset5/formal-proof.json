@@ -1,9 +1,9 @@
 {
-  "consumer_fingerprint": "f030051f78880ccd50faeffd2a771b6d16768825445383d6f561ccb5e8d5bf79",
+  "consumer_fingerprint": "ccc0464362d7bce364d68f13155296cfd6ee656fbefbd4d046a186463c7b9a7a",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "3b597f41e832c88cd74ae23462c319a1da917a4f6685dd204a87c2f04dc904d2",
+    "code_inventory_digest": "2a5856446d8667180a4f5d9a3a35689d3480dd1ddd2e09714936fbf9046cd456",
     "dataset_id": "D5",
-    "readiness_proof_digest": "3964e585e69e32dc67b99f49f4ef6606c0a39b4c83724751e03833ddd4bef6f5",
+    "readiness_proof_digest": "65a6e3fbd72574c60145a40b4d42cef7dbed94a5c4feba92d6cd77c0f79904b3",
     "source_schema_digest": "79adba300871317bcf9f40dc2b038536e3b371f1ecc6693ce1e77beb2310d537",
     "source_sha256": "368d896b0a7d2849ba2984e1bb3f4f07d36cf9175087ee755d6cd2a6c1c790b3",
     "target_schema_digest": "5f531ee2175bd9cc93552b5717f769fd794978e97023aef9e6ae959482947032",
@@ -16,10 +16,157 @@
   },
   "dataset_root": "dataset5",
   "dataset_specific": {
-    "oil_price_rule": "origin_bounded_fill",
-    "onpromotion_rule": "frozen_consumer_validation",
-    "resolver_used": true,
-    "transactions_rule": "forbidden_forecast"
+    "authority_digest": "2184444b74a8a30f400a080068f476524b3600981840b4175428885a74a7ee8d",
+    "dataset_id": "D5",
+    "protocol_version": "runtime_knn_windowed_stats_v1",
+    "scenario_files": {
+      "with": {
+        "path": "configs/solidified/knn/Dataset5/knn_with_info_sharing.json",
+        "readiness_digest": "4bd6982cacbf10d85cac9a4ce3a5daaed6d9b037046e02639003d70b186875c6",
+        "sha256": "0f569e9e23dc2b3e56c5dbfc890dcfd494a982b0ed04fc55c92095ec2f0e5241",
+        "source_history_calendar": "Gregorian daily",
+        "source_history_completeness_policy": "exact_expected_date_set",
+        "source_history_days": 180,
+        "source_history_end": "2017-02-15",
+        "source_history_expected_date_count": 180,
+        "source_history_inclusive_end": true,
+        "source_history_start": "2016-08-20",
+        "targets": {
+          "48_1159414": {
+            "candidate_pool_digest": "59133e518a3d3ab57e732c482589616defae9f7179e7f198e0fe2d3f5a8a35a5",
+            "consumer_frame_digest": "9d99e60e69cf4edcfe69702df12f8126ebf2c465e692cd0cbd99086ccf900c45",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "b9da59e8429326350036a5ff232e67f952619ed119ae531f2ee1a155889a7d3a",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "1159414"
+            ]
+          },
+          "48_1159415": {
+            "candidate_pool_digest": "5bb53a12bc8a4663545aa57cb2190b13e1c691cea3eab156cc9650edbd2a1795",
+            "consumer_frame_digest": "a9d0360557845482a08ebc12e18fc84c6475f93e3bad6ccaec1f30e5bff037f4",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "fc4ec6a2f63035e7c46ba592c3031aa373cffa48e9a2188dabef8ea851e25865",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "1159415"
+            ]
+          },
+          "48_1349808": {
+            "candidate_pool_digest": "ea77d6adb06d67165fe98c72dbad94a19f7d7d57d65499ac181f002b05ba26ad",
+            "consumer_frame_digest": "cc0a15d4e0be50b6a8c001dce79ba70a4f5bca608ad5163331f86ebf339c19a7",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "04131cb276d48ec031f3b0706618ef57a3e5e420c65f7ebcdc8d05d665f50113",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "1349808"
+            ]
+          },
+          "48_320682": {
+            "candidate_pool_digest": "c3c5e7997b7349c3705b285734e754526ffd20c6d60e6f8b58c52f38d9cb8d3e",
+            "consumer_frame_digest": "6072d64bcd7167c4b917b23b204a0bf41d715d48cbd442e301ca291f1f2e6f10",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "d8f8995609cd9496bd7a1401fff3f157d6d65aaa4c53e3d5a468d06b61d28eae",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "320682"
+            ]
+          },
+          "48_364606": {
+            "candidate_pool_digest": "2fb5c3980080f83cd6441cdc8c182d51d091585c13090cafb13f8e7008ddabb7",
+            "consumer_frame_digest": "8775aadeac5e4794a1f8caad175da5aee3c570860420307c7afe91b3f917dd58",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "065c8ed03dede54cf39fec6d2e6c54a20e3a699b8cb327f6a5de8f1196ac5ed9",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "364606"
+            ]
+          }
+        }
+      },
+      "without": {
+        "path": "configs/solidified/knn/Dataset5/knn_without_info_sharing.json",
+        "readiness_digest": "41b70af421fdf039f9fcbf1ece46b747f6ee4bf008a82eb3b82aed5b9b801286",
+        "sha256": "c6e33b63255087688ea618464aba2078eae265b11de06bb2b6c687a8c119ddcf",
+        "source_history_calendar": "Gregorian daily",
+        "source_history_completeness_policy": "exact_expected_date_set",
+        "source_history_days": 180,
+        "source_history_end": "2017-02-15",
+        "source_history_expected_date_count": 180,
+        "source_history_inclusive_end": true,
+        "source_history_start": "2016-08-20",
+        "targets": {
+          "48_1159414": {
+            "candidate_pool_digest": "f8f409e628c411f901a7f80ca49089945b7924c9f78935648ee3707dc8f2d8cb",
+            "consumer_frame_digest": "9d99e60e69cf4edcfe69702df12f8126ebf2c465e692cd0cbd99086ccf900c45",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "b9da59e8429326350036a5ff232e67f952619ed119ae531f2ee1a155889a7d3a",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "1159414"
+            ]
+          },
+          "48_1159415": {
+            "candidate_pool_digest": "b9f2ad0e70565380d16241950f9717ec78773343eb5fc1c131e781766239329a",
+            "consumer_frame_digest": "a9d0360557845482a08ebc12e18fc84c6475f93e3bad6ccaec1f30e5bff037f4",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "fc4ec6a2f63035e7c46ba592c3031aa373cffa48e9a2188dabef8ea851e25865",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "1159415"
+            ]
+          },
+          "48_1349808": {
+            "candidate_pool_digest": "d949f4d795ba73b78c1934a8e96e415c315a10e4a3e00d752aef33213712d96b",
+            "consumer_frame_digest": "cc0a15d4e0be50b6a8c001dce79ba70a4f5bca608ad5163331f86ebf339c19a7",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "04131cb276d48ec031f3b0706618ef57a3e5e420c65f7ebcdc8d05d665f50113",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "1349808"
+            ]
+          },
+          "48_320682": {
+            "candidate_pool_digest": "5d5b8175d842d88737f8d77370df5d1142fa66bedca1dd8cb74c53ccd1e858a7",
+            "consumer_frame_digest": "6072d64bcd7167c4b917b23b204a0bf41d715d48cbd442e301ca291f1f2e6f10",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "d8f8995609cd9496bd7a1401fff3f157d6d65aaa4c53e3d5a468d06b61d28eae",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "320682"
+            ]
+          },
+          "48_364606": {
+            "candidate_pool_digest": "f2edb9c7d6dca4c7d82532fb51ca32d8dba629159aa2335a4b16dcfa6661a0bc",
+            "consumer_frame_digest": "8775aadeac5e4794a1f8caad175da5aee3c570860420307c7afe91b3f917dd58",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "065c8ed03dede54cf39fec6d2e6c54a20e3a699b8cb327f6a5de8f1196ac5ed9",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "364606"
+            ]
+          }
+        }
+      }
+    },
+    "selection_authority": "runtime",
+    "source_history_calendar": "Gregorian daily",
+    "source_history_completeness_policy": "exact_expected_date_set",
+    "source_history_days": 180,
+    "source_history_end": "2017-02-15",
+    "source_history_expected_date_count": 180,
+    "source_history_inclusive_end": true,
+    "source_history_start": "2016-08-20"
   },
   "date_key": "date",
   "date_range": {
@@ -52,8 +199,8 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "9e18ef0973efa9c032e5cf880280d126b3746d1a222f487485a820b216b8df59",
-  "readiness_proof_digest": "3964e585e69e32dc67b99f49f4ef6606c0a39b4c83724751e03833ddd4bef6f5",
+  "proof_identity_sha256": "5087b162feef67416431aed5900009ce9e141e9be389f7ddca3a5fde8dc0cc89",
+  "readiness_proof_digest": "65a6e3fbd72574c60145a40b4d42cef7dbed94a5c4feba92d6cd77c0f79904b3",
   "readiness_result": {
     "failure_code": null,
     "status": "passed"

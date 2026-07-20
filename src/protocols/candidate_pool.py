@@ -58,6 +58,11 @@ def _canonical_candidate_pool_input(
     consumer_frame_fingerprint: object | None = None,
     source_frame_digest: object | None = None,
     target_frame_digest: object | None = None,
+    source_history_days: object | None = None,
+    source_history_start: object | None = None,
+    source_history_end: object | None = None,
+    source_history_completeness_policy: object | None = None,
+    source_history_frame_digest: object | None = None,
 ) -> Dict[str, Any]:
     normalized_candidates = [normalize_source_key(key) for key in candidate_keys]
     if len(set(normalized_candidates)) != len(normalized_candidates):
@@ -103,6 +108,29 @@ def _canonical_candidate_pool_input(
                 "target_frame_digest": str(target_frame_digest),
             }
         )
+    history_identity = (
+        source_history_days,
+        source_history_start,
+        source_history_end,
+        source_history_completeness_policy,
+        source_history_frame_digest,
+    )
+    if any(value is not None for value in history_identity):
+        if any(value is None for value in history_identity):
+            raise ProtocolViolation(
+                "D4-D6 candidate digest requires complete source history identity"
+            )
+        payload.update(
+            {
+                "source_history_days": int(source_history_days),
+                "source_history_start": _iso_date(source_history_start),
+                "source_history_end": _iso_date(source_history_end),
+                "source_history_completeness_policy": str(
+                    source_history_completeness_policy
+                ),
+                "source_history_frame_digest": str(source_history_frame_digest),
+            }
+        )
     return payload
 
 
@@ -121,6 +149,11 @@ def build_candidate_pool_digest(
     consumer_frame_fingerprint: object | None = None,
     source_frame_digest: object | None = None,
     target_frame_digest: object | None = None,
+    source_history_days: object | None = None,
+    source_history_start: object | None = None,
+    source_history_end: object | None = None,
+    source_history_completeness_policy: object | None = None,
+    source_history_frame_digest: object | None = None,
 ) -> str:
     """Return the one production SHA-256 digest for a candidate pool."""
 
@@ -139,6 +172,11 @@ def build_candidate_pool_digest(
         consumer_frame_fingerprint,
         source_frame_digest,
         target_frame_digest,
+        source_history_days,
+        source_history_start,
+        source_history_end,
+        source_history_completeness_policy,
+        source_history_frame_digest,
     )
     return _sha256_payload(payload)
 
@@ -420,6 +458,11 @@ class PreparedDailySequencePool:
     nonfinite_feature_keys: Mapping[str, frozenset[SourceKey]]
     metadata_by_col: Mapping[str, Mapping[SourceKey, str]]
     keys_by_metadata_value: Mapping[str, Mapping[str, Tuple[SourceKey, ...]]]
+
+    def __deepcopy__(self, memo: Dict[int, Any]) -> "PreparedDailySequencePool":
+        """Keep pandas attrs operations from copying the immutable pool."""
+        memo[id(self)] = self
+        return self
 
     def validate_for(
         self,
@@ -749,6 +792,23 @@ def select_daily_sequence_sources(
         raise ProtocolViolation(
             "D2 source calendarization identity is required before KNN"
         )
+    source_history_identity = {}
+    if "source_history_days" in source_df.attrs:
+        source_history_identity = {
+            "source_history_days": source_df.attrs.get("source_history_days"),
+            "source_history_start": source_df.attrs.get("source_history_start"),
+            "source_history_end": source_df.attrs.get("source_history_end"),
+            "source_history_completeness_policy": source_df.attrs.get(
+                "source_history_completeness_policy"
+            ),
+            "source_history_frame_digest": source_df.attrs.get(
+                "source_history_frame_digest"
+            ),
+        }
+        if any(value is None for value in source_history_identity.values()):
+            raise ProtocolViolation(
+                "D4-D6 source history identity is incomplete before KNN"
+            )
 
     window = protocol.observation_window(observed_start)
     observed_start_iso = window.knn_observed_start.isoformat()
@@ -903,6 +963,7 @@ def select_daily_sequence_sources(
         consumer_frame_fingerprint,
         source_frame_digest,
         target_frame_digest,
+        **source_history_identity,
     )
     candidate_digest = _sha256_payload(digest_input)
     selection_digest = build_selection_result_digest(

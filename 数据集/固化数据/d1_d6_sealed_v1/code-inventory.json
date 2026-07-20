@@ -1,5 +1,5 @@
 {
-  "file_count": 156,
+  "file_count": 158,
   "files": [
     {
       "path": "configs/solidified/knn/Dataset1/knn_with_info_sharing.json",
@@ -27,27 +27,27 @@
     },
     {
       "path": "configs/solidified/knn/Dataset4/knn_with_info_sharing.json",
-      "sha256": "44a332c374f97fce833b284802122f5337f8376a3bc1d70110c0c67debd5db6a"
+      "sha256": "5f9b1b32e4930ff2307c2cd76472f802eaf79a85f27b6259472956772559c5e6"
     },
     {
       "path": "configs/solidified/knn/Dataset4/knn_without_info_sharing.json",
-      "sha256": "b61df584146d27c5c4dc154c4d6445ddc298200e888cc186bedb51601091a73e"
+      "sha256": "859dbc251c3b3ae253290fd15c3ee00142e9c713eb73fe5f597c2a4db0ed8fbe"
     },
     {
       "path": "configs/solidified/knn/Dataset5/knn_with_info_sharing.json",
-      "sha256": "f9ef167dbf9aacef5c8479955a5391675d431c06d2aa2c6f1ddd0fb89df892cb"
+      "sha256": "0f569e9e23dc2b3e56c5dbfc890dcfd494a982b0ed04fc55c92095ec2f0e5241"
     },
     {
       "path": "configs/solidified/knn/Dataset5/knn_without_info_sharing.json",
-      "sha256": "9e23eb0987dc9146e9bc3d4aabf7aeda0932911320c0c928adc6b9013b948316"
+      "sha256": "c6e33b63255087688ea618464aba2078eae265b11de06bb2b6c687a8c119ddcf"
     },
     {
       "path": "configs/solidified/knn/Dataset6/knn_with_info_sharing.json",
-      "sha256": "c461a9d23bd6f4dd8b37aec3e2ff26d2b6c3655baa53694256db5c0420715f5d"
+      "sha256": "644d0274e1be12fb369eb4339d20333e2506023ba6974793a9184b1acad8bc94"
     },
     {
       "path": "configs/solidified/knn/Dataset6/knn_without_info_sharing.json",
-      "sha256": "6c1f1bdc11692f84024321614bf9bcb649578b2161584a47f17f5ab4a4548281"
+      "sha256": "acffae486d4742f107236ce58db7156a98fba6978fc469b9ae7b3e53d0bb901a"
     },
     {
       "path": "scripts/README_scan_d4_targets.md",
@@ -159,7 +159,7 @@
     },
     {
       "path": "scripts/parallel_mode_runner.sh",
-      "sha256": "86fe333e8b34523c631f3231d888586542779250b3f13533ec7ea3ffbe615117"
+      "sha256": "c2d072a466bccca1475bb021ba8eda488a4950473598dc6a1fae171df9fee813"
     },
     {
       "path": "scripts/parallel_runner.sh",
@@ -183,7 +183,7 @@
     },
     {
       "path": "scripts/regenerate_solidified_knn.py",
-      "sha256": "b317f490f66542fa8b54979fa1c0dde31a5edaef0ce0d2d2e148a890e5795fce"
+      "sha256": "b3bd99dc095255c935d2bde3feb55a199bbf87b18f48fe166601c02c34daa650"
     },
     {
       "path": "scripts/run_d4_d6_only.py",
@@ -327,7 +327,7 @@
     },
     {
       "path": "src/constants.py",
-      "sha256": "9347f0467adbfdcf85eb86e3a2d14b88f77c6e7903cb0aaf93ac743e122b3b88"
+      "sha256": "144be9241e61854e8e23ff9372c3fd80720ab9d1a3138a45a85b727dc03a7423"
     },
     {
       "path": "src/data_processing/__init__.py",
@@ -407,7 +407,7 @@
     },
     {
       "path": "src/protocols/candidate_pool.py",
-      "sha256": "eb2fe5fb75d3dac07596448bbc98cdd9686e0ee1d9422fa6cc926301fbbb34b9"
+      "sha256": "7551a96bac774ea94fd1addc48fcebdc7193ee8cc23973363ae319a49bc398b3"
     },
     {
       "path": "src/protocols/d2_source_calendarization.py",
@@ -419,7 +419,7 @@
     },
     {
       "path": "src/protocols/formal_deployment_manifest.py",
-      "sha256": "62feddddd58f1a2f7672bd90b86b038abfd608324f5b7458832d5219f1b7d8bb"
+      "sha256": "1ed3a0edd0d1b8a0432c48447883c2bf872049df1305ff6c601ab07b22894528"
     },
     {
       "path": "src/protocols/formal_input_paths.py",
@@ -427,7 +427,7 @@
     },
     {
       "path": "src/protocols/gate1_transformation.py",
-      "sha256": "ac07cf953dae26e0939e8002aae22fa0fab42900f958fd25fb87e825a07dde92"
+      "sha256": "87ae5141d8b1da103c0ab6f2fc52cbc300f2ab37f8a1316eac2563b04509a0ac"
     },
     {
       "path": "src/protocols/knn_frames.py",
@@ -447,7 +447,15 @@
     },
     {
       "path": "src/protocols/runner_adapter.py",
-      "sha256": "6a70c793da1bae4e65a882c4ea12c9bab2ddd459f3854c3090efad8036a68ff5"
+      "sha256": "37a2898a69e30baaf250ac1c9c3cb50acf7b3c2d8f6f456e10d87e50d82ff31f"
+    },
+    {
+      "path": "src/protocols/selection_metadata.py",
+      "sha256": "3eee81895de14e0b3b69a382c85adf25419332ea10eb38256222efcd3cda31f2"
+    },
+    {
+      "path": "src/protocols/source_history.py",
+      "sha256": "da47474060e5c63405a215f5a85f0b408a3d9d20a653cc5d865d490d420ac4ea"
     },
     {
       "path": "src/results/__init__.py",
@@ -467,7 +475,7 @@
     },
     {
       "path": "src/source_selection/source_selector.py",
-      "sha256": "18fa2a35dbd447e362d78b8b41281cd10aa0b2b8fefcee696329228c6a886d4f"
+      "sha256": "012e97d3742d301f65e92b9f3b58cbcfb1d7887a85f406d4db4a1bd1b884d9a8"
     },
     {
       "path": "src/transfer_methods/__init__.py",
@@ -519,7 +527,7 @@
     },
     {
       "path": "src/utils/d5_calendar_reconstruction.py",
-      "sha256": "8b7de73a00590568eec90efd837346f5bc568da8e44f7b588cd02f6576f18a84"
+      "sha256": "1961a539f906715f3f4704fb2ee0edaa35cae3a7ed6c1181612c8592d4f7189b"
     },
     {
       "path": "src/utils/entity_experiment.py",
@@ -555,7 +563,7 @@
     },
     {
       "path": "src/utils/parquet_data_loader.py",
-      "sha256": "23e601503a53fef0e3c38206bccc64d28e7118dd84c0a5a09bd51337e6e479b4"
+      "sha256": "a5c024c397703d0529a86075c27d8221d9f8b4d78760e0c356703f9b78a202ec"
     },
     {
       "path": "src/utils/progress_tracker.py",
@@ -611,21 +619,21 @@
     },
     {
       "path": "tools/operations/build_d1_d6_root_manifest.py",
-      "sha256": "ee3ebc49f994f30a9d31070b1fc1bf04dbb2300c3510f45985d9a4ba904be6fb"
+      "sha256": "61d930ad38d673b45b35ff1d549b6a4e42a5f2c96d7acaab6fe97958afb387bb"
     },
     {
       "path": "tools/operations/gate1x_real_input_readiness.py",
-      "sha256": "6e1136ee297f31b7388eb69d61a94581d8ede77d6f37bcdc9c97f61ab31dcb7e"
+      "sha256": "89497ec649063717a0d8265910432c7f22cb2ce899d2090a589bf870e89bb2d2"
     },
     {
       "path": "tools/operations/gate1x_unified_acceptance.py",
-      "sha256": "fe91b5ebbe32f0fde4f78aab1d17d49839925ee2199eef1b7c1a269808f3d0ff"
+      "sha256": "a6902a4637d443112a263a19a947bf618f6c9668fd22779242492a81b8a23677"
     },
     {
       "path": "tools/operations/materialize_d1_d6_sealed_authority.py",
       "sha256": "a8a1d6a43c87f01fc8ad010f594b7f51bf353d9788fd8a1d4b824f7325aa053c"
     }
   ],
-  "inventory_sha256": "3b597f41e832c88cd74ae23462c319a1da917a4f6685dd204a87c2f04dc904d2",
+  "inventory_sha256": "2a5856446d8667180a4f5d9a3a35689d3480dd1ddd2e09714936fbf9046cd456",
   "schema_version": "d1_d6_code_inventory_v1"
 }

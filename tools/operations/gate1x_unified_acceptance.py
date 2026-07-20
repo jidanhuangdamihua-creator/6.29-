@@ -29,6 +29,7 @@ from src.protocols.formal_deployment_manifest import (  # noqa: E402
     validate_deployment_manifest,
 )
 from src.protocols.formal_input_paths import FORMAL_SEALED_ROOT_RELATIVE  # noqa: E402
+from tools.operations.gate1x_real_input_readiness import run_readiness  # noqa: E402
 
 
 class AcceptanceFailure(RuntimeError):
@@ -83,8 +84,18 @@ def _metadata_identity(sealed: Path) -> dict[str, object]:
     }
 
 
-def _snapshot(root: Path, sealed: Path) -> dict[str, object]:
-    identity = require_repository_identity(root)
+def _snapshot(
+    root: Path,
+    sealed: Path,
+    *,
+    expected_branch: str,
+    expected_head: str,
+) -> dict[str, object]:
+    identity = require_repository_identity(
+        root,
+        expected_branch=expected_branch,
+        expected_head=expected_head,
+    )
     return {
         "branch": identity["branch"],
         "head": identity["head"],
@@ -170,9 +181,32 @@ def accept(
     if any(output.iterdir()):
         raise AcceptanceFailure("identity", "OUTPUT_DIR_NOT_EMPTY", str(output))
 
-    before = _snapshot(root, sealed)
+    before = _snapshot(
+        root,
+        sealed,
+        expected_branch=expected_branch,
+        expected_head=expected_head,
+    )
     atomic_write_json(output / "snapshot-before.json", before)
     try:
+        readiness = run_readiness(
+            root=root,
+            parent_root=root,
+            old_sealed_root=root,
+            require_deployment=False,
+        )
+        atomic_write_json(output / "real-input-readiness.json", readiness)
+        if (
+            readiness.get("status") != "passed"
+            or readiness.get("preflight_status") != "ready"
+            or readiness.get("datasets_ready") != 6
+            or readiness.get("source_history_static_audit", {}).get("status") != "passed"
+        ):
+            raise AcceptanceFailure(
+                "readiness",
+                "REAL_INPUT_READINESS_FAILED",
+                str(readiness.get("failure_code")),
+            )
         preflight = validate_deployment_manifest(root, sealed_root=sealed)
         atomic_write_json(
             output / "preflight.json",
@@ -240,7 +274,12 @@ def accept(
     except DeploymentManifestError as exc:
         raise AcceptanceFailure("preflight", exc.code, str(exc)) from exc
 
-    after = _snapshot(root, sealed)
+    after = _snapshot(
+        root,
+        sealed,
+        expected_branch=expected_branch,
+        expected_head=expected_head,
+    )
     atomic_write_json(output / "snapshot-after.json", after)
     if after["protected_artifacts"] != before["protected_artifacts"]:
         raise AcceptanceFailure("immutability", "PROTECTED_ARTIFACT_MUTATED")

@@ -1,9 +1,9 @@
 {
-  "consumer_fingerprint": "5ea4b84a55fe0168670d33605bbc7d85119101d64fca95311826192f5a00451b",
+  "consumer_fingerprint": "9ccb2697c541bad67d7fa5dea435b6da9aba40b68d16f38e44089a45e3b79a7b",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "3b597f41e832c88cd74ae23462c319a1da917a4f6685dd204a87c2f04dc904d2",
+    "code_inventory_digest": "2a5856446d8667180a4f5d9a3a35689d3480dd1ddd2e09714936fbf9046cd456",
     "dataset_id": "D4",
-    "readiness_proof_digest": "efe8292ae7ff3c6da7a559b9893fdc07dcd089919894795b5fae879cedd29209",
+    "readiness_proof_digest": "d8bfcb1d354d077a5106527a563c0857e35bcd201615ef59182f81e87c773284",
     "source_schema_digest": "b0f606e217d398f793d706e4f7981e10bca1a4ee3bb104722c4ec9dd5128f33a",
     "source_sha256": "17a1fa5bd1dddfd46bda2a6922ff7821aee2a7e79deca58a94ff7bf20821f7ef",
     "target_schema_digest": "943432f68afa3ab8dd3286950566623ce8a6710bbea5ced0cc58cc460ad8f59a",
@@ -20,105 +20,112 @@
       "store_id",
       "product_id"
     ],
-    "exact_key_proof_digest": "de1f29d000e1b509918af8f1b95bafa4cb45fc5e3913ce12093732629b15cd53",
+    "exact_key_proof_digest": "2c2ba95c1906ed9ea0a11b22f15a005fb54de35a464292bc6cfd4a11907df0c6",
     "exclusion_scope": "current_exact_target_tuple_only",
     "scenario_files": {
       "with": {
-        "manifest_identity": "231698a4ac844811087b9563f629e981afa50510dd3cf99e847653abdbd59bf4",
+        "manifest_identity": "130bb862c21f5048be66d75e4bdb42fd33b63834723a03595e892c934fec5850",
         "path": "configs/solidified/knn/Dataset4/knn_with_info_sharing.json",
-        "sha256": "44a332c374f97fce833b284802122f5337f8376a3bc1d70110c0c67debd5db6a",
+        "sha256": "5f9b1b32e4930ff2307c2cd76472f802eaf79a85f27b6259472956772559c5e6",
         "target_consumers": {
           "166_258": {
-            "candidate_pool_digest": "8bef9aa02a5298bd177552cf765532d5b44f229d8791b3f1733bf1f50aa6d6da",
-            "consumer_fingerprint": "abbc355c3b2fb84754dff185faf05a99f7df84ed717b14b93e035c7a7c172416",
-            "selection_result_digest": "4196c419072859d0421fae4ad77e608ecf7d7987602fd882148e8764d444fb74",
-            "source_pool_fingerprint": "4523fa81be8833bbab079a64480cf219eb87d0ec8a8e928fa5e9f167bdb45b6f",
-            "validation_proof_digest": "029357b2e778b15436ec1d9d596e3944c8473d8f1147bdb3b396bcc816da8269"
+            "candidate_pool_digest": "689bbc5afe2765569f3281a7aea0f618d431fca4ac9c46da8c47bdeb6b5b2324",
+            "consumer_fingerprint": "223ec33ac089684969cea0744c993c053fc57eec8b8886a49eb04463fea12229",
+            "selection_result_digest": "59eb0cb06e387517262175d3e0c4c32d559fbe151036c306854b269dc41ecbb9",
+            "source_pool_fingerprint": "371659b9ecc16e74c37064a748b0816bcfa520b3dde5d3259636c456c2535f13",
+            "validation_proof_digest": "f47294d2406c931bac03b1d7dff4ab830427afce2a8903d396233adf0125cf9e"
           },
           "166_311": {
-            "candidate_pool_digest": "097ad76ac2d1f59d20bf56bb738889c9b7be681b8cc693a167cc761f59ccd96c",
-            "consumer_fingerprint": "61724fd5ae2cac7aabe5976471296993118025d5d5ce2d355f3231dd542d9a00",
-            "selection_result_digest": "8cce11adb2a7c5c7ad95b3448765d51c73d9d04987ae9cd7d3f7ee9b9093ab5f",
-            "source_pool_fingerprint": "a5f80a068f3fd067975655d7f3c113a5ad632d00b169ff353c9edf4f098908be",
-            "validation_proof_digest": "2d9ae9dfd8e7cc19a7b251ead0c245e24293da2396f9498ef5d9e919b06ad68c"
+            "candidate_pool_digest": "ac33eea274be62a0710de5cde4fe4ae369885886df9343b53a6d35b3dc5fe1f2",
+            "consumer_fingerprint": "ec56edfed70b88fa1b0e7cad7456c574ece8c089ae3db189336fc5d497ebbd2a",
+            "selection_result_digest": "6953e10cbd0cf26f4f2561c02711c1f582ae9a2f1c57d4fc26b52950155eb00c",
+            "source_pool_fingerprint": "8b16df1689f47a58ca469dc104e9fd941354c2d62bcc2a10c9c50c18773996e9",
+            "validation_proof_digest": "ccdc2eb773ba4a39692e4dea0d619a5a423155d6062390f3216de055374088be"
           },
           "166_313": {
-            "candidate_pool_digest": "f5560eb31c03566bc6e19c1cbc3c5fb450d648b4a49660abab50d17f62bc66c1",
-            "consumer_fingerprint": "ef353b3b56821444d703ddcf0a132f54aea085f627092d56857498373b8530bf",
-            "selection_result_digest": "91fce8776ba14d7aa9d27157d08fe670a39ad37675cd2b54b1e872dd471bd7c8",
-            "source_pool_fingerprint": "e253ea0043709540fa279c070f7a5818e8f9f35129162565e478537f8b513522",
-            "validation_proof_digest": "c5cd43da134cd34e23460634433dd7d62e6e212e0cd96f99e1a11d4d200cc7e5"
+            "candidate_pool_digest": "055246939f80870e0201e926411218c6e2ea494a35dc97d465aacb8e79601b81",
+            "consumer_fingerprint": "5df4bdb9961d7a66e3e5e0fd9f0efbe8ef7da5ad244381bc0ca2ffec03d01487",
+            "selection_result_digest": "ac73ba61a26b16055fbeefe0e55c3c6cbf7e44ff5179df0c6a6bd3ecae4081c0",
+            "source_pool_fingerprint": "9062a24c414dd89e15e363cf7e0426027c489c4ff04b365a5cc1b25e9efd0498",
+            "validation_proof_digest": "b01c31ef3c4471e7f0a7b72d8d7a6ccd285c4be84ed5d87ce489ddee2c9a2116"
           },
           "166_432": {
-            "candidate_pool_digest": "e6e406f3c286e6c02109505a706a8a01bd8de8b2bc9e797c3fd1cd47793524c6",
-            "consumer_fingerprint": "c78593768bcb7a200e40fb4f0c8f0f68f4ad5afbea95301e1504585b99af8144",
-            "selection_result_digest": "394b098363b7421f74c9b3890b0e572fdf9ef9887cc9ce34d5d594845afd2112",
-            "source_pool_fingerprint": "d2fb4881382827374056d56936e0ba0669ba86ea89e955ae55708b203e567a54",
-            "validation_proof_digest": "cb8a46b8ac8c51c9f8bea49a4901cdc5c459d4d2a62f6e7d0ca9770aa15a2071"
+            "candidate_pool_digest": "1cdc6e0eba37f2da8c25abe509021483ad04888751bed1030cf77de23d96ec7d",
+            "consumer_fingerprint": "832a72697d10aa3ea2213e85fd2dc443224da4d34f803d09fc9addb2e11408e0",
+            "selection_result_digest": "ce41296fcbde2f65f8e80b09c55e4576fcb4998e5d8481518910addf6504fb60",
+            "source_pool_fingerprint": "2ef125e66b97f588a2b082e205f47bec2196ea4c7656d9cf0385d0bf9cca4259",
+            "validation_proof_digest": "e3aeacec3ec27a237b0be58c7cbd9e7ac356b0506dace15418b52a8ab5e8e020"
           },
           "166_433": {
-            "candidate_pool_digest": "4f22963478294fae6231c09bafb61dc196850eea651e8170b74ced572256d9df",
-            "consumer_fingerprint": "dff407b58c32087961cab693092aa0d7ddf7d2825cb14887de0eb421ff758899",
-            "selection_result_digest": "8ba95d954ce553e933d747fca8a27aa6e4387b5b1d8124bf1be9a44484d3828c",
-            "source_pool_fingerprint": "6c795f900a1b14b9742827d0c39eb4565ce0e4289187565759309a7c8865d28c",
-            "validation_proof_digest": "4fdd2a854056f5125b8bcb544ccaacfbdbb703aba231f8aad5c09e5b8dafd619"
+            "candidate_pool_digest": "88028bf54a3aa6ef2791d005a62cf4f20cbdf92834138be13e23e027b8a45fb7",
+            "consumer_fingerprint": "f854ef4c541bc1e64db2cd316a3faca9e2fd71662bd79ce829a42a536c6472de",
+            "selection_result_digest": "4a049298c815e25ee4736c9e460fdbd244c7bc423d558e299afd53a8af8e2419",
+            "source_pool_fingerprint": "e6376adf4c439a5da330713f1d65711e88d0358445d4cf76ee5fd81a83eb33cb",
+            "validation_proof_digest": "66c8985f9032ed89d1f90351ac576966be34445897a029ea41c3dbc62158f3dd"
           }
         }
       },
       "without": {
-        "manifest_identity": "372596182ec34f64b68455f8d70efabe4153cb7d1233a8fef7d56ac17ee61ea4",
+        "manifest_identity": "9fbdbc04cc50f6c9cd6dc1af0c4254dc607fb9ec1f861ca1ab3d8f15d8cf5efd",
         "path": "configs/solidified/knn/Dataset4/knn_without_info_sharing.json",
-        "sha256": "b61df584146d27c5c4dc154c4d6445ddc298200e888cc186bedb51601091a73e",
+        "sha256": "859dbc251c3b3ae253290fd15c3ee00142e9c713eb73fe5f597c2a4db0ed8fbe",
         "target_consumers": {
           "166_258": {
-            "candidate_pool_digest": "7940a1c51eee067b1bcd5868aee2cf70c53be1aaa9e54dec49c826873658206a",
-            "consumer_fingerprint": "f56294416199219e654353cc80f34d2503b3a771d95a8f963cfd67573f639063",
-            "selection_result_digest": "426aedd61c0748c02bed086b862c25a3df8a54101b5ae1171c393350f73664c4",
-            "source_pool_fingerprint": "421d90f0213967a36c1b6d5cace64ff8c73424ffa68abbf6b740f12be797ec2e",
-            "validation_proof_digest": "fb9666f4dc779041b7627dd72d6f425dfebbdb3ad25f6a175ba66f50b6f79386"
+            "candidate_pool_digest": "9aadcff7bc1ff2a934d54f1d742ec1e37b5a9734ec8db9c2c9ce32d2d0b18595",
+            "consumer_fingerprint": "fd699a583adacda0376e59861c83b767b2d0bf25f6f6d70ffae6a17ba2ea42b7",
+            "selection_result_digest": "1fb827abd06856e3cb58e1bcf188c26ee8c675e85a3109a2606717c7996c7d3e",
+            "source_pool_fingerprint": "0a81b194f3129a7f7ecc6271729225aadef3e15ad737e7b369d26106a15e0c9b",
+            "validation_proof_digest": "41d5dc201f19b2565593af692d0333514a38e99c1912168cb1a90b8a18732841"
           },
           "166_311": {
-            "candidate_pool_digest": "db984d919608e4e6a7d149c7248d35f4215d7774d2615b3654134855f1edfdfc",
-            "consumer_fingerprint": "9eef112b00b8013ab01bae76e9ae293d06ff0c80136161476bc4341d6d974d84",
-            "selection_result_digest": "3bf294c1df9296cd4c1786cfac18f2580b7241946f84ada8ac07fa8e185aa68b",
-            "source_pool_fingerprint": "41fcb24fc930f487679f8955772c51041ed303552b1f960e6a05a279361e4d9d",
-            "validation_proof_digest": "da5355ae67e51d498e5d53efe24091ee47bc5f0f1e5869d2ab67b91e7150c7f4"
+            "candidate_pool_digest": "676a714367c10b6a184304709c219e9ad306c3eed4525cd3cd6b2c3e2af84f82",
+            "consumer_fingerprint": "6d2a8f79a5e865365e6f849f3004514a80d19f859b4cfef102a3118ad1040724",
+            "selection_result_digest": "5b2fc126b51d77e0640a2c39c7f1ef7b9acb47e04ad8a565a6a3eb850a7eab0f",
+            "source_pool_fingerprint": "1f64ed7a6818e324839d3fc102e4e38a8ddc269c1100cc5c0a417ffa87889f05",
+            "validation_proof_digest": "46c8bfd72638be902dfd7fe98c97e18741802401632212a580cc8cc54dfa6dc3"
           },
           "166_313": {
-            "candidate_pool_digest": "762c2bda76dec4510af014ce0475a862a5f4748e9df95db5225660f387e359bb",
-            "consumer_fingerprint": "b737526d43c47a8ea97842d320041a0d6613940b80b578e613a66a1350c11167",
-            "selection_result_digest": "bc52c3509cad07c69c2afb03b3ec66f662ae5211e8904e88ae01fb4328c023d8",
-            "source_pool_fingerprint": "97b73fab3834f4bd32adda1badc8105c77499f137fa6ea2e6ccb35aad7948642",
-            "validation_proof_digest": "e42a33a56953d3ba95851682ec49c9b58c749598cfb8010b0d9c3d8d429dd023"
+            "candidate_pool_digest": "64ada900d78805b6f4760dd38f1d8350a531007908caf55aa646c1c84bd4ef6b",
+            "consumer_fingerprint": "375db5222dfff201881148b8912f968b420365568348cee363de81352bd9b423",
+            "selection_result_digest": "048ea580ed1c7830147927388fdd146d291916983b25661b899cf5aa41c7eee3",
+            "source_pool_fingerprint": "21d1691ab131e05c1b629797c6693f85f4d4cf0c6a64a415bbc093967d423402",
+            "validation_proof_digest": "844d74b09e408cc11a7d518853f1017e0dbe8ef3c3598665e57dc78feaab4559"
           },
           "166_432": {
-            "candidate_pool_digest": "286d273987e7ff2ac98e0e53b44539c5a8a2901d786ac5afceb1d024f6abee91",
-            "consumer_fingerprint": "77358e913dba5f8e5497184b4ed9df176e943c00099c479a2eac26417268aee4",
-            "selection_result_digest": "a642de6ede6a27949ab7293ad74702af7fe7e94584898b293442827fbd63b616",
-            "source_pool_fingerprint": "827f592cf96574181d73c2340739a24f9204dc183613439450ed52511ff02e65",
-            "validation_proof_digest": "35faf5b7da44acfc9460cc4b6c49e001f2a13f445532bf39756a6ba05eec3f57"
+            "candidate_pool_digest": "7c25840c1aac96a4ae4ef88ec5f97d1f0914f2b6901f4aad7a074c2e8e61fa68",
+            "consumer_fingerprint": "7dd81ea267ad967d4afcd5c87e87e6dc2a88424e7052e1dffad34cff1e8aecb6",
+            "selection_result_digest": "469c68c959061401947de4eb7c2cb0e312d11e49e177bd8f5ecc33132a1be55d",
+            "source_pool_fingerprint": "ddb12799e53cd89491412c5538b5a6a381ae703aa9443ccef4959a39d69e17fb",
+            "validation_proof_digest": "4d7f25643cbc2ae01ac775c7ca0d43014f06cae2cf085864abc2d47dc8bfcb41"
           },
           "166_433": {
-            "candidate_pool_digest": "6be3acdca16cea9ad34356ed69866a10d2fa9810b3585fe0fb405c069e12b559",
-            "consumer_fingerprint": "77835e907e7f30cc0e6430ff90e84003bf5c4d7b6e3b0919734f23aa3d24fc35",
-            "selection_result_digest": "c1a6f28286b81bd21c4f2cdd6e246c234cffac020fe6d103c8062cf67537dde3",
-            "source_pool_fingerprint": "f1d575571cb46cbe6cfa86b36211df5dd06717d367cfc1aca2126e72606b0a19",
-            "validation_proof_digest": "e0ab360ef06686a6f825c1342ea2e0729ba1799cbafda6b2fdced182a98b017b"
+            "candidate_pool_digest": "ccb09033537d93df51066f13ef091903e01f435cb1a5ab671b989a4c83b3c948",
+            "consumer_fingerprint": "18d121ec636d50f273cd6df5abbcfe27a94d852d52162940f690e6e3194e6db9",
+            "selection_result_digest": "4fd68d9bce86fd52e89f636ee0342bb46705ad6077be22921bb88e2b85b944e8",
+            "source_pool_fingerprint": "cb77bde36dc78d3da5314184b9d0e92595c8c41760bb06abf10ea2d19f596bc4",
+            "validation_proof_digest": "cf2cee40781d301bc91b839570da221b8a8c11c23afb89e72dc897fde832dce2"
           }
         }
       }
     },
+    "source_history_calendar": "Gregorian daily",
+    "source_history_completeness_policy": "exact_expected_date_set",
+    "source_history_days": 180,
+    "source_history_end": "2025-01-14",
+    "source_history_expected_date_count": 180,
+    "source_history_inclusive_end": true,
+    "source_history_start": "2024-07-19",
     "target_scenario_matrix": {
       "166/258": {
         "with": {
-          "candidate_pool_digest": "8bef9aa02a5298bd177552cf765532d5b44f229d8791b3f1733bf1f50aa6d6da",
-          "consumer_fingerprint": "abbc355c3b2fb84754dff185faf05a99f7df84ed717b14b93e035c7a7c172416",
+          "candidate_pool_digest": "689bbc5afe2765569f3281a7aea0f618d431fca4ac9c46da8c47bdeb6b5b2324",
+          "consumer_fingerprint": "223ec33ac089684969cea0744c993c053fc57eec8b8886a49eb04463fea12229",
           "exact_key_proof": {
             "candidate_digest_verified": true,
             "consumer_fingerprint_verified": true,
-            "cross_store_other_product_retained_count": 15919,
-            "cross_store_same_product_available_count": 14,
-            "cross_store_same_product_retained_count": 14,
+            "cross_store_other_product_retained_count": 6217,
+            "cross_store_same_product_available_count": 3,
+            "cross_store_same_product_retained_count": 3,
             "entity_key_fields": [
               "store_id",
               "product_id"
@@ -128,16 +135,16 @@
               "258"
             ],
             "exact_target_tuple_excluded": true,
-            "same_store_other_product_retained_count": 49
+            "same_store_other_product_retained_count": 20
           },
-          "manifest_identity_digest": "231698a4ac844811087b9563f629e981afa50510dd3cf99e847653abdbd59bf4",
-          "selection_result_digest": "4196c419072859d0421fae4ad77e608ecf7d7987602fd882148e8764d444fb74",
-          "source_pool_fingerprint": "4523fa81be8833bbab079a64480cf219eb87d0ec8a8e928fa5e9f167bdb45b6f",
-          "validation_proof_digest": "029357b2e778b15436ec1d9d596e3944c8473d8f1147bdb3b396bcc816da8269"
+          "manifest_identity_digest": "130bb862c21f5048be66d75e4bdb42fd33b63834723a03595e892c934fec5850",
+          "selection_result_digest": "59eb0cb06e387517262175d3e0c4c32d559fbe151036c306854b269dc41ecbb9",
+          "source_pool_fingerprint": "371659b9ecc16e74c37064a748b0816bcfa520b3dde5d3259636c456c2535f13",
+          "validation_proof_digest": "f47294d2406c931bac03b1d7dff4ab830427afce2a8903d396233adf0125cf9e"
         },
         "without": {
-          "candidate_pool_digest": "7940a1c51eee067b1bcd5868aee2cf70c53be1aaa9e54dec49c826873658206a",
-          "consumer_fingerprint": "f56294416199219e654353cc80f34d2503b3a771d95a8f963cfd67573f639063",
+          "candidate_pool_digest": "9aadcff7bc1ff2a934d54f1d742ec1e37b5a9734ec8db9c2c9ce32d2d0b18595",
+          "consumer_fingerprint": "fd699a583adacda0376e59861c83b767b2d0bf25f6f6d70ffae6a17ba2ea42b7",
           "exact_key_proof": {
             "candidate_digest_verified": true,
             "consumer_fingerprint_verified": true,
@@ -153,22 +160,22 @@
               "258"
             ],
             "exact_target_tuple_excluded": true,
-            "same_store_other_product_retained_count": 49
+            "same_store_other_product_retained_count": 20
           },
-          "manifest_identity_digest": "372596182ec34f64b68455f8d70efabe4153cb7d1233a8fef7d56ac17ee61ea4",
-          "selection_result_digest": "426aedd61c0748c02bed086b862c25a3df8a54101b5ae1171c393350f73664c4",
-          "source_pool_fingerprint": "421d90f0213967a36c1b6d5cace64ff8c73424ffa68abbf6b740f12be797ec2e",
-          "validation_proof_digest": "fb9666f4dc779041b7627dd72d6f425dfebbdb3ad25f6a175ba66f50b6f79386"
+          "manifest_identity_digest": "9fbdbc04cc50f6c9cd6dc1af0c4254dc607fb9ec1f861ca1ab3d8f15d8cf5efd",
+          "selection_result_digest": "1fb827abd06856e3cb58e1bcf188c26ee8c675e85a3109a2606717c7996c7d3e",
+          "source_pool_fingerprint": "0a81b194f3129a7f7ecc6271729225aadef3e15ad737e7b369d26106a15e0c9b",
+          "validation_proof_digest": "41d5dc201f19b2565593af692d0333514a38e99c1912168cb1a90b8a18732841"
         }
       },
       "166/311": {
         "with": {
-          "candidate_pool_digest": "097ad76ac2d1f59d20bf56bb738889c9b7be681b8cc693a167cc761f59ccd96c",
-          "consumer_fingerprint": "61724fd5ae2cac7aabe5976471296993118025d5d5ce2d355f3231dd542d9a00",
+          "candidate_pool_digest": "ac33eea274be62a0710de5cde4fe4ae369885886df9343b53a6d35b3dc5fe1f2",
+          "consumer_fingerprint": "ec56edfed70b88fa1b0e7cad7456c574ece8c089ae3db189336fc5d497ebbd2a",
           "exact_key_proof": {
             "candidate_digest_verified": true,
             "consumer_fingerprint_verified": true,
-            "cross_store_other_product_retained_count": 15932,
+            "cross_store_other_product_retained_count": 6219,
             "cross_store_same_product_available_count": 1,
             "cross_store_same_product_retained_count": 1,
             "entity_key_fields": [
@@ -180,16 +187,16 @@
               "311"
             ],
             "exact_target_tuple_excluded": true,
-            "same_store_other_product_retained_count": 49
+            "same_store_other_product_retained_count": 20
           },
-          "manifest_identity_digest": "231698a4ac844811087b9563f629e981afa50510dd3cf99e847653abdbd59bf4",
-          "selection_result_digest": "8cce11adb2a7c5c7ad95b3448765d51c73d9d04987ae9cd7d3f7ee9b9093ab5f",
-          "source_pool_fingerprint": "a5f80a068f3fd067975655d7f3c113a5ad632d00b169ff353c9edf4f098908be",
-          "validation_proof_digest": "2d9ae9dfd8e7cc19a7b251ead0c245e24293da2396f9498ef5d9e919b06ad68c"
+          "manifest_identity_digest": "130bb862c21f5048be66d75e4bdb42fd33b63834723a03595e892c934fec5850",
+          "selection_result_digest": "6953e10cbd0cf26f4f2561c02711c1f582ae9a2f1c57d4fc26b52950155eb00c",
+          "source_pool_fingerprint": "8b16df1689f47a58ca469dc104e9fd941354c2d62bcc2a10c9c50c18773996e9",
+          "validation_proof_digest": "ccdc2eb773ba4a39692e4dea0d619a5a423155d6062390f3216de055374088be"
         },
         "without": {
-          "candidate_pool_digest": "db984d919608e4e6a7d149c7248d35f4215d7774d2615b3654134855f1edfdfc",
-          "consumer_fingerprint": "9eef112b00b8013ab01bae76e9ae293d06ff0c80136161476bc4341d6d974d84",
+          "candidate_pool_digest": "676a714367c10b6a184304709c219e9ad306c3eed4525cd3cd6b2c3e2af84f82",
+          "consumer_fingerprint": "6d2a8f79a5e865365e6f849f3004514a80d19f859b4cfef102a3118ad1040724",
           "exact_key_proof": {
             "candidate_digest_verified": true,
             "consumer_fingerprint_verified": true,
@@ -205,24 +212,24 @@
               "311"
             ],
             "exact_target_tuple_excluded": true,
-            "same_store_other_product_retained_count": 49
+            "same_store_other_product_retained_count": 20
           },
-          "manifest_identity_digest": "372596182ec34f64b68455f8d70efabe4153cb7d1233a8fef7d56ac17ee61ea4",
-          "selection_result_digest": "3bf294c1df9296cd4c1786cfac18f2580b7241946f84ada8ac07fa8e185aa68b",
-          "source_pool_fingerprint": "41fcb24fc930f487679f8955772c51041ed303552b1f960e6a05a279361e4d9d",
-          "validation_proof_digest": "da5355ae67e51d498e5d53efe24091ee47bc5f0f1e5869d2ab67b91e7150c7f4"
+          "manifest_identity_digest": "9fbdbc04cc50f6c9cd6dc1af0c4254dc607fb9ec1f861ca1ab3d8f15d8cf5efd",
+          "selection_result_digest": "5b2fc126b51d77e0640a2c39c7f1ef7b9acb47e04ad8a565a6a3eb850a7eab0f",
+          "source_pool_fingerprint": "1f64ed7a6818e324839d3fc102e4e38a8ddc269c1100cc5c0a417ffa87889f05",
+          "validation_proof_digest": "46c8bfd72638be902dfd7fe98c97e18741802401632212a580cc8cc54dfa6dc3"
         }
       },
       "166/313": {
         "with": {
-          "candidate_pool_digest": "f5560eb31c03566bc6e19c1cbc3c5fb450d648b4a49660abab50d17f62bc66c1",
-          "consumer_fingerprint": "ef353b3b56821444d703ddcf0a132f54aea085f627092d56857498373b8530bf",
+          "candidate_pool_digest": "055246939f80870e0201e926411218c6e2ea494a35dc97d465aacb8e79601b81",
+          "consumer_fingerprint": "5df4bdb9961d7a66e3e5e0fd9f0efbe8ef7da5ad244381bc0ca2ffec03d01487",
           "exact_key_proof": {
             "candidate_digest_verified": true,
             "consumer_fingerprint_verified": true,
-            "cross_store_other_product_retained_count": 15906,
-            "cross_store_same_product_available_count": 27,
-            "cross_store_same_product_retained_count": 27,
+            "cross_store_other_product_retained_count": 6194,
+            "cross_store_same_product_available_count": 26,
+            "cross_store_same_product_retained_count": 26,
             "entity_key_fields": [
               "store_id",
               "product_id"
@@ -232,16 +239,16 @@
               "313"
             ],
             "exact_target_tuple_excluded": true,
-            "same_store_other_product_retained_count": 49
+            "same_store_other_product_retained_count": 20
           },
-          "manifest_identity_digest": "231698a4ac844811087b9563f629e981afa50510dd3cf99e847653abdbd59bf4",
-          "selection_result_digest": "91fce8776ba14d7aa9d27157d08fe670a39ad37675cd2b54b1e872dd471bd7c8",
-          "source_pool_fingerprint": "e253ea0043709540fa279c070f7a5818e8f9f35129162565e478537f8b513522",
-          "validation_proof_digest": "c5cd43da134cd34e23460634433dd7d62e6e212e0cd96f99e1a11d4d200cc7e5"
+          "manifest_identity_digest": "130bb862c21f5048be66d75e4bdb42fd33b63834723a03595e892c934fec5850",
+          "selection_result_digest": "ac73ba61a26b16055fbeefe0e55c3c6cbf7e44ff5179df0c6a6bd3ecae4081c0",
+          "source_pool_fingerprint": "9062a24c414dd89e15e363cf7e0426027c489c4ff04b365a5cc1b25e9efd0498",
+          "validation_proof_digest": "b01c31ef3c4471e7f0a7b72d8d7a6ccd285c4be84ed5d87ce489ddee2c9a2116"
         },
         "without": {
-          "candidate_pool_digest": "762c2bda76dec4510af014ce0475a862a5f4748e9df95db5225660f387e359bb",
-          "consumer_fingerprint": "b737526d43c47a8ea97842d320041a0d6613940b80b578e613a66a1350c11167",
+          "candidate_pool_digest": "64ada900d78805b6f4760dd38f1d8350a531007908caf55aa646c1c84bd4ef6b",
+          "consumer_fingerprint": "375db5222dfff201881148b8912f968b420365568348cee363de81352bd9b423",
           "exact_key_proof": {
             "candidate_digest_verified": true,
             "consumer_fingerprint_verified": true,
@@ -257,24 +264,24 @@
               "313"
             ],
             "exact_target_tuple_excluded": true,
-            "same_store_other_product_retained_count": 49
+            "same_store_other_product_retained_count": 20
           },
-          "manifest_identity_digest": "372596182ec34f64b68455f8d70efabe4153cb7d1233a8fef7d56ac17ee61ea4",
-          "selection_result_digest": "bc52c3509cad07c69c2afb03b3ec66f662ae5211e8904e88ae01fb4328c023d8",
-          "source_pool_fingerprint": "97b73fab3834f4bd32adda1badc8105c77499f137fa6ea2e6ccb35aad7948642",
-          "validation_proof_digest": "e42a33a56953d3ba95851682ec49c9b58c749598cfb8010b0d9c3d8d429dd023"
+          "manifest_identity_digest": "9fbdbc04cc50f6c9cd6dc1af0c4254dc607fb9ec1f861ca1ab3d8f15d8cf5efd",
+          "selection_result_digest": "048ea580ed1c7830147927388fdd146d291916983b25661b899cf5aa41c7eee3",
+          "source_pool_fingerprint": "21d1691ab131e05c1b629797c6693f85f4d4cf0c6a64a415bbc093967d423402",
+          "validation_proof_digest": "844d74b09e408cc11a7d518853f1017e0dbe8ef3c3598665e57dc78feaab4559"
         }
       },
       "166/432": {
         "with": {
-          "candidate_pool_digest": "e6e406f3c286e6c02109505a706a8a01bd8de8b2bc9e797c3fd1cd47793524c6",
-          "consumer_fingerprint": "c78593768bcb7a200e40fb4f0c8f0f68f4ad5afbea95301e1504585b99af8144",
+          "candidate_pool_digest": "1cdc6e0eba37f2da8c25abe509021483ad04888751bed1030cf77de23d96ec7d",
+          "consumer_fingerprint": "832a72697d10aa3ea2213e85fd2dc443224da4d34f803d09fc9addb2e11408e0",
           "exact_key_proof": {
             "candidate_digest_verified": true,
             "consumer_fingerprint_verified": true,
-            "cross_store_other_product_retained_count": 15788,
-            "cross_store_same_product_available_count": 145,
-            "cross_store_same_product_retained_count": 145,
+            "cross_store_other_product_retained_count": 6079,
+            "cross_store_same_product_available_count": 141,
+            "cross_store_same_product_retained_count": 141,
             "entity_key_fields": [
               "store_id",
               "product_id"
@@ -284,16 +291,16 @@
               "432"
             ],
             "exact_target_tuple_excluded": true,
-            "same_store_other_product_retained_count": 49
+            "same_store_other_product_retained_count": 20
           },
-          "manifest_identity_digest": "231698a4ac844811087b9563f629e981afa50510dd3cf99e847653abdbd59bf4",
-          "selection_result_digest": "394b098363b7421f74c9b3890b0e572fdf9ef9887cc9ce34d5d594845afd2112",
-          "source_pool_fingerprint": "d2fb4881382827374056d56936e0ba0669ba86ea89e955ae55708b203e567a54",
-          "validation_proof_digest": "cb8a46b8ac8c51c9f8bea49a4901cdc5c459d4d2a62f6e7d0ca9770aa15a2071"
+          "manifest_identity_digest": "130bb862c21f5048be66d75e4bdb42fd33b63834723a03595e892c934fec5850",
+          "selection_result_digest": "ce41296fcbde2f65f8e80b09c55e4576fcb4998e5d8481518910addf6504fb60",
+          "source_pool_fingerprint": "2ef125e66b97f588a2b082e205f47bec2196ea4c7656d9cf0385d0bf9cca4259",
+          "validation_proof_digest": "e3aeacec3ec27a237b0be58c7cbd9e7ac356b0506dace15418b52a8ab5e8e020"
         },
         "without": {
-          "candidate_pool_digest": "286d273987e7ff2ac98e0e53b44539c5a8a2901d786ac5afceb1d024f6abee91",
-          "consumer_fingerprint": "77358e913dba5f8e5497184b4ed9df176e943c00099c479a2eac26417268aee4",
+          "candidate_pool_digest": "7c25840c1aac96a4ae4ef88ec5f97d1f0914f2b6901f4aad7a074c2e8e61fa68",
+          "consumer_fingerprint": "7dd81ea267ad967d4afcd5c87e87e6dc2a88424e7052e1dffad34cff1e8aecb6",
           "exact_key_proof": {
             "candidate_digest_verified": true,
             "consumer_fingerprint_verified": true,
@@ -309,24 +316,24 @@
               "432"
             ],
             "exact_target_tuple_excluded": true,
-            "same_store_other_product_retained_count": 49
+            "same_store_other_product_retained_count": 20
           },
-          "manifest_identity_digest": "372596182ec34f64b68455f8d70efabe4153cb7d1233a8fef7d56ac17ee61ea4",
-          "selection_result_digest": "a642de6ede6a27949ab7293ad74702af7fe7e94584898b293442827fbd63b616",
-          "source_pool_fingerprint": "827f592cf96574181d73c2340739a24f9204dc183613439450ed52511ff02e65",
-          "validation_proof_digest": "35faf5b7da44acfc9460cc4b6c49e001f2a13f445532bf39756a6ba05eec3f57"
+          "manifest_identity_digest": "9fbdbc04cc50f6c9cd6dc1af0c4254dc607fb9ec1f861ca1ab3d8f15d8cf5efd",
+          "selection_result_digest": "469c68c959061401947de4eb7c2cb0e312d11e49e177bd8f5ecc33132a1be55d",
+          "source_pool_fingerprint": "ddb12799e53cd89491412c5538b5a6a381ae703aa9443ccef4959a39d69e17fb",
+          "validation_proof_digest": "4d7f25643cbc2ae01ac775c7ca0d43014f06cae2cf085864abc2d47dc8bfcb41"
         }
       },
       "166/433": {
         "with": {
-          "candidate_pool_digest": "4f22963478294fae6231c09bafb61dc196850eea651e8170b74ced572256d9df",
-          "consumer_fingerprint": "dff407b58c32087961cab693092aa0d7ddf7d2825cb14887de0eb421ff758899",
+          "candidate_pool_digest": "88028bf54a3aa6ef2791d005a62cf4f20cbdf92834138be13e23e027b8a45fb7",
+          "consumer_fingerprint": "f854ef4c541bc1e64db2cd316a3faca9e2fd71662bd79ce829a42a536c6472de",
           "exact_key_proof": {
             "candidate_digest_verified": true,
             "consumer_fingerprint_verified": true,
-            "cross_store_other_product_retained_count": 15852,
-            "cross_store_same_product_available_count": 81,
-            "cross_store_same_product_retained_count": 81,
+            "cross_store_other_product_retained_count": 6143,
+            "cross_store_same_product_available_count": 77,
+            "cross_store_same_product_retained_count": 77,
             "entity_key_fields": [
               "store_id",
               "product_id"
@@ -336,16 +343,16 @@
               "433"
             ],
             "exact_target_tuple_excluded": true,
-            "same_store_other_product_retained_count": 49
+            "same_store_other_product_retained_count": 20
           },
-          "manifest_identity_digest": "231698a4ac844811087b9563f629e981afa50510dd3cf99e847653abdbd59bf4",
-          "selection_result_digest": "8ba95d954ce553e933d747fca8a27aa6e4387b5b1d8124bf1be9a44484d3828c",
-          "source_pool_fingerprint": "6c795f900a1b14b9742827d0c39eb4565ce0e4289187565759309a7c8865d28c",
-          "validation_proof_digest": "4fdd2a854056f5125b8bcb544ccaacfbdbb703aba231f8aad5c09e5b8dafd619"
+          "manifest_identity_digest": "130bb862c21f5048be66d75e4bdb42fd33b63834723a03595e892c934fec5850",
+          "selection_result_digest": "4a049298c815e25ee4736c9e460fdbd244c7bc423d558e299afd53a8af8e2419",
+          "source_pool_fingerprint": "e6376adf4c439a5da330713f1d65711e88d0358445d4cf76ee5fd81a83eb33cb",
+          "validation_proof_digest": "66c8985f9032ed89d1f90351ac576966be34445897a029ea41c3dbc62158f3dd"
         },
         "without": {
-          "candidate_pool_digest": "6be3acdca16cea9ad34356ed69866a10d2fa9810b3585fe0fb405c069e12b559",
-          "consumer_fingerprint": "77835e907e7f30cc0e6430ff90e84003bf5c4d7b6e3b0919734f23aa3d24fc35",
+          "candidate_pool_digest": "ccb09033537d93df51066f13ef091903e01f435cb1a5ab671b989a4c83b3c948",
+          "consumer_fingerprint": "18d121ec636d50f273cd6df5abbcfe27a94d852d52162940f690e6e3194e6db9",
           "exact_key_proof": {
             "candidate_digest_verified": true,
             "consumer_fingerprint_verified": true,
@@ -361,12 +368,12 @@
               "433"
             ],
             "exact_target_tuple_excluded": true,
-            "same_store_other_product_retained_count": 49
+            "same_store_other_product_retained_count": 20
           },
-          "manifest_identity_digest": "372596182ec34f64b68455f8d70efabe4153cb7d1233a8fef7d56ac17ee61ea4",
-          "selection_result_digest": "c1a6f28286b81bd21c4f2cdd6e246c234cffac020fe6d103c8062cf67537dde3",
-          "source_pool_fingerprint": "f1d575571cb46cbe6cfa86b36211df5dd06717d367cfc1aca2126e72606b0a19",
-          "validation_proof_digest": "e0ab360ef06686a6f825c1342ea2e0729ba1799cbafda6b2fdced182a98b017b"
+          "manifest_identity_digest": "9fbdbc04cc50f6c9cd6dc1af0c4254dc607fb9ec1f861ca1ab3d8f15d8cf5efd",
+          "selection_result_digest": "4fd68d9bce86fd52e89f636ee0342bb46705ad6077be22921bb88e2b85b944e8",
+          "source_pool_fingerprint": "cb77bde36dc78d3da5314184b9d0e92595c8c41760bb06abf10ea2d19f596bc4",
+          "validation_proof_digest": "cf2cee40781d301bc91b839570da221b8a8c11c23afb89e72dc897fde832dce2"
         }
       }
     }
@@ -383,7 +390,7 @@
     ]
   },
   "entity_count": {
-    "source": 15982,
+    "source": 6240,
     "target": 5
   },
   "entity_key": [
@@ -402,8 +409,8 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "03e34709a3928170d9df1856edf6abff000965fe3ebed25d0cf1aef66c90b1f4",
-  "readiness_proof_digest": "efe8292ae7ff3c6da7a559b9893fdc07dcd089919894795b5fae879cedd29209",
+  "proof_identity_sha256": "2a7040664ed2ad00610b265e0e37d201f49900c8e26e38b2c7b0bf697beff941",
+  "readiness_proof_digest": "d8bfcb1d354d077a5106527a563c0857e35bcd201615ef59182f81e87c773284",
   "readiness_result": {
     "failure_code": null,
     "status": "passed"

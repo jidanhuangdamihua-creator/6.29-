@@ -11,11 +11,19 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from datetime import date
 from pathlib import Path, PurePosixPath
 import subprocess
 from typing import Any, Mapping, Sequence
 
 import pyarrow.parquet as pq
+
+from src.constants import (
+    D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+    SOURCE_HISTORY_CALENDAR,
+    SOURCE_HISTORY_COMPLETENESS_POLICY,
+    SOURCE_HISTORY_DAYS,
+)
 
 from src.protocols.formal_input_paths import (
     FORMAL_SEALED_ROOT_RELATIVE,
@@ -50,8 +58,20 @@ FROZEN_PARQUETS: dict[int, dict[str, dict[str, object]]] = {
 }
 
 D4_KNN = {
-    "with": {"path": "configs/solidified/knn/Dataset4/knn_with_info_sharing.json", "sha256": "44a332c374f97fce833b284802122f5337f8376a3bc1d70110c0c67debd5db6a"},
-    "without": {"path": "configs/solidified/knn/Dataset4/knn_without_info_sharing.json", "sha256": "b61df584146d27c5c4dc154c4d6445ddc298200e888cc186bedb51601091a73e"},
+    "with": {"path": "configs/solidified/knn/Dataset4/knn_with_info_sharing.json"},
+    "without": {"path": "configs/solidified/knn/Dataset4/knn_without_info_sharing.json"},
+}
+
+D4_D6_KNN = {
+    4: D4_KNN,
+    5: {
+        "with": {"path": "configs/solidified/knn/Dataset5/knn_with_info_sharing.json"},
+        "without": {"path": "configs/solidified/knn/Dataset5/knn_without_info_sharing.json"},
+    },
+    6: {
+        "with": {"path": "configs/solidified/knn/Dataset6/knn_with_info_sharing.json"},
+        "without": {"path": "configs/solidified/knn/Dataset6/knn_without_info_sharing.json"},
+    },
 }
 
 D1_D2_KNN = {
@@ -128,6 +148,155 @@ def _json(path: Path, code: str) -> dict[str, object]:
     if not isinstance(loaded, dict):
         raise DeploymentManifestError(code, f"JSON object required: {path}")
     return loaded
+
+
+def _date_identity(value: object) -> str:
+    """Normalize a persisted ISO date or fail closed at the manifest boundary."""
+    try:
+        return date.fromisoformat(str(value)).isoformat()
+    except (TypeError, ValueError) as exc:
+        raise DeploymentManifestError("D4_D6_KNN_METADATA_MISMATCH", f"invalid date: {value!r}") from exc
+
+
+def _verify_d4_d6_knn_payload(path: Path, *, dataset_id: int) -> dict[str, object]:
+    """Validate persisted D4-D6 selection identity without regenerating it."""
+    payload = _json(path, "D4_D6_KNN_AUTHORITY_UNREADABLE")
+    expected_top_level = {
+        "source_history_days": SOURCE_HISTORY_DAYS,
+        "source_history_expected_date_count": SOURCE_HISTORY_DAYS,
+        "source_history_start": dataset_contract(dataset_id).source_history_start.isoformat(),
+        "source_history_end": dataset_contract(dataset_id).source_history_end.isoformat(),
+        "source_history_calendar": SOURCE_HISTORY_CALENDAR,
+        "source_history_inclusive_end": True,
+        "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
+        "source_history_calendarization_rule": (
+            "D5_APPROVED_SOURCE_HISTORY_CALENDARIZATION"
+            if dataset_id == 5
+            else "not_applicable"
+        ),
+    }
+    if any(payload.get(field) != value for field, value in expected_top_level.items()):
+        raise DeploymentManifestError("D4_D6_SOURCE_HISTORY_IDENTITY_MISMATCH", str(path))
+    expected_authority = "shared_protocol" if dataset_id == 4 else "runtime"
+    expected_protocol = PROTOCOL_VERSION if dataset_id == 4 else D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
+    if payload.get("selection_authority") != expected_authority:
+        raise DeploymentManifestError("D4_D6_KNN_AUTHORITY_MISMATCH", str(path))
+    if payload.get("protocol_version") != expected_protocol:
+        raise DeploymentManifestError("D4_D6_KNN_PROTOCOL_MISMATCH", str(path))
+    metadata_map = payload.get("selection_metadata")
+    if not isinstance(metadata_map, Mapping) or not metadata_map:
+        raise DeploymentManifestError("D4_D6_KNN_METADATA_MISSING", str(path))
+    expected_features = list(get_experiment_protocol(dataset_id).knn_feature_columns)
+    targets: dict[str, object] = {}
+    from src.protocols.candidate_pool import build_candidate_pool_digest
+
+    spec = dataset_contract(dataset_id)
+    for target_id, metadata in sorted(metadata_map.items()):
+        if not isinstance(metadata, Mapping):
+            raise DeploymentManifestError("D4_D6_KNN_METADATA_INVALID", str(path))
+        if (
+            metadata.get("selection_authority") != expected_authority
+            or metadata.get("protocol_version") != expected_protocol
+            or metadata.get("knn_feature_columns") != expected_features
+            or metadata.get("historical_feature_columns") != expected_features
+            or metadata.get("forecast_excluded_columns") != []
+            or metadata.get("feature_scope") != "historical_observed"
+            or metadata.get("max_allowed_date_relation") != "date<=origin"
+        ):
+            raise DeploymentManifestError("D4_D6_KNN_METADATA_MISMATCH", f"{path}:{target_id}")
+        observed_start = metadata.get("knn_observed_start")
+        observed_end = metadata.get("knn_observed_end")
+        expected_window = get_experiment_protocol(dataset_id).observation_window(
+            observed_start
+        ) if observed_start is not None else None
+        if (
+            expected_window is None
+            or _date_identity(observed_start) != expected_window.knn_observed_start.isoformat()
+            or _date_identity(observed_end) != expected_window.knn_observed_end.isoformat()
+        ):
+            raise DeploymentManifestError("D4_D6_KNN_METADATA_MISMATCH", f"{path}:{target_id}")
+        for field, expected in (
+            ("source_history_days", SOURCE_HISTORY_DAYS),
+            ("source_history_expected_date_count", SOURCE_HISTORY_DAYS),
+            ("source_history_calendar", SOURCE_HISTORY_CALENDAR),
+            ("source_history_completeness_policy", SOURCE_HISTORY_COMPLETENESS_POLICY),
+            ("source_history_inclusive_end", True),
+            (
+                "source_history_calendarization_rule",
+                "D5_APPROVED_SOURCE_HISTORY_CALENDARIZATION"
+                if dataset_id == 5
+                else "not_applicable",
+            ),
+        ):
+            if metadata.get(field) != expected:
+                raise DeploymentManifestError("D4_D6_SOURCE_HISTORY_IDENTITY_MISMATCH", f"{path}:{target_id}")
+        digest_input = metadata.get("candidate_pool_digest_input")
+        if not isinstance(digest_input, Mapping):
+            raise DeploymentManifestError("D4_D6_CANDIDATE_DIGEST_INPUT_MISSING", f"{path}:{target_id}")
+        if (
+            digest_input.get("source_history_days") != SOURCE_HISTORY_DAYS
+            or digest_input.get("source_history_completeness_policy") != SOURCE_HISTORY_COMPLETENESS_POLICY
+            or digest_input.get("source_history_start") != spec.source_history_start.isoformat()
+            or digest_input.get("source_history_end") != spec.source_history_end.isoformat()
+            or digest_input.get("source_history_frame_digest") != metadata.get("source_history_frame_digest")
+        ):
+            raise DeploymentManifestError("D4_D6_CANDIDATE_HISTORY_IDENTITY_MISMATCH", f"{path}:{target_id}")
+        candidate_keys = digest_input.get("candidate_keys")
+        target_key = digest_input.get("target_key")
+        if not isinstance(candidate_keys, list) or not isinstance(target_key, list):
+            raise DeploymentManifestError("D4_D6_CANDIDATE_POOL_INVALID", f"{path}:{target_id}")
+        normalized_candidates = {
+            tuple(str(part) for part in key)
+            for key in candidate_keys
+            if isinstance(key, list)
+        }
+        normalized_target = tuple(str(part) for part in target_key)
+        if len(normalized_candidates) != len(candidate_keys) or normalized_target in normalized_candidates:
+            raise DeploymentManifestError("D4_D6_CANDIDATE_POOL_INVALID", f"{path}:{target_id}")
+        try:
+            candidate_digest = build_candidate_pool_digest(**dict(digest_input))
+        except Exception as exc:
+            raise DeploymentManifestError("D4_D6_CANDIDATE_DIGEST_INVALID", f"{path}:{target_id}: {exc}") from exc
+        if candidate_digest != metadata.get("candidate_pool_digest"):
+            raise DeploymentManifestError("D4_D6_CANDIDATE_DIGEST_INVALID", f"{path}:{target_id}")
+        selected = metadata.get("selected_sources_runtime")
+        if not isinstance(selected, list) or len(selected) != int(payload.get("k", 0)):
+            raise DeploymentManifestError("D4_D6_SELECTED_SOURCE_INVALID", f"{path}:{target_id}")
+        selected_keys = {
+            tuple(str(part) for part in row.get("source_key", []))
+            for row in selected
+            if isinstance(row, Mapping)
+        }
+        if len(selected_keys) != len(selected) or not selected_keys.issubset(normalized_candidates):
+            raise DeploymentManifestError("D4_D6_SELECTED_SOURCE_OUTSIDE_POOL", f"{path}:{target_id}")
+        for field in ("source_history_frame_digest", "consumer_frame_digest", "candidate_pool_digest", "selection_result_digest"):
+            value = metadata.get(field)
+            if not isinstance(value, str) or len(value) != 64:
+                raise DeploymentManifestError("D4_D6_DIGEST_MISSING", f"{path}:{target_id}/{field}")
+        if metadata.get("consumer_frame_rows") != len(selected) * SOURCE_HISTORY_DAYS:
+            raise DeploymentManifestError("D4_D6_CONSUMER_FRAME_CARDINALITY", f"{path}:{target_id}")
+        if dataset_id == 4 and ("729", "424") in normalized_candidates.union(selected_keys):
+            raise DeploymentManifestError("D4_INCOMPLETE_CANDIDATE_PRESENT", f"{path}:{target_id}")
+        targets[str(target_id)] = {
+            "target_key": list(normalized_target),
+            "candidate_pool_digest": candidate_digest,
+            "selection_result_digest": metadata["selection_result_digest"],
+            "source_history_frame_digest": metadata["source_history_frame_digest"],
+            "consumer_frame_digest": metadata["consumer_frame_digest"],
+            "consumer_frame_rows": metadata["consumer_frame_rows"],
+        }
+    return {
+        "path": str(path),
+        "sha256": sha256_file(path),
+        "source_history_days": SOURCE_HISTORY_DAYS,
+        "source_history_start": spec.source_history_start.isoformat(),
+        "source_history_end": spec.source_history_end.isoformat(),
+        "source_history_expected_date_count": SOURCE_HISTORY_DAYS,
+        "source_history_calendar": SOURCE_HISTORY_CALENDAR,
+        "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
+        "source_history_inclusive_end": True,
+        "targets": targets,
+    }
 
 
 def _relative(path: Path, root: Path) -> str:
@@ -272,6 +441,14 @@ def frozen_artifact_snapshot(repository_root: Path) -> dict[str, object]:
         }
         for scenario, item in D4_KNN.items()
     }
+    d4_d6_knn: dict[str, object] = {}
+    for dataset_id, scenarios in D4_D6_KNN.items():
+        d4_d6_knn[f"D{dataset_id}"] = {
+            scenario: _verify_d4_d6_knn_payload(
+                root / str(item["path"]), dataset_id=dataset_id
+            )
+            for scenario, item in scenarios.items()
+        }
     strict_knn: dict[str, object] = {}
     for dataset_id, scenarios in D1_D2_KNN.items():
         dataset_payload: dict[str, object] = {}
@@ -296,10 +473,20 @@ def frozen_artifact_snapshot(repository_root: Path) -> dict[str, object]:
                 "selection_metadata": dict(metadata),
             }
         strict_knn[f"D{dataset_id}"] = dataset_payload
-    return {"datasets": datasets, "d1_d2_knn": strict_knn, "d4_knn": knn}
+    return {
+        "datasets": datasets,
+        "d1_d2_knn": strict_knn,
+        "d4_knn": knn,
+        "d4_d6_knn": d4_d6_knn,
+    }
 
 
-def verify_frozen_snapshot(snapshot: Mapping[str, object]) -> None:
+def verify_frozen_snapshot(
+    snapshot: Mapping[str, object],
+    *,
+    repository_root: Path,
+) -> None:
+    root = Path(repository_root).resolve(strict=True)
     datasets = snapshot.get("datasets")
     if not isinstance(datasets, Mapping):
         raise DeploymentManifestError("FINAL_AUTHORITY_INVALID", "datasets missing")
@@ -318,12 +505,21 @@ def verify_frozen_snapshot(snapshot: Mapping[str, object]) -> None:
                     f"D{dataset_id} {role}",
                 )
     knn = snapshot.get("d4_knn")
-    if not isinstance(knn, Mapping):
+    if not isinstance(knn, Mapping) or set(knn) != set(D4_KNN):
         raise DeploymentManifestError("D4_KNN_AUTHORITY_MISMATCH")
-    for scenario, expected in D4_KNN.items():
-        actual = knn.get(scenario)
-        if not isinstance(actual, Mapping) or actual.get("sha256") != expected["sha256"]:
-            raise DeploymentManifestError("D4_KNN_AUTHORITY_MISMATCH", scenario)
+    d4_d6_knn = snapshot.get("d4_d6_knn")
+    if not isinstance(d4_d6_knn, Mapping) or set(d4_d6_knn) != {f"D{i}" for i in (4, 5, 6)}:
+        raise DeploymentManifestError("D4_D6_KNN_AUTHORITY_MISMATCH")
+    for dataset_id, scenarios in D4_D6_KNN.items():
+        actual_dataset = d4_d6_knn.get(f"D{dataset_id}")
+        if not isinstance(actual_dataset, Mapping) or set(actual_dataset) != set(scenarios):
+            raise DeploymentManifestError("D4_D6_KNN_AUTHORITY_MISMATCH", f"D{dataset_id}")
+        for scenario in scenarios:
+            actual = actual_dataset.get(scenario)
+            if not isinstance(actual, Mapping) or actual.get("sha256") != sha256_file(
+                root / str(scenarios[scenario]["path"])
+            ):
+                raise DeploymentManifestError("D4_D6_KNN_AUTHORITY_MISMATCH", f"D{dataset_id}/{scenario}")
     strict_knn = snapshot.get("d1_d2_knn")
     if not isinstance(strict_knn, Mapping):
         raise DeploymentManifestError("D1_D2_KNN_AUTHORITY_MISMATCH")
@@ -447,10 +643,64 @@ def _d4_authority(repository_root: Path, readiness: Mapping[str, object]) -> dic
     return {
         "entity_key": ["store_id", "product_id"],
         "exclusion_scope": "current_exact_target_tuple_only",
+        "source_history_days": SOURCE_HISTORY_DAYS,
+        "source_history_start": dataset_contract(4).source_history_start.isoformat(),
+        "source_history_end": dataset_contract(4).source_history_end.isoformat(),
+        "source_history_expected_date_count": SOURCE_HISTORY_DAYS,
+        "source_history_calendar": SOURCE_HISTORY_CALENDAR,
+        "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
+        "source_history_inclusive_end": True,
         "scenario_files": files,
         "target_scenario_matrix": matrix,
         "exact_key_proof_digest": exact_key_proof_digest,
     }
+
+
+def _d4_d6_runtime_authority(
+    repository_root: Path,
+    dataset_id: int,
+    readiness: Mapping[str, object],
+) -> dict[str, object]:
+    """Bind D5/D6 persisted runtime selections to readiness and file bytes."""
+    root = Path(repository_root)
+    source_selection = readiness.get("source_selection")
+    scenarios = source_selection.get("scenarios") if isinstance(source_selection, Mapping) else None
+    if not isinstance(scenarios, Mapping) or set(scenarios) != {"without", "with"}:
+        raise DeploymentManifestError("D4_D6_SELECTION_AUTHORITY_MISSING", f"D{dataset_id}")
+    files: dict[str, object] = {}
+    for scenario, expected in D4_D6_KNN[dataset_id].items():
+        path = root / str(expected["path"])
+        payload = _verify_d4_d6_knn_payload(path, dataset_id=dataset_id)
+        report = scenarios.get(scenario)
+        if not isinstance(report, Mapping):
+            raise DeploymentManifestError("D4_D6_SELECTION_READINESS_MISSING", f"D{dataset_id}/{scenario}")
+        files[scenario] = {
+            "path": expected["path"],
+            "sha256": payload["sha256"],
+            "source_history_days": SOURCE_HISTORY_DAYS,
+            "source_history_start": payload["source_history_start"],
+            "source_history_end": payload["source_history_end"],
+            "source_history_expected_date_count": SOURCE_HISTORY_DAYS,
+            "source_history_calendar": SOURCE_HISTORY_CALENDAR,
+            "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
+            "source_history_inclusive_end": True,
+            "targets": payload["targets"],
+            "readiness_digest": sha256_bytes(canonical_json_bytes(report)),
+        }
+    authority = {
+        "dataset_id": f"D{dataset_id}",
+        "selection_authority": "runtime",
+        "protocol_version": D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+        "source_history_days": SOURCE_HISTORY_DAYS,
+        "source_history_start": dataset_contract(dataset_id).source_history_start.isoformat(),
+        "source_history_end": dataset_contract(dataset_id).source_history_end.isoformat(),
+        "source_history_expected_date_count": SOURCE_HISTORY_DAYS,
+        "source_history_calendar": SOURCE_HISTORY_CALENDAR,
+        "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
+        "source_history_inclusive_end": True,
+        "scenario_files": files,
+    }
+    return {**authority, "authority_digest": sha256_bytes(canonical_json_bytes(authority))}
 
 
 def _d1_d2_authority(repository_root: Path, dataset_id: int) -> dict[str, object]:
@@ -651,18 +901,9 @@ def build_formal_proof(
     elif dataset_id == 4:
         dataset_specific = _d4_authority(root, readiness)
     elif dataset_id == 5:
-        dataset_specific = {
-            "resolver_used": True,
-            "onpromotion_rule": "frozen_consumer_validation",
-            "transactions_rule": "forbidden_forecast",
-            "oil_price_rule": "origin_bounded_fill",
-        }
+        dataset_specific = _d4_d6_runtime_authority(root, 5, readiness)
     elif dataset_id == 6:
-        dataset_specific = {
-            "resolver_used": True,
-            "sell_price_authority": "frozen_consumer_validation",
-            "calendar_event_snap_authority": "frozen_consumer_validation",
-        }
+        dataset_specific = _d4_d6_runtime_authority(root, 6, readiness)
     payload: dict[str, object] = {
         "schema_version": PROOF_SCHEMA_VERSION,
         "dataset_id": f"D{dataset_id}",
@@ -757,6 +998,8 @@ def build_root_manifest(
     d1 = proofs["D1"]["dataset_specific"]
     d2 = proofs["D2"]["dataset_specific"]
     d4 = proofs["D4"]["dataset_specific"]
+    d5 = proofs["D5"]["dataset_specific"]
+    d6 = proofs["D6"]["dataset_specific"]
     payload: dict[str, object] = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "publication_state": "authoritative",
@@ -773,6 +1016,11 @@ def build_root_manifest(
             "with": d4["scenario_files"]["with"],  # type: ignore[index]
             "without": d4["scenario_files"]["without"],  # type: ignore[index]
             "exact_key_proof_digest": d4["exact_key_proof_digest"],  # type: ignore[index]
+        },
+        "d4_d6_selection_authority": {
+            "D4": d4,
+            "D5": d5,
+            "D6": d6,
         },
         "d1_d2_knn_selection_authority": {
             "D1": d1["knn_selection_authority"]["scenario_files"],  # type: ignore[index]
@@ -835,7 +1083,7 @@ def validate_deployment_manifest(
         raise DeploymentManifestError("CODE_INVENTORY_MISMATCH")
     verify_code_inventory(root, inventory)
     snapshot = frozen_artifact_snapshot(root)
-    verify_frozen_snapshot(snapshot)
+    verify_frozen_snapshot(snapshot, repository_root=root)
     datasets = manifest.get("datasets")
     if not isinstance(datasets, Mapping) or set(datasets) != {f"D{i}" for i in range(1, 7)}:
         raise DeploymentManifestError("DATASET_ENTRY_MISSING")
@@ -895,6 +1143,24 @@ def validate_deployment_manifest(
         or d4.get("exact_key_proof_digest") != manifest["d4_selection_authority"]["exact_key_proof_digest"]  # type: ignore[index]
     ):
         raise DeploymentManifestError("D4_EXACT_KEY_AUTHORITY_MISMATCH")
+    d4_d6_authority = manifest.get("d4_d6_selection_authority")
+    expected_d4_d6_authority = {
+        f"D{dataset_id}": proofs[f"D{dataset_id}"]["dataset_specific"]
+        for dataset_id in (4, 5, 6)
+    }
+    if d4_d6_authority != expected_d4_d6_authority:
+        raise DeploymentManifestError("D4_D6_SELECTION_AUTHORITY_MISMATCH")
+    for dataset_id in (4, 5, 6):
+        authority = expected_d4_d6_authority[f"D{dataset_id}"]
+        scenario_files = authority.get("scenario_files") if isinstance(authority, Mapping) else None
+        if not isinstance(scenario_files, Mapping):
+            raise DeploymentManifestError("D4_D6_SELECTION_AUTHORITY_MISSING", f"D{dataset_id}")
+        for scenario, entry in scenario_files.items():
+            if not isinstance(entry, Mapping):
+                raise DeploymentManifestError("D4_D6_SELECTION_AUTHORITY_INVALID", f"D{dataset_id}/{scenario}")
+            path = root / str(entry.get("path"))
+            if sha256_file(path) != entry.get("sha256"):
+                raise DeploymentManifestError("D4_D6_KNN_BYTES_MISMATCH", f"D{dataset_id}/{scenario}")
     return {
         "preflight_status": "ready",
         "failure_code": None,
@@ -955,7 +1221,7 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
 
 
 __all__ = [
-    "D1_D2_KNN", "D4_KNN", "EXPECTED_BRANCH", "EXPECTED_HEAD", "FROZEN_PARQUETS",
+    "D1_D2_KNN", "D4_KNN", "D4_D6_KNN", "EXPECTED_BRANCH", "EXPECTED_HEAD", "FROZEN_PARQUETS",
     "DeploymentManifestError", "atomic_write_bytes", "atomic_write_json",
     "build_code_inventory", "build_formal_proof", "build_root_manifest",
     "canonical_json_bytes", "formal_identity_payload", "frozen_artifact_snapshot",

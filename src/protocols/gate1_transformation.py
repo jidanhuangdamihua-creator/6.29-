@@ -19,7 +19,10 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import pandas as pd
 
+from src.constants import SOURCE_HISTORY_DAYS
+
 from .experiment_protocol import get_experiment_protocol
+from .source_history import build_exact_source_history_candidate_frame
 
 
 CONTRACT_VERSION = "1R.1.0"
@@ -555,7 +558,22 @@ def select_source_history_candidates(
 ) -> tuple[pd.DataFrame, dict[str, object]]:
     spec = dataset_contract(dataset)
     source = _prepare_frame(source_frame, label=f"{spec.dataset} source", spec=spec)
-    source = source.loc[source["date"].between(pd.Timestamp(spec.source_history_start), pd.Timestamp(spec.source_history_end))].copy()
+    exact_history = None
+    if spec.dataset in {"D4", "D5", "D6"}:
+        exact_history = build_exact_source_history_candidate_frame(
+            source,
+            key_fields=spec.key_fields,
+            origin=spec.source_history_end,
+            source_history_days=SOURCE_HISTORY_DAYS,
+        )
+        source = exact_history.candidate_frame
+    else:
+        source = source.loc[
+            source["date"].between(
+                pd.Timestamp(spec.source_history_start),
+                pd.Timestamp(spec.source_history_end),
+            )
+        ].copy()
     source = source.loc[_domain_mask(source, spec, scenario)].copy()
     if spec.dataset in {"D5", "D6"}:
         source = source.loc[_same_group_mask(source, spec)].copy()
@@ -569,15 +587,27 @@ def select_source_history_candidates(
             )
         target_set = {normalized_current_target}
     source = source.loc[~_key_series(source, spec.key_fields).isin(target_set)].copy()
-    counts = source.groupby(list(spec.key_fields), dropna=False)["date"].nunique()
     complete = []
     incomplete: dict[str, int] = {}
-    for raw_key, count in counts.items():
-        key = normalize_key(raw_key if isinstance(raw_key, tuple) else (raw_key,))
-        if int(count) == 180:
-            complete.append(key)
-        else:
-            incomplete["/".join(key)] = int(count)
+    if exact_history is not None:
+        available_keys = set(_key_series(source, spec.key_fields))
+        complete = [
+            key
+            for key in exact_history.eligible_keys
+            if key in available_keys
+        ]
+        incomplete = {
+            "/".join(key): count
+            for key, count in exact_history.incomplete_keys.items()
+        }
+    else:
+        counts = source.groupby(list(spec.key_fields), dropna=False)["date"].nunique()
+        for raw_key, count in counts.items():
+            key = normalize_key(raw_key if isinstance(raw_key, tuple) else (raw_key,))
+            if int(count) == 180:
+                complete.append(key)
+            else:
+                incomplete["/".join(key)] = int(count)
     if require_complete and not complete:
         raise Gate1Failure("SOURCE_ENTITY_MISSING", "no complete approved source candidate")
     selected = source.loc[_key_series(source, spec.key_fields).isin(set(complete))].copy()
@@ -588,7 +618,7 @@ def select_source_history_candidates(
         "incomplete_candidates": incomplete,
         "source_rows_before": int(len(source_frame)),
         "source_rows_after": int(len(selected)),
-        "expected_days": 180,
+        "expected_days": SOURCE_HISTORY_DAYS,
         "excluded_target_keys": [list(key) for key in sorted(target_set)],
     }
 
@@ -601,7 +631,7 @@ def stream_source_history_candidates(
     target_frame: pd.DataFrame | None = None,
     current_target_key: Sequence[object] | None = None,
     allow_approved_calendarization: bool = False,
-    source_history_days: int = 180,
+    source_history_days: int = SOURCE_HISTORY_DAYS,
     batch_size: int = 500_000,
 ) -> dict[str, object]:
     """Prove source eligibility by scanning parquet batches without materializing it.
@@ -629,13 +659,13 @@ def stream_source_history_candidates(
         shared = False
     else:
         raise Gate1Failure("SCENARIO", f"unsupported scenario {scenario!r}")
-    target_keys = set(spec.target_keys)
-    if spec.dataset == "D4" and current_target_key is not None:
+    target_keys: set[tuple[str, ...]] = set()
+    if current_target_key is not None:
         normalized_current_target = normalize_key(current_target_key)
-        if normalized_current_target not in target_keys:
+        if normalized_current_target not in set(spec.target_keys):
             raise Gate1Failure(
                 "TARGET_SCOPE",
-                f"D4 current target is not frozen: {normalized_current_target!r}",
+                f"{spec.dataset} current target is not frozen: {normalized_current_target!r}",
             )
         target_keys = {normalized_current_target}
     target_groups: set[str] = set()
@@ -651,6 +681,7 @@ def stream_source_history_candidates(
     eligible_rows = 0
     post_origin_rows = 0
     duplicate_exact_key_dates = 0
+    duplicate_keys: set[tuple[str, ...]] = set()
     date_masks_by_key: dict[tuple[str, ...], int] = {}
     expected_history_days = int(source_history_days)
     if expected_history_days <= 0:
@@ -675,9 +706,7 @@ def stream_source_history_candidates(
         for row in history.itertuples(index=False, name=None):
             values = dict(zip(fields, row))
             key = normalize_key(tuple(values[field] for field in spec.key_fields))
-            if key in target_keys and not (
-                spec.dataset == "D4" and current_target_key is not None
-            ):
+            if key in target_keys:
                 continue
             if spec.dataset in {"D1", "D2"}:
                 if key[0] not in allowed_domains or key[1] not in allowed_item_ids:
@@ -697,6 +726,7 @@ def stream_source_history_candidates(
             current_mask = date_masks_by_key.get(key, 0)
             if current_mask & bit:
                 duplicate_exact_key_dates += 1
+                duplicate_keys.add(key)
             date_masks_by_key[key] = current_mask | bit
             eligible_rows += 1
     available_date_masks_by_key = dict(date_masks_by_key)
@@ -711,7 +741,7 @@ def stream_source_history_candidates(
     raw_complete = sorted(
         key
         for key, mask in date_masks_by_key.items()
-        if _popcount(mask) == expected_history_days
+        if _popcount(mask) == expected_history_days and key not in duplicate_keys
     )
     incomplete = {
         key: count
@@ -719,7 +749,7 @@ def stream_source_history_candidates(
         if count != expected_history_days
     }
     if spec.dataset == "D5" and allow_approved_calendarization:
-        complete = sorted(date_masks_by_key)
+        complete = sorted(key for key in date_masks_by_key if key not in duplicate_keys)
         calendarization = {
             "status": "passed",
             "rule": "D5_APPROVED_SOURCE_HISTORY_CALENDARIZATION",
@@ -728,6 +758,7 @@ def stream_source_history_candidates(
             "raw_complete_candidate_count": len(raw_complete),
             "raw_incomplete_candidate_count": len(incomplete),
             "raw_candidate_cardinality_digest": canonical_digest(raw_counts),
+            "duplicate_entity_date_keys": [list(key) for key in sorted(duplicate_keys)],
             "raw_eligible_rows": int(eligible_rows),
             "calendarized_rows": int(len(complete) * expected_history_days),
             "repaired_rows": int(sum(expected_history_days - count for count in incomplete.values())),
@@ -743,6 +774,7 @@ def stream_source_history_candidates(
             "raw_complete_candidate_count": len(raw_complete),
             "raw_incomplete_candidate_count": len(incomplete),
             "raw_candidate_cardinality_digest": canonical_digest(raw_counts),
+            "duplicate_entity_date_keys": [list(key) for key in sorted(duplicate_keys)],
             "raw_eligible_rows": int(eligible_rows),
             "calendarized_rows": int(len(complete) * expected_history_days),
             "repaired_rows": 0,
