@@ -46,6 +46,8 @@ def _rows(
             "second_category_id": second_category_id,
             "date": dates,
             "sales": np.full(len(dates), float(product_id)),
+            "onpromotion": np.zeros(len(dates), dtype=float),
+            "oil_price": np.full(len(dates), 50.0, dtype=float),
         }
     )
 

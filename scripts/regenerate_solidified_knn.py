@@ -172,6 +172,56 @@ def _write_json(path: Path, payload: Dict[str, Any]) -> None:
     )
 
 
+def _d5_knn_schema_payload() -> Dict[str, Any]:
+    """Return the sealed D5 KNN schema from protocol authority."""
+    feature_columns = list(get_experiment_protocol(5).knn_feature_columns)
+    body: Dict[str, Any] = {
+        "dataset_id": "D5",
+        "dimension": len(feature_columns),
+        "fields": [
+            {"disposition": "knn_observed", "dtype": "float64", "name": column}
+            for column in feature_columns
+        ],
+        "protocol_version": "d1_d6_sealed_v1",
+        "version": "knn_observed_schema_v1",
+    }
+    body["digest"] = _canonical_sha256(body)
+    return body
+
+
+def _write_d5_sealed_schema_binding(knn_root: Path) -> None:
+    """Bind the sealed D5 schema and both canonical authority bytes."""
+    sealed_dataset_root = PROJECT_ROOT / "数据集" / "固化数据" / "d1_d6_sealed_v1" / "dataset5"
+    schema_path = sealed_dataset_root / "knn_schema.json"
+    manifest_path = sealed_dataset_root / "manifest.json"
+    if not schema_path.is_file() or not manifest_path.is_file():
+        raise FileNotFoundError(
+            f"D5 sealed schema sidecars are required: schema={schema_path} manifest={manifest_path}"
+        )
+    schema = _d5_knn_schema_payload()
+    _write_json(schema_path, schema)
+    authorities = {}
+    for scenario in ("without", "with"):
+        path = _scenario_file(5, scenario, knn_root)
+        if not path.is_file() or path.is_symlink():
+            raise FileNotFoundError(f"D5 authority is missing: {path}")
+        authorities[scenario] = {
+            "path": str(path.relative_to(PROJECT_ROOT)),
+            "sha256": _sha256_file(path),
+        }
+    manifest = _load_json(manifest_path)
+    binding = {
+        "knn_feature_columns": list(get_experiment_protocol(5).knn_feature_columns),
+        "knn_schema_digest": schema["digest"],
+        "authority_files": authorities,
+    }
+    manifest["knn_feature_columns"] = list(get_experiment_protocol(5).knn_feature_columns)
+    manifest["knn_feature_schema_digest"] = schema["digest"]
+    manifest["knn_authority_binding"] = binding
+    manifest["knn_authority_binding_digest"] = _canonical_sha256(binding)
+    _write_json(manifest_path, manifest)
+
+
 
 
 def _scenario_file(dataset_id: int, scenario: str, root: Path) -> Path:
@@ -290,6 +340,54 @@ def _select_d4_shared_protocol(
     return selected
 
 
+def _select_d5_shared_protocol(
+    *,
+    source_df: pd.DataFrame,
+    target_entity_df: pd.DataFrame,
+    scenario: str,
+    feature_cols: Sequence[str],
+    k: int,
+    group_cols: Sequence[str],
+    prepared_pool: Any,
+) -> Dict[str, Any]:
+    """Select a Dataset5 target through the shared three-field KNN path."""
+    observed_start = target_entity_df.attrs.get(
+        "knn_observed_start",
+        target_entity_df.attrs.get(
+            "target_observed_start",
+            pd.to_datetime(target_entity_df["date"], errors="raise").min(),
+        ),
+    )
+    configured_source, configured_target = configure_protocol_frames(
+        source_df,
+        target_entity_df,
+        dataset_id=5,
+        scenario=scenario,
+        group_cols=group_cols,
+        grouping_col="family",
+        observed_start=observed_start,
+        prepared_pool=prepared_pool,
+    )
+    selected = SourceSelector().select_top_k_sources(
+        target_df=configured_target,
+        source_df=configured_source,
+        feature_cols=feature_cols,
+        k=k,
+        group_cols=tuple(group_cols),
+        consumer_source_df=source_df,
+    )
+    metadata = selected.get("meta", {})
+    if not isinstance(metadata, dict) or metadata.get("selection_path") != "shared_protocol":
+        raise ValueError("Dataset5 regeneration did not use the shared protocol selector path")
+    expected = list(get_experiment_protocol(5).knn_feature_columns)
+    if metadata.get("knn_feature_columns") != expected:
+        raise ValueError(
+            "Dataset5 shared selector returned the wrong KNN features: "
+            f"expected={expected!r} actual={metadata.get('knn_feature_columns')!r}"
+        )
+    return selected
+
+
 def _select_d1_d2_shared_protocol(
     *,
     dataset_id: int,
@@ -385,6 +483,7 @@ def _build_regenerated_payload(
     old_payload: Dict[str, Any],
     feature_cols: Sequence[str],
     feature_info: Dict[str, Any],
+    knn_feature_cols: Sequence[str] | None = None,
     source_pool_size: int,
     results: Dict[str, List[Dict[str, Any]]],
     selection_metadata: Dict[str, Dict[str, Any]],
@@ -396,6 +495,9 @@ def _build_regenerated_payload(
             raise ValueError(f"KNN payload missing required protocol field: {field}")
     if not feature_cols:
         raise ValueError("KNN payload requires non-empty feature_cols")
+    effective_knn_features = list(knn_feature_cols or feature_cols)
+    if not effective_knn_features:
+        raise ValueError("KNN payload requires non-empty knn_feature_cols")
     for target_key, metadata in selection_metadata.items():
         authority = metadata.get("selection_authority")
         version = metadata.get("protocol_version")
@@ -429,14 +531,14 @@ def _build_regenerated_payload(
         if key in old_payload
     }
     strict_d1_d2 = int(dataset_id) in {1, 2} if dataset_id is not None else False
-    shared_dataset4 = int(dataset_id) == 4 if dataset_id is not None else False
+    shared_protocol_dataset = int(dataset_id) in {4, 5} if dataset_id is not None else False
     new_payload.update(
         {
-            "selection_authority": "shared_protocol" if (strict_d1_d2 or shared_dataset4) else "runtime",
-            "protocol_version": PROTOCOL_VERSION if (strict_d1_d2 or shared_dataset4) else D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+            "selection_authority": "shared_protocol" if (strict_d1_d2 or shared_protocol_dataset) else "runtime",
+            "protocol_version": PROTOCOL_VERSION if (strict_d1_d2 or shared_protocol_dataset) else D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
             "results_semantics": "json_top_k_diagnostic_not_training_authority",
             "training_selection_authority": (
-                "shared_protocol_selector" if (strict_d1_d2 or shared_dataset4) else "runtime_source_selector"
+                "shared_protocol_selector" if (strict_d1_d2 or shared_protocol_dataset) else "runtime_source_selector"
             ),
             "json_results_used_for": [
                 "target_list",
@@ -453,6 +555,9 @@ def _build_regenerated_payload(
             "selection_metadata": copy.deepcopy(selection_metadata),
         }
     )
+    if dataset_id is not None and int(dataset_id) == 5:
+        new_payload["knn_feature_columns"] = list(effective_knn_features)
+        new_payload["feature_info"]["knn_feature_columns"] = list(effective_knn_features)
     if dataset_id is not None and int(dataset_id) in {4, 5, 6}:
         history_values = {
             (
@@ -510,7 +615,9 @@ def _build_regenerated_payload(
         )
     if strict_d1_d2:
         new_payload["knn_frame_authority"] = "configured_observed_frame"
-        new_payload["knn_feature_columns"] = list(feature_cols)
+        new_payload["knn_feature_columns"] = list(effective_knn_features)
+    if dataset_id is not None and int(dataset_id) == 5:
+        new_payload["knn_frame_authority"] = "configured_observed_frame"
     return new_payload
 
 
@@ -707,9 +814,21 @@ def regenerate_dataset_scenario(
     if missing_features:
         raise ValueError(f"KNN payload feature_cols missing from runtime frames: {missing_features}")
 
+    protocol = get_experiment_protocol(dataset_id)
+    knn_feature_cols = list(protocol.knn_feature_columns)
+    missing_knn_features = [
+        col
+        for col in knn_feature_cols
+        if col not in source_df.columns or col not in target_df.columns
+    ]
+    if missing_knn_features:
+        raise ValueError(
+            f"D{dataset_id} protocol KNN features missing from runtime frames: "
+            f"{missing_knn_features}"
+        )
+
     prepared_pool = None
     if int(dataset_id) == 4:
-        protocol = get_experiment_protocol(dataset_id)
         pool_feature_cols = tuple(dict.fromkeys(("sales", *feature_cols)))
         prepared_pool = prepare_daily_sequence_pool(
             source_df,
@@ -717,11 +836,21 @@ def regenerate_dataset_scenario(
             observed_start=target_df.attrs["target_observed_start"],
             feature_cols=pool_feature_cols,
         )
+    elif int(dataset_id) == 5:
+        prepared_pool = prepare_daily_sequence_pool(
+            source_df,
+            group_cols=group_cols,
+            observed_start=target_df.attrs["target_observed_start"],
+            metadata_cols=("family",),
+            feature_cols=tuple(knn_feature_cols),
+        )
 
     feature_info = copy.deepcopy(existing_feature_info) if isinstance(existing_feature_info, dict) else {}
     feature_info["selected_features"] = list(feature_cols)
     if int(dataset_id) in {1, 2}:
         feature_info["knn_feature_columns"] = list(feature_cols)
+    if int(dataset_id) == 5:
+        feature_info["knn_feature_columns"] = list(knn_feature_cols)
     if "k" not in old_payload or int(old_payload["k"]) <= 0:
         raise ValueError("KNN payload requires positive k")
     k = int(old_payload["k"])
@@ -756,6 +885,16 @@ def regenerate_dataset_scenario(
             )
         elif int(dataset_id) == 4:
             selected = _select_d4_shared_protocol(
+                source_df=source_df,
+                target_entity_df=target_entity_df,
+                scenario=scenario,
+                feature_cols=feature_cols,
+                k=k,
+                group_cols=group_cols,
+                prepared_pool=prepared_pool,
+            )
+        elif int(dataset_id) == 5:
+            selected = _select_d5_shared_protocol(
                 source_df=source_df,
                 target_entity_df=target_entity_df,
                 scenario=scenario,
@@ -835,6 +974,7 @@ def regenerate_dataset_scenario(
         dataset_id=dataset_id,
         old_payload=old_payload,
         feature_cols=feature_cols,
+        knn_feature_cols=knn_feature_cols if int(dataset_id) == 5 else None,
         feature_info=feature_info,
         source_pool_size=int(len(source_df)),
         source_domain_policy_diagnostics=source_domain_policy.diagnostics,
@@ -901,6 +1041,9 @@ def main() -> None:
                     write=bool(args.write),
                 )
             )
+
+    if bool(args.write) and 5 in {int(dataset_id) for dataset_id in args.datasets}:
+        _write_d5_sealed_schema_binding(args.knn_root)
 
     all_diff_rows = [row for record in records for row in record["diff_rows"]]
     summary = {

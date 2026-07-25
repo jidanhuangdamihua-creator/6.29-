@@ -36,6 +36,8 @@ def _rows(
         "item_id": str(item),
         "date": pd.date_range(start, periods=periods, freq="D"),
         "sales": np.full(periods, sales_value, dtype=float),
+        "onpromotion": np.zeros(periods, dtype=float),
+        "oil_price": np.full(periods, 50.0, dtype=float),
     }
     if group_col:
         payload[group_col] = group_value

@@ -290,18 +290,18 @@ def _verify_d4_d6_knn_payload(path: Path, *, dataset_id: int) -> dict[str, objec
     }
     if any(payload.get(field) != value for field, value in expected_top_level.items()):
         raise DeploymentManifestError("D4_D6_SOURCE_HISTORY_IDENTITY_MISMATCH", str(path))
-    expected_authority = "shared_protocol" if dataset_id == 4 else "runtime"
-    expected_protocol = PROTOCOL_VERSION if dataset_id == 4 else D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
-    if payload.get("selection_authority") != expected_authority:
-        raise DeploymentManifestError("D4_D6_KNN_AUTHORITY_MISMATCH", str(path))
-    if payload.get("protocol_version") != expected_protocol:
-        raise DeploymentManifestError("D4_D6_KNN_PROTOCOL_MISMATCH", str(path))
+    expected_authority = "shared_protocol" if dataset_id in {4, 5} else "runtime"
+    expected_protocol = PROTOCOL_VERSION if dataset_id in {4, 5} else D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
+    expected_features = list(get_experiment_protocol(dataset_id).knn_feature_columns)
     metadata_map = payload.get("selection_metadata")
     if not isinstance(metadata_map, Mapping) or not metadata_map:
         raise DeploymentManifestError("D4_D6_KNN_METADATA_MISSING", str(path))
-    expected_features = list(get_experiment_protocol(dataset_id).knn_feature_columns)
     targets: dict[str, object] = {}
-    from src.protocols.candidate_pool import build_candidate_pool_digest
+    from src.protocols.candidate_pool import (
+        build_candidate_pool_digest,
+        build_consumer_fingerprint,
+        build_source_pool_fingerprint,
+    )
 
     spec = dataset_contract(dataset_id)
     for target_id, metadata in sorted(metadata_map.items()):
@@ -375,6 +375,20 @@ def _verify_d4_d6_knn_payload(path: Path, *, dataset_id: int) -> dict[str, objec
         selected = metadata.get("selected_sources_runtime")
         if not isinstance(selected, list) or len(selected) != int(payload.get("k", 0)):
             raise DeploymentManifestError("D4_D6_SELECTED_SOURCE_INVALID", f"{path}:{target_id}")
+        if metadata.get("consumer_frame_rows") != len(selected) * SOURCE_HISTORY_DAYS:
+            raise DeploymentManifestError("D4_D6_CONSUMER_FRAME_CARDINALITY", f"{path}:{target_id}")
+        source_pool_fingerprint = None
+        if dataset_id == 5:
+            source_pool_fingerprint = build_source_pool_fingerprint(
+                protocol_version=metadata["protocol_version"],
+                dataset_id=f"D{dataset_id}",
+                scenario=metadata.get("protocol_scenario", payload.get("info_sharing", "")),
+                target_key=target_key,
+                group_cols=digest_input.get("group_cols", []),
+                candidate_keys=candidate_keys,
+            )
+            if source_pool_fingerprint != metadata.get("source_pool_fingerprint"):
+                raise DeploymentManifestError("D5_SOURCE_POOL_FINGERPRINT_INVALID", f"{path}:{target_id}")
         selected_keys = {
             tuple(str(part) for part in row.get("source_key", []))
             for row in selected
@@ -382,12 +396,23 @@ def _verify_d4_d6_knn_payload(path: Path, *, dataset_id: int) -> dict[str, objec
         }
         if len(selected_keys) != len(selected) or not selected_keys.issubset(normalized_candidates):
             raise DeploymentManifestError("D4_D6_SELECTED_SOURCE_OUTSIDE_POOL", f"{path}:{target_id}")
+        if dataset_id == 5:
+            consumer_fingerprint = build_consumer_fingerprint(
+                protocol_version=metadata["protocol_version"],
+                dataset_id=f"D{dataset_id}",
+                scenario=metadata.get("protocol_scenario", payload.get("info_sharing", "")),
+                target_key=target_key,
+                source_pool_fingerprint=source_pool_fingerprint,
+                candidate_pool_digest=candidate_digest,
+                selection_result_digest=metadata.get("selection_result_digest", ""),
+                ordered_top_k=selected,
+            )
+            if consumer_fingerprint != metadata.get("consumer_fingerprint"):
+                raise DeploymentManifestError("D5_CONSUMER_FINGERPRINT_INVALID", f"{path}:{target_id}")
         for field in ("source_history_frame_digest", "consumer_frame_digest", "candidate_pool_digest", "selection_result_digest"):
             value = metadata.get(field)
             if not isinstance(value, str) or len(value) != 64:
                 raise DeploymentManifestError("D4_D6_DIGEST_MISSING", f"{path}:{target_id}/{field}")
-        if metadata.get("consumer_frame_rows") != len(selected) * SOURCE_HISTORY_DAYS:
-            raise DeploymentManifestError("D4_D6_CONSUMER_FRAME_CARDINALITY", f"{path}:{target_id}")
         if dataset_id == 4 and ("729", "424") in normalized_candidates.union(selected_keys):
             raise DeploymentManifestError("D4_INCOMPLETE_CANDIDATE_PRESENT", f"{path}:{target_id}")
         targets[str(target_id)] = {
@@ -398,6 +423,23 @@ def _verify_d4_d6_knn_payload(path: Path, *, dataset_id: int) -> dict[str, objec
             "consumer_frame_digest": metadata["consumer_frame_digest"],
             "consumer_frame_rows": metadata["consumer_frame_rows"],
         }
+    if payload.get("selection_authority") != expected_authority:
+        raise DeploymentManifestError("D4_D6_KNN_AUTHORITY_MISMATCH", str(path))
+    if payload.get("protocol_version") != expected_protocol:
+        raise DeploymentManifestError("D4_D6_KNN_PROTOCOL_MISMATCH", str(path))
+    if dataset_id == 5:
+        actual_features = payload.get("knn_feature_columns")
+        if actual_features != expected_features:
+            raise DeploymentManifestError(
+                "D5_KNN_FEATURE_CONTRACT_MISMATCH",
+                f"dataset=D5 expected features={expected_features!r} actual features={actual_features!r} "
+                f"authority_path={path} consumer_fingerprint=<not-read>",
+            )
+        if payload.get("knn_frame_authority") != "configured_observed_frame":
+            raise DeploymentManifestError(
+                "D5_KNN_FRAME_AUTHORITY_MISMATCH",
+                f"dataset=D5 authority_path={path} consumer_fingerprint=<not-read>",
+            )
     return {
         "path": str(path),
         "sha256": sha256_file(path),
@@ -802,8 +844,9 @@ def _d4_d6_runtime_authority(
         }
     authority = {
         "dataset_id": f"D{dataset_id}",
-        "selection_authority": "runtime",
-        "protocol_version": D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+        "selection_authority": "shared_protocol" if dataset_id == 5 else "runtime",
+        "protocol_version": PROTOCOL_VERSION if dataset_id == 5 else D4_D6_RUNTIME_KNN_PROTOCOL_VERSION,
+        "knn_feature_columns": list(get_experiment_protocol(dataset_id).knn_feature_columns),
         "source_history_days": SOURCE_HISTORY_DAYS,
         "source_history_start": dataset_contract(dataset_id).source_history_start.isoformat(),
         "source_history_end": dataset_contract(dataset_id).source_history_end.isoformat(),

@@ -47,10 +47,9 @@ def _feature_frame() -> pd.DataFrame:
             "transactions": np.linspace(100.0, 139.0, len(dates)),
             "oil_price": np.linspace(50.0, 55.0, len(dates)),
             "is_holiday": [0] * len(dates),
-            "onpromotion": [np.nan] + [0.0] * (len(dates) - 1),
+            "onpromotion": [0.0] * len(dates),
         }
     )
-    frame.loc[0, "oil_price"] = np.nan
     frame.loc[1, "transactions"] = np.nan
     frame.attrs["split_role"] = "source"
     frame.attrs["split_mode"] = "ratio"
@@ -158,7 +157,7 @@ def test_entity_loop_passes_same_solidified_model_features_to_all_tl_methods(mon
         ignore_index=True,
     )
     source_df["class"] = source_df["class"].astype(float)
-    source_df.loc[source_df["entity_id"].eq("48_938574"), "oil_price"] = np.nan
+    source_df.loc[source_df["entity_id"].eq("48_938574"), "transactions"] = np.nan
     source_df.loc[source_df["entity_id"].eq("48_1146785"), "transactions"] = np.inf
     source_df.loc[source_df["entity_id"].eq("48_1146785"), "class"] = -np.inf
     target_df = _d5_protocol_frame(48, 1159415)
@@ -281,7 +280,7 @@ def test_source_sanitize_path_is_shared_by_d4_d5_d6(monkeypatch, dataset_id):
         group_cols = ("store_id", "item_id")
         source_key = ("CA_1", "FOODS_3_226")
     source_df["class"] = source_df["class"].astype(float)
-    source_df.loc[0, "oil_price"] = np.nan
+    source_df.loc[0, "transactions"] = np.nan
     source_df.loc[1, "transactions"] = np.inf
     source_df.loc[2, "class"] = -np.inf
     target_df.loc[:, ["transactions", "oil_price"]] = target_df[["transactions", "oil_price"]].fillna(0)

@@ -114,6 +114,8 @@ def test_d4_d6_manifest_rejects_frame_cardinality_that_is_not_180_days(tmp_path:
         build_selection_metadata_contract(protocol, observed_start=observed_start)
     )
     metadata = payload["selection_metadata"][target_id]
+    metadata["selection_authority"] = "shared_protocol"
+    metadata["protocol_version"] = protocol.protocol_version
     target_key = [part for part in target_id.split("_")]
     candidate_keys = [row["source_key"] for row in metadata["selected_sources_runtime"]]
     digest_input = {
@@ -127,8 +129,8 @@ def test_d4_d6_manifest_rejects_frame_cardinality_that_is_not_180_days(tmp_path:
         "observed_end": metadata["knn_observed_end"],
         "feature_cols": metadata["feature_cols"],
         "source_history_days": metadata["source_history_days"],
-        "source_history_start": metadata["source_history_start"],
-        "source_history_end": metadata["source_history_end"],
+        "source_history_start": str(metadata["source_history_start"])[:10],
+        "source_history_end": str(metadata["source_history_end"])[:10],
         "source_history_completeness_policy": metadata["source_history_completeness_policy"],
         "source_history_frame_digest": metadata["source_history_frame_digest"],
     }

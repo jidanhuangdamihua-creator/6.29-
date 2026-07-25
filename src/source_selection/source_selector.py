@@ -270,11 +270,20 @@ class SourceSelector:
                 provenance_source_df = prepared_pool.selected_sales_frame(
                     result.ordered_source_keys
                 )
-            else:
+            elif all(
+                column in prepared_pool.feature_matrices
+                for column in tuple(model_feature_cols)
+            ):
                 provenance_source_df = prepared_pool.selected_frame(
                     result.ordered_source_keys,
                     feature_cols=model_feature_cols,
                 )
+            # The prepared pool is the KNN authority and intentionally contains
+            # only the protocol KNN fields.  Model feature candidates remain a
+            # separate contract; retain the full consumer frame for CNN
+            # provenance when it contains fields outside the KNN pool.
+            elif consumer_source_df is not None:
+                provenance_source_df = consumer_source_df
         source_slices = extract_selected_source_slices(
             result,
             provenance_source_df,
@@ -360,6 +369,30 @@ class SourceSelector:
             ordered_top_k=sources,
         )
         candidate_digest_input = dict(result.candidate_pool_digest_input)
+        valid_distance_count = len(eligible_candidate_keys) - len(excluded)
+        runtime_knn_proof = {
+            "protocol_declared_knn_features": list(knn_feature_columns),
+            "configured_source_knn_features": list(
+                knn_source_df.attrs.get("knn_feature_columns", ())
+            ),
+            "configured_target_knn_features": list(
+                knn_target_df.attrs.get("knn_feature_columns", ())
+            ),
+            "pool_feature_matrices": list(
+                prepared_pool.feature_matrices.keys()
+            ) if prepared_pool is not None else [],
+            "target_exact_vector_feature_cols": list(knn_feature_columns),
+            "target_exact_vector_shape": [30 * len(knn_feature_columns)],
+            "source_matrix_shapes": {
+                column: [valid_distance_count, 30]
+                for column in knn_feature_columns
+            },
+            "distance_count": valid_distance_count,
+            "distance_shape": [valid_distance_count],
+            "distance_feature_columns": list(knn_feature_columns),
+            "nan_count": 0,
+            "inf_count": 0,
+        }
         meta = {
             "selection_authority": "shared_protocol",
             "selection_path": "shared_protocol",
@@ -425,6 +458,7 @@ class SourceSelector:
             "cnn_provenance_sample_counts": [
                 int(item.input_tensor.shape[0]) for item in tensor_provenance
             ],
+            "runtime_knn_proof": runtime_knn_proof,
         }
         meta.update(
             build_selection_metadata_contract(

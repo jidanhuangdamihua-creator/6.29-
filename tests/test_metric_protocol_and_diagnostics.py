@@ -261,6 +261,8 @@ def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_invers
             "item_id": [1] * len(dates),
             "family": ["F1"] * len(dates),
             "sales": np.arange(1.0, len(dates) + 1.0),
+            "onpromotion": np.zeros(len(dates)),
+            "oil_price": np.full(len(dates), 50.0),
         }
     )
     target_df = pd.DataFrame(
@@ -270,6 +272,8 @@ def test_entity_experiment_forwards_metric_protocol_and_marks_unavailable_invers
             "item_id": [364606] * len(dates),
             "family": ["F1"] * len(dates),
             "sales": np.arange(2.0, len(dates) + 2.0),
+            "onpromotion": np.zeros(len(dates)),
+            "oil_price": np.full(len(dates), 50.0),
         }
     )
     source_df["store_nbr"] = source_df["entity_id"]

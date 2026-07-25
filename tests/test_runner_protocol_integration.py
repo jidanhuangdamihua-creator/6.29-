@@ -28,6 +28,8 @@ def _daily_rows(
         "item_id": item,
         "date": pd.date_range(start, periods=periods, freq="D"),
         "sales": np.full(periods, sales, dtype=float),
+        "onpromotion": np.zeros(periods, dtype=float),
+        "oil_price": np.full(periods, 50.0, dtype=float),
     }
     if group_col is not None:
         payload[group_col] = group_value

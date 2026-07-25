@@ -31,6 +31,7 @@ D5_SOLIDIFIED_FEATURES = [
     "oil_price",
     "is_holiday",
 ]
+D5_KNN_FEATURES = ["sales", "onpromotion", "oil_price"]
 
 
 def _write_knn_json(root: Path, selected_features: list[str]) -> Path:
@@ -66,12 +67,14 @@ def _solidified_feature_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
             for index, feature in enumerate(D5_SOLIDIFIED_FEATURES)
         }
     )
+    source_df["onpromotion"] = [0.0, 1.0]
     target_df = pd.DataFrame(
         {
             feature: [float(index + 3), float(index + 4)]
             for index, feature in enumerate(D5_SOLIDIFIED_FEATURES)
         }
     )
+    target_df["onpromotion"] = [1.0, 0.0]
     return source_df, target_df
 
 
@@ -127,6 +130,8 @@ def test_d5_solidified_knn_json_features_parse_stably(
 
     assert payload["feature_cols"] == D5_SOLIDIFIED_FEATURES
     assert payload["feature_info"]["selected_features"] == D5_SOLIDIFIED_FEATURES
+    assert payload["knn_feature_columns"] == D5_KNN_FEATURES
+    assert payload["feature_info"]["knn_feature_columns"] == D5_KNN_FEATURES
     assert info["selected_features"] == D5_SOLIDIFIED_FEATURES
     assert info["payload"]["feature_cols"] == D5_SOLIDIFIED_FEATURES
     assert info["source"] == "solidified_json"

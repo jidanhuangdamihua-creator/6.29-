@@ -211,8 +211,8 @@ def _verify_runtime_knn_metadata(
     spec = dataset_contract(dataset_id)
     protocol = get_experiment_protocol(dataset_id)
     expected_features = list(protocol.knn_feature_columns)
-    expected_authority = "shared_protocol" if dataset_id == 4 else "runtime"
-    expected_protocol = PROTOCOL_VERSION if dataset_id == 4 else D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
+    expected_authority = "shared_protocol" if dataset_id in {4, 5} else "runtime"
+    expected_protocol = PROTOCOL_VERSION if dataset_id in {4, 5} else D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
     expected_start = spec.source_history_start.isoformat()
     expected_end = spec.source_history_end.isoformat()
     if (
@@ -226,7 +226,13 @@ def _verify_runtime_knn_metadata(
         or _date_identity(metadata.get("knn_observed_start")) != _date_identity(spec.knn_start)
         or _date_identity(metadata.get("knn_observed_end")) != _date_identity(spec.origin)
     ):
-        raise Gate1Failure("KNN_METADATA_MISMATCH", f"D{dataset_id}/{scenario}/{target_id}")
+        raise Gate1Failure(
+            "KNN_METADATA_MISMATCH",
+            f"dataset=D{dataset_id} scenario={scenario} expected features={expected_features!r} "
+            f"actual features={metadata.get('knn_feature_columns')!r} "
+            f"authority_path={payload.get('_authority_path', '<unknown>')} "
+            f"consumer_fingerprint={metadata.get('consumer_fingerprint', '<missing>')}",
+        )
 
     expected_history = {
         "source_history_days": SOURCE_HISTORY_DAYS,
@@ -253,6 +259,10 @@ def _verify_runtime_knn_metadata(
             )
     _sha256_identity(metadata.get("source_history_frame_digest"), field="source_history_frame_digest")
     _sha256_identity(metadata.get("consumer_frame_digest"), field="consumer_frame_digest")
+    if dataset_id == 5:
+        _sha256_identity(metadata.get("selection_result_digest"), field="selection_result_digest")
+        _sha256_identity(metadata.get("source_pool_fingerprint"), field="source_pool_fingerprint")
+        _sha256_identity(metadata.get("consumer_fingerprint"), field="consumer_fingerprint")
 
     digest_input = metadata.get("candidate_pool_digest_input")
     if not isinstance(digest_input, Mapping):
@@ -294,6 +304,25 @@ def _verify_runtime_knn_metadata(
     if candidate_digest != metadata.get("candidate_pool_digest"):
         raise Gate1Failure("KNN_CANDIDATE_DIGEST_INVALID", f"D{dataset_id}/{scenario}/{target_id}")
 
+    source_pool_fingerprint = None
+    if dataset_id == 5:
+        source_pool_fingerprint = build_source_pool_fingerprint(
+            protocol_version=metadata["protocol_version"],
+            dataset_id=f"D{dataset_id}",
+            scenario=scenario,
+            target_key=target_key,
+            group_cols=digest_input.get("group_cols", []),
+            candidate_keys=raw_candidate_keys,
+        )
+        if source_pool_fingerprint != metadata.get("source_pool_fingerprint"):
+            raise Gate1Failure(
+                "D5_SOURCE_POOL_FINGERPRINT_INVALID",
+                f"dataset=D5 scenario={scenario} expected features={expected_features!r} "
+                f"actual features={metadata.get('knn_feature_columns')!r} "
+                f"authority_path={payload.get('_authority_path', '<unknown>')} "
+                f"consumer_fingerprint={metadata.get('consumer_fingerprint', '<missing>')}",
+            )
+
     selected = metadata.get("selected_sources_runtime")
     if not isinstance(selected, list) or not selected:
         raise Gate1Failure("KNN_SELECTED_SOURCES_MISSING", f"D{dataset_id}/{scenario}/{target_id}")
@@ -304,6 +333,25 @@ def _verify_runtime_knn_metadata(
         selected_keys.append(tuple(str(part) for part in row["source_key"]))
     if any(key not in candidate_keys for key in selected_keys) or len(set(selected_keys)) != len(selected_keys):
         raise Gate1Failure("KNN_SELECTED_SOURCE_OUTSIDE_POOL", f"D{dataset_id}/{scenario}/{target_id}")
+    if dataset_id == 5:
+        consumer_fingerprint = build_consumer_fingerprint(
+            protocol_version=metadata["protocol_version"],
+            dataset_id=f"D{dataset_id}",
+            scenario=scenario,
+            target_key=target_key,
+            source_pool_fingerprint=source_pool_fingerprint,
+            candidate_pool_digest=candidate_digest,
+            selection_result_digest=metadata["selection_result_digest"],
+            ordered_top_k=selected,
+        )
+        if consumer_fingerprint != metadata.get("consumer_fingerprint"):
+            raise Gate1Failure(
+                "D5_CONSUMER_FINGERPRINT_INVALID",
+                f"dataset=D5 scenario={scenario} expected features={expected_features!r} "
+                f"actual features={metadata.get('knn_feature_columns')!r} "
+                f"authority_path={payload.get('_authority_path', '<unknown>')} "
+                f"consumer_fingerprint={metadata.get('consumer_fingerprint', '<missing>')}",
+            )
     requested_k = int(payload.get("k", 0))
     if (
         int(metadata.get("selected_count", -1)) != len(selected_keys)
@@ -345,6 +393,7 @@ def _verify_runtime_knn_authority(
     if not authority_path.is_file() or authority_path.is_symlink():
         raise Gate1Failure("KNN_AUTHORITY_MISSING", str(authority_path))
     payload = _load_json_file(authority_path)
+    payload["_authority_path"] = str(authority_path.relative_to(root))
     expected_top_level = {
         "source_history_days": SOURCE_HISTORY_DAYS,
         "source_history_expected_date_count": SOURCE_HISTORY_DAYS,
@@ -361,6 +410,36 @@ def _verify_runtime_knn_authority(
     }
     if any(payload.get(field) != value for field, value in expected_top_level.items()):
         raise Gate1Failure("SOURCE_HISTORY_IDENTITY_MISMATCH", f"D{dataset_id}/{scenario}")
+    expected_features = list(get_experiment_protocol(dataset_id).knn_feature_columns)
+    actual_features = payload.get("knn_feature_columns")
+    if dataset_id == 5 and actual_features != expected_features:
+        raise Gate1Failure(
+            "D5_KNN_FEATURE_CONTRACT_MISMATCH",
+            f"dataset=D5 scenario={scenario} expected features={expected_features!r} "
+            f"actual features={actual_features!r} authority_path={authority_path} "
+            "consumer_fingerprint=<not-read>",
+        )
+    if dataset_id == 5 and payload.get("knn_frame_authority") != "configured_observed_frame":
+        raise Gate1Failure(
+            "D5_KNN_FRAME_AUTHORITY_MISMATCH",
+            f"dataset=D5 scenario={scenario} expected features={expected_features!r} "
+            f"actual features={actual_features!r} authority_path={authority_path} "
+            "consumer_fingerprint=<not-read>",
+        )
+    if dataset_id == 5:
+        _verify_d5_knn_schema_sidecar(root, expected_features)
+    expected_authority = "shared_protocol" if dataset_id in {4, 5} else "runtime"
+    expected_protocol = PROTOCOL_VERSION if dataset_id in {4, 5} else D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
+    if (
+        payload.get("selection_authority") != expected_authority
+        or payload.get("protocol_version") != expected_protocol
+    ):
+        raise Gate1Failure(
+            "KNN_AUTHORITY_CONTRACT_MISMATCH",
+            f"dataset=D{dataset_id} scenario={scenario} expected features={expected_features!r} "
+            f"actual features={actual_features!r} authority_path={authority_path} "
+            "consumer_fingerprint=<not-read>",
+        )
     metadata_map = payload.get("selection_metadata")
     if not isinstance(metadata_map, Mapping) or not metadata_map:
         raise Gate1Failure("KNN_METADATA_MISSING", f"D{dataset_id}/{scenario}")
@@ -394,6 +473,64 @@ def _verify_runtime_knn_authority(
         "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
         "source_history_inclusive_end": True,
     }
+
+
+def _verify_d5_knn_schema_sidecar(
+    root: Path,
+    expected_features: list[str],
+) -> None:
+    """Verify the sealed D5 schema and both authority-byte bindings."""
+    sealed_root = root / "数据集" / "固化数据" / "d1_d6_sealed_v1" / "dataset5"
+    schema_path = sealed_root / "knn_schema.json"
+    manifest_path = sealed_root / "manifest.json"
+    if not schema_path.is_file() or not manifest_path.is_file():
+        raise Gate1Failure(
+            "D5_KNN_SCHEMA_SIDECAR_MISSING",
+            f"dataset=D5 expected features={expected_features!r} actual features=<missing> "
+            f"authority_path={schema_path} consumer_fingerprint=<not-read>",
+        )
+    schema = _load_json_file(schema_path)
+    actual_fields = [
+        item.get("name")
+        for item in schema.get("fields", [])
+        if isinstance(item, Mapping)
+    ]
+    schema_body = {key: value for key, value in schema.items() if key != "digest"}
+    if (
+        schema.get("dataset_id") != "D5"
+        or schema.get("dimension") != len(expected_features)
+        or actual_fields != expected_features
+        or schema.get("digest") != canonical_digest(schema_body)
+    ):
+        raise Gate1Failure(
+            "D5_KNN_SCHEMA_SIDECAR_MISMATCH",
+            f"dataset=D5 expected features={expected_features!r} actual features={actual_fields!r} "
+            f"authority_path={schema_path} consumer_fingerprint=<not-read>",
+        )
+    manifest = _load_json_file(manifest_path)
+    expected_authorities = {
+        scenario: {
+            "path": f"configs/solidified/knn/Dataset5/knn_{scenario}_info_sharing.json",
+            "sha256": _sha256_file(root / "configs" / "solidified" / "knn" / "Dataset5" / f"knn_{scenario}_info_sharing.json"),
+        }
+        for scenario in ("without", "with")
+    }
+    expected_binding = {
+        "knn_feature_columns": expected_features,
+        "knn_schema_digest": schema["digest"],
+        "authority_files": expected_authorities,
+    }
+    if (
+        manifest.get("knn_feature_columns") != expected_features
+        or manifest.get("knn_feature_schema_digest") != schema["digest"]
+        or manifest.get("knn_authority_binding") != expected_binding
+        or manifest.get("knn_authority_binding_digest") != canonical_digest(expected_binding)
+    ):
+        raise Gate1Failure(
+            "D5_KNN_SCHEMA_BINDING_MISMATCH",
+            f"dataset=D5 expected features={expected_features!r} actual features={manifest.get('knn_feature_columns')!r} "
+            f"authority_path={manifest_path} consumer_fingerprint=<not-read>",
+        )
 
 
 def _verify_d2_sealed_identity(root: Path, source_path: Path, target_path: Path) -> dict[str, object]:
@@ -906,33 +1043,41 @@ def _dataset_report(root: Path, parent_root: Path, old_root: Path, dataset_id: i
                     "post_origin_history_rows"
                 ]
             else:
-                source_proof = stream_source_history_candidates(
-                    spec.dataset,
-                    source_path,
-                    "with-sharing",
-                    target_frame=target,
-                    allow_approved_calendarization=(dataset_id == 5),
-                )
-                candidate_universe = {
-                    tuple(str(part) for part in key)
-                    for key in source_proof["complete_candidate_keys"]
-                }
                 authority_reports = {}
+                stream_proofs = {}
                 for scenario in ("without", "with"):
+                    stream_scenario = scenario if dataset_id == 5 else "with"
+                    scenario_source_proof = stream_source_history_candidates(
+                        spec.dataset,
+                        source_path,
+                        f"{stream_scenario}-sharing",
+                        target_frame=target,
+                        allow_approved_calendarization=(dataset_id == 5),
+                    )
+                    scenario_candidate_universe = {
+                        tuple(str(part) for part in key)
+                        for key in scenario_source_proof["complete_candidate_keys"]
+                    }
                     authority_reports[scenario] = _verify_runtime_knn_authority(
                         root,
                         dataset_id=dataset_id,
                         scenario=scenario,
-                        candidate_universe=candidate_universe,
+                        candidate_universe=scenario_candidate_universe,
                     )
+                    stream_proofs[scenario] = scenario_source_proof
+                with_candidate_universe = {
+                    tuple(str(part) for part in key)
+                    for key in stream_proofs["with"]["complete_candidate_keys"]
+                }
                 report["source_selection"] = {
                     "status": "passed",
-                    "candidate_universe": [list(key) for key in sorted(candidate_universe)],
-                    "stream_proof": source_proof,
+                    "candidate_universe": [list(key) for key in sorted(with_candidate_universe)],
+                    "stream_proof": stream_proofs["with"],
+                    "stream_proof_by_scenario": stream_proofs,
                     "scenarios": authority_reports,
                 }
-                report["source_entities"] = source_proof["complete_candidate_keys"]
-                report["post_origin_history_rows"] = source_proof["post_origin_history_rows"]
+                report["source_entities"] = stream_proofs["with"]["complete_candidate_keys"]
+                report["post_origin_history_rows"] = stream_proofs["with"]["post_origin_history_rows"]
             report["proof_inputs_available"].update({"raw_authority": True, "source_eligibility": True, "bounded_stream": True})
         if report["duplicate_exact_keys"]:
             report["failure_code"] = "DUPLICATE_EXACT_KEY_DATE"

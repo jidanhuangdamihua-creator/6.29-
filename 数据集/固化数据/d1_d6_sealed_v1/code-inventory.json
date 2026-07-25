@@ -1,5 +1,5 @@
 {
-  "file_count": 158,
+  "file_count": 159,
   "files": [
     {
       "path": "configs/solidified/knn/Dataset1/knn_with_info_sharing.json",
@@ -35,11 +35,11 @@
     },
     {
       "path": "configs/solidified/knn/Dataset5/knn_with_info_sharing.json",
-      "sha256": "0f569e9e23dc2b3e56c5dbfc890dcfd494a982b0ed04fc55c92095ec2f0e5241"
+      "sha256": "ebb51c397b4c0030fc094470caf11b14557a2a7017ceed3a564de78d155565dc"
     },
     {
       "path": "configs/solidified/knn/Dataset5/knn_without_info_sharing.json",
-      "sha256": "c6e33b63255087688ea618464aba2078eae265b11de06bb2b6c687a8c119ddcf"
+      "sha256": "4d71e2a38a3963d3613fa785980942d666af87a8fc244eb7fdfc26081702e533"
     },
     {
       "path": "configs/solidified/knn/Dataset6/knn_with_info_sharing.json",
@@ -183,7 +183,7 @@
     },
     {
       "path": "scripts/regenerate_solidified_knn.py",
-      "sha256": "b3bd99dc095255c935d2bde3feb55a199bbf87b18f48fe166601c02c34daa650"
+      "sha256": "c2ef0d67daf4ff09ee2ba7dfa445df90fcd592d97dae4d21fc763b854707c386"
     },
     {
       "path": "scripts/run_d4_d6_only.py",
@@ -415,11 +415,11 @@
     },
     {
       "path": "src/protocols/experiment_protocol.py",
-      "sha256": "8da01d3ce6e64af0b938dc251d80bcc9905464b211f2524464fef5b1215c9698"
+      "sha256": "bdfa0aa9b859f00bd08a039399619cf0fb03836ff78cdcd5c3be0dcfe8778501"
     },
     {
       "path": "src/protocols/formal_deployment_manifest.py",
-      "sha256": "38e8d69a1b10a7f2a07e1fbda9c6f9e0daf4b886f168418547f11fb8e7465d8e"
+      "sha256": "fd879003feff6265ab1af7129cb9311ecf1f9f3c4b88d54becc250a9896d27b7"
     },
     {
       "path": "src/protocols/formal_input_paths.py",
@@ -475,7 +475,7 @@
     },
     {
       "path": "src/source_selection/source_selector.py",
-      "sha256": "012e97d3742d301f65e92b9f3b58cbcfb1d7887a85f406d4db4a1bd1b884d9a8"
+      "sha256": "1d5cc77cedfa3725a4b3b80bfd5e8967b2e5d1291e3db373eb74bdd6ccc4d1ce"
     },
     {
       "path": "src/transfer_methods/__init__.py",
@@ -531,7 +531,7 @@
     },
     {
       "path": "src/utils/entity_experiment.py",
-      "sha256": "80868c5ac02027de0e46c4e98aad8f71e95a9aa17ceb06994253b64af8c1b2cc"
+      "sha256": "4df51917d9638d760bf7da99f4b67dcc4d4f41cd634c1cd807ee1301bdad7e0a"
     },
     {
       "path": "src/utils/environment.py",
@@ -551,7 +551,7 @@
     },
     {
       "path": "src/utils/knn_feature_loader.py",
-      "sha256": "aaff4be3a84539efbb6eec80d1457eab7d1ce7a07ca511e9c1420294bab72b04"
+      "sha256": "04f14144b30f805522cd7e4fe21c93bae4bd4c950e9ee7d12add7aa5596a76b8"
     },
     {
       "path": "src/utils/logger.py",
@@ -622,8 +622,12 @@
       "sha256": "61d930ad38d673b45b35ff1d549b6a4e42a5f2c96d7acaab6fe97958afb387bb"
     },
     {
+      "path": "tools/operations/d5_knn_contract_fix_acceptance.sh",
+      "sha256": "ee4798139a998586183905612dd13a43f405b5cfac0277672d0983e937e41b01"
+    },
+    {
       "path": "tools/operations/gate1x_real_input_readiness.py",
-      "sha256": "4ecfc5266b52606523ed907664a8ace1252841346b05daff17c2e33ef9f8c84a"
+      "sha256": "08b5a6e7fdee15d9dba747ee8900215dcd5516fdf27d8cf5829125ae6c909fc6"
     },
     {
       "path": "tools/operations/gate1x_unified_acceptance.py",
@@ -634,6 +638,6 @@
       "sha256": "a8a1d6a43c87f01fc8ad010f594b7f51bf353d9788fd8a1d4b824f7325aa053c"
     }
   ],
-  "inventory_sha256": "cd831d91e86a1708647de66434f21e06414e204be88e78d796a9c389e2f0d4d4",
+  "inventory_sha256": "5d5f2d391c081f4bb91e8509810b7577da4338c5b0f5c89c3ffef663ecac77e3",
   "schema_version": "d1_d6_code_inventory_v1"
 }

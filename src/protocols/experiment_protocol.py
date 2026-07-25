@@ -28,6 +28,7 @@ D1_D2_KNN_ORIGINS = {
 STRICT_KNN_OBSERVED_DAYS = 30
 D1_KNN_FEATURES = ("sales",)
 D2_KNN_FEATURES = ("sales", "promo")
+D5_KNN_FEATURES = ("sales", "onpromotion", "oil_price")
 
 SourceKey = Tuple[str, ...]
 
@@ -307,7 +308,7 @@ _PROTOCOLS = {
             ("48", "1349808"),
             ("48", "320682"),
         ),
-        knn_feature_columns=("sales",),
+        knn_feature_columns=D5_KNN_FEATURES,
     ),
     "D6": ExperimentProtocol(
         "D6",
