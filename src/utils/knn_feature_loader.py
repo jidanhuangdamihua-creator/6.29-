@@ -7,6 +7,7 @@ from typing import Any, Dict, Sequence
 import pandas as pd
 
 from src.data_processing.data_preprocessing import _is_identifier_like_column, infer_source_selection_feature_columns
+from src.protocols.experiment_protocol import get_experiment_protocol
 
 
 FEATURE_STATUS_ALIGNED = "aligned"
@@ -174,14 +175,41 @@ def resolve_knn_feature_columns(
     knn_payload: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Resolve D4-D6 feature columns with solidified JSON as authority."""
+    protocol_features = list(get_experiment_protocol(dataset_id).knn_feature_columns)
     json_info = load_solidified_knn_selected_features(
         dataset_id=dataset_id,
         information_sharing=information_sharing,
         knn_root=knn_root,
         payload=knn_payload,
     )
+    if int(dataset_id) == 5:
+        payload = json_info.get("payload")
+        declared = payload.get("knn_feature_columns") if isinstance(payload, dict) else None
+        authority_path = json_info.get("json_path", "")
+        if declared != protocol_features:
+            raise ValueError(
+                "D5 KNN contract mismatch: "
+                f"expected features={protocol_features!r} actual features={declared!r} "
+                f"authority_path={authority_path}"
+            )
+        if not json_info.get("selected_features"):
+            raise ValueError(
+                "D5 KNN authority has no model feature columns; "
+                f"expected KNN features={protocol_features!r} authority_path={authority_path}"
+            )
     runtime_info = infer_source_selection_feature_columns(source_df, target_df)
     runtime_features = [str(col) for col in runtime_info.get("selected_features", [])]
+    # D5 keeps the model's historical 11-column candidate list separate from
+    # the three-column KNN contract.  ``onpromotion`` is a KNN-only field in
+    # that split, so it must not make an otherwise aligned model-feature
+    # comparison look divergent.
+    if int(dataset_id) == 5 and json_info.get("selected_features"):
+        json_feature_set = set(json_info["selected_features"])
+        runtime_features = [
+            column
+            for column in runtime_features
+            if column in json_feature_set or column == "sales"
+        ]
 
     if json_info.get("selected_features"):
         try:
@@ -207,6 +235,11 @@ def resolve_knn_feature_columns(
             **comparison,
         }
 
+    if int(dataset_id) == 5:
+        raise ValueError(
+            "D5 KNN authority is missing selected model feature columns; "
+            f"expected KNN features={protocol_features!r} authority_path={json_info.get('json_path', '')}"
+        )
     return {
         "selected_features": runtime_features,
         "feature_source": "runtime_infer",

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import unittest
 
+import pandas as pd
+import pytest
+
 from src.protocols.experiment_protocol import (
     FORMAL_METHODS,
     FORMAL_PROTOCOL_TRACK,
@@ -29,12 +32,35 @@ class ExperimentProtocolContractTest(unittest.TestCase):
         self.assertEqual(d1.horizons, (1, 2, 3, 4, 5))
         self.assertEqual(d1.seeds, (42, 43, 44, 45, 46))
 
-        window = d1.observation_window("2017-06-05")
-        self.assertEqual(window.knn_observed_start.isoformat(), "2017-06-05")
-        self.assertEqual(window.knn_observed_end.isoformat(), "2017-07-04")
+        window = d1.observation_window()
+        self.assertEqual(window.origin.isoformat(), "2017-06-30")
+        self.assertEqual(window.knn_observed_start.isoformat(), "2017-06-01")
+        self.assertEqual(window.knn_observed_end.isoformat(), "2017-06-30")
+        self.assertEqual(window.observed_days, 30)
+        self.assertEqual(len(pd.date_range("2017-06-01", "2017-06-30", freq="D")), 30)
         self.assertEqual(window.source_observation_cutoff, window.knn_observed_end)
-        self.assertTrue(window.is_test_date("2017-07-05"))
-        self.assertFalse(window.is_test_date("2017-07-04"))
+        self.assertTrue(window.is_test_date("2017-07-01"))
+        self.assertFalse(window.is_test_date("2017-06-30"))
+
+        d4_window = d4.observation_window("2020-01-01")
+        self.assertEqual(d4_window.knn_observed_end.isoformat(), "2020-01-30")
+
+    def test_d1_d2_windows_are_frozen_from_the_origin(self) -> None:
+        expected = {
+            "D1": ("2017-06-30", "2017-06-01", "2017-06-30"),
+            "D2": ("2018-06-30", "2018-06-01", "2018-06-30"),
+        }
+        for dataset_id, (origin, start, end) in expected.items():
+            window = get_experiment_protocol(dataset_id).observation_window()
+            self.assertEqual(window.origin.isoformat(), origin)
+            self.assertEqual(window.knn_observed_start.isoformat(), start)
+            self.assertEqual(window.knn_observed_end.isoformat(), end)
+            self.assertEqual(window.observed_days, 30)
+            self.assertEqual(len(pd.date_range(start, end, freq="D")), 30)
+
+    def test_d1_rejects_the_legacy_offset_window(self) -> None:
+        with pytest.raises(ProtocolViolation, match="authoritative D1 KNN window"):
+            get_experiment_protocol("D1").observation_window("2017-06-05")
 
     def test_d1_without_and_with_candidate_keys_are_exact(self) -> None:
         available = {

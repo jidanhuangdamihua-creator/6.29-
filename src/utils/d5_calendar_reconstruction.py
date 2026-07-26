@@ -334,8 +334,15 @@ def reconstruct_d5_target_calendar(
     entity_col: str,
     expected_dates: pd.DatetimeIndex,
     authorities: D5AuthorityBundle,
+    allow_missing_transactions_zero_fill: bool = False,
 ) -> tuple[pd.DataFrame, D5ReconstructionReport]:
-    """Add only missing entity-days using field-specific D5 authorities."""
+    """Add only missing entity-days using field-specific D5 authorities.
+
+    Target reconstruction remains fail-closed for missing transaction
+    authority.  The source-history caller may opt into the frozen D5 source
+    calendarization rule, where a missing store-day transaction row means
+    zero transactions.
+    """
     dates = _validate_expected_dates(expected_dates)
     required = {date_col, entity_col, "store_nbr", "item_nbr", "sales"}
     missing = required.difference(observed.columns)
@@ -386,6 +393,7 @@ def reconstruct_d5_target_calendar(
     stores = authorities.stores_by_store
     synthetic_rows: list[dict[str, object]] = []
     synthetic_keys: list[tuple[str, str]] = []
+    missing_transaction_zero_fills = 0
     entity_order = working[entity_col].drop_duplicates().tolist()
 
     for entity in entity_order:
@@ -407,12 +415,20 @@ def reconstruct_d5_target_calendar(
         missing_dates = dates.difference(pd.DatetimeIndex(entity_rows[date_col]))
         for day in missing_dates:
             identity = f"store_nbr={store_nbr} date={day.date().isoformat()}"
-            tx_authority = _lookup_one(
-                tx,
-                tx["store_nbr"].eq(store_nbr) & tx["date"].eq(day),
-                authority="transactions",
-                identity=identity,
-            )
+            tx_matches = tx.loc[tx["store_nbr"].eq(store_nbr) & tx["date"].eq(day)]
+            if not tx_matches.empty and len(tx_matches) != 1:
+                raise ValueError(f"duplicate transactions authority lookup for {identity}")
+            if tx_matches.empty and allow_missing_transactions_zero_fill:
+                tx_value = 0
+                missing_transaction_zero_fills += 1
+            else:
+                tx_authority = _lookup_one(
+                    tx,
+                    tx["store_nbr"].eq(store_nbr) & tx["date"].eq(day),
+                    authority="transactions",
+                    identity=identity,
+                )
+                tx_value = tx_authority["transactions"]
             oil_authority = _lookup_one(
                 oil,
                 oil["date"].eq(day),
@@ -439,7 +455,7 @@ def reconstruct_d5_target_calendar(
                 if column in row:
                     row[column] = store_authority[column]
             if "transactions" in row:
-                row["transactions"] = tx_authority["transactions"]
+                row["transactions"] = tx_value
             if "oil_price" in row:
                 row["oil_price"] = oil_authority["oil_price"]
             if "is_holiday" in row:
@@ -501,7 +517,16 @@ def reconstruct_d5_target_calendar(
         D5FieldReconstructionStats("onpromotion", "missing_promotion_contract", (), 0, count, 0),
         D5FieldReconstructionStats("oil_price", "oil_by_date", ("date",), count, 0, 0),
         D5FieldReconstructionStats(
-            "transactions", "transactions_by_store_date", ("store_nbr", "date"), count, 0, 0
+            "transactions",
+            (
+                "transactions_by_store_date_or_zero_fill_missing_source_day"
+                if allow_missing_transactions_zero_fill
+                else "transactions_by_store_date"
+            ),
+            ("store_nbr", "date"),
+            count - missing_transaction_zero_fills,
+            missing_transaction_zero_fills,
+            0,
         ),
         D5FieldReconstructionStats("item_static", "items_by_item", ("item_nbr",), count, 0, 0),
         D5FieldReconstructionStats("store_static", "stores_by_store", ("store_nbr",), count, 0, 0),
@@ -521,5 +546,263 @@ def reconstruct_d5_target_calendar(
         "synthetic_row_count": count,
         "original_row_count": len(original),
         "original_rows_unchanged": True,
+        "missing_transaction_zero_fill_count": missing_transaction_zero_fills,
     }
+    return combined, report
+
+
+def reconstruct_d5_source_history_calendar(
+    observed: pd.DataFrame,
+    *,
+    expected_dates: pd.DatetimeIndex,
+    authorities: D5AuthorityBundle,
+) -> tuple[pd.DataFrame, D5ReconstructionReport]:
+    """Build the exact D5 source-history frame before candidate eligibility.
+
+    D5's raw sales table is a sparse observation table.  The frozen D5
+    authority permits natural-day reconstruction for missing source days;
+    after this function returns, the caller still performs the common exact
+    date-set and duplicate entity-date checks.  Source history can contain
+    millions of rows, so the entity/date completion and authority joins are
+    vectorized rather than scanning the full frame once per entity.
+    """
+    date_col = "date"
+    entity_col = "entity_id"
+    dates = _validate_expected_dates(expected_dates)
+    required = {date_col, entity_col, "store_nbr", "item_nbr", "sales"}
+    missing = required.difference(observed.columns)
+    if missing:
+        raise ValueError(f"D5 source missing reconstruction columns: {sorted(missing)}")
+    if observed.empty:
+        raise ValueError("D5 source has no observed rows to reconstruct")
+    historical = [col for col in observed.columns if HISTORICAL_DERIVED_PATTERN.search(str(col))]
+    if historical:
+        raise ValueError(
+            f"D5 historical derived fields cannot be synthesized: {sorted(historical)}"
+        )
+
+    original_row_count = len(observed)
+    original_dtypes = observed.dtypes.copy()
+    original_attrs = observed.attrs.copy()
+    working = observed.copy(deep=True)
+    working[date_col] = pd.to_datetime(working[date_col], errors="coerce").dt.normalize()
+    if working[date_col].isna().any():
+        raise ValueError("D5 source contains invalid dates")
+    if working.duplicated([entity_col, date_col]).any():
+        raise ValueError("D5 source contains duplicate entity-date keys")
+    outside = working.loc[~working[date_col].isin(dates), [entity_col, date_col]]
+    if not outside.empty:
+        raise ValueError("D5 source contains dates outside expected_dates")
+
+    known_columns = {
+        date_col,
+        entity_col,
+        "item_id",
+        "store_nbr",
+        "item_nbr",
+        "sales",
+        "onpromotion",
+        *ITEM_STATIC_COLUMNS,
+        *STORE_STATIC_COLUMNS,
+        "transactions",
+        "oil_price",
+        "is_holiday",
+        *DATE_COLUMNS,
+    }
+    unsupported = set(working.columns).difference(known_columns)
+    if unsupported:
+        raise ValueError(f"D5 source has fields without reconstruction authority: {sorted(unsupported)}")
+
+    entity_fields = ["store_nbr", "item_nbr"]
+    if "item_id" in working.columns:
+        entity_fields.append("item_id")
+    grouped = working.groupby(entity_col, sort=False, dropna=False)
+    for column in entity_fields:
+        counts = grouped[column].nunique(dropna=True)
+        invalid = counts.loc[counts.ne(1)]
+        if not invalid.empty:
+            entity = invalid.index[0]
+            values = working.loc[working[entity_col].eq(entity), column].drop_duplicates().tolist()
+            raise ValueError(f"D5 entity {entity!r} must have exactly one {column}: {values}")
+
+    entity_meta = grouped[entity_fields].first().reset_index()
+    entity_meta["store_nbr"] = _normalize_integer_key(
+        entity_meta["store_nbr"], "D5 source", "store_nbr"
+    )
+    entity_meta["item_nbr"] = _normalize_integer_key(
+        entity_meta["item_nbr"], "D5 source", "item_nbr"
+    )
+
+    full_index = pd.MultiIndex.from_product(
+        [entity_meta[entity_col].tolist(), dates], names=[entity_col, date_col]
+    )
+    observed_index = pd.MultiIndex.from_frame(working[[entity_col, date_col]])
+    missing_index = full_index.difference(observed_index, sort=False)
+    missing_frame = missing_index.to_frame(index=False)
+    synthetic_entity_date_keys = (
+        tuple(
+            (str(entity), day.date().isoformat())
+            for entity, day in missing_index.tolist()
+        )
+        if len(missing_index) <= 10_000
+        else ()
+    )
+    synthetic_entity_date_keys_elided = len(missing_index) > 10_000
+    del full_index, observed_index, missing_index
+    missing_transaction_zero_fills = 0
+
+    if not missing_frame.empty:
+        rows = missing_frame.merge(
+            entity_meta,
+            on=entity_col,
+            how="left",
+            validate="many_to_one",
+        )
+        del missing_frame
+
+        item_lookup = authorities.items_by_item.loc[
+            :, ["item_nbr", *ITEM_STATIC_COLUMNS]
+        ]
+        rows = rows.merge(
+            item_lookup,
+            on="item_nbr",
+            how="left",
+            validate="many_to_one",
+            indicator="_item_authority",
+        )
+        missing_items = rows.loc[rows["_item_authority"].ne("both"), "item_nbr"]
+        if not missing_items.empty:
+            raise ValueError(f"missing items authority lookup for item_nbr={int(missing_items.iloc[0])}")
+        rows = rows.drop(columns="_item_authority")
+
+        store_lookup = authorities.stores_by_store.loc[
+            :, ["store_nbr", *STORE_STATIC_COLUMNS]
+        ]
+        rows = rows.merge(
+            store_lookup,
+            on="store_nbr",
+            how="left",
+            validate="many_to_one",
+            indicator="_store_authority",
+        )
+        missing_stores = rows.loc[rows["_store_authority"].ne("both"), "store_nbr"]
+        if not missing_stores.empty:
+            raise ValueError(f"missing stores authority lookup for store_nbr={int(missing_stores.iloc[0])}")
+        rows = rows.drop(columns="_store_authority")
+
+        tx_lookup = authorities.transactions_by_store_date.loc[
+            :, ["store_nbr", "date", "transactions"]
+        ]
+        rows = rows.merge(
+            tx_lookup,
+            on=["store_nbr", "date"],
+            how="left",
+            validate="many_to_one",
+            indicator="_transactions_authority",
+        )
+        missing_transactions = rows["_transactions_authority"].ne("both")
+        if missing_transactions.any():
+            rows.loc[missing_transactions, "transactions"] = 0
+            missing_transaction_zero_fills = int(missing_transactions.sum())
+        rows = rows.drop(columns="_transactions_authority")
+
+        oil_lookup = authorities.oil_by_date.loc[:, ["date", "oil_price"]]
+        rows = rows.merge(
+            oil_lookup,
+            on="date",
+            how="left",
+            validate="many_to_one",
+            indicator="_oil_authority",
+        )
+        missing_oil = rows["_oil_authority"].ne("both") | rows["oil_price"].isna()
+        if missing_oil.any():
+            identity = pd.Timestamp(rows.loc[missing_oil, "date"].iloc[0]).date().isoformat()
+            raise ValueError(f"missing oil authority lookup for date={identity}")
+        rows = rows.drop(columns="_oil_authority")
+
+        if "is_holiday" in working.columns:
+            if authorities.holidays_by_store_date is None:
+                raise ValueError("missing holidays authority for is_holiday reconstruction")
+            holiday_lookup = authorities.holidays_by_store_date.loc[
+                :, ["store_nbr", "date", "is_holiday"]
+            ]
+            rows = rows.merge(
+                holiday_lookup,
+                on=["store_nbr", "date"],
+                how="left",
+                validate="many_to_one",
+            )
+            rows["is_holiday"] = pd.to_numeric(rows["is_holiday"], errors="coerce").fillna(0).astype("int64")
+
+        synthetic = rows.reindex(columns=working.columns)
+        synthetic["sales"] = 0
+        if "onpromotion" in synthetic.columns:
+            synthetic["onpromotion"] = 0
+        synthetic_dates = pd.to_datetime(synthetic[date_col], errors="raise")
+        iso = synthetic_dates.dt.isocalendar()
+        generated = {
+            "year": synthetic_dates.dt.year,
+            "month": synthetic_dates.dt.month,
+            "week": iso["week"].astype("int64"),
+            "day": synthetic_dates.dt.day,
+        }
+        for column, values in generated.items():
+            if column in synthetic.columns:
+                synthetic[column] = values
+    else:
+        synthetic = working.iloc[0:0].copy()
+
+    if not synthetic.empty:
+        combined = pd.concat([working, synthetic], ignore_index=True)
+    else:
+        combined = working.copy()
+    entity_rank = {value: index for index, value in enumerate(entity_meta[entity_col].tolist())}
+    combined["__entity_rank"] = combined[entity_col].map(entity_rank)
+    combined = combined.sort_values(["__entity_rank", date_col], kind="stable").drop(
+        columns="__entity_rank"
+    )
+    combined = combined.loc[:, working.columns].reset_index(drop=True)
+    combined = _cast_like_original(combined, original_dtypes)
+
+    count = len(synthetic)
+    stats = (
+        D5FieldReconstructionStats("sales", "natural_day_zero_demand", (), 0, count, 0),
+        D5FieldReconstructionStats("onpromotion", "missing_promotion_contract", (), 0, count, 0),
+        D5FieldReconstructionStats("oil_price", "oil_by_date", ("date",), count, 0, 0),
+        D5FieldReconstructionStats(
+            "transactions",
+            "transactions_by_store_date_or_zero_fill_missing_source_day",
+            ("store_nbr", "date"),
+            count - missing_transaction_zero_fills,
+            missing_transaction_zero_fills,
+            0,
+        ),
+        D5FieldReconstructionStats("item_static", "items_by_item", ("item_nbr",), count, 0, 0),
+        D5FieldReconstructionStats("store_static", "stores_by_store", ("store_nbr",), count, 0, 0),
+        D5FieldReconstructionStats("date_fields", "expected_dates", ("date",), count, 0, 0),
+    )
+    report = D5ReconstructionReport(
+        synthetic_entity_date_keys=tuple(
+            synthetic_entity_date_keys
+        ),
+        synthetic_row_count=count,
+        field_stats=stats,
+        original_row_count=original_row_count,
+        original_rows_unchanged=True,
+        missing_lookups=(),
+        authority_files=authorities.files,
+    )
+    combined.attrs = original_attrs
+    combined.attrs["d5_calendar_reconstruction"] = {
+        "strategy": "vectorized_entity_date_merge",
+        "synthetic_row_count": count,
+        "original_row_count": original_row_count,
+        "original_rows_unchanged": True,
+        "missing_transaction_zero_fill_count": missing_transaction_zero_fills,
+        "synthetic_entity_date_keys_elided": synthetic_entity_date_keys_elided,
+        "source_history_prevalidated_exact": True,
+        "source_history_canonical_order": True,
+    }
+    combined.attrs["source_history_prevalidated_exact"] = True
+    combined.attrs["source_history_canonical_order"] = True
     return combined, report

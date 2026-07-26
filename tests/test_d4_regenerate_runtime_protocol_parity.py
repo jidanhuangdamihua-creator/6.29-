@@ -39,6 +39,8 @@ def _rows(
             "second_category_id": second_category_id,
             "date": dates,
             "sales": np.arange(len(dates), dtype=float) + float(product_id),
+            "onpromotion": np.zeros(len(dates), dtype=float),
+            "oil_price": np.full(len(dates), 50.0, dtype=float),
         }
     )
 
@@ -187,6 +189,8 @@ class Dataset4RegenerateRuntimeProtocolParityTest(unittest.TestCase):
         self.assertEqual(result["meta"]["valid_30d_candidate_count"], 3)
         self.assertEqual(result["meta"]["selected_count"], 3)
         self.assertEqual(result["meta"]["observed_days"], 30)
+        self.assertEqual(len(result["meta"]["source_pool_fingerprint"]), 64)
+        self.assertEqual(len(result["meta"]["consumer_fingerprint"]), 64)
         self.assertEqual(source.attrs["protocol_version"], PROTOCOL_VERSION)
         self.assertEqual(target.attrs["protocol_dataset_id"], "D4")
         self.assertEqual(target.attrs["protocol_scenario"], "without")
@@ -229,8 +233,14 @@ class Dataset4RegenerateRuntimeProtocolParityTest(unittest.TestCase):
         self.assertIn(("167", "263"), _key_set(regenerated["meta"]["eligible_candidate_keys"]))
         self.assertIn(("168", "264"), _key_set(regenerated["meta"]["eligible_candidate_keys"]))
         self.assertIn(("167", "258"), _key_set(regenerated["meta"]["eligible_candidate_keys"]))
-        self.assertEqual(runtime["meta"]["eligible_candidate_count"], 7)
-        self.assertEqual(runtime["meta"]["valid_30d_candidate_count"], 6)
+        self.assertEqual(
+            runtime["meta"]["source_pool_fingerprint"],
+            regenerated["meta"]["source_pool_fingerprint"],
+        )
+        self.assertEqual(
+            runtime["meta"]["consumer_fingerprint"],
+            regenerated["meta"]["consumer_fingerprint"],
+        )
         self.assertEqual(_source_keys(runtime), _source_keys(regenerated))
         self.assertEqual(
             runtime["meta"]["source_skip_diagnostics"],

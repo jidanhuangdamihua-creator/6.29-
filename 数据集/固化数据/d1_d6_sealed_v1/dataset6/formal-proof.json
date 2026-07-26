@@ -1,0 +1,938 @@
+{
+  "consumer_fingerprint": "4577f87308db439e15929ec72996e60100e58074583cbd14c2f3f94d90fcdd2e",
+  "consumer_fingerprint_input": {
+    "code_inventory_digest": "5d5f2d391c081f4bb91e8509810b7577da4338c5b0f5c89c3ffef663ecac77e3",
+    "dataset_id": "D6",
+    "readiness_proof_digest": "c833a37ef8b5f48ee72696d9be22858e3d3ce2ca07543bf9e7014169cb5135f0",
+    "source_schema_digest": "d9ced790cfe72d43b3e76b033fbe8f2d92d124a3aa7f631391741ee855fb5932",
+    "source_sha256": "12297d9b00a8e40fd9f13966e41aa558fe15e00079f8d0b23477bf4e7c288458",
+    "target_schema_digest": "673949680e08ba2b9625d22645d135dadb5e20f96817c9c6382d4e8e39277250",
+    "target_sha256": "233540a998e980a5ecf1fe82d4e871637673fe5cf49d8717f9f64bee2aab04b1"
+  },
+  "dataset_id": "D6",
+  "dataset_manifest_identity": {
+    "path": "dataset6/manifest.json",
+    "sha256": "ddce0ead262ab36d3cbf830e58b0d40c1595010179186c5ad6ab61dbe92ce45e"
+  },
+  "dataset_root": "dataset6",
+  "dataset_specific": {
+    "authority_digest": "5559a5cb402ad2255a0aae0b7435b664cef37c162631e1f62465726462136ecc",
+    "dataset_id": "D6",
+    "knn_feature_columns": [
+      "sales"
+    ],
+    "protocol_version": "runtime_knn_windowed_stats_v1",
+    "scenario_files": {
+      "with": {
+        "path": "configs/solidified/knn/Dataset6/knn_with_info_sharing.json",
+        "readiness_digest": "26ba2a24c63722078a42026208c4fe203df02eb39d02b1ac99859c95d760dca7",
+        "sha256": "644d0274e1be12fb369eb4339d20333e2506023ba6974793a9184b1acad8bc94",
+        "source_history_calendar": "Gregorian daily",
+        "source_history_completeness_policy": "exact_expected_date_set",
+        "source_history_days": 180,
+        "source_history_end": "2015-11-24",
+        "source_history_expected_date_count": 180,
+        "source_history_inclusive_end": true,
+        "source_history_start": "2015-05-29",
+        "targets": {
+          "CA_1_FOODS_3_080": {
+            "candidate_pool_digest": "dc18c5ec259f80946249e47d0b4e13bdec82057ec86864e0c045966581c90209",
+            "consumer_frame_digest": "463b159704201b32589337c115c9b0386d78b61edf1b67ffa011f45fb7fb58b9",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "0ab8c820a7a597fe33e6677c175b94e1e706820dca0ae5a74ea93ad6282c53f0",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_080"
+            ]
+          },
+          "CA_1_FOODS_3_377": {
+            "candidate_pool_digest": "ef766adb850eb1d8fbceb1262c0b0cd300227ba87dc3c5e8752384ef8258dabe",
+            "consumer_frame_digest": "546ed9e80959dd62c52c9efa2dcfd1eab6824ac5a40384dacb152a59e20c224e",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "b9f0353bc38e7a241eefa1378ff218fbc53fdea398a40cbc7f13193eef5959b6",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_377"
+            ]
+          },
+          "CA_1_FOODS_3_555": {
+            "candidate_pool_digest": "826f45179a138569c0e3598b2438934fe20149c4ee0b78a2cf595115a2647b3c",
+            "consumer_frame_digest": "242ee751f5f3e6e6c2c055d290062fa85323cf6601eb0fdc7587e701f083653f",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "24a1b65d80e36fe0845f78095f348bedd5c387663535d0c7bf7d7acdd894630b",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_555"
+            ]
+          },
+          "CA_1_FOODS_3_586": {
+            "candidate_pool_digest": "f78cf715bf97992643d10ba727b2a00b23c939c20a8d5d9f730ed103141e4bb6",
+            "consumer_frame_digest": "10a392862ef5d0a94ac32d8f1e520ddc2494c09e21304146c68853a5e41e7be5",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "faa2941cd4db63445bd7d13fb46bcdd07573fbe27e03b9cb71ed97a4412deab6",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_586"
+            ]
+          },
+          "CA_1_FOODS_3_668": {
+            "candidate_pool_digest": "8920e916d87a49c6c74c987e4b77493ff18931207138ff0cb4a7c43c3dbbb01d",
+            "consumer_frame_digest": "a852a87ee6363033b1482020eff20a80c6ea9dcd8c7760157006e5362db0b706",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "ac7bcbf43336146953378bacdbb08f61923c01947dac84f412788d4084aa987f",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_668"
+            ]
+          }
+        }
+      },
+      "without": {
+        "path": "configs/solidified/knn/Dataset6/knn_without_info_sharing.json",
+        "readiness_digest": "00669ee56efe9e66f6b70b835ac30e0d4ce66b3cdac18675dba82c44663ccd3f",
+        "sha256": "acffae486d4742f107236ce58db7156a98fba6978fc469b9ae7b3e53d0bb901a",
+        "source_history_calendar": "Gregorian daily",
+        "source_history_completeness_policy": "exact_expected_date_set",
+        "source_history_days": 180,
+        "source_history_end": "2015-11-24",
+        "source_history_expected_date_count": 180,
+        "source_history_inclusive_end": true,
+        "source_history_start": "2015-05-29",
+        "targets": {
+          "CA_1_FOODS_3_080": {
+            "candidate_pool_digest": "6b38fd8e1551b4a402adb7d6b21af8a6e8a067563d5c32950d8754deb47203af",
+            "consumer_frame_digest": "463b159704201b32589337c115c9b0386d78b61edf1b67ffa011f45fb7fb58b9",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "0ab8c820a7a597fe33e6677c175b94e1e706820dca0ae5a74ea93ad6282c53f0",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_080"
+            ]
+          },
+          "CA_1_FOODS_3_377": {
+            "candidate_pool_digest": "967a95be7d61185b42b6c7899236d7e077af406a530e288b9f2b3e8ef673a059",
+            "consumer_frame_digest": "546ed9e80959dd62c52c9efa2dcfd1eab6824ac5a40384dacb152a59e20c224e",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "b9f0353bc38e7a241eefa1378ff218fbc53fdea398a40cbc7f13193eef5959b6",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_377"
+            ]
+          },
+          "CA_1_FOODS_3_555": {
+            "candidate_pool_digest": "e969caabd8a180019130c19827aaa41add92170858f746193aeb2bf9601a1251",
+            "consumer_frame_digest": "242ee751f5f3e6e6c2c055d290062fa85323cf6601eb0fdc7587e701f083653f",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "24a1b65d80e36fe0845f78095f348bedd5c387663535d0c7bf7d7acdd894630b",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_555"
+            ]
+          },
+          "CA_1_FOODS_3_586": {
+            "candidate_pool_digest": "721a541b5fa98ee5c5761a951a3941e53493d4bdf1667617df87ffdc3edb1300",
+            "consumer_frame_digest": "10a392862ef5d0a94ac32d8f1e520ddc2494c09e21304146c68853a5e41e7be5",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "faa2941cd4db63445bd7d13fb46bcdd07573fbe27e03b9cb71ed97a4412deab6",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_586"
+            ]
+          },
+          "CA_1_FOODS_3_668": {
+            "candidate_pool_digest": "f39945a6fe27381e0a6ddf779128afacf65adeb8f03ccb2a2270daebb3bce5af",
+            "consumer_frame_digest": "a852a87ee6363033b1482020eff20a80c6ea9dcd8c7760157006e5362db0b706",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "ac7bcbf43336146953378bacdbb08f61923c01947dac84f412788d4084aa987f",
+            "source_history_frame_digest": "9ea70cf051bb615725dd9d36c7b11d6a71a71e673850fe4b0aa533518a3a6fd5",
+            "target_key": [
+              "CA_1",
+              "FOODS_3_668"
+            ]
+          }
+        }
+      }
+    },
+    "selection_authority": "runtime",
+    "source_history_calendar": "Gregorian daily",
+    "source_history_completeness_policy": "exact_expected_date_set",
+    "source_history_days": 180,
+    "source_history_end": "2015-11-24",
+    "source_history_expected_date_count": 180,
+    "source_history_inclusive_end": true,
+    "source_history_start": "2015-05-29"
+  },
+  "date_key": "date",
+  "date_range": {
+    "source": [
+      "2015-05-29",
+      "2015-11-24"
+    ],
+    "target": [
+      "2015-10-26",
+      "2016-05-22"
+    ]
+  },
+  "entity_count": {
+    "source": 8225,
+    "target": 5
+  },
+  "entity_key": [
+    "store_id",
+    "item_id"
+  ],
+  "formal_identity": {
+    "combined_identity_sha256": "sha256:3d11fef7b4edeb9fc804cc61455095b59e2c995afda11ba7d2c2a8afed7000e6",
+    "contract_sha256": "sha256:85713b9d13cae3c017c4856b6a0f42a49d6074aebbb729171d60b95baa42eb74",
+    "decision_book_sha256": "sha256:4aaebe5f07d3dc0e61ada72dbe0625c82615ba74577e91b72b46b07a709c689d",
+    "freeze_commit": "9eb50948241dad2f01d6854ca3cb4bf4e9c363d7",
+    "matrix_sha256": "sha256:80545e2739dacdedfd8e60857bd8828dbf2102db37fc310ae4fc994b194e1da3",
+    "scope_sha256": "sha256:98107929ea310e7fc304d2631803092e68c01e51fa992da96a3c3118b628eeb4"
+  },
+  "key_date_uniqueness": {
+    "consumer_duplicate_exact_keys": 0,
+    "status": "passed"
+  },
+  "proof_identity_sha256": "b6c6d888bdde8c1c792ab67d4dd6dc477cd0e43e821401ea8a71cafb202666e5",
+  "readiness_proof_digest": "c833a37ef8b5f48ee72696d9be22858e3d3ce2ca07543bf9e7014169cb5135f0",
+  "readiness_result": {
+    "failure_code": null,
+    "status": "passed"
+  },
+  "row_count": {
+    "source": 15964725,
+    "target": 9705
+  },
+  "schema_version": "d1_d6_formal_proof_v1",
+  "source": {
+    "dtypes": {
+      "cat_id": "string",
+      "date": "timestamp[ns]",
+      "day": "int64",
+      "dept_id": "string",
+      "entity_id": "string",
+      "event_name_1": "string",
+      "event_name_2": "string",
+      "event_type_1": "string",
+      "event_type_2": "string",
+      "id": "string",
+      "is_event_1": "int64",
+      "is_event_2": "int64",
+      "item_id": "string",
+      "month": "int64",
+      "sales": "int64",
+      "sell_price": "double",
+      "snap": "int64",
+      "state_id": "string",
+      "store_id": "string",
+      "week": "int64",
+      "weekday": "int64",
+      "wm_yr_wk": "int64",
+      "year": "int64"
+    },
+    "mtime_ns": 1782806760596815790,
+    "nullable": {
+      "cat_id": true,
+      "date": true,
+      "day": true,
+      "dept_id": true,
+      "entity_id": true,
+      "event_name_1": true,
+      "event_name_2": true,
+      "event_type_1": true,
+      "event_type_2": true,
+      "id": true,
+      "is_event_1": true,
+      "is_event_2": true,
+      "item_id": true,
+      "month": true,
+      "sales": true,
+      "sell_price": true,
+      "snap": true,
+      "state_id": true,
+      "store_id": true,
+      "week": true,
+      "weekday": true,
+      "wm_yr_wk": true,
+      "year": true
+    },
+    "ordered_columns": [
+      "id",
+      "item_id",
+      "dept_id",
+      "cat_id",
+      "store_id",
+      "state_id",
+      "sales",
+      "date",
+      "entity_id",
+      "year",
+      "month",
+      "week",
+      "day",
+      "wm_yr_wk",
+      "event_name_1",
+      "event_type_1",
+      "event_name_2",
+      "event_type_2",
+      "weekday",
+      "is_event_1",
+      "is_event_2",
+      "snap",
+      "sell_price"
+    ],
+    "path": "数据集/固化数据/d1_d6_sealed_v1/dataset6/source.parquet",
+    "rows": 15964725,
+    "schema": {
+      "columns": [
+        {
+          "dtype": "string",
+          "name": "id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "item_id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "dept_id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "cat_id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "store_id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "state_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "sales",
+          "nullable": true
+        },
+        {
+          "dtype": "timestamp[ns]",
+          "name": "date",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "entity_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "year",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "month",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "week",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "day",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "wm_yr_wk",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "event_name_1",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "event_type_1",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "event_name_2",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "event_type_2",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "weekday",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "is_event_1",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "is_event_2",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "snap",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "sell_price",
+          "nullable": true
+        }
+      ],
+      "date_column": "date",
+      "key_columns": [
+        "store_id",
+        "item_id"
+      ],
+      "role": "source",
+      "schema_digest": "d9ced790cfe72d43b3e76b033fbe8f2d92d124a3aa7f631391741ee855fb5932"
+    },
+    "schema_digest": "d9ced790cfe72d43b3e76b033fbe8f2d92d124a3aa7f631391741ee855fb5932",
+    "sha256": "12297d9b00a8e40fd9f13966e41aa558fe15e00079f8d0b23477bf4e7c288458",
+    "size_bytes": 18392840
+  },
+  "source_schema": {
+    "columns": [
+      {
+        "dtype": "string",
+        "name": "id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "item_id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "dept_id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "cat_id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "store_id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "state_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "sales",
+        "nullable": true
+      },
+      {
+        "dtype": "timestamp[ns]",
+        "name": "date",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "entity_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "year",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "month",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "week",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "day",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "wm_yr_wk",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "event_name_1",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "event_type_1",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "event_name_2",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "event_type_2",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "weekday",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "is_event_1",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "is_event_2",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "snap",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "sell_price",
+        "nullable": true
+      }
+    ],
+    "date_column": "date",
+    "key_columns": [
+      "store_id",
+      "item_id"
+    ],
+    "role": "source",
+    "schema_digest": "d9ced790cfe72d43b3e76b033fbe8f2d92d124a3aa7f631391741ee855fb5932"
+  },
+  "supporting_proof_files": [
+    {
+      "path": "dataset6/adopt_validation_report.json",
+      "sha256": "486fc07ae89c52b17d21c2e351d3a4ff2370230d9b9d03ce8202dbdbdee20a98",
+      "size_bytes": 2667
+    },
+    {
+      "path": "dataset6/calendarization_audit.json",
+      "sha256": "b73a8cd557fc42ca15c153b3b87900ca123f4d0945b02b740b93acec73abef11",
+      "size_bytes": 196
+    },
+    {
+      "path": "dataset6/knn_schema.json",
+      "sha256": "19ad9b5a8fbcddb69e4c0a569f60a1e3c1c436367a4d4340d54b8887b5741845",
+      "size_bytes": 422
+    },
+    {
+      "path": "dataset6/manifest.json",
+      "sha256": "ddce0ead262ab36d3cbf830e58b0d40c1595010179186c5ad6ab61dbe92ce45e",
+      "size_bytes": 3301
+    },
+    {
+      "path": "dataset6/predictor_schema.json",
+      "sha256": "0c1a17565891b3876b7a8746600c2ed2864f9fc39d31fa1a7ccb03ebd199e0fc",
+      "size_bytes": 1332
+    },
+    {
+      "path": "dataset6/provenance.json",
+      "sha256": "7e983bb76d000ec3d0952a3073a4d2876b740afd2a1164fd0cd1f1177f4f41a7",
+      "size_bytes": 888
+    },
+    {
+      "path": "dataset6/source_sales_canonicalization.json",
+      "sha256": "36a2fb0c81fc3e22710cfe8ee11561ac422ea5beb9bdede728f8aff3f602f31f",
+      "size_bytes": 150
+    },
+    {
+      "path": "dataset6/source_schema.json",
+      "sha256": "859904ab9ffe0dfd22fdc61dde63aa4a9a5a4b198759b9242fd95068724dcf9c",
+      "size_bytes": 1968
+    },
+    {
+      "path": "dataset6/target_schema.json",
+      "sha256": "859904ab9ffe0dfd22fdc61dde63aa4a9a5a4b198759b9242fd95068724dcf9c",
+      "size_bytes": 1968
+    },
+    {
+      "path": "dataset6/validation_report.json",
+      "sha256": "486fc07ae89c52b17d21c2e351d3a4ff2370230d9b9d03ce8202dbdbdee20a98",
+      "size_bytes": 2667
+    }
+  ],
+  "target": {
+    "dtypes": {
+      "cat_id": "string",
+      "date": "timestamp[ns]",
+      "day": "int64",
+      "dept_id": "string",
+      "entity_id": "string",
+      "event_name_1": "string",
+      "event_name_2": "string",
+      "event_type_1": "string",
+      "event_type_2": "string",
+      "id": "string",
+      "is_event_1": "int64",
+      "is_event_2": "int64",
+      "item_id": "string",
+      "month": "int64",
+      "sales": "int64",
+      "sell_price": "double",
+      "snap": "int64",
+      "state_id": "string",
+      "store_id": "string",
+      "week": "int64",
+      "weekday": "int64",
+      "wm_yr_wk": "int64",
+      "year": "int64"
+    },
+    "mtime_ns": 1782806760598708152,
+    "nullable": {
+      "cat_id": true,
+      "date": true,
+      "day": true,
+      "dept_id": true,
+      "entity_id": true,
+      "event_name_1": true,
+      "event_name_2": true,
+      "event_type_1": true,
+      "event_type_2": true,
+      "id": true,
+      "is_event_1": true,
+      "is_event_2": true,
+      "item_id": true,
+      "month": true,
+      "sales": true,
+      "sell_price": true,
+      "snap": true,
+      "state_id": true,
+      "store_id": true,
+      "week": true,
+      "weekday": true,
+      "wm_yr_wk": true,
+      "year": true
+    },
+    "ordered_columns": [
+      "id",
+      "item_id",
+      "dept_id",
+      "cat_id",
+      "store_id",
+      "state_id",
+      "sales",
+      "date",
+      "entity_id",
+      "year",
+      "month",
+      "week",
+      "day",
+      "wm_yr_wk",
+      "event_name_1",
+      "event_type_1",
+      "event_name_2",
+      "event_type_2",
+      "weekday",
+      "is_event_1",
+      "is_event_2",
+      "snap",
+      "sell_price"
+    ],
+    "path": "数据集/固化数据/d1_d6_sealed_v1/dataset6/target.parquet",
+    "rows": 9705,
+    "schema": {
+      "columns": [
+        {
+          "dtype": "string",
+          "name": "id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "item_id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "dept_id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "cat_id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "store_id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "state_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "sales",
+          "nullable": true
+        },
+        {
+          "dtype": "timestamp[ns]",
+          "name": "date",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "entity_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "year",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "month",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "week",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "day",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "wm_yr_wk",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "event_name_1",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "event_type_1",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "event_name_2",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "event_type_2",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "weekday",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "is_event_1",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "is_event_2",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "snap",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "sell_price",
+          "nullable": true
+        }
+      ],
+      "date_column": "date",
+      "key_columns": [
+        "store_id",
+        "item_id"
+      ],
+      "role": "target",
+      "schema_digest": "673949680e08ba2b9625d22645d135dadb5e20f96817c9c6382d4e8e39277250"
+    },
+    "schema_digest": "673949680e08ba2b9625d22645d135dadb5e20f96817c9c6382d4e8e39277250",
+    "sha256": "233540a998e980a5ecf1fe82d4e871637673fe5cf49d8717f9f64bee2aab04b1",
+    "size_bytes": 53532
+  },
+  "target_schema": {
+    "columns": [
+      {
+        "dtype": "string",
+        "name": "id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "item_id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "dept_id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "cat_id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "store_id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "state_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "sales",
+        "nullable": true
+      },
+      {
+        "dtype": "timestamp[ns]",
+        "name": "date",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "entity_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "year",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "month",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "week",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "day",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "wm_yr_wk",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "event_name_1",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "event_type_1",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "event_name_2",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "event_type_2",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "weekday",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "is_event_1",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "is_event_2",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "snap",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "sell_price",
+        "nullable": true
+      }
+    ],
+    "date_column": "date",
+    "key_columns": [
+      "store_id",
+      "item_id"
+    ],
+    "role": "target",
+    "schema_digest": "673949680e08ba2b9625d22645d135dadb5e20f96817c9c6382d4e8e39277250"
+  }
+}

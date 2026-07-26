@@ -6,8 +6,13 @@
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
+import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.protocols.formal_input_paths import resolve_formal_dataset_paths
 
 print("=" * 80)
 print("验证 MMD 分析的 Source Pool 数据来源")
@@ -53,8 +58,9 @@ print()
 # ============================================================================
 
 print("[2] 读取 fixed 脚本使用的固化数据...")
-source_parquet = PROJECT_ROOT / "数据集/固化数据/dataset4-source.parquet"
-target_parquet = PROJECT_ROOT / "数据集/固化数据/dataset4-target.parquet"
+formal_paths = resolve_formal_dataset_paths(4, repository_root=PROJECT_ROOT)
+source_parquet = formal_paths.source_path
+target_parquet = formal_paths.target_path
 
 if not source_parquet.exists():
     print(f"  ✗ 文件不存在: {source_parquet}")

@@ -29,6 +29,8 @@ def test_shared_selector_records_physical_group_keys(
             grouping_col: "G1",
             "date": dates,
             "sales": np.r_[np.zeros(30), np.ones(5)],
+            "onpromotion": np.zeros(len(dates)),
+            "oil_price": np.full(len(dates), 50.0),
         }
     )
     source = pd.concat(
@@ -40,6 +42,8 @@ def test_shared_selector_records_physical_group_keys(
                     grouping_col: "G1",
                     "date": dates[:30],
                     "sales": value,
+                    "onpromotion": np.zeros(30),
+                    "oil_price": np.full(30, 50.0),
                 }
             )
             for store, item, value in (("T1", "I1", 1.0), ("S2", "I2", 2.0))

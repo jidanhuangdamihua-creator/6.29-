@@ -37,7 +37,9 @@ from src.transfer_methods.source_failure_tolerance import (
 from src.utils.finite_diagnostics import NonFiniteArrayError, validate_feature_frame_finite
 from src.utils.result_validation import annotate_silent_metric_failure
 from src.protocols.runner_adapter import configure_protocol_frames
+from src.protocols.candidate_pool import prepare_daily_sequence_pool
 from src.protocols.experiment_protocol import (
+    get_experiment_protocol,
     resolve_result_protocol_tracks,
     serialize_canonical_target_key,
 )
@@ -693,6 +695,16 @@ def run_single_entity_experiment(
             pd.to_datetime(target_entity_df["date"], errors="raise").min(),
         ),
     )
+    if dataset_id == 5:
+        protocol = get_experiment_protocol(dataset_id)
+        prepared_pool = prepare_daily_sequence_pool(
+            source_df,
+            group_cols=source_selection_group_cols,
+            observed_start=observed_start,
+            feature_cols=protocol.knn_feature_columns,
+            metadata_cols=("family",),
+        )
+        source_df.attrs["prepared_daily_sequence_pool"] = prepared_pool
     source_df, target_entity_df = configure_protocol_frames(
         source_df,
         target_entity_df,

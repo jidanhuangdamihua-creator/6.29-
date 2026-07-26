@@ -1,0 +1,888 @@
+{
+  "consumer_fingerprint": "6bfdc648f1ec7db53b2a2c24d47ff617bdd14f93adb27fe0a7f436e954a9cc31",
+  "consumer_fingerprint_input": {
+    "code_inventory_digest": "5d5f2d391c081f4bb91e8509810b7577da4338c5b0f5c89c3ffef663ecac77e3",
+    "dataset_id": "D5",
+    "readiness_proof_digest": "ed909a685c67f7b4145f3fd841e7ad39e75628933aae124df324aa9af8929610",
+    "source_schema_digest": "79adba300871317bcf9f40dc2b038536e3b371f1ecc6693ce1e77beb2310d537",
+    "source_sha256": "368d896b0a7d2849ba2984e1bb3f4f07d36cf9175087ee755d6cd2a6c1c790b3",
+    "target_schema_digest": "5f531ee2175bd9cc93552b5717f769fd794978e97023aef9e6ae959482947032",
+    "target_sha256": "89df965859b3b563d178c0341039acc44ad6192a53196c8974f256ebd400edff"
+  },
+  "dataset_id": "D5",
+  "dataset_manifest_identity": {
+    "path": "dataset5/manifest.json",
+    "sha256": "345a56d608d13b65040a77a1e08420636e0f3dd4496b2ec6d204270d709287a0"
+  },
+  "dataset_root": "dataset5",
+  "dataset_specific": {
+    "authority_digest": "a29ab5608eb5f97b98869a19c99e3bc78d4c6e3bedae48fda1edd3b8ac3ecc6d",
+    "dataset_id": "D5",
+    "knn_feature_columns": [
+      "sales",
+      "onpromotion",
+      "oil_price"
+    ],
+    "protocol_version": "d1_d6_protocol_v1",
+    "scenario_files": {
+      "with": {
+        "path": "configs/solidified/knn/Dataset5/knn_with_info_sharing.json",
+        "readiness_digest": "a7f6dd8daa7a76e4e3069eb12bcbb49e05a289cf27c2e2422cc676c24f52878f",
+        "sha256": "ebb51c397b4c0030fc094470caf11b14557a2a7017ceed3a564de78d155565dc",
+        "source_history_calendar": "Gregorian daily",
+        "source_history_completeness_policy": "exact_expected_date_set",
+        "source_history_days": 180,
+        "source_history_end": "2017-02-15",
+        "source_history_expected_date_count": 180,
+        "source_history_inclusive_end": true,
+        "source_history_start": "2016-08-20",
+        "targets": {
+          "48_1159414": {
+            "candidate_pool_digest": "2d24d72294dd6aa73c99d44d04437f1b90fe44ba4757cc81b0d8d7a68c0114bf",
+            "consumer_frame_digest": "9ee3abe8bd7c914c6e553d442dccfe3aa3339c31af38a1880eddd6a19c5df07c",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "eac2b64d9bd8bf97302f35eab503c1e8d750bc2e7bf85389f7a3353ebb025570",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "1159414"
+            ]
+          },
+          "48_1159415": {
+            "candidate_pool_digest": "df026f061a61a74ef01a711122b7df562709ff2d05142b1ddf4c6cacf402075e",
+            "consumer_frame_digest": "a49fa7414cc60277b1047067a8f65efc6e20741157daf3dafffd95db197e56b4",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "87a19fc0766870a9594b10289ba2cb0c84393c3ea492aa6e694efb6d06656abc",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "1159415"
+            ]
+          },
+          "48_1349808": {
+            "candidate_pool_digest": "76c5a5738f6c46e1cadb7e98472c26cff0f3f7de5f5e67e32287a3137e77778f",
+            "consumer_frame_digest": "f8d7c83ea8508ef870267c7106f43ba9d65f8ef4cb32dbb243a928803088ad44",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "551abe4510dd5e58db4d626588b3f25b9836e9b51af74ca21f6ed500eb6a4e39",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "1349808"
+            ]
+          },
+          "48_320682": {
+            "candidate_pool_digest": "1320d608681261f7747e866e6cddecb6849c3389f5920d240f113d0cc1aad82f",
+            "consumer_frame_digest": "57d5e9b69ebe687eec364197de683f8f2a4728a06818d5af866529e22c0897c2",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "f8d5c753ea8ede997ec4cd4adda3da41d072e5069f8e85aa36a6b136f3151a60",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "320682"
+            ]
+          },
+          "48_364606": {
+            "candidate_pool_digest": "ff3c880b28cc5b93fca440b644999d844e47b222e86c64757f39f9f068acab44",
+            "consumer_frame_digest": "38a6c6a010925714d2f9aa41f963e571f0d9cb7610680d24c721658cb3387c98",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "96a9e3e0b8cc1cc8194eb029f5c66b4bb0d8d179fb188238526454e2e45dbde8",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "364606"
+            ]
+          }
+        }
+      },
+      "without": {
+        "path": "configs/solidified/knn/Dataset5/knn_without_info_sharing.json",
+        "readiness_digest": "731b51c84a36c1ae2f9c058ac269fad3d52a299ce5f0c16a3986bcb8b222f519",
+        "sha256": "4d71e2a38a3963d3613fa785980942d666af87a8fc244eb7fdfc26081702e533",
+        "source_history_calendar": "Gregorian daily",
+        "source_history_completeness_policy": "exact_expected_date_set",
+        "source_history_days": 180,
+        "source_history_end": "2017-02-15",
+        "source_history_expected_date_count": 180,
+        "source_history_inclusive_end": true,
+        "source_history_start": "2016-08-20",
+        "targets": {
+          "48_1159414": {
+            "candidate_pool_digest": "9263b5c4b63e436f9904874f9a588e7b519523415b50ed55f8da72c8b7e9722d",
+            "consumer_frame_digest": "21bb7b46af4a59936dd8c9ad34fea6c1fc6b16b4948405fda2028fd6db46d59c",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "8558a816275cb1a8873832769aa4830b6617c7991795e8621d81e26f15f479ab",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "1159414"
+            ]
+          },
+          "48_1159415": {
+            "candidate_pool_digest": "7e4f8229c0a0432e6b205a95927be8e5ea7d180b48ccf0a6147043e24fae155c",
+            "consumer_frame_digest": "e4396226ad60e0c68459292bacdbbf565972761228a487efad129ed34183ae6e",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "07e5c61692d46281c66a7edd2dc4d540063060f3ef370b6b0b7857d06392d1ed",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "1159415"
+            ]
+          },
+          "48_1349808": {
+            "candidate_pool_digest": "5cb746c93530a779ed84eeda2f58b59caec2107991d3a6023a5b21bed954df6b",
+            "consumer_frame_digest": "279ca37d1f0f4868596c886d601ba5c1b0283d31405236acabf178551ee2da99",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "8abe3b5397ef72598f4743395ae2e859e2fdf21e93f0221168b3998558b9d05e",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "1349808"
+            ]
+          },
+          "48_320682": {
+            "candidate_pool_digest": "d8cbc643218a92dc9b92ab6eb1501f36219b442d24df1e3b8a6a1fbcc2b1fe52",
+            "consumer_frame_digest": "db21b2a9dba0704fbe56452ee4827af3b2efa8e089a90b7a6cc890529608c020",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "fe7d53e3a9138590cfe300b42feaf1a98442dc1e7525caad1c382e8c29c362d4",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "320682"
+            ]
+          },
+          "48_364606": {
+            "candidate_pool_digest": "550167dee546f8d649f83c899b003fa2aeb537c77b701c240bd059976a12a198",
+            "consumer_frame_digest": "0367263e65770b30ecd0fd9e6c8c29a56636b0e8e4e3fcd807192f521703f836",
+            "consumer_frame_rows": 540,
+            "selection_result_digest": "2c6788ceb602249417a11e3356de91b9dfbba4eb6054e2cb95d4e659da76cd8a",
+            "source_history_frame_digest": "1666c8edb877ea75730958d5a132805de7fefdf6d84ebee8defb74e07b584b60",
+            "target_key": [
+              "48",
+              "364606"
+            ]
+          }
+        }
+      }
+    },
+    "selection_authority": "shared_protocol",
+    "source_history_calendar": "Gregorian daily",
+    "source_history_completeness_policy": "exact_expected_date_set",
+    "source_history_days": 180,
+    "source_history_end": "2017-02-15",
+    "source_history_expected_date_count": 180,
+    "source_history_inclusive_end": true,
+    "source_history_start": "2016-08-20"
+  },
+  "date_key": "date",
+  "date_range": {
+    "source": [
+      "2016-08-20",
+      "2017-02-15"
+    ],
+    "target": [
+      "2017-01-17",
+      "2017-08-14"
+    ]
+  },
+  "entity_count": {
+    "source": 49868,
+    "target": 5
+  },
+  "entity_key": [
+    "store_nbr",
+    "item_nbr"
+  ],
+  "formal_identity": {
+    "combined_identity_sha256": "sha256:3d11fef7b4edeb9fc804cc61455095b59e2c995afda11ba7d2c2a8afed7000e6",
+    "contract_sha256": "sha256:85713b9d13cae3c017c4856b6a0f42a49d6074aebbb729171d60b95baa42eb74",
+    "decision_book_sha256": "sha256:4aaebe5f07d3dc0e61ada72dbe0625c82615ba74577e91b72b46b07a709c689d",
+    "freeze_commit": "9eb50948241dad2f01d6854ca3cb4bf4e9c363d7",
+    "matrix_sha256": "sha256:80545e2739dacdedfd8e60857bd8828dbf2102db37fc310ae4fc994b194e1da3",
+    "scope_sha256": "sha256:98107929ea310e7fc304d2631803092e68c01e51fa992da96a3c3118b628eeb4"
+  },
+  "key_date_uniqueness": {
+    "consumer_duplicate_exact_keys": 0,
+    "status": "passed"
+  },
+  "proof_identity_sha256": "21b6ba471fbff91f4996d5a5b8375be7da81c3eab4e611d3d90436f11ef99baa",
+  "readiness_proof_digest": "ed909a685c67f7b4145f3fd841e7ad39e75628933aae124df324aa9af8929610",
+  "readiness_result": {
+    "failure_code": null,
+    "status": "passed"
+  },
+  "row_count": {
+    "source": 45401018,
+    "target": 7323
+  },
+  "schema_version": "d1_d6_formal_proof_v1",
+  "source": {
+    "dtypes": {
+      "city": "string",
+      "class": "int64",
+      "cluster": "int64",
+      "date": "timestamp[ns]",
+      "day": "int64",
+      "entity_id": "string",
+      "family": "string",
+      "is_holiday": "int64",
+      "item_id": "string",
+      "item_nbr": "int32",
+      "month": "int64",
+      "oil_price": "double",
+      "onpromotion": "string",
+      "perishable": "int64",
+      "sales": "double",
+      "state": "string",
+      "store_nbr": "int32",
+      "transactions": "int64",
+      "type": "string",
+      "week": "int64",
+      "year": "int64"
+    },
+    "mtime_ns": 1782806760582641575,
+    "nullable": {
+      "city": true,
+      "class": true,
+      "cluster": true,
+      "date": true,
+      "day": true,
+      "entity_id": true,
+      "family": true,
+      "is_holiday": true,
+      "item_id": true,
+      "item_nbr": true,
+      "month": true,
+      "oil_price": true,
+      "onpromotion": true,
+      "perishable": true,
+      "sales": true,
+      "state": true,
+      "store_nbr": true,
+      "transactions": true,
+      "type": true,
+      "week": true,
+      "year": true
+    },
+    "ordered_columns": [
+      "date",
+      "store_nbr",
+      "item_nbr",
+      "sales",
+      "onpromotion",
+      "family",
+      "entity_id",
+      "item_id",
+      "year",
+      "month",
+      "week",
+      "day",
+      "class",
+      "perishable",
+      "city",
+      "state",
+      "type",
+      "cluster",
+      "transactions",
+      "oil_price",
+      "is_holiday"
+    ],
+    "path": "数据集/固化数据/d1_d6_sealed_v1/dataset5/source.parquet",
+    "rows": 45401018,
+    "schema": {
+      "columns": [
+        {
+          "dtype": "timestamp[ns]",
+          "name": "date",
+          "nullable": true
+        },
+        {
+          "dtype": "int32",
+          "name": "store_nbr",
+          "nullable": true
+        },
+        {
+          "dtype": "int32",
+          "name": "item_nbr",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "sales",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "onpromotion",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "family",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "entity_id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "item_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "year",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "month",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "week",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "day",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "class",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "perishable",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "city",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "state",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "type",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "cluster",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "transactions",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "oil_price",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "is_holiday",
+          "nullable": true
+        }
+      ],
+      "date_column": "date",
+      "key_columns": [
+        "store_nbr",
+        "item_nbr"
+      ],
+      "role": "source",
+      "schema_digest": "79adba300871317bcf9f40dc2b038536e3b371f1ecc6693ce1e77beb2310d537"
+    },
+    "schema_digest": "79adba300871317bcf9f40dc2b038536e3b371f1ecc6693ce1e77beb2310d537",
+    "sha256": "368d896b0a7d2849ba2984e1bb3f4f07d36cf9175087ee755d6cd2a6c1c790b3",
+    "size_bytes": 282097362
+  },
+  "source_schema": {
+    "columns": [
+      {
+        "dtype": "timestamp[ns]",
+        "name": "date",
+        "nullable": true
+      },
+      {
+        "dtype": "int32",
+        "name": "store_nbr",
+        "nullable": true
+      },
+      {
+        "dtype": "int32",
+        "name": "item_nbr",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "sales",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "onpromotion",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "family",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "entity_id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "item_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "year",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "month",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "week",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "day",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "class",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "perishable",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "city",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "state",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "type",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "cluster",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "transactions",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "oil_price",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "is_holiday",
+        "nullable": true
+      }
+    ],
+    "date_column": "date",
+    "key_columns": [
+      "store_nbr",
+      "item_nbr"
+    ],
+    "role": "source",
+    "schema_digest": "79adba300871317bcf9f40dc2b038536e3b371f1ecc6693ce1e77beb2310d537"
+  },
+  "supporting_proof_files": [
+    {
+      "path": "dataset5/adopt_validation_report.json",
+      "sha256": "8adc4c6bd1b24c2c6ed70be3e4438a48901f9147e7f918d5308bddf9c701da37",
+      "size_bytes": 2557
+    },
+    {
+      "path": "dataset5/calendarization_audit.json",
+      "sha256": "b73a8cd557fc42ca15c153b3b87900ca123f4d0945b02b740b93acec73abef11",
+      "size_bytes": 196
+    },
+    {
+      "path": "dataset5/knn_schema.json",
+      "sha256": "0c692a9c6c35deb19f9133446c028e11a6031ddc97e18b1c886897e2ff5c0bda",
+      "size_bytes": 525
+    },
+    {
+      "path": "dataset5/manifest.json",
+      "sha256": "345a56d608d13b65040a77a1e08420636e0f3dd4496b2ec6d204270d709287a0",
+      "size_bytes": 4117
+    },
+    {
+      "path": "dataset5/predictor_schema.json",
+      "sha256": "567a42911b6602be2d21b43729afbe61463c1b7f69c12f8069e394f90f1f9d73",
+      "size_bytes": 1091
+    },
+    {
+      "path": "dataset5/provenance.json",
+      "sha256": "e5da0069da8605c42afe64f0e38e4c6fa04212856406412d2e51d4fe8eedfd33",
+      "size_bytes": 890
+    },
+    {
+      "path": "dataset5/source_sales_canonicalization.json",
+      "sha256": "36a2fb0c81fc3e22710cfe8ee11561ac422ea5beb9bdede728f8aff3f602f31f",
+      "size_bytes": 150
+    },
+    {
+      "path": "dataset5/source_schema.json",
+      "sha256": "7a268fefaf5c15c6d56079496316c2756edd5a0290e10a1c21696ada425542f0",
+      "size_bytes": 1773
+    },
+    {
+      "path": "dataset5/target_schema.json",
+      "sha256": "7a268fefaf5c15c6d56079496316c2756edd5a0290e10a1c21696ada425542f0",
+      "size_bytes": 1773
+    },
+    {
+      "path": "dataset5/validation_report.json",
+      "sha256": "8adc4c6bd1b24c2c6ed70be3e4438a48901f9147e7f918d5308bddf9c701da37",
+      "size_bytes": 2557
+    }
+  ],
+  "target": {
+    "dtypes": {
+      "city": "string",
+      "class": "int64",
+      "cluster": "int64",
+      "date": "timestamp[ns]",
+      "day": "int64",
+      "entity_id": "string",
+      "family": "string",
+      "is_holiday": "int64",
+      "item_id": "string",
+      "item_nbr": "int32",
+      "month": "int64",
+      "oil_price": "double",
+      "onpromotion": "string",
+      "perishable": "int64",
+      "sales": "double",
+      "state": "string",
+      "store_nbr": "int32",
+      "transactions": "int64",
+      "type": "string",
+      "week": "int64",
+      "year": "int64"
+    },
+    "mtime_ns": 1782806760584870385,
+    "nullable": {
+      "city": true,
+      "class": true,
+      "cluster": true,
+      "date": true,
+      "day": true,
+      "entity_id": true,
+      "family": true,
+      "is_holiday": true,
+      "item_id": true,
+      "item_nbr": true,
+      "month": true,
+      "oil_price": true,
+      "onpromotion": true,
+      "perishable": true,
+      "sales": true,
+      "state": true,
+      "store_nbr": true,
+      "transactions": true,
+      "type": true,
+      "week": true,
+      "year": true
+    },
+    "ordered_columns": [
+      "date",
+      "store_nbr",
+      "item_nbr",
+      "sales",
+      "onpromotion",
+      "family",
+      "entity_id",
+      "item_id",
+      "year",
+      "month",
+      "week",
+      "day",
+      "class",
+      "perishable",
+      "city",
+      "state",
+      "type",
+      "cluster",
+      "transactions",
+      "oil_price",
+      "is_holiday"
+    ],
+    "path": "数据集/固化数据/d1_d6_sealed_v1/dataset5/target.parquet",
+    "rows": 7323,
+    "schema": {
+      "columns": [
+        {
+          "dtype": "timestamp[ns]",
+          "name": "date",
+          "nullable": true
+        },
+        {
+          "dtype": "int32",
+          "name": "store_nbr",
+          "nullable": true
+        },
+        {
+          "dtype": "int32",
+          "name": "item_nbr",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "sales",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "onpromotion",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "family",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "entity_id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "item_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "year",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "month",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "week",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "day",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "class",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "perishable",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "city",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "state",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "type",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "cluster",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "transactions",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "oil_price",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "is_holiday",
+          "nullable": true
+        }
+      ],
+      "date_column": "date",
+      "key_columns": [
+        "store_nbr",
+        "item_nbr"
+      ],
+      "role": "target",
+      "schema_digest": "5f531ee2175bd9cc93552b5717f769fd794978e97023aef9e6ae959482947032"
+    },
+    "schema_digest": "5f531ee2175bd9cc93552b5717f769fd794978e97023aef9e6ae959482947032",
+    "sha256": "89df965859b3b563d178c0341039acc44ad6192a53196c8974f256ebd400edff",
+    "size_bytes": 189057
+  },
+  "target_schema": {
+    "columns": [
+      {
+        "dtype": "timestamp[ns]",
+        "name": "date",
+        "nullable": true
+      },
+      {
+        "dtype": "int32",
+        "name": "store_nbr",
+        "nullable": true
+      },
+      {
+        "dtype": "int32",
+        "name": "item_nbr",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "sales",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "onpromotion",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "family",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "entity_id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "item_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "year",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "month",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "week",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "day",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "class",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "perishable",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "city",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "state",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "type",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "cluster",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "transactions",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "oil_price",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "is_holiday",
+        "nullable": true
+      }
+    ],
+    "date_column": "date",
+    "key_columns": [
+      "store_nbr",
+      "item_nbr"
+    ],
+    "role": "target",
+    "schema_digest": "5f531ee2175bd9cc93552b5717f769fd794978e97023aef9e6ae959482947032"
+  }
+}

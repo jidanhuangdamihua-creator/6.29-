@@ -5,7 +5,10 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from src.protocols.candidate_pool import prepare_daily_sequence_pool
+from src.protocols.candidate_pool import (
+    build_candidate_pool_digest,
+    prepare_daily_sequence_pool,
+)
 from src.protocols.experiment_protocol import (
     ProtocolViolation,
     SourceIdentity,
@@ -43,6 +46,8 @@ def _rows(
             "second_category_id": second_category_id,
             "date": dates,
             "sales": np.full(len(dates), float(product_id)),
+            "onpromotion": np.zeros(len(dates), dtype=float),
+            "oil_price": np.full(len(dates), 50.0, dtype=float),
         }
     )
 
@@ -175,7 +180,7 @@ class Dataset4CandidateProtocolTest(unittest.TestCase):
         self.assertLess(len(after), len(source))
         self.assertTrue(config["domain_filter_applied_to_source"])
 
-    def test_shared_d4_protocol_uses_full_entity_key_not_second_category_for_eligibility(
+    def test_shared_d4_protocol_excludes_only_exact_composite_target_key(
         self,
     ) -> None:
         identities = (
@@ -205,61 +210,10 @@ class Dataset4CandidateProtocolTest(unittest.TestCase):
                 CROSS_STORE_SAME_PRODUCT_KEY,
             ),
         )
-
-    def test_d4_excludes_only_exact_full_key_and_preserves_candidate_order(self) -> None:
-        identities = (
-            SourceIdentity(("396", "258")),
-            SourceIdentity(("166", "601")),
-            SourceIdentity(("166", "258")),
-            SourceIdentity(("200", "258")),
-            SourceIdentity(("166", "432")),
-        )
-
-        candidate_keys = build_candidate_keys(
-            get_experiment_protocol("D4"),
-            "with",
-            ("166", "258"),
-            identities,
-        )
-
         self.assertEqual(
-            candidate_keys,
-            (
-                ("166", "432"),
-                ("166", "601"),
-                ("200", "258"),
-                ("396", "258"),
-            ),
+            protocol.source_pool_rule.excluded_candidate_key_fields,
+            (),
         )
-        self.assertNotIn(("166", "258"), candidate_keys)
-        self.assertIn(("396", "258"), candidate_keys)
-        self.assertIn(("166", "432"), candidate_keys)
-        self.assertEqual(
-            set(candidate_keys).intersection({("166", "258")}),
-            set(),
-        )
-
-    def test_d4_multiple_targets_exclude_only_each_exact_full_key(self) -> None:
-        target_keys = (("166", "258"), ("166", "432"), ("200", "258"))
-        identities = tuple(SourceIdentity(key) for key in target_keys) + (
-            SourceIdentity(("396", "258")),
-            SourceIdentity(("166", "601")),
-        )
-        protocol = get_experiment_protocol("D4")
-
-        candidate_keys_by_target = {
-            target_key: build_candidate_keys(protocol, "with", target_key, identities)
-            for target_key in target_keys
-        }
-
-        for target_key, candidate_keys in candidate_keys_by_target.items():
-            self.assertNotIn(target_key, candidate_keys)
-            self.assertEqual(
-                set(candidate_keys).intersection({target_key}),
-                set(),
-            )
-        self.assertIn(("396", "258"), candidate_keys_by_target[("166", "258")])
-        self.assertIn(("166", "432"), candidate_keys_by_target[("166", "258")])
 
     def test_d5_still_excludes_different_group_candidates(self) -> None:
         target = _rows(166, 258, 20, DATES).assign(family="F1")
@@ -305,7 +259,7 @@ class Dataset4CandidateProtocolTest(unittest.TestCase):
             candidate["second_category_id"].iloc[0], target["second_category_id"].iloc[0]
         )
 
-    def test_with_allows_cross_store_candidates_including_same_product(
+    def test_with_excludes_only_exact_key_and_retains_cross_store_same_product(
         self,
     ) -> None:
         candidate_keys = _candidate_keys(scenario="with")
@@ -323,11 +277,6 @@ class Dataset4CandidateProtocolTest(unittest.TestCase):
             candidate["second_category_id"].iloc[0], target["second_category_id"].iloc[0]
         )
 
-        self.assertEqual(
-            set(candidate_keys).intersection({TARGET_KEY}),
-            set(),
-        )
-
     def test_prepared_pool_does_not_restore_second_category_restriction(
         self,
     ) -> None:
@@ -336,3 +285,22 @@ class Dataset4CandidateProtocolTest(unittest.TestCase):
 
         self.assertIn(SAME_STORE_DIFFERENT_CATEGORY_KEY, without_candidate_keys)
         self.assertIn(CROSS_STORE_DIFFERENT_CATEGORY_KEY, with_candidate_keys)
+        self.assertIn(CROSS_STORE_SAME_PRODUCT_KEY, with_candidate_keys)
+
+    def test_candidate_digest_binds_store_and_product_components(self) -> None:
+        payload = {
+            "protocol_version": "d1_d6_protocol_v1",
+            "dataset_id": "D4",
+            "scenario": "with",
+            "target_key": TARGET_KEY,
+            "group_cols": ("store_id", "product_id"),
+            "candidate_keys": (CROSS_STORE_SAME_PRODUCT_KEY,),
+            "observed_start": "2020-01-01",
+            "observed_end": "2020-01-30",
+            "feature_cols": ("sales",),
+        }
+        baseline = build_candidate_pool_digest(**payload)
+        changed = build_candidate_pool_digest(
+            **{**payload, "candidate_keys": (("169", "258"),)}
+        )
+        self.assertNotEqual(baseline, changed)

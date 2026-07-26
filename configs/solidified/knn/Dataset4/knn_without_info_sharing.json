@@ -17,10 +17,10 @@
     "store_id",
     "product_id"
   ],
-  "selection_authority": "runtime",
-  "protocol_version": "runtime_knn_windowed_stats_v1",
+  "selection_authority": "shared_protocol",
+  "protocol_version": "d1_d6_protocol_v1",
   "results_semantics": "json_top_k_diagnostic_not_training_authority",
-  "training_selection_authority": "runtime_source_selector",
+  "training_selection_authority": "shared_protocol_selector",
   "json_results_used_for": [
     "target_list",
     "smoke_or_source_limit_candidate_pool",
@@ -161,7 +161,7 @@
     "include_sales_in_knn": true,
     "knn_feature_mode": "paper_available_features_no_ids"
   },
-  "source_pool_size": 3007705,
+  "source_pool_size": 1123200,
   "source_domain_policy_diagnostics": {
     "knn_json_domain_filter": {
       "column": "first_category_id",
@@ -176,40 +176,40 @@
     "target_domain_validation_passed": true,
     "source_pool_policy": "without_information_sharing_same_store",
     "source_domain_filter_reason": "domain_filter_target_only",
-    "source_pool_size_before_filter": 3007705,
-    "source_pool_size_after_filter": 3007705,
-    "source_pool_rows_before_filter": 3007705,
-    "source_pool_rows_after_filter": 3007705,
+    "source_pool_size_before_filter": 1123200,
+    "source_pool_size_after_filter": 1123200,
+    "source_pool_rows_before_filter": 1123200,
+    "source_pool_rows_after_filter": 1123200,
     "excluded_source_row_count": 0,
-    "source_pool_entities_before_filter": 15982,
-    "source_pool_entities_after_filter": 15982,
+    "source_pool_entities_before_filter": 6240,
+    "source_pool_entities_after_filter": 6240,
     "excluded_source_entity_count": 0,
     "source_domain_filter_error": "",
     "target_domain_validation_target_count": 5,
-    "source_pool_entity_count": 15982
+    "source_pool_entity_count": 6240
   },
   "results": {
     "166_258": [
       {
         "source_entity": "166_184",
         "distance": 0.3943636632290917,
-        "weight": 0.3348976837346105,
+        "weight": 0.36008617104490953,
         "source_store_id": "166",
         "source_product_id": "184"
       },
       {
-        "source_entity": "166_560",
-        "distance": 0.39522872821337834,
-        "weight": 0.3341646695797514,
-        "source_store_id": "166",
-        "source_product_id": "560"
-      },
-      {
         "source_entity": "166_530",
         "distance": 0.39908266323527564,
-        "weight": 0.33093764668563813,
+        "weight": 0.35582828976529335,
         "source_store_id": "166",
         "source_product_id": "530"
+      },
+      {
+        "source_entity": "166_229",
+        "distance": 0.4998667044313751,
+        "weight": 0.2840855391897971,
+        "source_store_id": "166",
+        "source_product_id": "229"
       }
     ],
     "166_432": [
@@ -239,69 +239,69 @@
       {
         "source_entity": "166_184",
         "distance": 0.4208339432960117,
-        "weight": 0.3532992866334921,
+        "weight": 0.3626160213275833,
         "source_store_id": "166",
         "source_product_id": "184"
       },
       {
         "source_entity": "166_530",
         "distance": 0.44036730721577544,
-        "weight": 0.33762799753320805,
+        "weight": 0.3465314700204802,
         "source_store_id": "166",
         "source_product_id": "530"
       },
       {
-        "source_entity": "166_560",
-        "distance": 0.4810529198575318,
-        "weight": 0.3090727158332999,
+        "source_entity": "166_229",
+        "distance": 0.5246684361861585,
+        "weight": 0.2908525086519365,
         "source_store_id": "166",
-        "source_product_id": "560"
+        "source_product_id": "229"
       }
     ],
     "166_313": [
       {
         "source_entity": "166_506",
         "distance": 0.705263722270509,
-        "weight": 0.3443671901034923,
+        "weight": 0.3530020343805755,
         "source_store_id": "166",
         "source_product_id": "506"
       },
       {
-        "source_entity": "166_548",
-        "distance": 0.7273585055998667,
-        "weight": 0.3339064361728102,
-        "source_store_id": "166",
-        "source_product_id": "548"
-      },
-      {
         "source_entity": "166_510",
         "distance": 0.7548951729870074,
-        "weight": 0.3217263737236974,
+        "weight": 0.3297935102476499,
         "source_store_id": "166",
         "source_product_id": "510"
+      },
+      {
+        "source_entity": "166_242",
+        "distance": 0.7848550828281822,
+        "weight": 0.3172044553717747,
+        "source_store_id": "166",
+        "source_product_id": "242"
       }
     ],
     "166_311": [
       {
         "source_entity": "166_506",
         "distance": 0.44525355569941677,
-        "weight": 0.3662111903785728,
+        "weight": 0.39023072900418654,
         "source_store_id": "166",
         "source_product_id": "506"
       },
       {
-        "source_entity": "166_548",
-        "distance": 0.47248313888939697,
-        "weight": 0.3451061454749517,
-        "source_store_id": "166",
-        "source_product_id": "548"
-      },
-      {
         "source_entity": "166_510",
         "distance": 0.5648307144121653,
-        "weight": 0.28868266414647537,
+        "weight": 0.30761716037211845,
         "source_store_id": "166",
         "source_product_id": "510"
+      },
+      {
+        "source_entity": "166_242",
+        "distance": 0.5750468535679657,
+        "weight": 0.30215211062369507,
+        "source_store_id": "166",
+        "source_product_id": "242"
       }
     ]
   },
@@ -321,6 +321,15 @@
       "feature_cols": [
         "sales"
       ],
+      "knn_feature_columns": [
+        "sales"
+      ],
+      "historical_feature_columns": [
+        "sales"
+      ],
+      "forecast_excluded_columns": [],
+      "feature_scope": "historical_observed",
+      "max_allowed_date_relation": "date<=origin",
       "requested_feature_cols": [
         "sales"
       ],
@@ -330,15 +339,18 @@
       "scaler_fit_scope": "target_and_candidate_legal_observed_values",
       "knn_observed_start": "2024-12-16",
       "knn_observed_end": "2025-01-14",
+      "origin": "2025-01-14",
       "protocol_observed_start": "2024-12-16",
       "protocol_observed_days": 30,
+      "observed_days": 30,
+      "boundary": "inclusive",
       "target_observed_start": "2024-12-16",
       "target_observed_end": "2025-01-14",
       "source_observation_cutoff": "2025-01-14",
       "target_test_excluded": true,
       "source_future_excluded": true,
       "source_alignment_mode": "exact_knn_observed_dates",
-      "candidate_pool_digest": "7940a1c51eee067b1bcd5868aee2cf70c53be1aaa9e54dec49c826873658206a",
+      "candidate_pool_digest": "9aadcff7bc1ff2a934d54f1d742ec1e37b5a9734ec8db9c2c9ce32d2d0b18595",
       "candidate_pool_digest_input": {
         "protocol_version": "d1_d6_protocol_v1",
         "dataset_id": "D4",
@@ -354,27 +366,7 @@
         "candidate_keys": [
           [
             "166",
-            "12"
-          ],
-          [
-            "166",
             "133"
-          ],
-          [
-            "166",
-            "143"
-          ],
-          [
-            "166",
-            "150"
-          ],
-          [
-            "166",
-            "166"
-          ],
-          [
-            "166",
-            "167"
           ],
           [
             "166",
@@ -382,23 +374,7 @@
           ],
           [
             "166",
-            "189"
-          ],
-          [
-            "166",
-            "205"
-          ],
-          [
-            "166",
-            "227"
-          ],
-          [
-            "166",
             "229"
-          ],
-          [
-            "166",
-            "230"
           ],
           [
             "166",
@@ -422,15 +398,7 @@
           ],
           [
             "166",
-            "269"
-          ],
-          [
-            "166",
             "277"
-          ],
-          [
-            "166",
-            "291"
           ],
           [
             "166",
@@ -442,22 +410,6 @@
           ],
           [
             "166",
-            "336"
-          ],
-          [
-            "166",
-            "338"
-          ],
-          [
-            "166",
-            "357"
-          ],
-          [
-            "166",
-            "375"
-          ],
-          [
-            "166",
             "394"
           ],
           [
@@ -466,23 +418,7 @@
           ],
           [
             "166",
-            "417"
-          ],
-          [
-            "166",
-            "427"
-          ],
-          [
-            "166",
             "441"
-          ],
-          [
-            "166",
-            "470"
-          ],
-          [
-            "166",
-            "474"
           ],
           [
             "166",
@@ -498,51 +434,11 @@
           ],
           [
             "166",
-            "518"
-          ],
-          [
-            "166",
-            "529"
-          ],
-          [
-            "166",
             "530"
           ],
           [
             "166",
-            "542"
-          ],
-          [
-            "166",
-            "548"
-          ],
-          [
-            "166",
-            "555"
-          ],
-          [
-            "166",
-            "560"
-          ],
-          [
-            "166",
-            "6"
-          ],
-          [
-            "166",
-            "7"
-          ],
-          [
-            "166",
             "72"
-          ],
-          [
-            "166",
-            "83"
-          ],
-          [
-            "166",
-            "90"
           ],
           [
             "166",
@@ -553,9 +449,25 @@
         "observed_end": "2025-01-14",
         "feature_cols": [
           "sales"
-        ]
+        ],
+        "source_history_days": 180,
+        "source_history_start": "2024-07-19",
+        "source_history_end": "2025-01-14",
+        "source_history_completeness_policy": "exact_expected_date_set",
+        "source_history_frame_digest": "b3584f9ca0e52cb4b9fae0e65353b141c243ae7a75dd954c925b06c877e6335c"
       },
-      "selection_result_digest": "426aedd61c0748c02bed086b862c25a3df8a54101b5ae1171c393350f73664c4",
+      "selection_result_digest": "1fb827abd06856e3cb58e1bcf188c26ee8c675e85a3109a2606717c7996c7d3e",
+      "selection_digest": "1fb827abd06856e3cb58e1bcf188c26ee8c675e85a3109a2606717c7996c7d3e",
+      "source_frame_min_date": "2024-12-16",
+      "source_frame_max_date": "2025-01-14",
+      "target_frame_min_date": "2024-12-16",
+      "target_frame_max_date": "2025-01-14",
+      "source_frame_digest": "54d7dfbba24a75bd6da7f6198111ebb3574684e2d68522000c52fb3f0ff6ae1f",
+      "target_frame_digest": "e5d7ee61568337f0a96bcc17cab2cf38e4cdf135958b2fb968e216a49770d4b2",
+      "source_pool_fingerprint": "0a81b194f3129a7f7ecc6271729225aadef3e15ad737e7b369d26106a15e0c9b",
+      "consumer_fingerprint": "fd699a583adacda0376e59861c83b767b2d0bf25f6f6d70ffae6a17ba2ea42b7",
+      "consumer_frame_digest": "196ee31c9e6880dafdcf836e127115bc7b7538aadee884d151cd28fd6583b47b",
+      "consumer_frame_rows": 540,
       "selected_sources_runtime": [
         {
           "source_rank": 1,
@@ -564,7 +476,7 @@
             "184"
           ],
           "distance": 0.3943636632290917,
-          "weight": 0.3348976837346105,
+          "weight": 0.36008617104490953,
           "tie_group": 1,
           "date_start": "2024-12-16",
           "date_end": "2025-01-14"
@@ -573,10 +485,10 @@
           "source_rank": 2,
           "source_key": [
             "166",
-            "560"
+            "530"
           ],
-          "distance": 0.39522872821337834,
-          "weight": 0.3341646695797514,
+          "distance": 0.39908266323527564,
+          "weight": 0.35582828976529335,
           "tie_group": 2,
           "date_start": "2024-12-16",
           "date_end": "2025-01-14"
@@ -585,603 +497,22 @@
           "source_rank": 3,
           "source_key": [
             "166",
-            "530"
+            "229"
           ],
-          "distance": 0.39908266323527564,
-          "weight": 0.33093764668563813,
+          "distance": 0.4998667044313751,
+          "weight": 0.2840855391897971,
           "tie_group": 3,
           "date_start": "2024-12-16",
           "date_end": "2025-01-14"
         }
       ],
-      "source_skip_diagnostics": [
-        {
-          "source_key": [
-            "166",
-            "12"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "143"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "166"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "189"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "291"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "336"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "338"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "375"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "427"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "470"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "474"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "518"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "529"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "542"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "555"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        }
-      ],
-      "candidate_source_count": 49,
-      "valid_source_count": 34,
+      "source_skip_diagnostics": [],
+      "candidate_source_count": 20,
+      "valid_source_count": 20,
       "eligible_candidate_keys": [
         [
           "166",
-          "12"
-        ],
-        [
-          "166",
           "133"
-        ],
-        [
-          "166",
-          "143"
-        ],
-        [
-          "166",
-          "150"
-        ],
-        [
-          "166",
-          "166"
-        ],
-        [
-          "166",
-          "167"
         ],
         [
           "166",
@@ -1189,23 +520,7 @@
         ],
         [
           "166",
-          "189"
-        ],
-        [
-          "166",
-          "205"
-        ],
-        [
-          "166",
-          "227"
-        ],
-        [
-          "166",
           "229"
-        ],
-        [
-          "166",
-          "230"
         ],
         [
           "166",
@@ -1229,15 +544,7 @@
         ],
         [
           "166",
-          "269"
-        ],
-        [
-          "166",
           "277"
-        ],
-        [
-          "166",
-          "291"
         ],
         [
           "166",
@@ -1249,22 +556,6 @@
         ],
         [
           "166",
-          "336"
-        ],
-        [
-          "166",
-          "338"
-        ],
-        [
-          "166",
-          "357"
-        ],
-        [
-          "166",
-          "375"
-        ],
-        [
-          "166",
           "394"
         ],
         [
@@ -1273,23 +564,7 @@
         ],
         [
           "166",
-          "417"
-        ],
-        [
-          "166",
-          "427"
-        ],
-        [
-          "166",
           "441"
-        ],
-        [
-          "166",
-          "470"
-        ],
-        [
-          "166",
-          "474"
         ],
         [
           "166",
@@ -1305,51 +580,11 @@
         ],
         [
           "166",
-          "518"
-        ],
-        [
-          "166",
-          "529"
-        ],
-        [
-          "166",
           "530"
         ],
         [
           "166",
-          "542"
-        ],
-        [
-          "166",
-          "548"
-        ],
-        [
-          "166",
-          "555"
-        ],
-        [
-          "166",
-          "560"
-        ],
-        [
-          "166",
-          "6"
-        ],
-        [
-          "166",
-          "7"
-        ],
-        [
-          "166",
           "72"
-        ],
-        [
-          "166",
-          "83"
-        ],
-        [
-          "166",
-          "90"
         ],
         [
           "166",
@@ -1363,31 +598,11 @@
         ],
         [
           "166",
-          "150"
-        ],
-        [
-          "166",
-          "167"
-        ],
-        [
-          "166",
           "184"
         ],
         [
           "166",
-          "205"
-        ],
-        [
-          "166",
-          "227"
-        ],
-        [
-          "166",
           "229"
-        ],
-        [
-          "166",
-          "230"
         ],
         [
           "166",
@@ -1411,10 +626,6 @@
         ],
         [
           "166",
-          "269"
-        ],
-        [
-          "166",
           "277"
         ],
         [
@@ -1427,19 +638,11 @@
         ],
         [
           "166",
-          "357"
-        ],
-        [
-          "166",
           "394"
         ],
         [
           "166",
           "413"
-        ],
-        [
-          "166",
-          "417"
         ],
         [
           "166",
@@ -1463,42 +666,17 @@
         ],
         [
           "166",
-          "548"
-        ],
-        [
-          "166",
-          "560"
-        ],
-        [
-          "166",
-          "6"
-        ],
-        [
-          "166",
-          "7"
-        ],
-        [
-          "166",
           "72"
-        ],
-        [
-          "166",
-          "83"
-        ],
-        [
-          "166",
-          "90"
         ],
         [
           "166",
           "99"
         ]
       ],
-      "eligible_candidate_count": 49,
-      "valid_30d_candidate_count": 34,
+      "eligible_candidate_count": 20,
+      "valid_30d_candidate_count": 20,
       "selected_count": 3,
-      "observed_days": 30,
-      "skipped_source_count": 15,
+      "skipped_source_count": 0,
       "requested_k": 3,
       "effective_k": 3,
       "scaler_min": 0.0,
@@ -1511,11 +689,11 @@
         ],
         [
           "166",
-          "560"
+          "530"
         ],
         [
           "166",
-          "530"
+          "229"
         ]
       ],
       "cnn_provenance_sample_counts": [
@@ -1523,18 +701,44 @@
         20,
         20
       ],
+      "source_history_days": 180,
+      "source_history_start": "2024-07-19T00:00:00",
+      "source_history_end": "2025-01-14T00:00:00",
+      "source_history_expected_date_count": 180,
+      "source_history_completeness_policy": "exact_expected_date_set",
+      "source_history_calendar": "Gregorian daily",
+      "source_history_inclusive_end": true,
+      "source_history_calendarization_rule": "not_applicable",
+      "source_history_synthetic_row_count": 0,
+      "source_history_frame_digest": "b3584f9ca0e52cb4b9fae0e65353b141c243ae7a75dd954c925b06c877e6335c",
       "source_pool_policy": "without_information_sharing_same_store",
       "domain_filter_scope": "target_only",
       "domain_filter_applied_to_source": false,
-      "source_pool_entity_count": 15982,
+      "source_pool_entity_count": 6240,
       "require_same_group": false,
-      "excluded_candidate_key_fields": [
-        "product_id"
-      ],
+      "excluded_candidate_key_fields": [],
       "target_domain_filter": {
         "column": "first_category_id",
         "value": 15
-      }
+      },
+      "d4_validation_proof": {
+        "entity_key_fields": [
+          "store_id",
+          "product_id"
+        ],
+        "exact_target_tuple": [
+          "166",
+          "258"
+        ],
+        "exact_target_tuple_excluded": true,
+        "cross_store_same_product_available_count": 0,
+        "cross_store_same_product_retained_count": 0,
+        "same_store_other_product_retained_count": 20,
+        "cross_store_other_product_retained_count": 0,
+        "candidate_digest_verified": true,
+        "consumer_fingerprint_verified": true
+      },
+      "d4_validation_proof_digest": "41d5dc201f19b2565593af692d0333514a38e99c1912168cb1a90b8a18732841"
     },
     "166_432": {
       "selection_authority": "shared_protocol",
@@ -1551,6 +755,15 @@
       "feature_cols": [
         "sales"
       ],
+      "knn_feature_columns": [
+        "sales"
+      ],
+      "historical_feature_columns": [
+        "sales"
+      ],
+      "forecast_excluded_columns": [],
+      "feature_scope": "historical_observed",
+      "max_allowed_date_relation": "date<=origin",
       "requested_feature_cols": [
         "sales"
       ],
@@ -1560,15 +773,18 @@
       "scaler_fit_scope": "target_and_candidate_legal_observed_values",
       "knn_observed_start": "2024-12-16",
       "knn_observed_end": "2025-01-14",
+      "origin": "2025-01-14",
       "protocol_observed_start": "2024-12-16",
       "protocol_observed_days": 30,
+      "observed_days": 30,
+      "boundary": "inclusive",
       "target_observed_start": "2024-12-16",
       "target_observed_end": "2025-01-14",
       "source_observation_cutoff": "2025-01-14",
       "target_test_excluded": true,
       "source_future_excluded": true,
       "source_alignment_mode": "exact_knn_observed_dates",
-      "candidate_pool_digest": "286d273987e7ff2ac98e0e53b44539c5a8a2901d786ac5afceb1d024f6abee91",
+      "candidate_pool_digest": "7c25840c1aac96a4ae4ef88ec5f97d1f0914f2b6901f4aad7a074c2e8e61fa68",
       "candidate_pool_digest_input": {
         "protocol_version": "d1_d6_protocol_v1",
         "dataset_id": "D4",
@@ -1584,27 +800,7 @@
         "candidate_keys": [
           [
             "166",
-            "12"
-          ],
-          [
-            "166",
             "133"
-          ],
-          [
-            "166",
-            "143"
-          ],
-          [
-            "166",
-            "150"
-          ],
-          [
-            "166",
-            "166"
-          ],
-          [
-            "166",
-            "167"
           ],
           [
             "166",
@@ -1612,23 +808,7 @@
           ],
           [
             "166",
-            "189"
-          ],
-          [
-            "166",
-            "205"
-          ],
-          [
-            "166",
-            "227"
-          ],
-          [
-            "166",
             "229"
-          ],
-          [
-            "166",
-            "230"
           ],
           [
             "166",
@@ -1652,15 +832,7 @@
           ],
           [
             "166",
-            "269"
-          ],
-          [
-            "166",
             "277"
-          ],
-          [
-            "166",
-            "291"
           ],
           [
             "166",
@@ -1672,22 +844,6 @@
           ],
           [
             "166",
-            "336"
-          ],
-          [
-            "166",
-            "338"
-          ],
-          [
-            "166",
-            "357"
-          ],
-          [
-            "166",
-            "375"
-          ],
-          [
-            "166",
             "394"
           ],
           [
@@ -1696,23 +852,7 @@
           ],
           [
             "166",
-            "417"
-          ],
-          [
-            "166",
-            "427"
-          ],
-          [
-            "166",
             "441"
-          ],
-          [
-            "166",
-            "470"
-          ],
-          [
-            "166",
-            "474"
           ],
           [
             "166",
@@ -1728,51 +868,11 @@
           ],
           [
             "166",
-            "518"
-          ],
-          [
-            "166",
-            "529"
-          ],
-          [
-            "166",
             "530"
           ],
           [
             "166",
-            "542"
-          ],
-          [
-            "166",
-            "548"
-          ],
-          [
-            "166",
-            "555"
-          ],
-          [
-            "166",
-            "560"
-          ],
-          [
-            "166",
-            "6"
-          ],
-          [
-            "166",
-            "7"
-          ],
-          [
-            "166",
             "72"
-          ],
-          [
-            "166",
-            "83"
-          ],
-          [
-            "166",
-            "90"
           ],
           [
             "166",
@@ -1783,9 +883,25 @@
         "observed_end": "2025-01-14",
         "feature_cols": [
           "sales"
-        ]
+        ],
+        "source_history_days": 180,
+        "source_history_start": "2024-07-19",
+        "source_history_end": "2025-01-14",
+        "source_history_completeness_policy": "exact_expected_date_set",
+        "source_history_frame_digest": "b3584f9ca0e52cb4b9fae0e65353b141c243ae7a75dd954c925b06c877e6335c"
       },
-      "selection_result_digest": "a642de6ede6a27949ab7293ad74702af7fe7e94584898b293442827fbd63b616",
+      "selection_result_digest": "469c68c959061401947de4eb7c2cb0e312d11e49e177bd8f5ecc33132a1be55d",
+      "selection_digest": "469c68c959061401947de4eb7c2cb0e312d11e49e177bd8f5ecc33132a1be55d",
+      "source_frame_min_date": "2024-12-16",
+      "source_frame_max_date": "2025-01-14",
+      "target_frame_min_date": "2024-12-16",
+      "target_frame_max_date": "2025-01-14",
+      "source_frame_digest": "54d7dfbba24a75bd6da7f6198111ebb3574684e2d68522000c52fb3f0ff6ae1f",
+      "target_frame_digest": "cb641e1f68283b5dfa96a17c376e54db185f42e78c3cf326425646a3b858bcb4",
+      "source_pool_fingerprint": "ddb12799e53cd89491412c5538b5a6a381ae703aa9443ccef4959a39d69e17fb",
+      "consumer_fingerprint": "7dd81ea267ad967d4afcd5c87e87e6dc2a88424e7052e1dffad34cff1e8aecb6",
+      "consumer_frame_digest": "f80283163ce94ae9e71d3780248ef32ebd257af3cd98b8804bace0ac15d44c60",
+      "consumer_frame_rows": 540,
       "selected_sources_runtime": [
         {
           "source_rank": 1,
@@ -1824,594 +940,13 @@
           "date_end": "2025-01-14"
         }
       ],
-      "source_skip_diagnostics": [
-        {
-          "source_key": [
-            "166",
-            "12"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "143"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "166"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "189"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "291"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "336"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "338"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "375"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "427"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "470"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "474"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "518"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "529"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "542"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "555"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        }
-      ],
-      "candidate_source_count": 49,
-      "valid_source_count": 34,
+      "source_skip_diagnostics": [],
+      "candidate_source_count": 20,
+      "valid_source_count": 20,
       "eligible_candidate_keys": [
         [
           "166",
-          "12"
-        ],
-        [
-          "166",
           "133"
-        ],
-        [
-          "166",
-          "143"
-        ],
-        [
-          "166",
-          "150"
-        ],
-        [
-          "166",
-          "166"
-        ],
-        [
-          "166",
-          "167"
         ],
         [
           "166",
@@ -2419,23 +954,7 @@
         ],
         [
           "166",
-          "189"
-        ],
-        [
-          "166",
-          "205"
-        ],
-        [
-          "166",
-          "227"
-        ],
-        [
-          "166",
           "229"
-        ],
-        [
-          "166",
-          "230"
         ],
         [
           "166",
@@ -2459,15 +978,7 @@
         ],
         [
           "166",
-          "269"
-        ],
-        [
-          "166",
           "277"
-        ],
-        [
-          "166",
-          "291"
         ],
         [
           "166",
@@ -2479,22 +990,6 @@
         ],
         [
           "166",
-          "336"
-        ],
-        [
-          "166",
-          "338"
-        ],
-        [
-          "166",
-          "357"
-        ],
-        [
-          "166",
-          "375"
-        ],
-        [
-          "166",
           "394"
         ],
         [
@@ -2503,23 +998,7 @@
         ],
         [
           "166",
-          "417"
-        ],
-        [
-          "166",
-          "427"
-        ],
-        [
-          "166",
           "441"
-        ],
-        [
-          "166",
-          "470"
-        ],
-        [
-          "166",
-          "474"
         ],
         [
           "166",
@@ -2535,51 +1014,11 @@
         ],
         [
           "166",
-          "518"
-        ],
-        [
-          "166",
-          "529"
-        ],
-        [
-          "166",
           "530"
         ],
         [
           "166",
-          "542"
-        ],
-        [
-          "166",
-          "548"
-        ],
-        [
-          "166",
-          "555"
-        ],
-        [
-          "166",
-          "560"
-        ],
-        [
-          "166",
-          "6"
-        ],
-        [
-          "166",
-          "7"
-        ],
-        [
-          "166",
           "72"
-        ],
-        [
-          "166",
-          "83"
-        ],
-        [
-          "166",
-          "90"
         ],
         [
           "166",
@@ -2593,31 +1032,11 @@
         ],
         [
           "166",
-          "150"
-        ],
-        [
-          "166",
-          "167"
-        ],
-        [
-          "166",
           "184"
         ],
         [
           "166",
-          "205"
-        ],
-        [
-          "166",
-          "227"
-        ],
-        [
-          "166",
           "229"
-        ],
-        [
-          "166",
-          "230"
         ],
         [
           "166",
@@ -2641,10 +1060,6 @@
         ],
         [
           "166",
-          "269"
-        ],
-        [
-          "166",
           "277"
         ],
         [
@@ -2657,19 +1072,11 @@
         ],
         [
           "166",
-          "357"
-        ],
-        [
-          "166",
           "394"
         ],
         [
           "166",
           "413"
-        ],
-        [
-          "166",
-          "417"
         ],
         [
           "166",
@@ -2693,42 +1100,17 @@
         ],
         [
           "166",
-          "548"
-        ],
-        [
-          "166",
-          "560"
-        ],
-        [
-          "166",
-          "6"
-        ],
-        [
-          "166",
-          "7"
-        ],
-        [
-          "166",
           "72"
-        ],
-        [
-          "166",
-          "83"
-        ],
-        [
-          "166",
-          "90"
         ],
         [
           "166",
           "99"
         ]
       ],
-      "eligible_candidate_count": 49,
-      "valid_30d_candidate_count": 34,
+      "eligible_candidate_count": 20,
+      "valid_30d_candidate_count": 20,
       "selected_count": 3,
-      "observed_days": 30,
-      "skipped_source_count": 15,
+      "skipped_source_count": 0,
       "requested_k": 3,
       "effective_k": 3,
       "scaler_min": 0.0,
@@ -2753,18 +1135,44 @@
         20,
         20
       ],
+      "source_history_days": 180,
+      "source_history_start": "2024-07-19T00:00:00",
+      "source_history_end": "2025-01-14T00:00:00",
+      "source_history_expected_date_count": 180,
+      "source_history_completeness_policy": "exact_expected_date_set",
+      "source_history_calendar": "Gregorian daily",
+      "source_history_inclusive_end": true,
+      "source_history_calendarization_rule": "not_applicable",
+      "source_history_synthetic_row_count": 0,
+      "source_history_frame_digest": "b3584f9ca0e52cb4b9fae0e65353b141c243ae7a75dd954c925b06c877e6335c",
       "source_pool_policy": "without_information_sharing_same_store",
       "domain_filter_scope": "target_only",
       "domain_filter_applied_to_source": false,
-      "source_pool_entity_count": 15982,
+      "source_pool_entity_count": 6240,
       "require_same_group": false,
-      "excluded_candidate_key_fields": [
-        "product_id"
-      ],
+      "excluded_candidate_key_fields": [],
       "target_domain_filter": {
         "column": "first_category_id",
         "value": 15
-      }
+      },
+      "d4_validation_proof": {
+        "entity_key_fields": [
+          "store_id",
+          "product_id"
+        ],
+        "exact_target_tuple": [
+          "166",
+          "432"
+        ],
+        "exact_target_tuple_excluded": true,
+        "cross_store_same_product_available_count": 0,
+        "cross_store_same_product_retained_count": 0,
+        "same_store_other_product_retained_count": 20,
+        "cross_store_other_product_retained_count": 0,
+        "candidate_digest_verified": true,
+        "consumer_fingerprint_verified": true
+      },
+      "d4_validation_proof_digest": "4d7f25643cbc2ae01ac775c7ca0d43014f06cae2cf085864abc2d47dc8bfcb41"
     },
     "166_433": {
       "selection_authority": "shared_protocol",
@@ -2781,6 +1189,15 @@
       "feature_cols": [
         "sales"
       ],
+      "knn_feature_columns": [
+        "sales"
+      ],
+      "historical_feature_columns": [
+        "sales"
+      ],
+      "forecast_excluded_columns": [],
+      "feature_scope": "historical_observed",
+      "max_allowed_date_relation": "date<=origin",
       "requested_feature_cols": [
         "sales"
       ],
@@ -2790,15 +1207,18 @@
       "scaler_fit_scope": "target_and_candidate_legal_observed_values",
       "knn_observed_start": "2024-12-16",
       "knn_observed_end": "2025-01-14",
+      "origin": "2025-01-14",
       "protocol_observed_start": "2024-12-16",
       "protocol_observed_days": 30,
+      "observed_days": 30,
+      "boundary": "inclusive",
       "target_observed_start": "2024-12-16",
       "target_observed_end": "2025-01-14",
       "source_observation_cutoff": "2025-01-14",
       "target_test_excluded": true,
       "source_future_excluded": true,
       "source_alignment_mode": "exact_knn_observed_dates",
-      "candidate_pool_digest": "6be3acdca16cea9ad34356ed69866a10d2fa9810b3585fe0fb405c069e12b559",
+      "candidate_pool_digest": "ccb09033537d93df51066f13ef091903e01f435cb1a5ab671b989a4c83b3c948",
       "candidate_pool_digest_input": {
         "protocol_version": "d1_d6_protocol_v1",
         "dataset_id": "D4",
@@ -2814,27 +1234,7 @@
         "candidate_keys": [
           [
             "166",
-            "12"
-          ],
-          [
-            "166",
             "133"
-          ],
-          [
-            "166",
-            "143"
-          ],
-          [
-            "166",
-            "150"
-          ],
-          [
-            "166",
-            "166"
-          ],
-          [
-            "166",
-            "167"
           ],
           [
             "166",
@@ -2842,23 +1242,7 @@
           ],
           [
             "166",
-            "189"
-          ],
-          [
-            "166",
-            "205"
-          ],
-          [
-            "166",
-            "227"
-          ],
-          [
-            "166",
             "229"
-          ],
-          [
-            "166",
-            "230"
           ],
           [
             "166",
@@ -2882,15 +1266,7 @@
           ],
           [
             "166",
-            "269"
-          ],
-          [
-            "166",
             "277"
-          ],
-          [
-            "166",
-            "291"
           ],
           [
             "166",
@@ -2902,22 +1278,6 @@
           ],
           [
             "166",
-            "336"
-          ],
-          [
-            "166",
-            "338"
-          ],
-          [
-            "166",
-            "357"
-          ],
-          [
-            "166",
-            "375"
-          ],
-          [
-            "166",
             "394"
           ],
           [
@@ -2926,23 +1286,7 @@
           ],
           [
             "166",
-            "417"
-          ],
-          [
-            "166",
-            "427"
-          ],
-          [
-            "166",
             "441"
-          ],
-          [
-            "166",
-            "470"
-          ],
-          [
-            "166",
-            "474"
           ],
           [
             "166",
@@ -2958,51 +1302,11 @@
           ],
           [
             "166",
-            "518"
-          ],
-          [
-            "166",
-            "529"
-          ],
-          [
-            "166",
             "530"
           ],
           [
             "166",
-            "542"
-          ],
-          [
-            "166",
-            "548"
-          ],
-          [
-            "166",
-            "555"
-          ],
-          [
-            "166",
-            "560"
-          ],
-          [
-            "166",
-            "6"
-          ],
-          [
-            "166",
-            "7"
-          ],
-          [
-            "166",
             "72"
-          ],
-          [
-            "166",
-            "83"
-          ],
-          [
-            "166",
-            "90"
           ],
           [
             "166",
@@ -3013,9 +1317,25 @@
         "observed_end": "2025-01-14",
         "feature_cols": [
           "sales"
-        ]
+        ],
+        "source_history_days": 180,
+        "source_history_start": "2024-07-19",
+        "source_history_end": "2025-01-14",
+        "source_history_completeness_policy": "exact_expected_date_set",
+        "source_history_frame_digest": "b3584f9ca0e52cb4b9fae0e65353b141c243ae7a75dd954c925b06c877e6335c"
       },
-      "selection_result_digest": "c1a6f28286b81bd21c4f2cdd6e246c234cffac020fe6d103c8062cf67537dde3",
+      "selection_result_digest": "4fd68d9bce86fd52e89f636ee0342bb46705ad6077be22921bb88e2b85b944e8",
+      "selection_digest": "4fd68d9bce86fd52e89f636ee0342bb46705ad6077be22921bb88e2b85b944e8",
+      "source_frame_min_date": "2024-12-16",
+      "source_frame_max_date": "2025-01-14",
+      "target_frame_min_date": "2024-12-16",
+      "target_frame_max_date": "2025-01-14",
+      "source_frame_digest": "54d7dfbba24a75bd6da7f6198111ebb3574684e2d68522000c52fb3f0ff6ae1f",
+      "target_frame_digest": "fb8aa210ac72a5864882ad52c1d8bbe4738273723aee07247b3fdc48704f88da",
+      "source_pool_fingerprint": "cb77bde36dc78d3da5314184b9d0e92595c8c41760bb06abf10ea2d19f596bc4",
+      "consumer_fingerprint": "18d121ec636d50f273cd6df5abbcfe27a94d852d52162940f690e6e3194e6db9",
+      "consumer_frame_digest": "196ee31c9e6880dafdcf836e127115bc7b7538aadee884d151cd28fd6583b47b",
+      "consumer_frame_rows": 540,
       "selected_sources_runtime": [
         {
           "source_rank": 1,
@@ -3024,7 +1344,7 @@
             "184"
           ],
           "distance": 0.4208339432960117,
-          "weight": 0.3532992866334921,
+          "weight": 0.3626160213275833,
           "tie_group": 1,
           "date_start": "2024-12-16",
           "date_end": "2025-01-14"
@@ -3036,7 +1356,7 @@
             "530"
           ],
           "distance": 0.44036730721577544,
-          "weight": 0.33762799753320805,
+          "weight": 0.3465314700204802,
           "tie_group": 2,
           "date_start": "2024-12-16",
           "date_end": "2025-01-14"
@@ -3045,603 +1365,22 @@
           "source_rank": 3,
           "source_key": [
             "166",
-            "560"
+            "229"
           ],
-          "distance": 0.4810529198575318,
-          "weight": 0.3090727158332999,
+          "distance": 0.5246684361861585,
+          "weight": 0.2908525086519365,
           "tie_group": 3,
           "date_start": "2024-12-16",
           "date_end": "2025-01-14"
         }
       ],
-      "source_skip_diagnostics": [
-        {
-          "source_key": [
-            "166",
-            "12"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "143"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "166"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "189"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "291"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "336"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "338"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "375"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "427"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "470"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "474"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "518"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "529"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "542"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "555"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        }
-      ],
-      "candidate_source_count": 49,
-      "valid_source_count": 34,
+      "source_skip_diagnostics": [],
+      "candidate_source_count": 20,
+      "valid_source_count": 20,
       "eligible_candidate_keys": [
         [
           "166",
-          "12"
-        ],
-        [
-          "166",
           "133"
-        ],
-        [
-          "166",
-          "143"
-        ],
-        [
-          "166",
-          "150"
-        ],
-        [
-          "166",
-          "166"
-        ],
-        [
-          "166",
-          "167"
         ],
         [
           "166",
@@ -3649,23 +1388,7 @@
         ],
         [
           "166",
-          "189"
-        ],
-        [
-          "166",
-          "205"
-        ],
-        [
-          "166",
-          "227"
-        ],
-        [
-          "166",
           "229"
-        ],
-        [
-          "166",
-          "230"
         ],
         [
           "166",
@@ -3689,15 +1412,7 @@
         ],
         [
           "166",
-          "269"
-        ],
-        [
-          "166",
           "277"
-        ],
-        [
-          "166",
-          "291"
         ],
         [
           "166",
@@ -3709,22 +1424,6 @@
         ],
         [
           "166",
-          "336"
-        ],
-        [
-          "166",
-          "338"
-        ],
-        [
-          "166",
-          "357"
-        ],
-        [
-          "166",
-          "375"
-        ],
-        [
-          "166",
           "394"
         ],
         [
@@ -3733,23 +1432,7 @@
         ],
         [
           "166",
-          "417"
-        ],
-        [
-          "166",
-          "427"
-        ],
-        [
-          "166",
           "441"
-        ],
-        [
-          "166",
-          "470"
-        ],
-        [
-          "166",
-          "474"
         ],
         [
           "166",
@@ -3765,51 +1448,11 @@
         ],
         [
           "166",
-          "518"
-        ],
-        [
-          "166",
-          "529"
-        ],
-        [
-          "166",
           "530"
         ],
         [
           "166",
-          "542"
-        ],
-        [
-          "166",
-          "548"
-        ],
-        [
-          "166",
-          "555"
-        ],
-        [
-          "166",
-          "560"
-        ],
-        [
-          "166",
-          "6"
-        ],
-        [
-          "166",
-          "7"
-        ],
-        [
-          "166",
           "72"
-        ],
-        [
-          "166",
-          "83"
-        ],
-        [
-          "166",
-          "90"
         ],
         [
           "166",
@@ -3823,31 +1466,11 @@
         ],
         [
           "166",
-          "150"
-        ],
-        [
-          "166",
-          "167"
-        ],
-        [
-          "166",
           "184"
         ],
         [
           "166",
-          "205"
-        ],
-        [
-          "166",
-          "227"
-        ],
-        [
-          "166",
           "229"
-        ],
-        [
-          "166",
-          "230"
         ],
         [
           "166",
@@ -3871,10 +1494,6 @@
         ],
         [
           "166",
-          "269"
-        ],
-        [
-          "166",
           "277"
         ],
         [
@@ -3887,19 +1506,11 @@
         ],
         [
           "166",
-          "357"
-        ],
-        [
-          "166",
           "394"
         ],
         [
           "166",
           "413"
-        ],
-        [
-          "166",
-          "417"
         ],
         [
           "166",
@@ -3923,42 +1534,17 @@
         ],
         [
           "166",
-          "548"
-        ],
-        [
-          "166",
-          "560"
-        ],
-        [
-          "166",
-          "6"
-        ],
-        [
-          "166",
-          "7"
-        ],
-        [
-          "166",
           "72"
-        ],
-        [
-          "166",
-          "83"
-        ],
-        [
-          "166",
-          "90"
         ],
         [
           "166",
           "99"
         ]
       ],
-      "eligible_candidate_count": 49,
-      "valid_30d_candidate_count": 34,
+      "eligible_candidate_count": 20,
+      "valid_30d_candidate_count": 20,
       "selected_count": 3,
-      "observed_days": 30,
-      "skipped_source_count": 15,
+      "skipped_source_count": 0,
       "requested_k": 3,
       "effective_k": 3,
       "scaler_min": 0.0,
@@ -3975,7 +1561,7 @@
         ],
         [
           "166",
-          "560"
+          "229"
         ]
       ],
       "cnn_provenance_sample_counts": [
@@ -3983,18 +1569,44 @@
         20,
         20
       ],
+      "source_history_days": 180,
+      "source_history_start": "2024-07-19T00:00:00",
+      "source_history_end": "2025-01-14T00:00:00",
+      "source_history_expected_date_count": 180,
+      "source_history_completeness_policy": "exact_expected_date_set",
+      "source_history_calendar": "Gregorian daily",
+      "source_history_inclusive_end": true,
+      "source_history_calendarization_rule": "not_applicable",
+      "source_history_synthetic_row_count": 0,
+      "source_history_frame_digest": "b3584f9ca0e52cb4b9fae0e65353b141c243ae7a75dd954c925b06c877e6335c",
       "source_pool_policy": "without_information_sharing_same_store",
       "domain_filter_scope": "target_only",
       "domain_filter_applied_to_source": false,
-      "source_pool_entity_count": 15982,
+      "source_pool_entity_count": 6240,
       "require_same_group": false,
-      "excluded_candidate_key_fields": [
-        "product_id"
-      ],
+      "excluded_candidate_key_fields": [],
       "target_domain_filter": {
         "column": "first_category_id",
         "value": 15
-      }
+      },
+      "d4_validation_proof": {
+        "entity_key_fields": [
+          "store_id",
+          "product_id"
+        ],
+        "exact_target_tuple": [
+          "166",
+          "433"
+        ],
+        "exact_target_tuple_excluded": true,
+        "cross_store_same_product_available_count": 0,
+        "cross_store_same_product_retained_count": 0,
+        "same_store_other_product_retained_count": 20,
+        "cross_store_other_product_retained_count": 0,
+        "candidate_digest_verified": true,
+        "consumer_fingerprint_verified": true
+      },
+      "d4_validation_proof_digest": "cf2cee40781d301bc91b839570da221b8a8c11c23afb89e72dc897fde832dce2"
     },
     "166_313": {
       "selection_authority": "shared_protocol",
@@ -4011,6 +1623,15 @@
       "feature_cols": [
         "sales"
       ],
+      "knn_feature_columns": [
+        "sales"
+      ],
+      "historical_feature_columns": [
+        "sales"
+      ],
+      "forecast_excluded_columns": [],
+      "feature_scope": "historical_observed",
+      "max_allowed_date_relation": "date<=origin",
       "requested_feature_cols": [
         "sales"
       ],
@@ -4020,15 +1641,18 @@
       "scaler_fit_scope": "target_and_candidate_legal_observed_values",
       "knn_observed_start": "2024-12-16",
       "knn_observed_end": "2025-01-14",
+      "origin": "2025-01-14",
       "protocol_observed_start": "2024-12-16",
       "protocol_observed_days": 30,
+      "observed_days": 30,
+      "boundary": "inclusive",
       "target_observed_start": "2024-12-16",
       "target_observed_end": "2025-01-14",
       "source_observation_cutoff": "2025-01-14",
       "target_test_excluded": true,
       "source_future_excluded": true,
       "source_alignment_mode": "exact_knn_observed_dates",
-      "candidate_pool_digest": "762c2bda76dec4510af014ce0475a862a5f4748e9df95db5225660f387e359bb",
+      "candidate_pool_digest": "64ada900d78805b6f4760dd38f1d8350a531007908caf55aa646c1c84bd4ef6b",
       "candidate_pool_digest_input": {
         "protocol_version": "d1_d6_protocol_v1",
         "dataset_id": "D4",
@@ -4044,27 +1668,7 @@
         "candidate_keys": [
           [
             "166",
-            "12"
-          ],
-          [
-            "166",
             "133"
-          ],
-          [
-            "166",
-            "143"
-          ],
-          [
-            "166",
-            "150"
-          ],
-          [
-            "166",
-            "166"
-          ],
-          [
-            "166",
-            "167"
           ],
           [
             "166",
@@ -4072,23 +1676,7 @@
           ],
           [
             "166",
-            "189"
-          ],
-          [
-            "166",
-            "205"
-          ],
-          [
-            "166",
-            "227"
-          ],
-          [
-            "166",
             "229"
-          ],
-          [
-            "166",
-            "230"
           ],
           [
             "166",
@@ -4112,15 +1700,7 @@
           ],
           [
             "166",
-            "269"
-          ],
-          [
-            "166",
             "277"
-          ],
-          [
-            "166",
-            "291"
           ],
           [
             "166",
@@ -4132,22 +1712,6 @@
           ],
           [
             "166",
-            "336"
-          ],
-          [
-            "166",
-            "338"
-          ],
-          [
-            "166",
-            "357"
-          ],
-          [
-            "166",
-            "375"
-          ],
-          [
-            "166",
             "394"
           ],
           [
@@ -4156,23 +1720,7 @@
           ],
           [
             "166",
-            "417"
-          ],
-          [
-            "166",
-            "427"
-          ],
-          [
-            "166",
             "441"
-          ],
-          [
-            "166",
-            "470"
-          ],
-          [
-            "166",
-            "474"
           ],
           [
             "166",
@@ -4188,51 +1736,11 @@
           ],
           [
             "166",
-            "518"
-          ],
-          [
-            "166",
-            "529"
-          ],
-          [
-            "166",
             "530"
           ],
           [
             "166",
-            "542"
-          ],
-          [
-            "166",
-            "548"
-          ],
-          [
-            "166",
-            "555"
-          ],
-          [
-            "166",
-            "560"
-          ],
-          [
-            "166",
-            "6"
-          ],
-          [
-            "166",
-            "7"
-          ],
-          [
-            "166",
             "72"
-          ],
-          [
-            "166",
-            "83"
-          ],
-          [
-            "166",
-            "90"
           ],
           [
             "166",
@@ -4243,9 +1751,25 @@
         "observed_end": "2025-01-14",
         "feature_cols": [
           "sales"
-        ]
+        ],
+        "source_history_days": 180,
+        "source_history_start": "2024-07-19",
+        "source_history_end": "2025-01-14",
+        "source_history_completeness_policy": "exact_expected_date_set",
+        "source_history_frame_digest": "b3584f9ca0e52cb4b9fae0e65353b141c243ae7a75dd954c925b06c877e6335c"
       },
-      "selection_result_digest": "bc52c3509cad07c69c2afb03b3ec66f662ae5211e8904e88ae01fb4328c023d8",
+      "selection_result_digest": "048ea580ed1c7830147927388fdd146d291916983b25661b899cf5aa41c7eee3",
+      "selection_digest": "048ea580ed1c7830147927388fdd146d291916983b25661b899cf5aa41c7eee3",
+      "source_frame_min_date": "2024-12-16",
+      "source_frame_max_date": "2025-01-14",
+      "target_frame_min_date": "2024-12-16",
+      "target_frame_max_date": "2025-01-14",
+      "source_frame_digest": "54d7dfbba24a75bd6da7f6198111ebb3574684e2d68522000c52fb3f0ff6ae1f",
+      "target_frame_digest": "26bf45b23e1691f07466b64f48ade1ac5af8458c47c8f2709c06621221f4bf1e",
+      "source_pool_fingerprint": "21d1691ab131e05c1b629797c6693f85f4d4cf0c6a64a415bbc093967d423402",
+      "consumer_fingerprint": "375db5222dfff201881148b8912f968b420365568348cee363de81352bd9b423",
+      "consumer_frame_digest": "f80283163ce94ae9e71d3780248ef32ebd257af3cd98b8804bace0ac15d44c60",
+      "consumer_frame_rows": 540,
       "selected_sources_runtime": [
         {
           "source_rank": 1,
@@ -4254,7 +1778,7 @@
             "506"
           ],
           "distance": 0.705263722270509,
-          "weight": 0.3443671901034923,
+          "weight": 0.3530020343805755,
           "tie_group": 1,
           "date_start": "2024-12-16",
           "date_end": "2025-01-14"
@@ -4263,10 +1787,10 @@
           "source_rank": 2,
           "source_key": [
             "166",
-            "548"
+            "510"
           ],
-          "distance": 0.7273585055998667,
-          "weight": 0.3339064361728102,
+          "distance": 0.7548951729870074,
+          "weight": 0.3297935102476499,
           "tie_group": 2,
           "date_start": "2024-12-16",
           "date_end": "2025-01-14"
@@ -4275,603 +1799,22 @@
           "source_rank": 3,
           "source_key": [
             "166",
-            "510"
+            "242"
           ],
-          "distance": 0.7548951729870074,
-          "weight": 0.3217263737236974,
+          "distance": 0.7848550828281822,
+          "weight": 0.3172044553717747,
           "tie_group": 3,
           "date_start": "2024-12-16",
           "date_end": "2025-01-14"
         }
       ],
-      "source_skip_diagnostics": [
-        {
-          "source_key": [
-            "166",
-            "12"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "143"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "166"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "189"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "291"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "336"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "338"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "375"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "427"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "470"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "474"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "518"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "529"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "542"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "555"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        }
-      ],
-      "candidate_source_count": 49,
-      "valid_source_count": 34,
+      "source_skip_diagnostics": [],
+      "candidate_source_count": 20,
+      "valid_source_count": 20,
       "eligible_candidate_keys": [
         [
           "166",
-          "12"
-        ],
-        [
-          "166",
           "133"
-        ],
-        [
-          "166",
-          "143"
-        ],
-        [
-          "166",
-          "150"
-        ],
-        [
-          "166",
-          "166"
-        ],
-        [
-          "166",
-          "167"
         ],
         [
           "166",
@@ -4879,23 +1822,7 @@
         ],
         [
           "166",
-          "189"
-        ],
-        [
-          "166",
-          "205"
-        ],
-        [
-          "166",
-          "227"
-        ],
-        [
-          "166",
           "229"
-        ],
-        [
-          "166",
-          "230"
         ],
         [
           "166",
@@ -4919,15 +1846,7 @@
         ],
         [
           "166",
-          "269"
-        ],
-        [
-          "166",
           "277"
-        ],
-        [
-          "166",
-          "291"
         ],
         [
           "166",
@@ -4939,22 +1858,6 @@
         ],
         [
           "166",
-          "336"
-        ],
-        [
-          "166",
-          "338"
-        ],
-        [
-          "166",
-          "357"
-        ],
-        [
-          "166",
-          "375"
-        ],
-        [
-          "166",
           "394"
         ],
         [
@@ -4963,23 +1866,7 @@
         ],
         [
           "166",
-          "417"
-        ],
-        [
-          "166",
-          "427"
-        ],
-        [
-          "166",
           "441"
-        ],
-        [
-          "166",
-          "470"
-        ],
-        [
-          "166",
-          "474"
         ],
         [
           "166",
@@ -4995,51 +1882,11 @@
         ],
         [
           "166",
-          "518"
-        ],
-        [
-          "166",
-          "529"
-        ],
-        [
-          "166",
           "530"
         ],
         [
           "166",
-          "542"
-        ],
-        [
-          "166",
-          "548"
-        ],
-        [
-          "166",
-          "555"
-        ],
-        [
-          "166",
-          "560"
-        ],
-        [
-          "166",
-          "6"
-        ],
-        [
-          "166",
-          "7"
-        ],
-        [
-          "166",
           "72"
-        ],
-        [
-          "166",
-          "83"
-        ],
-        [
-          "166",
-          "90"
         ],
         [
           "166",
@@ -5053,31 +1900,11 @@
         ],
         [
           "166",
-          "150"
-        ],
-        [
-          "166",
-          "167"
-        ],
-        [
-          "166",
           "184"
         ],
         [
           "166",
-          "205"
-        ],
-        [
-          "166",
-          "227"
-        ],
-        [
-          "166",
           "229"
-        ],
-        [
-          "166",
-          "230"
         ],
         [
           "166",
@@ -5101,10 +1928,6 @@
         ],
         [
           "166",
-          "269"
-        ],
-        [
-          "166",
           "277"
         ],
         [
@@ -5117,19 +1940,11 @@
         ],
         [
           "166",
-          "357"
-        ],
-        [
-          "166",
           "394"
         ],
         [
           "166",
           "413"
-        ],
-        [
-          "166",
-          "417"
         ],
         [
           "166",
@@ -5153,42 +1968,17 @@
         ],
         [
           "166",
-          "548"
-        ],
-        [
-          "166",
-          "560"
-        ],
-        [
-          "166",
-          "6"
-        ],
-        [
-          "166",
-          "7"
-        ],
-        [
-          "166",
           "72"
-        ],
-        [
-          "166",
-          "83"
-        ],
-        [
-          "166",
-          "90"
         ],
         [
           "166",
           "99"
         ]
       ],
-      "eligible_candidate_count": 49,
-      "valid_30d_candidate_count": 34,
+      "eligible_candidate_count": 20,
+      "valid_30d_candidate_count": 20,
       "selected_count": 3,
-      "observed_days": 30,
-      "skipped_source_count": 15,
+      "skipped_source_count": 0,
       "requested_k": 3,
       "effective_k": 3,
       "scaler_min": 0.0,
@@ -5201,11 +1991,11 @@
         ],
         [
           "166",
-          "548"
+          "510"
         ],
         [
           "166",
-          "510"
+          "242"
         ]
       ],
       "cnn_provenance_sample_counts": [
@@ -5213,18 +2003,44 @@
         20,
         20
       ],
+      "source_history_days": 180,
+      "source_history_start": "2024-07-19T00:00:00",
+      "source_history_end": "2025-01-14T00:00:00",
+      "source_history_expected_date_count": 180,
+      "source_history_completeness_policy": "exact_expected_date_set",
+      "source_history_calendar": "Gregorian daily",
+      "source_history_inclusive_end": true,
+      "source_history_calendarization_rule": "not_applicable",
+      "source_history_synthetic_row_count": 0,
+      "source_history_frame_digest": "b3584f9ca0e52cb4b9fae0e65353b141c243ae7a75dd954c925b06c877e6335c",
       "source_pool_policy": "without_information_sharing_same_store",
       "domain_filter_scope": "target_only",
       "domain_filter_applied_to_source": false,
-      "source_pool_entity_count": 15982,
+      "source_pool_entity_count": 6240,
       "require_same_group": false,
-      "excluded_candidate_key_fields": [
-        "product_id"
-      ],
+      "excluded_candidate_key_fields": [],
       "target_domain_filter": {
         "column": "first_category_id",
         "value": 15
-      }
+      },
+      "d4_validation_proof": {
+        "entity_key_fields": [
+          "store_id",
+          "product_id"
+        ],
+        "exact_target_tuple": [
+          "166",
+          "313"
+        ],
+        "exact_target_tuple_excluded": true,
+        "cross_store_same_product_available_count": 0,
+        "cross_store_same_product_retained_count": 0,
+        "same_store_other_product_retained_count": 20,
+        "cross_store_other_product_retained_count": 0,
+        "candidate_digest_verified": true,
+        "consumer_fingerprint_verified": true
+      },
+      "d4_validation_proof_digest": "844d74b09e408cc11a7d518853f1017e0dbe8ef3c3598665e57dc78feaab4559"
     },
     "166_311": {
       "selection_authority": "shared_protocol",
@@ -5241,6 +2057,15 @@
       "feature_cols": [
         "sales"
       ],
+      "knn_feature_columns": [
+        "sales"
+      ],
+      "historical_feature_columns": [
+        "sales"
+      ],
+      "forecast_excluded_columns": [],
+      "feature_scope": "historical_observed",
+      "max_allowed_date_relation": "date<=origin",
       "requested_feature_cols": [
         "sales"
       ],
@@ -5250,15 +2075,18 @@
       "scaler_fit_scope": "target_and_candidate_legal_observed_values",
       "knn_observed_start": "2024-12-16",
       "knn_observed_end": "2025-01-14",
+      "origin": "2025-01-14",
       "protocol_observed_start": "2024-12-16",
       "protocol_observed_days": 30,
+      "observed_days": 30,
+      "boundary": "inclusive",
       "target_observed_start": "2024-12-16",
       "target_observed_end": "2025-01-14",
       "source_observation_cutoff": "2025-01-14",
       "target_test_excluded": true,
       "source_future_excluded": true,
       "source_alignment_mode": "exact_knn_observed_dates",
-      "candidate_pool_digest": "db984d919608e4e6a7d149c7248d35f4215d7774d2615b3654134855f1edfdfc",
+      "candidate_pool_digest": "676a714367c10b6a184304709c219e9ad306c3eed4525cd3cd6b2c3e2af84f82",
       "candidate_pool_digest_input": {
         "protocol_version": "d1_d6_protocol_v1",
         "dataset_id": "D4",
@@ -5274,27 +2102,7 @@
         "candidate_keys": [
           [
             "166",
-            "12"
-          ],
-          [
-            "166",
             "133"
-          ],
-          [
-            "166",
-            "143"
-          ],
-          [
-            "166",
-            "150"
-          ],
-          [
-            "166",
-            "166"
-          ],
-          [
-            "166",
-            "167"
           ],
           [
             "166",
@@ -5302,23 +2110,7 @@
           ],
           [
             "166",
-            "189"
-          ],
-          [
-            "166",
-            "205"
-          ],
-          [
-            "166",
-            "227"
-          ],
-          [
-            "166",
             "229"
-          ],
-          [
-            "166",
-            "230"
           ],
           [
             "166",
@@ -5342,15 +2134,7 @@
           ],
           [
             "166",
-            "269"
-          ],
-          [
-            "166",
             "277"
-          ],
-          [
-            "166",
-            "291"
           ],
           [
             "166",
@@ -5362,22 +2146,6 @@
           ],
           [
             "166",
-            "336"
-          ],
-          [
-            "166",
-            "338"
-          ],
-          [
-            "166",
-            "357"
-          ],
-          [
-            "166",
-            "375"
-          ],
-          [
-            "166",
             "394"
           ],
           [
@@ -5386,23 +2154,7 @@
           ],
           [
             "166",
-            "417"
-          ],
-          [
-            "166",
-            "427"
-          ],
-          [
-            "166",
             "441"
-          ],
-          [
-            "166",
-            "470"
-          ],
-          [
-            "166",
-            "474"
           ],
           [
             "166",
@@ -5418,51 +2170,11 @@
           ],
           [
             "166",
-            "518"
-          ],
-          [
-            "166",
-            "529"
-          ],
-          [
-            "166",
             "530"
           ],
           [
             "166",
-            "542"
-          ],
-          [
-            "166",
-            "548"
-          ],
-          [
-            "166",
-            "555"
-          ],
-          [
-            "166",
-            "560"
-          ],
-          [
-            "166",
-            "6"
-          ],
-          [
-            "166",
-            "7"
-          ],
-          [
-            "166",
             "72"
-          ],
-          [
-            "166",
-            "83"
-          ],
-          [
-            "166",
-            "90"
           ],
           [
             "166",
@@ -5473,9 +2185,25 @@
         "observed_end": "2025-01-14",
         "feature_cols": [
           "sales"
-        ]
+        ],
+        "source_history_days": 180,
+        "source_history_start": "2024-07-19",
+        "source_history_end": "2025-01-14",
+        "source_history_completeness_policy": "exact_expected_date_set",
+        "source_history_frame_digest": "b3584f9ca0e52cb4b9fae0e65353b141c243ae7a75dd954c925b06c877e6335c"
       },
-      "selection_result_digest": "3bf294c1df9296cd4c1786cfac18f2580b7241946f84ada8ac07fa8e185aa68b",
+      "selection_result_digest": "5b2fc126b51d77e0640a2c39c7f1ef7b9acb47e04ad8a565a6a3eb850a7eab0f",
+      "selection_digest": "5b2fc126b51d77e0640a2c39c7f1ef7b9acb47e04ad8a565a6a3eb850a7eab0f",
+      "source_frame_min_date": "2024-12-16",
+      "source_frame_max_date": "2025-01-14",
+      "target_frame_min_date": "2024-12-16",
+      "target_frame_max_date": "2025-01-14",
+      "source_frame_digest": "54d7dfbba24a75bd6da7f6198111ebb3574684e2d68522000c52fb3f0ff6ae1f",
+      "target_frame_digest": "c5987cea17eeb21f127e54fd4a00a4fefbfeddab1ff0ced7c64c137690843be2",
+      "source_pool_fingerprint": "1f64ed7a6818e324839d3fc102e4e38a8ddc269c1100cc5c0a417ffa87889f05",
+      "consumer_fingerprint": "6d2a8f79a5e865365e6f849f3004514a80d19f859b4cfef102a3118ad1040724",
+      "consumer_frame_digest": "f80283163ce94ae9e71d3780248ef32ebd257af3cd98b8804bace0ac15d44c60",
+      "consumer_frame_rows": 540,
       "selected_sources_runtime": [
         {
           "source_rank": 1,
@@ -5484,7 +2212,7 @@
             "506"
           ],
           "distance": 0.44525355569941677,
-          "weight": 0.3662111903785728,
+          "weight": 0.39023072900418654,
           "tie_group": 1,
           "date_start": "2024-12-16",
           "date_end": "2025-01-14"
@@ -5493,10 +2221,10 @@
           "source_rank": 2,
           "source_key": [
             "166",
-            "548"
+            "510"
           ],
-          "distance": 0.47248313888939697,
-          "weight": 0.3451061454749517,
+          "distance": 0.5648307144121653,
+          "weight": 0.30761716037211845,
           "tie_group": 2,
           "date_start": "2024-12-16",
           "date_end": "2025-01-14"
@@ -5505,603 +2233,22 @@
           "source_rank": 3,
           "source_key": [
             "166",
-            "510"
+            "242"
           ],
-          "distance": 0.5648307144121653,
-          "weight": 0.28868266414647537,
+          "distance": 0.5750468535679657,
+          "weight": 0.30215211062369507,
           "tie_group": 3,
           "date_start": "2024-12-16",
           "date_end": "2025-01-14"
         }
       ],
-      "source_skip_diagnostics": [
-        {
-          "source_key": [
-            "166",
-            "12"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "143"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "166"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "189"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "291"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "336"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "338"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "375"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "427"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "470"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "474"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "518"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "529"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "542"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        },
-        {
-          "source_key": [
-            "166",
-            "555"
-          ],
-          "reason": "missing_observed_dates",
-          "missing_dates": [
-            "2024-12-16",
-            "2024-12-17",
-            "2024-12-18",
-            "2024-12-19",
-            "2024-12-20",
-            "2024-12-21",
-            "2024-12-22",
-            "2024-12-23",
-            "2024-12-24",
-            "2024-12-25",
-            "2024-12-26",
-            "2024-12-27",
-            "2024-12-28",
-            "2024-12-29",
-            "2024-12-30",
-            "2024-12-31",
-            "2025-01-01",
-            "2025-01-02",
-            "2025-01-03",
-            "2025-01-04",
-            "2025-01-05",
-            "2025-01-06",
-            "2025-01-07",
-            "2025-01-08",
-            "2025-01-09",
-            "2025-01-10",
-            "2025-01-11",
-            "2025-01-12",
-            "2025-01-13",
-            "2025-01-14"
-          ]
-        }
-      ],
-      "candidate_source_count": 49,
-      "valid_source_count": 34,
+      "source_skip_diagnostics": [],
+      "candidate_source_count": 20,
+      "valid_source_count": 20,
       "eligible_candidate_keys": [
         [
           "166",
-          "12"
-        ],
-        [
-          "166",
           "133"
-        ],
-        [
-          "166",
-          "143"
-        ],
-        [
-          "166",
-          "150"
-        ],
-        [
-          "166",
-          "166"
-        ],
-        [
-          "166",
-          "167"
         ],
         [
           "166",
@@ -6109,23 +2256,7 @@
         ],
         [
           "166",
-          "189"
-        ],
-        [
-          "166",
-          "205"
-        ],
-        [
-          "166",
-          "227"
-        ],
-        [
-          "166",
           "229"
-        ],
-        [
-          "166",
-          "230"
         ],
         [
           "166",
@@ -6149,15 +2280,7 @@
         ],
         [
           "166",
-          "269"
-        ],
-        [
-          "166",
           "277"
-        ],
-        [
-          "166",
-          "291"
         ],
         [
           "166",
@@ -6169,22 +2292,6 @@
         ],
         [
           "166",
-          "336"
-        ],
-        [
-          "166",
-          "338"
-        ],
-        [
-          "166",
-          "357"
-        ],
-        [
-          "166",
-          "375"
-        ],
-        [
-          "166",
           "394"
         ],
         [
@@ -6193,23 +2300,7 @@
         ],
         [
           "166",
-          "417"
-        ],
-        [
-          "166",
-          "427"
-        ],
-        [
-          "166",
           "441"
-        ],
-        [
-          "166",
-          "470"
-        ],
-        [
-          "166",
-          "474"
         ],
         [
           "166",
@@ -6225,51 +2316,11 @@
         ],
         [
           "166",
-          "518"
-        ],
-        [
-          "166",
-          "529"
-        ],
-        [
-          "166",
           "530"
         ],
         [
           "166",
-          "542"
-        ],
-        [
-          "166",
-          "548"
-        ],
-        [
-          "166",
-          "555"
-        ],
-        [
-          "166",
-          "560"
-        ],
-        [
-          "166",
-          "6"
-        ],
-        [
-          "166",
-          "7"
-        ],
-        [
-          "166",
           "72"
-        ],
-        [
-          "166",
-          "83"
-        ],
-        [
-          "166",
-          "90"
         ],
         [
           "166",
@@ -6283,31 +2334,11 @@
         ],
         [
           "166",
-          "150"
-        ],
-        [
-          "166",
-          "167"
-        ],
-        [
-          "166",
           "184"
         ],
         [
           "166",
-          "205"
-        ],
-        [
-          "166",
-          "227"
-        ],
-        [
-          "166",
           "229"
-        ],
-        [
-          "166",
-          "230"
         ],
         [
           "166",
@@ -6331,10 +2362,6 @@
         ],
         [
           "166",
-          "269"
-        ],
-        [
-          "166",
           "277"
         ],
         [
@@ -6347,19 +2374,11 @@
         ],
         [
           "166",
-          "357"
-        ],
-        [
-          "166",
           "394"
         ],
         [
           "166",
           "413"
-        ],
-        [
-          "166",
-          "417"
         ],
         [
           "166",
@@ -6383,42 +2402,17 @@
         ],
         [
           "166",
-          "548"
-        ],
-        [
-          "166",
-          "560"
-        ],
-        [
-          "166",
-          "6"
-        ],
-        [
-          "166",
-          "7"
-        ],
-        [
-          "166",
           "72"
-        ],
-        [
-          "166",
-          "83"
-        ],
-        [
-          "166",
-          "90"
         ],
         [
           "166",
           "99"
         ]
       ],
-      "eligible_candidate_count": 49,
-      "valid_30d_candidate_count": 34,
+      "eligible_candidate_count": 20,
+      "valid_30d_candidate_count": 20,
       "selected_count": 3,
-      "observed_days": 30,
-      "skipped_source_count": 15,
+      "skipped_source_count": 0,
       "requested_k": 3,
       "effective_k": 3,
       "scaler_min": 0.0,
@@ -6431,11 +2425,11 @@
         ],
         [
           "166",
-          "548"
+          "510"
         ],
         [
           "166",
-          "510"
+          "242"
         ]
       ],
       "cnn_provenance_sample_counts": [
@@ -6443,18 +2437,101 @@
         20,
         20
       ],
+      "source_history_days": 180,
+      "source_history_start": "2024-07-19T00:00:00",
+      "source_history_end": "2025-01-14T00:00:00",
+      "source_history_expected_date_count": 180,
+      "source_history_completeness_policy": "exact_expected_date_set",
+      "source_history_calendar": "Gregorian daily",
+      "source_history_inclusive_end": true,
+      "source_history_calendarization_rule": "not_applicable",
+      "source_history_synthetic_row_count": 0,
+      "source_history_frame_digest": "b3584f9ca0e52cb4b9fae0e65353b141c243ae7a75dd954c925b06c877e6335c",
       "source_pool_policy": "without_information_sharing_same_store",
       "domain_filter_scope": "target_only",
       "domain_filter_applied_to_source": false,
-      "source_pool_entity_count": 15982,
+      "source_pool_entity_count": 6240,
       "require_same_group": false,
-      "excluded_candidate_key_fields": [
-        "product_id"
-      ],
+      "excluded_candidate_key_fields": [],
       "target_domain_filter": {
         "column": "first_category_id",
         "value": 15
-      }
+      },
+      "d4_validation_proof": {
+        "entity_key_fields": [
+          "store_id",
+          "product_id"
+        ],
+        "exact_target_tuple": [
+          "166",
+          "311"
+        ],
+        "exact_target_tuple_excluded": true,
+        "cross_store_same_product_available_count": 0,
+        "cross_store_same_product_retained_count": 0,
+        "same_store_other_product_retained_count": 20,
+        "cross_store_other_product_retained_count": 0,
+        "candidate_digest_verified": true,
+        "consumer_fingerprint_verified": true
+      },
+      "d4_validation_proof_digest": "46c8bfd72638be902dfd7fe98c97e18741802401632212a580cc8cc54dfa6dc3"
     }
+  },
+  "source_history_days": 180,
+  "source_history_expected_date_count": 180,
+  "source_history_start": "2024-07-19",
+  "source_history_end": "2025-01-14",
+  "source_history_calendar": "Gregorian daily",
+  "source_history_inclusive_end": true,
+  "source_history_completeness_policy": "exact_expected_date_set",
+  "source_history_calendarization_rule": "not_applicable",
+  "d4_manifest_identity": {
+    "identity_version": "d4_exact_composite_key_v1",
+    "dataset_id": "D4",
+    "scenario": "without",
+    "entity_key_fields": [
+      "store_id",
+      "product_id"
+    ],
+    "source_parquet_sha256": "17a1fa5bd1dddfd46bda2a6922ff7821aee2a7e79deca58a94ff7bf20821f7ef",
+    "target_parquet_sha256": "f0b83798ea265c6b79f09487903404c7c75acfcac2657f53e989ef59588e5946",
+    "target_consumers": {
+      "166_258": {
+        "candidate_pool_digest": "9aadcff7bc1ff2a934d54f1d742ec1e37b5a9734ec8db9c2c9ce32d2d0b18595",
+        "selection_result_digest": "1fb827abd06856e3cb58e1bcf188c26ee8c675e85a3109a2606717c7996c7d3e",
+        "source_pool_fingerprint": "0a81b194f3129a7f7ecc6271729225aadef3e15ad737e7b369d26106a15e0c9b",
+        "consumer_fingerprint": "fd699a583adacda0376e59861c83b767b2d0bf25f6f6d70ffae6a17ba2ea42b7",
+        "validation_proof_digest": "41d5dc201f19b2565593af692d0333514a38e99c1912168cb1a90b8a18732841"
+      },
+      "166_311": {
+        "candidate_pool_digest": "676a714367c10b6a184304709c219e9ad306c3eed4525cd3cd6b2c3e2af84f82",
+        "selection_result_digest": "5b2fc126b51d77e0640a2c39c7f1ef7b9acb47e04ad8a565a6a3eb850a7eab0f",
+        "source_pool_fingerprint": "1f64ed7a6818e324839d3fc102e4e38a8ddc269c1100cc5c0a417ffa87889f05",
+        "consumer_fingerprint": "6d2a8f79a5e865365e6f849f3004514a80d19f859b4cfef102a3118ad1040724",
+        "validation_proof_digest": "46c8bfd72638be902dfd7fe98c97e18741802401632212a580cc8cc54dfa6dc3"
+      },
+      "166_313": {
+        "candidate_pool_digest": "64ada900d78805b6f4760dd38f1d8350a531007908caf55aa646c1c84bd4ef6b",
+        "selection_result_digest": "048ea580ed1c7830147927388fdd146d291916983b25661b899cf5aa41c7eee3",
+        "source_pool_fingerprint": "21d1691ab131e05c1b629797c6693f85f4d4cf0c6a64a415bbc093967d423402",
+        "consumer_fingerprint": "375db5222dfff201881148b8912f968b420365568348cee363de81352bd9b423",
+        "validation_proof_digest": "844d74b09e408cc11a7d518853f1017e0dbe8ef3c3598665e57dc78feaab4559"
+      },
+      "166_432": {
+        "candidate_pool_digest": "7c25840c1aac96a4ae4ef88ec5f97d1f0914f2b6901f4aad7a074c2e8e61fa68",
+        "selection_result_digest": "469c68c959061401947de4eb7c2cb0e312d11e49e177bd8f5ecc33132a1be55d",
+        "source_pool_fingerprint": "ddb12799e53cd89491412c5538b5a6a381ae703aa9443ccef4959a39d69e17fb",
+        "consumer_fingerprint": "7dd81ea267ad967d4afcd5c87e87e6dc2a88424e7052e1dffad34cff1e8aecb6",
+        "validation_proof_digest": "4d7f25643cbc2ae01ac775c7ca0d43014f06cae2cf085864abc2d47dc8bfcb41"
+      },
+      "166_433": {
+        "candidate_pool_digest": "ccb09033537d93df51066f13ef091903e01f435cb1a5ab671b989a4c83b3c948",
+        "selection_result_digest": "4fd68d9bce86fd52e89f636ee0342bb46705ad6077be22921bb88e2b85b944e8",
+        "source_pool_fingerprint": "cb77bde36dc78d3da5314184b9d0e92595c8c41760bb06abf10ea2d19f596bc4",
+        "consumer_fingerprint": "18d121ec636d50f273cd6df5abbcfe27a94d852d52162940f690e6e3194e6db9",
+        "validation_proof_digest": "cf2cee40781d301bc91b839570da221b8a8c11c23afb89e72dc897fde832dce2"
+      }
+    },
+    "manifest_identity_digest": "9fbdbc04cc50f6c9cd6dc1af0c4254dc607fb9ec1f861ca1ab3d8f15d8cf5efd"
   }
 }

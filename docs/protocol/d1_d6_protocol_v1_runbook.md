@@ -5,11 +5,18 @@
 ## 1. 当前状态与前置条件
 
 - D1–D3 属于 `strict_paper`；D4–D6 属于 `extended`。
-- KNN 只使用从 `knn_observed_start` 开始的连续30个日历日销量序列。
+- KNN 使用各数据集冻结合同规定的、从 `knn_observed_start` 开始的连续30个日历日观测序列；D2 的 KNN 特征固定为 `sales` + historical `promo`，不得退化为 sales-only。
 - 30日 KNN 序列只用于选源；CNN 与 BL1–BL4 的评估输入窗口统一为10日，并逐日期消费同一 `sample_manifest`。两者角色不同，不得混成同一特征表示。
 - 历史 `数据集/固化数据/dataset1-*.parquet` 与 `dataset2-*.parquet` 分别缺少 Store2–3、Brand2–3 的 with-sharing 候选；它们不得再被正式 D1/D2 入口读取。
 - D2 原始宽表位于 `数据集/原始数据/Dataset 2/hierarchical_sales_data.csv`，格式为 `DATE` 加 `QTY_B<brand>_<item>`（可选对应 `PROMO_B<brand>_<item>`）。
 - D1/D2 正式入口仅读取新的 `数据集/派生数据/d1d2_protocol_v1`；目录不存在时必须先在服务器执行下列再生步骤，不能从旧 parquet、旧 JSON 或旧 KNN 选择结果补造候选池。
+
+### D2 KNN 冻结合同（Gate 1R 1R.1.0）
+
+- D2 KNN 特征固定为 `("sales", "promo")`，即 `sales` + historical `promo`；`historical promo` 是正式 KNN 特征，不是可选字段。
+- D2 KNN 的 historical `sales` 和 historical `promo` 均只能来自 `date <= origin`；KNN 输入的 source 和 target rows 都不得晚于 `origin`。
+- `forecast horizon` 的 `promo` 不可用，必须从 D2 `consumer frame` 排除（forecast promo excluded）。forecast promo 的不可用性不影响历史 `promo` 作为 KNN 特征使用。
+- 任何 `sales-only` KNN 配置都不属于 Gate 1R 1R.1.0 正式协议。正式执行必须使用当前冻结并验证过的配置，不允许操作者根据旧说明重新生成 sales-only selection；不得用“forecast promo 缺失填 0”替代 historical promo KNN 特征。
 
 ## 2. 数据再生成
 
@@ -22,7 +29,7 @@ python tools/protection/codex_timeout.py --timeout 180 -- \
   --output-dir "数据集/派生数据/d1d2_protocol_v1"
 ```
 
-D2 也支持已规范化的长表；`promo` 缺失时仅作为声明为零的协变量，不影响只使用 `sales` 的 KNN。
+D2 也支持已规范化的长表；历史 `promo` 必须保留并进入正式 KNN 特征，缺少历史 `promo` 的输入不满足合同。forecast horizon 的 `promo` 不可用且不得进入 D2 `consumer frame`；不得用“forecast promo 缺失填 0”替代 historical promo KNN 特征。
 
 生成器应得到：
 

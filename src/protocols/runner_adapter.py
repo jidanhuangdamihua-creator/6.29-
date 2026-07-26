@@ -6,12 +6,16 @@ from typing import Sequence, Tuple
 
 import pandas as pd
 
+from src.constants import SOURCE_HISTORY_DAYS
+
 from .candidate_pool import PreparedDailySequencePool
 from .d2_source_calendarization import (
     D2_SOURCE_CALENDARIZATION_RULE_VERSION,
-    calendarize_d2_source_frame,
     slice_d2_source_frame,
+    verify_d2_source_frame,
 )
+from .knn_frames import build_observed_knn_frame, canonical_knn_frame_digest
+from .selection_metadata import build_selection_metadata_contract
 from .experiment_protocol import (
     EXTENDED_TRACK,
     STRICT_PAPER_TRACK,
@@ -208,6 +212,32 @@ def configure_protocol_frames(
         )
     if "date" not in source_df.columns or "date" not in target_df.columns:
         raise ProtocolViolation("protocol frames require date columns")
+    window = protocol.observation_window(observed_start)
+    knn_feature_columns = tuple(protocol.knn_feature_columns)
+    digest_feature_columns = (
+        None if knn_feature_columns == ("sales",) else knn_feature_columns
+    )
+    digest_ignored_columns = ("promo",) if digest_feature_columns is None else ()
+    if prepared_pool is None:
+        source_knn_candidate_frame = build_observed_knn_frame(
+            source_df,
+            window=window,
+            role="source",
+            group_cols=normalized_group_cols,
+            feature_cols=knn_feature_columns,
+        )
+    else:
+        source_knn_candidate_frame = prepared_pool.selected_frame(
+            prepared_pool.source_keys,
+            feature_cols=knn_feature_columns,
+        )
+    target_knn_frame = build_observed_knn_frame(
+        target_df,
+        window=window,
+        role="target",
+        group_cols=normalized_group_cols,
+        feature_cols=knn_feature_columns,
+    )
     require_static_target = (
         protocol.track == STRICT_PAPER_TRACK
         if enforce_formal_target is None
@@ -218,7 +248,12 @@ def configure_protocol_frames(
             f"{protocol.dataset_id} formal runtime requires canonical group columns "
             f"{protocol.source_pool_rule.key_fields!r}, got {normalized_group_cols!r}"
         )
-    runtime_target_key = _unique_key(target_df, normalized_group_cols, role="target")
+    target_key_frame = (
+        target_knn_frame
+        if protocol.dataset_id in {"D1", "D2"}
+        else target_df
+    )
+    runtime_target_key = _unique_key(target_key_frame, normalized_group_cols, role="target")
     if require_static_target:
         target_key = validate_canonical_target_key(
             protocol.dataset_id,
@@ -232,7 +267,12 @@ def configure_protocol_frames(
     available = (
         prepared_pool.source_keys
         if prepared_pool is not None
-        else _available_keys(source_df, normalized_group_cols)
+        else _available_keys(
+            source_knn_candidate_frame
+            if protocol.dataset_id in {"D1", "D2"}
+            else source_df,
+            normalized_group_cols,
+        )
     )
     if protocol.track == EXTENDED_TRACK:
         rule = protocol.source_pool_rule
@@ -290,7 +330,6 @@ def configure_protocol_frames(
             available,
         )
 
-    window = protocol.observation_window(observed_start)
     cutoff = pd.Timestamp(window.source_observation_cutoff).normalize()
     d2_calendarization_metadata = {}
     if prepared_pool is None:
@@ -301,10 +340,22 @@ def configure_protocol_frames(
             raise ProtocolViolation("source frame contains invalid dates")
         if protocol.dataset_id == "D2":
             source.attrs.setdefault("split_role", "source")
-            source_slice = slice_d2_source_frame(source)
-            source, report = calendarize_d2_source_frame(
-                source_slice,
+            sealed_source = source.copy()
+            verified_source, report = verify_d2_source_frame(
+                slice_d2_source_frame(sealed_source),
                 candidate_keys=candidates,
+            )
+            source_keys = source.loc[:, list(normalized_group_cols)].apply(
+                lambda row: normalize_source_key(tuple(row.tolist())),
+                axis=1,
+            )
+            source = source.loc[source_keys.isin(set(candidates))].copy()
+            source.attrs = {**sealed_source.attrs, **verified_source.attrs}
+            source.attrs.update(
+                {
+                    "d2_source_verification_frame_fingerprint": report.consumer_frame_fingerprint,
+                    "d2_source_verified_candidate_row_count": int(len(verified_source)),
+                }
             )
             d2_calendarization_metadata = {
                 "d2_source_calendarization_rule_version": report.rule_version,
@@ -354,6 +405,20 @@ def configure_protocol_frames(
     if not (target_dates > cutoff).any():
         raise ProtocolViolation("target frame has no test dates after knn_observed_end")
 
+    if prepared_pool is None:
+        source_knn_frame = build_observed_knn_frame(
+            source,
+            window=window,
+            role="source",
+            group_cols=normalized_group_cols,
+            feature_cols=knn_feature_columns,
+        )
+    else:
+        source_knn_frame = prepared_pool.selected_frame(
+            candidates,
+            feature_cols=knn_feature_columns,
+        )
+        source_knn_frame.attrs = source.attrs.copy()
     metadata = {
         "selection_authority": "shared_protocol",
         "protocol_version": protocol.protocol_version,
@@ -364,7 +429,10 @@ def configure_protocol_frames(
         "protocol_candidate_keys": candidates,
         "protocol_group_cols": normalized_group_cols,
         "protocol_observed_start": window.knn_observed_start.isoformat(),
-        "protocol_observed_days": 30,
+        "protocol_observed_days": window.observed_days,
+        "origin": window.origin.isoformat(),
+        "observed_days": window.observed_days,
+        "boundary": "inclusive",
         "knn_observed_start": window.knn_observed_start.isoformat(),
         "knn_observed_end": window.knn_observed_end.isoformat(),
         "source_observation_cutoff": window.source_observation_cutoff.isoformat(),
@@ -378,10 +446,77 @@ def configure_protocol_frames(
         "scaler_fit_scope": "target_and_candidate_legal_observed_values",
         "source_alignment_mode": "exact_knn_observed_dates",
         "information_sharing_scenario": normalized_scenario,
+        "source_frame_min_date": source_knn_frame["date"].min().strftime("%Y-%m-%d"),
+        "source_frame_max_date": source_knn_frame["date"].max().strftime("%Y-%m-%d"),
+        "target_frame_min_date": target_knn_frame["date"].min().strftime("%Y-%m-%d"),
+        "target_frame_max_date": target_knn_frame["date"].max().strftime("%Y-%m-%d"),
+        "source_frame_digest": canonical_knn_frame_digest(
+            source_knn_frame,
+            group_cols=normalized_group_cols,
+            feature_cols=digest_feature_columns,
+            ignore_columns=digest_ignored_columns,
+        ),
+        "target_frame_digest": canonical_knn_frame_digest(
+            target_knn_frame,
+            group_cols=normalized_group_cols,
+            feature_cols=digest_feature_columns,
+            ignore_columns=digest_ignored_columns,
+        ),
     }
+    metadata.update(build_selection_metadata_contract(protocol, window=window))
+    if protocol.dataset_id in {"D4", "D5", "D6"} and "source_history_days" in source_df.attrs:
+        source_history_fields = (
+            "source_history_days",
+            "source_history_start",
+            "source_history_end",
+            "source_history_expected_date_count",
+            "source_history_completeness_policy",
+            "source_history_calendar",
+            "source_history_inclusive_end",
+            "source_history_calendarization_rule",
+            "source_history_synthetic_row_count",
+            "source_history_frame_digest",
+        )
+        missing_history = [
+            field for field in source_history_fields if field not in source_df.attrs
+        ]
+        if missing_history:
+            raise ProtocolViolation(
+                "D4-D6 source history metadata is incomplete: "
+                f"{missing_history!r}"
+            )
+        if int(source_df.attrs["source_history_days"]) != SOURCE_HISTORY_DAYS:
+            raise ProtocolViolation(
+                "D4-D6 source history must be exactly "
+                f"{SOURCE_HISTORY_DAYS} days"
+            )
+        metadata.update({field: source_df.attrs[field] for field in source_history_fields})
+        metadata["source_history_eligible_keys"] = source_df.attrs.get(
+            "source_history_eligible_keys", []
+        )
     metadata.update(d2_calendarization_metadata)
-    source.attrs = {**source_df.attrs, **metadata}
-    target.attrs = {**target_df.attrs, **metadata}
+    source_knn_frame.attrs.update(metadata)
+    target_knn_frame.attrs.update(metadata)
+    source.attrs = {
+        **source_df.attrs,
+        **metadata,
+        "protocol_knn_observed_frame": source_knn_frame,
+    }
+    forecast_consumer = target.loc[target_dates > cutoff].copy()
+    if protocol.dataset_id == "D2":
+        forecast_consumer = forecast_consumer.drop(columns=["promo"], errors="ignore")
+        target.loc[target_dates > cutoff, "promo"] = pd.NA
+    forecast_consumer.attrs = {
+        **metadata,
+        "feature_scope": "forecast_consumer",
+        "forecast_excluded_columns": ["promo"] if protocol.dataset_id == "D2" else [],
+    }
+    target.attrs = {
+        **target_df.attrs,
+        **metadata,
+        "protocol_knn_observed_frame": target_knn_frame,
+        "forecast_consumer_frame": forecast_consumer,
+    }
     if prepared_pool is not None:
         source.attrs["prepared_daily_sequence_pool"] = prepared_pool
     return source, target

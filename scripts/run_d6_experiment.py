@@ -25,6 +25,10 @@ from src.utils.d4_d6_runtime import apply_runtime_source_domain_policy, load_def
 from src.utils.finite_diagnostics import validate_feature_frame_finite
 from src.utils.knn_feature_loader import resolve_knn_feature_columns
 from src.protocols.reproducibility import set_protocol_seed
+from src.protocols.formal_input_paths import (
+    require_explicit_formal_paths,
+    resolve_formal_dataset_paths,
+)
 from src.utils.run_artifacts import publish_formal_cell_output_frame
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -33,7 +37,6 @@ config = {
     "use_parquet": True,
     "dataset_id": 6,
     "dataset_name": "Dataset6",
-    "parquet_dir": "数据集/固化数据",
     "knn_json_dir": str(SOLIDIFIED_KNN_ROOT / "Dataset6"),
     "info_sharing": "without",
     "source_history_days": SOURCE_HISTORY_DAYS,
@@ -72,6 +75,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--repair-source-numeric-na", action="store_true")
     parser.add_argument("--horizon", type=int, choices=[1, 2, 3, 4, 5], default=1)
     parser.add_argument("--seed", type=int, choices=[42, 43, 44, 45, 46], default=42)
+    parser.add_argument("--formal-source-path", type=Path, default=None)
+    parser.add_argument("--formal-target-path", type=Path, default=None)
     return parser.parse_args()
 
 
@@ -88,6 +93,19 @@ def _align_results_to_reference_schema(df: pd.DataFrame) -> pd.DataFrame:
 
 def main() -> None:
     args = _parse_args()
+    if (args.formal_source_path is None) != (args.formal_target_path is None):
+        raise SystemExit("FORMAL_INPUT_RESOLVER_PARITY_MISMATCH dataset=6")
+    if args.formal_source_path is None:
+        formal_paths = resolve_formal_dataset_paths(6, repository_root=PROJECT_ROOT)
+    else:
+        formal_paths = require_explicit_formal_paths(
+            6,
+            source_path=args.formal_source_path,
+            target_path=args.formal_target_path,
+            repository_root=PROJECT_ROOT,
+        )
+    config["formal_source_path"] = str(formal_paths.source_path)
+    config["formal_target_path"] = str(formal_paths.target_path)
     config["info_sharing"] = str(args.info_sharing)
     config["smoke"] = bool(args.smoke)
     if args.target_limit is not None:
@@ -134,7 +152,8 @@ def main() -> None:
     )
     source_df, target_df = load_parquet_source_target(
         dataset_id=config["dataset_id"],
-        parquet_dir=config["parquet_dir"],
+        source_path=formal_paths.source_path,
+        target_path=formal_paths.target_path,
         windows=windows,
         source_history_days=config["source_history_days"],
     )

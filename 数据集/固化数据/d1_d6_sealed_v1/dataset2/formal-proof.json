@@ -1,0 +1,677 @@
+{
+  "consumer_fingerprint": "271aee0f50b3da1413b1379d3eb8f0fce0123c1de6153a80cda9dd000ddeb5ca",
+  "consumer_fingerprint_input": {
+    "code_inventory_digest": "5d5f2d391c081f4bb91e8509810b7577da4338c5b0f5c89c3ffef663ecac77e3",
+    "dataset_id": "D2",
+    "readiness_proof_digest": "f0e02f23b1be9a9daa9701dc95b9b880176e21a3d401dc17a4d6ac3d314ee964",
+    "source_schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f",
+    "source_sha256": "466391bb7e89067663d2d8f882834819896620c56bbbdc1959b81df938080ab2",
+    "target_schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086",
+    "target_sha256": "fbfe0df5a5624504b00a8ea701ca7dd250ab46232d29f82473dcf4d0df712588"
+  },
+  "dataset_id": "D2",
+  "dataset_manifest_identity": {
+    "path": "dataset2/manifest.json",
+    "sha256": "80674e823ff7b628ce0bee804e05ae04338c267941f3ab75a1efc3f145217abf"
+  },
+  "dataset_root": "dataset2",
+  "dataset_specific": {
+    "frozen_dates": [
+      "2018-04-01",
+      "2018-04-25",
+      "2018-05-01",
+      "2018-06-02"
+    ],
+    "knn_selection_authority": {
+      "authority_digest": "a43cd877789af5fdc45453aa0a4b7e47e556788bd909f20ebab74271fcff37f3",
+      "knn_feature_columns": [
+        "sales",
+        "promo"
+      ],
+      "knn_frame_authority": "configured_observed_frame",
+      "observed_window": {
+        "boundary": "inclusive",
+        "observed_days": 30,
+        "observed_end": "2018-06-30",
+        "observed_start": "2018-06-01",
+        "origin": "2018-06-30"
+      },
+      "protocol_version": "d1_d6_protocol_v1",
+      "scenario_files": {
+        "with": {
+          "candidate_pool_digest": "b5bad690b1c76c76b9e43217dd3dee56c22f6e5891209786c931b186cf99c36b",
+          "feature_cols": [
+            "sales",
+            "promo"
+          ],
+          "knn_feature_columns": [
+            "sales",
+            "promo"
+          ],
+          "knn_frame_authority": "configured_observed_frame",
+          "observed_window": {
+            "boundary": "inclusive",
+            "observed_days": 30,
+            "observed_end": "2018-06-30",
+            "observed_start": "2018-06-01",
+            "origin": "2018-06-30"
+          },
+          "path": "configs/solidified/knn/Dataset2/knn_with_info_sharing.json",
+          "protocol_version": "d1_d6_protocol_v1",
+          "selection_authority": "shared_protocol",
+          "selection_digest": "84f1025f9ab9d3ecf68acc085e353655c9c0f5f7ef9bbb1dae294daf23991cdd",
+          "selection_result_digest": "84f1025f9ab9d3ecf68acc085e353655c9c0f5f7ef9bbb1dae294daf23991cdd",
+          "sha256": "e22df714542c79240f7ad3f92ff147621d23ab05872364a3c8c2ed0507615ca1",
+          "source_frame_digest": "6007a23b37fac4c0c0dc875da2f6f6243c3bd57e69f4b8dd7d56112274bb8078",
+          "source_frame_max_date": "2018-06-30",
+          "source_frame_min_date": "2018-06-01",
+          "target_frame_digest": "2949980f589d8b2f74ba11119e48b8df54b6a34c0a43673aaff379f8a1f2919d",
+          "target_frame_max_date": "2018-06-30",
+          "target_frame_min_date": "2018-06-01"
+        },
+        "without": {
+          "candidate_pool_digest": "809e3d55c15c9ec6a026901efa8b5ae0bd1ba617114c7ea29eb2ce0a29eb84ae",
+          "feature_cols": [
+            "sales",
+            "promo"
+          ],
+          "knn_feature_columns": [
+            "sales",
+            "promo"
+          ],
+          "knn_frame_authority": "configured_observed_frame",
+          "observed_window": {
+            "boundary": "inclusive",
+            "observed_days": 30,
+            "observed_end": "2018-06-30",
+            "observed_start": "2018-06-01",
+            "origin": "2018-06-30"
+          },
+          "path": "configs/solidified/knn/Dataset2/knn_without_info_sharing.json",
+          "protocol_version": "d1_d6_protocol_v1",
+          "selection_authority": "shared_protocol",
+          "selection_digest": "3078df637d3c8c081f8e75cd4b8f8481de98cd4bf6999308cf3dc6a3650ce74d",
+          "selection_result_digest": "3078df637d3c8c081f8e75cd4b8f8481de98cd4bf6999308cf3dc6a3650ce74d",
+          "sha256": "6998c89a4f38dfb858f956e249f2eeab6794309e735e6eeedc187b96faabf2a0",
+          "source_frame_digest": "3582ed1730d83af05d11e2481eae04fdc0fac0fc62d721da88d3605256c12e8d",
+          "source_frame_max_date": "2018-06-30",
+          "source_frame_min_date": "2018-06-01",
+          "target_frame_digest": "2949980f589d8b2f74ba11119e48b8df54b6a34c0a43673aaff379f8a1f2919d",
+          "target_frame_max_date": "2018-06-30",
+          "target_frame_min_date": "2018-06-01"
+        }
+      },
+      "selection_authority": "shared_protocol",
+      "target_scenario_matrix": {
+        "with": {
+          "candidate_pool_digest": "b5bad690b1c76c76b9e43217dd3dee56c22f6e5891209786c931b186cf99c36b",
+          "selection_digest": "84f1025f9ab9d3ecf68acc085e353655c9c0f5f7ef9bbb1dae294daf23991cdd",
+          "selection_result_digest": "84f1025f9ab9d3ecf68acc085e353655c9c0f5f7ef9bbb1dae294daf23991cdd",
+          "source_frame_digest": "6007a23b37fac4c0c0dc875da2f6f6243c3bd57e69f4b8dd7d56112274bb8078",
+          "target_frame_digest": "2949980f589d8b2f74ba11119e48b8df54b6a34c0a43673aaff379f8a1f2919d"
+        },
+        "without": {
+          "candidate_pool_digest": "809e3d55c15c9ec6a026901efa8b5ae0bd1ba617114c7ea29eb2ce0a29eb84ae",
+          "selection_digest": "3078df637d3c8c081f8e75cd4b8f8481de98cd4bf6999308cf3dc6a3650ce74d",
+          "selection_result_digest": "3078df637d3c8c081f8e75cd4b8f8481de98cd4bf6999308cf3dc6a3650ce74d",
+          "source_frame_digest": "3582ed1730d83af05d11e2481eae04fdc0fac0fc62d721da88d3605256c12e8d",
+          "target_frame_digest": "2949980f589d8b2f74ba11119e48b8df54b6a34c0a43673aaff379f8a1f2919d"
+        }
+      }
+    },
+    "runtime_calendarization": false,
+    "sales_zero": true,
+    "sealed_identity": {
+      "artifacts": {
+        "source": {
+          "path": "dataset2/source.parquet",
+          "row_count": 48654,
+          "schema_digest": "e7c59c5f751ae614699a31f710e3091f3b96b2b6f50c3ecd6f00f1ad157749f7",
+          "schema_fields": [
+            "date",
+            "brand_id",
+            "item_id",
+            "sales",
+            "promo",
+            "entity_id",
+            "year",
+            "month",
+            "week",
+            "day"
+          ],
+          "sha256": "466391bb7e89067663d2d8f882834819896620c56bbbdc1959b81df938080ab2",
+          "size_bytes": 126978
+        },
+        "target": {
+          "path": "dataset2/target.parquet",
+          "row_count": 1802,
+          "schema_digest": "77c0bbba1525b2dc78cbe3225f757017e008d707e43acfd914f4c6c42c361746",
+          "schema_fields": [
+            "date",
+            "brand_id",
+            "item_id",
+            "sales",
+            "promo",
+            "entity_id",
+            "year",
+            "month",
+            "week",
+            "day"
+          ],
+          "sha256": "fbfe0df5a5624504b00a8ea701ca7dd250ab46232d29f82473dcf4d0df712588",
+          "size_bytes": 24984
+        }
+      },
+      "manifest_path": "dataset2/manifest.json",
+      "manifest_version": "sealed_dataset_manifest_v1",
+      "precalendarized": true,
+      "runtime_calendarization": false,
+      "status": "passed",
+      "verified_zero_sales_dates": [
+        "2018-04-01",
+        "2018-04-25",
+        "2018-05-01",
+        "2018-06-02"
+      ],
+      "zero_date_evidence": {
+        "source": {
+          "2018-04-01": {
+            "rows": 27,
+            "sales_zero": true
+          },
+          "2018-04-25": {
+            "rows": 27,
+            "sales_zero": true
+          },
+          "2018-05-01": {
+            "rows": 27,
+            "sales_zero": true
+          },
+          "2018-06-02": {
+            "rows": 27,
+            "sales_zero": true
+          }
+        },
+        "target": {
+          "2018-04-01": {
+            "rows": 1,
+            "sales_zero": true
+          },
+          "2018-04-25": {
+            "rows": 1,
+            "sales_zero": true
+          },
+          "2018-05-01": {
+            "rows": 1,
+            "sales_zero": true
+          },
+          "2018-06-02": {
+            "rows": 1,
+            "sales_zero": true
+          }
+        }
+      }
+    },
+    "source_entities_per_date": 27,
+    "target_entities_per_date": 1,
+    "zero_date_evidence": {
+      "source": {
+        "2018-04-01": {
+          "rows": 27,
+          "sales_zero": true
+        },
+        "2018-04-25": {
+          "rows": 27,
+          "sales_zero": true
+        },
+        "2018-05-01": {
+          "rows": 27,
+          "sales_zero": true
+        },
+        "2018-06-02": {
+          "rows": 27,
+          "sales_zero": true
+        }
+      },
+      "target": {
+        "2018-04-01": {
+          "rows": 1,
+          "sales_zero": true
+        },
+        "2018-04-25": {
+          "rows": 1,
+          "sales_zero": true
+        },
+        "2018-05-01": {
+          "rows": 1,
+          "sales_zero": true
+        },
+        "2018-06-02": {
+          "rows": 1,
+          "sales_zero": true
+        }
+      }
+    }
+  },
+  "date_key": "date",
+  "date_range": {
+    "source": [
+      "2018-01-02",
+      "2018-06-30"
+    ],
+    "target": [
+      "2018-06-01",
+      "2018-12-27"
+    ]
+  },
+  "entity_count": {
+    "source": 27,
+    "target": 1
+  },
+  "entity_key": [
+    "brand_id",
+    "item_id"
+  ],
+  "formal_identity": {
+    "combined_identity_sha256": "sha256:3d11fef7b4edeb9fc804cc61455095b59e2c995afda11ba7d2c2a8afed7000e6",
+    "contract_sha256": "sha256:85713b9d13cae3c017c4856b6a0f42a49d6074aebbb729171d60b95baa42eb74",
+    "decision_book_sha256": "sha256:4aaebe5f07d3dc0e61ada72dbe0625c82615ba74577e91b72b46b07a709c689d",
+    "freeze_commit": "9eb50948241dad2f01d6854ca3cb4bf4e9c363d7",
+    "matrix_sha256": "sha256:80545e2739dacdedfd8e60857bd8828dbf2102db37fc310ae4fc994b194e1da3",
+    "scope_sha256": "sha256:98107929ea310e7fc304d2631803092e68c01e51fa992da96a3c3118b628eeb4"
+  },
+  "key_date_uniqueness": {
+    "consumer_duplicate_exact_keys": 0,
+    "status": "passed"
+  },
+  "proof_identity_sha256": "f9a67ed32060d5cb526e1671ce2f07af20c1eeceba338d89492eb6e4c4cca065",
+  "readiness_proof_digest": "f0e02f23b1be9a9daa9701dc95b9b880176e21a3d401dc17a4d6ac3d314ee964",
+  "readiness_result": {
+    "failure_code": null,
+    "status": "passed"
+  },
+  "row_count": {
+    "source": 48654,
+    "target": 1802
+  },
+  "schema_version": "d1_d6_formal_proof_v1",
+  "source": {
+    "dtypes": {
+      "brand_id": "int64",
+      "date": "timestamp[ns]",
+      "day": "double",
+      "entity_id": "string",
+      "item_id": "int64",
+      "month": "double",
+      "promo": "double",
+      "sales": "double",
+      "week": "double",
+      "year": "double"
+    },
+    "mtime_ns": 1784287890489214078,
+    "nullable": {
+      "brand_id": true,
+      "date": true,
+      "day": true,
+      "entity_id": true,
+      "item_id": true,
+      "month": true,
+      "promo": true,
+      "sales": true,
+      "week": true,
+      "year": true
+    },
+    "ordered_columns": [
+      "date",
+      "brand_id",
+      "item_id",
+      "sales",
+      "promo",
+      "entity_id",
+      "year",
+      "month",
+      "week",
+      "day"
+    ],
+    "path": "数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet",
+    "rows": 48654,
+    "schema": {
+      "columns": [
+        {
+          "dtype": "timestamp[ns]",
+          "name": "date",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "brand_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "item_id",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "sales",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "promo",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "entity_id",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "year",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "month",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "week",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "day",
+          "nullable": true
+        }
+      ],
+      "date_column": "date",
+      "key_columns": [
+        "brand_id",
+        "item_id"
+      ],
+      "role": "source",
+      "schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f"
+    },
+    "schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f",
+    "sha256": "466391bb7e89067663d2d8f882834819896620c56bbbdc1959b81df938080ab2",
+    "size_bytes": 126978
+  },
+  "source_schema": {
+    "columns": [
+      {
+        "dtype": "timestamp[ns]",
+        "name": "date",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "brand_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "item_id",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "sales",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "promo",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "entity_id",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "year",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "month",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "week",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "day",
+        "nullable": true
+      }
+    ],
+    "date_column": "date",
+    "key_columns": [
+      "brand_id",
+      "item_id"
+    ],
+    "role": "source",
+    "schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f"
+  },
+  "supporting_proof_files": [
+    {
+      "path": "dataset2/calendarization_audit.json",
+      "sha256": "f32541ba70100adb6c9a8c73e03dc14fea4b4bdd32f7fd3086a1fc195e59dff0",
+      "size_bytes": 1430
+    },
+    {
+      "path": "dataset2/knn_schema.json",
+      "sha256": "86f86b3adc637b24b856c58e5dc8bbf6d1cfe5bde52f254b2338bec4a9f422f1",
+      "size_bytes": 771
+    },
+    {
+      "path": "dataset2/manifest.json",
+      "sha256": "80674e823ff7b628ce0bee804e05ae04338c267941f3ab75a1efc3f145217abf",
+      "size_bytes": 3642
+    },
+    {
+      "path": "dataset2/predictor_schema.json",
+      "sha256": "1015715a2d2e0cfe73e5d0238f033de3802bed92c77958cd5ea817a6948555d5",
+      "size_bytes": 841
+    },
+    {
+      "path": "dataset2/provenance.json",
+      "sha256": "9ba9834877b6681fb85f81c0dd694a16b6b58fe287c68d55fd9cada5dced8d3a",
+      "size_bytes": 832
+    },
+    {
+      "path": "dataset2/source_sales_canonicalization.json",
+      "sha256": "73b4b85a12573bdb2393379c33a88331bdf0ef142a4bfc916a379bb6f9cea245",
+      "size_bytes": 681
+    },
+    {
+      "path": "dataset2/source_schema.json",
+      "sha256": "f1ae721c4892dd7025e4e84a4b4988fd7e232a17d886d6109d546574208c07ec",
+      "size_bytes": 1238
+    },
+    {
+      "path": "dataset2/target_schema.json",
+      "sha256": "a1dc21591e39248a0120eeef331f0d21dad68022b151295acc691c399ddbbaa2",
+      "size_bytes": 1232
+    },
+    {
+      "path": "dataset2/validation_report.json",
+      "sha256": "7d92167df3455590e7c2296792e96c2339da2f1ea9dd1710a89b97a9cb4b1268",
+      "size_bytes": 1343
+    }
+  ],
+  "target": {
+    "dtypes": {
+      "brand_id": "int64",
+      "date": "timestamp[ns]",
+      "day": "double",
+      "entity_id": "string",
+      "item_id": "int64",
+      "month": "double",
+      "promo": "double",
+      "sales": "double",
+      "week": "double",
+      "year": "double"
+    },
+    "mtime_ns": 1784287890563147085,
+    "nullable": {
+      "brand_id": true,
+      "date": true,
+      "day": true,
+      "entity_id": true,
+      "item_id": true,
+      "month": true,
+      "promo": true,
+      "sales": true,
+      "week": true,
+      "year": true
+    },
+    "ordered_columns": [
+      "date",
+      "brand_id",
+      "item_id",
+      "sales",
+      "promo",
+      "entity_id",
+      "year",
+      "month",
+      "week",
+      "day"
+    ],
+    "path": "数据集/固化数据/d1_d6_sealed_v1/dataset2/target.parquet",
+    "rows": 1802,
+    "schema": {
+      "columns": [
+        {
+          "dtype": "timestamp[ns]",
+          "name": "date",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "brand_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "item_id",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "sales",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "promo",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "entity_id",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "year",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "month",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "week",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "day",
+          "nullable": true
+        }
+      ],
+      "date_column": "date",
+      "key_columns": [
+        "brand_id",
+        "item_id"
+      ],
+      "role": "target",
+      "schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086"
+    },
+    "schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086",
+    "sha256": "fbfe0df5a5624504b00a8ea701ca7dd250ab46232d29f82473dcf4d0df712588",
+    "size_bytes": 24984
+  },
+  "target_schema": {
+    "columns": [
+      {
+        "dtype": "timestamp[ns]",
+        "name": "date",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "brand_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "item_id",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "sales",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "promo",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "entity_id",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "year",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "month",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "week",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "day",
+        "nullable": true
+      }
+    ],
+    "date_column": "date",
+    "key_columns": [
+      "brand_id",
+      "item_id"
+    ],
+    "role": "target",
+    "schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086"
+  }
+}

@@ -220,17 +220,30 @@ resolve_worker_pid() {
     local launcher_pid="$1"
     local attempt
     local candidate
+    local candidate_args
+    local candidates
     local args
+    local unified_runner_name="${UNIFIED_RUNNER##*/}"
+    local launcher_pgid
     for ((attempt = 0; attempt < 50; attempt++)); do
-        candidate="$(pgrep -P "${launcher_pid}" 2>/dev/null | head -n 1 || true)"
-        if [[ "${candidate}" =~ ^[0-9]+$ ]]; then
-            printf '%s\n' "${candidate}"
-            return 0
-        fi
+        candidates="$(pgrep -P "${launcher_pid}" 2>/dev/null || true)"
+        while IFS= read -r candidate; do
+            [[ "${candidate}" =~ ^[0-9]+$ ]] || continue
+            candidate_args="$(ps -ww -o args= -p "${candidate}" 2>/dev/null || true)"
+            if [[ "${candidate_args}" == *"${unified_runner_name}"* ]]; then
+                printf '%s\n' "${candidate}"
+                return 0
+            fi
+        done <<<"${candidates}"
         args="$(ps -ww -o args= -p "${launcher_pid}" 2>/dev/null || true)"
-        if [[ "${args}" == *"${UNIFIED_RUNNER}"* ]]; then
-            printf '%s\n' "${launcher_pid}"
-            return 0
+        if [[ "${args}" == *"${unified_runner_name}"* ]]; then
+            launcher_pgid="$(ps -o pgid= -p "${launcher_pid}" 2>/dev/null \
+                | awk '{gsub(/[[:space:]]/, "", $0); print}')"
+            if [[ "${launcher_pgid}" =~ ^[0-9]+$ \
+                && "${launcher_pgid}" != "${SUPERVISOR_PGID}" ]]; then
+                printf '%s\n' "${launcher_pid}"
+                return 0
+            fi
         fi
         kill -0 "${launcher_pid}" 2>/dev/null || break
         sleep 0.1

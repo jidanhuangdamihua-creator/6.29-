@@ -142,6 +142,8 @@ class SourceSelectorSharedProtocolTest(unittest.TestCase):
                 "family": "F1",
                 "date": dates,
                 "sales": np.r_[np.zeros(30), np.full(5, 9999.0)],
+                "onpromotion": np.zeros(35),
+                "oil_price": np.linspace(10.0, 20.0, 35),
             }
         )
         source = pd.concat(
@@ -153,6 +155,8 @@ class SourceSelectorSharedProtocolTest(unittest.TestCase):
                         "family": family,
                         "date": dates,
                         "sales": np.full(35, value),
+                        "onpromotion": np.zeros(35),
+                        "oil_price": np.linspace(10.0, 20.0, 35),
                     }
                 )
                 for store, item, family, value in (

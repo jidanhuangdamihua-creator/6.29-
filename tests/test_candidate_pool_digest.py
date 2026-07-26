@@ -71,6 +71,21 @@ class CandidatePoolDigestTest(unittest.TestCase):
                     ),
                 )
 
+    def test_actual_frame_digests_are_bound_when_supplied(self) -> None:
+        baseline = build_candidate_pool_digest(
+            **WITHOUT_INPUT,
+            source_frame_digest="a" * 64,
+            target_frame_digest="b" * 64,
+        )
+        self.assertNotEqual(
+            baseline,
+            build_candidate_pool_digest(
+                **WITHOUT_INPUT,
+                source_frame_digest="c" * 64,
+                target_frame_digest="b" * 64,
+            ),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

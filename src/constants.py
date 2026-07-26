@@ -1,7 +1,9 @@
 # source domain 历史窗口天数，论文固定值
 import json
 
-SOURCE_HISTORY_DAYS = 300
+SOURCE_HISTORY_DAYS = 180
+SOURCE_HISTORY_CALENDAR = "Gregorian daily"
+SOURCE_HISTORY_COMPLETENESS_POLICY = "exact_expected_date_set"
 D4_D6_RUNTIME_KNN_PROTOCOL_VERSION = "runtime_knn_windowed_stats_v1"
 MIXED_METRIC_SPACE = "mixed_metric_space"
 MIXED_METRIC_PROTOCOL_NOTE = (
@@ -270,16 +272,6 @@ SOLIDIFIED_KNN_ROOT: Path = _PROJECT_ROOT / "configs" / "solidified" / "knn"
 D3_WITHOUT_INFO_SHARING_DOMAIN_FILTER: dict[str, object] = {
     "column": "region",
     "value": 1,
-}
-
-D1_TARGET_TRAIN_WINDOW: dict[str, str] = {
-    "start": "2017-06-05",
-    "end": "2017-06-19",
-}
-
-D2_TARGET_TRAIN_WINDOW: dict[str, str] = {
-    "start": "2018-06-05",
-    "end": "2018-06-19",
 }
 
 SOLIDIFIED_TARGET_WINDOWS: dict[int, dict[str, str]] = {

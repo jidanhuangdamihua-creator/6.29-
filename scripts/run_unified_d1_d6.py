@@ -25,6 +25,18 @@ from scripts.run_strict_protocol_baseline import (
     build_mode_expected_contract,
 )
 from src.protocols.experiment_protocol import FORMAL_HORIZONS, FORMAL_METHODS, FORMAL_SEEDS
+from src.protocols.formal_input_paths import (
+    resolve_all_formal_dataset_identities,
+    resolve_all_formal_dataset_paths,
+)
+from src.protocols.formal_deployment_manifest import (
+    DeploymentManifestError,
+    atomic_write_json,
+    canonical_json_bytes,
+    repository_identity,
+    sha256_bytes,
+    validate_deployment_manifest,
+)
 from src.utils.result_acceptance import (
     AcceptanceScope,
     AggregateProfile,
@@ -57,11 +69,141 @@ VALID_DATASETS = tuple(f"d{number}" for number in range(1, 7))
 VALID_MODES = ("without", "with")
 
 
-def _formal_parquet_dir(project_root: Path, dataset_id: int) -> Path:
-    root = Path(project_root)
-    if int(dataset_id) in (1, 2):
-        return root / "数据集" / "派生数据" / "d1d2_protocol_v1"
-    return root / "数据集" / "固化数据"
+def _working_tree_fingerprint(project_root: Path) -> str:
+    root = Path(project_root).resolve(strict=True)
+    status = subprocess.check_output(
+        ["git", "-C", str(root), "status", "--porcelain=v1", "-z"]
+    )
+    diff = subprocess.check_output(
+        ["git", "-C", str(root), "diff", "--raw", "-z", "HEAD", "--"]
+    )
+    untracked = subprocess.check_output(
+        ["git", "-C", str(root), "ls-files", "--others", "--exclude-standard", "-z"]
+    )
+    digest = hashlib.sha256(status + b"\0" + diff + b"\0" + untracked)
+    changed = subprocess.check_output(
+        ["git", "-C", str(root), "diff", "--name-only", "-z", "HEAD", "--"]
+    )
+    paths = set(part for part in changed.split(b"\0") if part)
+    paths.update(part for part in untracked.split(b"\0") if part)
+    for raw in sorted(paths):
+        relative = raw.decode("utf-8")
+        path = (root / relative).resolve(strict=True)
+        path.relative_to(root)
+        if path.is_file() and not path.is_symlink():
+            digest.update(relative.encode("utf-8") + b"\0")
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+    return digest.hexdigest()
+
+
+def run_formal_preflight(project_root: Path = PROJECT_ROOT) -> dict[str, object]:
+    """Execute the complete current-byte manifest and consumer preflight."""
+
+    root = Path(project_root).resolve(strict=True)
+    manifest_report = validate_deployment_manifest(root)
+    from tools.operations.gate1x_real_input_readiness import run_readiness
+
+    readiness = run_readiness(
+        root=root,
+        parent_root=root,
+        old_sealed_root=root,
+        require_deployment=True,
+    )
+    if (
+        readiness.get("status") != "passed"
+        or readiness.get("datasets_ready") != 6
+        or readiness.get("datasets_total") != 6
+    ):
+        raise DeploymentManifestError(
+            str(readiness.get("failure_code") or "FINAL_PREFLIGHT_NOT_READY")
+        )
+    return {**manifest_report, "readiness": readiness}
+
+
+def build_formal_dry_run_plan(
+    run_root: Path,
+    *,
+    project_root: Path = PROJECT_ROOT,
+    preflight: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    root = Path(project_root).resolve(strict=True)
+    output = Path(run_root).resolve()
+    try:
+        output.relative_to(Path("/tmp").resolve())
+    except ValueError as exc:
+        raise DeploymentManifestError("DRY_RUN_OUTPUT_NOT_TMP", str(output)) from exc
+    checked = dict(preflight or run_formal_preflight(root))
+    manifest = checked["manifest"]
+    tasks = build_tasks(None, smoke=False, run_dir=output, repository_root=root)
+    cells = [
+        {
+            "dataset": f"D{task.dataset_id}",
+            "mode": task.scenario,
+            "horizon": task.horizon,
+            "seed": task.seed,
+            "result_path": task.expected_result_path.relative_to(output).as_posix(),
+        }
+        for task in tasks
+    ]
+    identities = repository_identity(root)
+    payload: dict[str, object] = {
+        "schema_version": "formal_d1_d6_dry_run_plan_v1",
+        "branch": identities["branch"],
+        "head": identities["head"],
+        "working_tree_fingerprint": _working_tree_fingerprint(root),
+        "formal_identity": manifest["formal_identity"],
+        "root_manifest_path": "数据集/固化数据/d1_d6_sealed_v1/deployment-manifest.json",
+        "root_manifest_sha256": checked["manifest_sha256"],
+        "root_identity_sha256": checked["root_identity_sha256"],
+        "code_inventory_sha256": checked["code_inventory_sha256"],
+        "datasets": {
+            key: {
+                "source_path": entry["source"]["path"],
+                "target_path": entry["target"]["path"],
+                "source_sha256": entry["source"]["sha256"],
+                "target_sha256": entry["target"]["sha256"],
+                "source_schema_digest": entry["source_schema_digest"],
+                "target_schema_digest": entry["target_schema_digest"],
+                "consumer_fingerprint": entry["consumer_fingerprint"],
+            }
+            for key, entry in manifest["datasets"].items()
+        },
+        "d4_selection_authority": manifest["d4_selection_authority"],
+        "methods": list(FORMAL_METHODS),
+        "horizons": list(FORMAL_HORIZONS),
+        "seeds": list(FORMAL_SEEDS),
+        "cells": cells,
+        "cell_count": len(cells),
+        "unique_cell_count": len(
+            {(item["dataset"], item["mode"], item["horizon"], item["seed"]) for item in cells}
+        ),
+        "preflight_status": "ready",
+        "datasets_ready": 6,
+        "datasets_total": 6,
+        "training_started": False,
+        "results_created": False,
+        "publication_performed": False,
+    }
+    if payload["cell_count"] != 300 or payload["unique_cell_count"] != 300:
+        raise DeploymentManifestError("FORMAL_CELL_MATRIX_MISMATCH")
+    return {**payload, "run_plan_identity_sha256": sha256_bytes(canonical_json_bytes(payload))}
+
+
+def execute_formal_dry_run(
+    run_root: Path,
+    *,
+    project_root: Path = PROJECT_ROOT,
+) -> dict[str, object]:
+    preflight = run_formal_preflight(project_root)
+    plan = build_formal_dry_run_plan(
+        run_root, project_root=project_root, preflight=preflight
+    )
+    output = Path(run_root).resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(output / "run_plan.json", plan)
+    return plan
 
 
 def discover_formal_input_identity(project_root: Path) -> dict[str, dict[str, object]]:
@@ -72,12 +214,14 @@ def discover_formal_input_identity(project_root: Path) -> dict[str, dict[str, ob
         root / "configs" / "matrix_config.json",
     ]
     paths.extend(sorted((root / "configs" / "solidified" / "knn").glob("**/*.json")))
-    for dataset_id in range(1, 7):
-        parquet_dir = _formal_parquet_dir(root, dataset_id)
+    for resolved in resolve_all_formal_dataset_paths(repository_root=root):
         paths.extend(
             [
-                parquet_dir / f"dataset{dataset_id}-source.parquet",
-                parquet_dir / f"dataset{dataset_id}-target.parquet",
+                resolved.source_path,
+                resolved.target_path,
+                resolved.dataset_manifest_path,
+                resolved.source_schema_path,
+                resolved.target_schema_path,
             ]
         )
     d5_raw = root / "数据集" / "原始数据" / "Dataset 5Favorita"
@@ -93,6 +237,14 @@ def discover_formal_input_identity(project_root: Path) -> dict[str, dict[str, ob
         )
     )
     return discover_input_identity(root, paths)
+
+
+def resolve_unified_formal_input_identities(
+    project_root: Path = PROJECT_ROOT,
+) -> tuple[dict[str, object], ...]:
+    """Identity payload shared by dry-run, run-plan, and verification."""
+
+    return resolve_all_formal_dataset_identities(repository_root=project_root)
 
 
 @dataclass(frozen=True)
@@ -135,6 +287,7 @@ def build_tasks(
     smoke: bool,
     run_dir: Optional[Path] = None,
     info_sharing: Optional[str] = None,
+    repository_root: Path = PROJECT_ROOT,
 ) -> List[Task]:
     if smoke:
         raise ValueError(
@@ -146,8 +299,13 @@ def build_tasks(
     layout = RunLayout(run_root)
     tasks: List[Task] = []
     modes = (info_sharing,) if info_sharing is not None else VALID_MODES
+    resolved_by_dataset = {
+        item.dataset_id: item
+        for item in resolve_all_formal_dataset_paths(repository_root=repository_root)
+    }
     for dataset_token in expand_only_tokens(only):
         dataset_id = int(dataset_token[1:])
+        resolved = resolved_by_dataset[dataset_id]
         for mode in modes:
             matrix = build_matrix_tasks(
                 dataset=dataset_token,
@@ -156,6 +314,14 @@ def build_tasks(
             )
             for cell in matrix:
                 command = list(cell.command)
+                command.extend(
+                    [
+                        "--formal-source-path",
+                        str(resolved.source_path),
+                        "--formal-target-path",
+                        str(resolved.target_path),
+                    ]
+                )
                 if smoke and dataset_id >= 4:
                     command.append("--smoke")
                 tasks.append(
@@ -196,7 +362,14 @@ def _format_cmd(cmd: Sequence[str]) -> str:
     return shlex.join([str(part) for part in cmd])
 
 
-def print_dry_run(tasks: Sequence[Task]) -> None:
+def print_dry_run(
+    tasks: Sequence[Task],
+    formal_inputs: Sequence[Mapping[str, object]],
+) -> None:
+    print(
+        "[FORMAL INPUTS] "
+        + json.dumps(list(formal_inputs), ensure_ascii=False, sort_keys=True)
+    )
     for index, task in enumerate(tasks, start=1):
         print(f"{index}. [{task.label}] {_format_cmd(task.cmd)}")
         print(f"   expected result: {task.expected_result_path}")
@@ -336,6 +509,7 @@ def build_run_plan(
         "schema_registry_version": RESULT_SCHEMA_REGISTRY_VERSION,
         "schema_registry_digest": result_schema_registry_digest(),
         "input_identity": input_identity,
+        "formal_inputs": list(resolve_unified_formal_input_identities(PROJECT_ROOT)),
         "methods": list(FORMAL_METHODS),
         "horizons": list(FORMAL_HORIZONS),
         "seeds": list(FORMAL_SEEDS),
@@ -602,7 +776,7 @@ def aggregate_prepared_run(run_root: Path) -> Path:
 def _resolve_run_root(args: argparse.Namespace) -> Path:
     output_dir = getattr(args, "output_dir", None)
     if getattr(args, "dry_run", False):
-        return UNIFIED_RUN_DIR if output_dir is None else Path(output_dir)
+        return Path("/tmp/gate1x_formal_dry_run") if output_dir is None else Path(output_dir)
     if output_dir is None:
         return create_run_dir(PROJECT_ROOT, "unified")
     path = Path(output_dir)
@@ -627,6 +801,7 @@ def main() -> None:
         if output_dir is None:
             raise SystemExit(f"--operation {operation} requires --output-dir")
         output_path = Path(output_dir)
+        run_formal_preflight(PROJECT_ROOT)
 
         if operation == "prepare":
             if getattr(args, "only", None) or getattr(args, "info_sharing", None):
@@ -674,8 +849,19 @@ def main() -> None:
         raise SystemExit(
             "unified --smoke is disabled; run an individual dataset diagnostic runner instead"
         )
+    if not args.dry_run:
+        run_formal_preflight(PROJECT_ROOT)
     run_root = _resolve_run_root(args)
+    if args.dry_run and not args.only and args.info_sharing is None:
+        plan = execute_formal_dry_run(run_root, project_root=PROJECT_ROOT)
+        print(
+            "preflight_status=ready datasets_ready=6/6 "
+            f"cells={plan['cell_count']} unique_cells={plan['unique_cell_count']}"
+        )
+        print(f"run_plan={Path(run_root).resolve() / 'run_plan.json'}")
+        return
     try:
+        formal_inputs = resolve_unified_formal_input_identities(PROJECT_ROOT)
         tasks = build_tasks(
             only=args.only,
             smoke=bool(args.smoke),
@@ -685,7 +871,7 @@ def main() -> None:
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     if args.dry_run:
-        print_dry_run(tasks)
+        print_dry_run(tasks, formal_inputs)
         return
 
     code_identity = discover_code_identity(PROJECT_ROOT)
@@ -695,11 +881,12 @@ def main() -> None:
         )
     input_identity = discover_formal_input_identity(PROJECT_ROOT)
     run_plan = {
-        "run_plan_version": "formal_d1_d6_run_plan_v1",
+        "run_plan_version": "formal_d1_d6_run_plan_v2",
         "code_identity": code_identity.to_dict(),
         "schema_registry_version": RESULT_SCHEMA_REGISTRY_VERSION,
         "schema_registry_digest": result_schema_registry_digest(),
         "input_identity": input_identity,
+        "formal_inputs": list(formal_inputs),
         "methods": list(FORMAL_METHODS),
         "horizons": list(FORMAL_HORIZONS),
         "seeds": list(FORMAL_SEEDS),

@@ -15,23 +15,23 @@
     "brand_id",
     "item_id"
   ],
-  "source_pool_size": 73718,
+  "selection_authority": "shared_protocol",
+  "protocol_version": "d1_d6_protocol_v1",
+  "results_semantics": "json_top_k_diagnostic_not_training_authority",
+  "training_selection_authority": "shared_protocol_selector",
+  "json_results_used_for": [
+    "target_list",
+    "smoke_or_source_limit_candidate_pool",
+    "diagnostics"
+  ],
   "feature_cols": [
     "sales",
-    "promo",
-    "year",
-    "month",
-    "week",
-    "day"
+    "promo"
   ],
   "feature_info": {
     "selected_features": [
       "sales",
-      "promo",
-      "year",
-      "month",
-      "week",
-      "day"
+      "promo"
     ],
     "modeling_source_features": [
       "sales",
@@ -70,31 +70,342 @@
       "brand_id"
     ],
     "include_sales_in_knn": true,
-    "knn_feature_mode": "paper_available_features_no_ids"
+    "knn_feature_mode": "paper_available_features_no_ids",
+    "knn_feature_columns": [
+      "sales",
+      "promo"
+    ]
+  },
+  "source_pool_size": 16218,
+  "source_domain_policy_diagnostics": {
+    "knn_json_domain_filter": {
+      "column": "brand_id",
+      "value": 1
+    },
+    "source_domain_filter": {
+      "brand_id": 1
+    },
+    "source_domain_filter_applied": true,
+    "domain_filter_applied_to_source": true,
+    "domain_filter_scope": "source_pool",
+    "domain_filter_column": "brand_id",
+    "domain_filter_value": 1,
+    "target_domain_validation_passed": null,
+    "source_pool_policy": "",
+    "source_domain_filter_reason": "without_information_sharing_same_domain_protocol",
+    "source_pool_size_before_filter": 48654,
+    "source_pool_size_after_filter": 16218,
+    "source_pool_rows_before_filter": 48654,
+    "source_pool_rows_after_filter": 16218,
+    "excluded_source_row_count": 32436,
+    "source_pool_entities_before_filter": 4,
+    "source_pool_entities_after_filter": 2,
+    "excluded_source_entity_count": 2,
+    "source_domain_filter_error": ""
   },
   "results": {
     "1_10": [
       {
-        "source_entity": "1_41",
-        "source_brand_id": 1,
-        "source_item_id": 41,
-        "distance": 21.72556098240043,
-        "weight": 0.34152875792957155
+        "source_entity": "1_4",
+        "distance": 0.3122498999199199,
+        "weight": 0.34957615189589825,
+        "source_brand_id": "1",
+        "source_item_id": "4"
       },
       {
-        "source_entity": "1_25",
-        "source_brand_id": 1,
-        "source_item_id": 25,
-        "distance": 22.360679774997898,
-        "weight": 0.33182818824836396
+        "source_entity": "1_6",
+        "distance": 0.3356430395524388,
+        "weight": 0.32521192405205085,
+        "source_brand_id": "1",
+        "source_item_id": "6"
       },
       {
-        "source_entity": "1_7",
-        "source_brand_id": 1,
-        "source_item_id": 7,
-        "distance": 22.715633383201094,
-        "weight": 0.3266430538220645
+        "source_entity": "1_8",
+        "distance": 0.3356430395524388,
+        "weight": 0.32521192405205085,
+        "source_brand_id": "1",
+        "source_item_id": "8"
       }
     ]
-  }
+  },
+  "selection_metadata": {
+    "1_10": {
+      "selection_authority": "shared_protocol",
+      "selection_path": "shared_protocol",
+      "protocol_track": "strict_paper",
+      "protocol_version": "d1_d6_protocol_v1",
+      "weight_mode": "inverse_distance",
+      "distance_metric": "euclidean",
+      "group_cols": [
+        "brand_id",
+        "item_id"
+      ],
+      "target_signature_dim": 60,
+      "feature_cols": [
+        "sales",
+        "promo"
+      ],
+      "knn_feature_columns": [
+        "sales",
+        "promo"
+      ],
+      "historical_feature_columns": [
+        "sales",
+        "promo"
+      ],
+      "forecast_excluded_columns": [
+        "promo"
+      ],
+      "feature_scope": "historical_observed",
+      "max_allowed_date_relation": "date<=origin",
+      "requested_feature_cols": [
+        "sales",
+        "promo"
+      ],
+      "representation": "daily_sales_flattened_30d",
+      "knn_representation": "daily_sales_flattened_30d",
+      "scaling": "global_minmax_legal_observed_values",
+      "scaler_fit_scope": "target_and_candidate_legal_observed_values",
+      "knn_observed_start": "2018-06-01",
+      "knn_observed_end": "2018-06-30",
+      "origin": "2018-06-30",
+      "protocol_observed_start": "2018-06-01",
+      "protocol_observed_days": 30,
+      "observed_days": 30,
+      "boundary": "inclusive",
+      "target_observed_start": "2018-06-01",
+      "target_observed_end": "2018-06-30",
+      "source_observation_cutoff": "2018-06-30",
+      "target_test_excluded": true,
+      "source_future_excluded": true,
+      "source_alignment_mode": "exact_knn_observed_dates",
+      "candidate_pool_digest": "809e3d55c15c9ec6a026901efa8b5ae0bd1ba617114c7ea29eb2ce0a29eb84ae",
+      "candidate_pool_digest_input": {
+        "protocol_version": "d1_d6_protocol_v1",
+        "dataset_id": "D2",
+        "scenario": "without",
+        "target_key": [
+          "1",
+          "10"
+        ],
+        "group_cols": [
+          "brand_id",
+          "item_id"
+        ],
+        "candidate_keys": [
+          [
+            "1",
+            "1"
+          ],
+          [
+            "1",
+            "2"
+          ],
+          [
+            "1",
+            "3"
+          ],
+          [
+            "1",
+            "4"
+          ],
+          [
+            "1",
+            "5"
+          ],
+          [
+            "1",
+            "6"
+          ],
+          [
+            "1",
+            "7"
+          ],
+          [
+            "1",
+            "8"
+          ],
+          [
+            "1",
+            "9"
+          ]
+        ],
+        "observed_start": "2018-06-01",
+        "observed_end": "2018-06-30",
+        "feature_cols": [
+          "sales",
+          "promo"
+        ],
+        "calendarization_rule_version": "d2_source_calendarization_v1",
+        "source_authority_digest": "a6d5f4462b472d8833da05a313b349906adf7cedfa62a23d2b67e0f78c06f18a",
+        "consumer_frame_fingerprint": "cb2fb7f1d110f4dd4e70b4cbebccb5de9dbebacf36035b05854bf2b871605f09",
+        "source_frame_digest": "3582ed1730d83af05d11e2481eae04fdc0fac0fc62d721da88d3605256c12e8d",
+        "target_frame_digest": "2949980f589d8b2f74ba11119e48b8df54b6a34c0a43673aaff379f8a1f2919d"
+      },
+      "selection_result_digest": "3078df637d3c8c081f8e75cd4b8f8481de98cd4bf6999308cf3dc6a3650ce74d",
+      "selection_digest": "3078df637d3c8c081f8e75cd4b8f8481de98cd4bf6999308cf3dc6a3650ce74d",
+      "source_frame_min_date": "2018-06-01",
+      "source_frame_max_date": "2018-06-30",
+      "target_frame_min_date": "2018-06-01",
+      "target_frame_max_date": "2018-06-30",
+      "source_frame_digest": "3582ed1730d83af05d11e2481eae04fdc0fac0fc62d721da88d3605256c12e8d",
+      "target_frame_digest": "2949980f589d8b2f74ba11119e48b8df54b6a34c0a43673aaff379f8a1f2919d",
+      "source_pool_fingerprint": "e3184cc233f32da7a12ad1ff095dd153dd8a7359da2aa818cd2bc47e451cd372",
+      "consumer_fingerprint": "5606b1e8c4b48584bb67c81271818713c6758ebb7a040fe6330cf80bdfa6274f",
+      "selected_sources_runtime": [
+        {
+          "source_rank": 1,
+          "source_key": [
+            "1",
+            "4"
+          ],
+          "distance": 0.3122498999199199,
+          "weight": 0.34957615189589825,
+          "tie_group": 1,
+          "date_start": "2018-06-01",
+          "date_end": "2018-06-30"
+        },
+        {
+          "source_rank": 2,
+          "source_key": [
+            "1",
+            "6"
+          ],
+          "distance": 0.3356430395524388,
+          "weight": 0.32521192405205085,
+          "tie_group": 2,
+          "date_start": "2018-06-01",
+          "date_end": "2018-06-30"
+        },
+        {
+          "source_rank": 3,
+          "source_key": [
+            "1",
+            "8"
+          ],
+          "distance": 0.3356430395524388,
+          "weight": 0.32521192405205085,
+          "tie_group": 2,
+          "date_start": "2018-06-01",
+          "date_end": "2018-06-30"
+        }
+      ],
+      "source_skip_diagnostics": [],
+      "candidate_source_count": 9,
+      "valid_source_count": 9,
+      "eligible_candidate_keys": [
+        [
+          "1",
+          "1"
+        ],
+        [
+          "1",
+          "2"
+        ],
+        [
+          "1",
+          "3"
+        ],
+        [
+          "1",
+          "4"
+        ],
+        [
+          "1",
+          "5"
+        ],
+        [
+          "1",
+          "6"
+        ],
+        [
+          "1",
+          "7"
+        ],
+        [
+          "1",
+          "8"
+        ],
+        [
+          "1",
+          "9"
+        ]
+      ],
+      "valid_30d_candidate_keys": [
+        [
+          "1",
+          "1"
+        ],
+        [
+          "1",
+          "2"
+        ],
+        [
+          "1",
+          "3"
+        ],
+        [
+          "1",
+          "4"
+        ],
+        [
+          "1",
+          "5"
+        ],
+        [
+          "1",
+          "6"
+        ],
+        [
+          "1",
+          "7"
+        ],
+        [
+          "1",
+          "8"
+        ],
+        [
+          "1",
+          "9"
+        ]
+      ],
+      "eligible_candidate_count": 9,
+      "valid_30d_candidate_count": 9,
+      "selected_count": 3,
+      "skipped_source_count": 0,
+      "requested_k": 3,
+      "effective_k": 3,
+      "scaler_min": 0.0,
+      "scaler_max": 80.0,
+      "cnn_provenance_validated": true,
+      "cnn_provenance_source_keys": [
+        [
+          "1",
+          "4"
+        ],
+        [
+          "1",
+          "6"
+        ],
+        [
+          "1",
+          "8"
+        ]
+      ],
+      "cnn_provenance_sample_counts": [
+        20,
+        20,
+        20
+      ],
+      "d2_source_calendarization_rule_version": "d2_source_calendarization_v1",
+      "d2_source_authority_digest": "a6d5f4462b472d8833da05a313b349906adf7cedfa62a23d2b67e0f78c06f18a",
+      "d2_consumer_frame_fingerprint": "cb2fb7f1d110f4dd4e70b4cbebccb5de9dbebacf36035b05854bf2b871605f09",
+      "d2_sealed_identity": "0a0a7cbaa3f37ec64447daa06087ec75f7bbd57b86da0789a85caa03b258576a"
+    }
+  },
+  "knn_frame_authority": "configured_observed_frame",
+  "knn_feature_columns": [
+    "sales",
+    "promo"
+  ]
 }

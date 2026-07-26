@@ -21,6 +21,14 @@ FORMAL_METHODS = (
 FORMAL_PROTOCOL_TRACK = "strict_paper"
 STRICT_PAPER_TRACK = FORMAL_PROTOCOL_TRACK
 EXTENDED_TRACK = "extended"
+D1_D2_KNN_ORIGINS = {
+    "D1": date(2017, 6, 30),
+    "D2": date(2018, 6, 30),
+}
+STRICT_KNN_OBSERVED_DAYS = 30
+D1_KNN_FEATURES = ("sales",)
+D2_KNN_FEATURES = ("sales", "promo")
+D5_KNN_FEATURES = ("sales", "onpromotion", "oil_price")
 
 SourceKey = Tuple[str, ...]
 
@@ -125,6 +133,26 @@ class ObservationWindow:
         end = start + timedelta(days=29)
         return cls(start, end, end)
 
+    @classmethod
+    def from_origin(
+        cls,
+        origin: object,
+        observed_days: int = STRICT_KNN_OBSERVED_DAYS,
+    ) -> "ObservationWindow":
+        if int(observed_days) <= 0:
+            raise ProtocolViolation("observed_days must be positive")
+        end = _as_date(origin)
+        start = end - timedelta(days=int(observed_days) - 1)
+        return cls(start, end, end)
+
+    @property
+    def origin(self) -> date:
+        return self.knn_observed_end
+
+    @property
+    def observed_days(self) -> int:
+        return (self.knn_observed_end - self.knn_observed_start).days + 1
+
     def is_test_date(self, value: object) -> bool:
         return _as_date(value) > self.knn_observed_end
 
@@ -172,12 +200,21 @@ class ExperimentProtocol:
     horizons: Tuple[int, ...] = FORMAL_HORIZONS
     seeds: Tuple[int, ...] = FORMAL_SEEDS
     knn_representation: str = "daily_sales_flattened_30d"
+    knn_feature_columns: Tuple[str, ...] = D1_KNN_FEATURES
     primary_metric_space: str = "original_sales"
     tie_tolerance: float = 1e-12
     weight_mode: str = "inverse_distance"
     weight_epsilon: float = 1e-8
 
     def __post_init__(self) -> None:
+        feature_columns = tuple(str(column).strip() for column in self.knn_feature_columns)
+        if not feature_columns or any(not column for column in feature_columns):
+            raise ProtocolViolation(f"{self.dataset_id} requires non-empty KNN feature columns")
+        if len(set(feature_columns)) != len(feature_columns):
+            raise ProtocolViolation(f"{self.dataset_id} KNN feature columns must be unique")
+        if "sales" not in feature_columns:
+            raise ProtocolViolation(f"{self.dataset_id} KNN features must include sales")
+        object.__setattr__(self, "knn_feature_columns", feature_columns)
         configured = self.formal_target_keys
         if not configured and self.source_pool_rule.target_key is not None:
             configured = (self.source_pool_rule.target_key,)
@@ -203,7 +240,19 @@ class ExperimentProtocol:
             )
         object.__setattr__(self, "formal_target_keys", normalized)
 
-    def observation_window(self, observed_start: object) -> ObservationWindow:
+    def observation_window(self, observed_start: object | None = None) -> ObservationWindow:
+        if self.dataset_id in D1_D2_KNN_ORIGINS:
+            window = ObservationWindow.from_origin(D1_D2_KNN_ORIGINS[self.dataset_id])
+            if observed_start is not None and _as_date(observed_start) != window.knn_observed_start:
+                raise ProtocolViolation(
+                    f"authoritative {self.dataset_id} KNN window starts at "
+                    f"{window.knn_observed_start.isoformat()}, got {observed_start!r}"
+                )
+            return window
+        if observed_start is None:
+            raise ProtocolViolation(
+                f"{self.dataset_id} observation window requires observed_start"
+            )
         return ObservationWindow.from_start(observed_start)
 
 
@@ -213,18 +262,21 @@ _PROTOCOLS = {
         STRICT_PAPER_TRACK,
         SourcePoolRule(("store_id", "item_id"), ("1", "10")),
         target_display_label="Store1/Item10",
+        knn_feature_columns=D1_KNN_FEATURES,
     ),
     "D2": ExperimentProtocol(
         "D2",
         STRICT_PAPER_TRACK,
         SourcePoolRule(("brand_id", "item_id"), ("1", "10")),
         target_display_label="Brand1/Item10",
+        knn_feature_columns=D2_KNN_FEATURES,
     ),
     "D3": ExperimentProtocol(
         "D3",
         STRICT_PAPER_TRACK,
         SourcePoolRule(("store_id",), ("10",)),
         target_display_label="Store10",
+        knn_feature_columns=("sales",),
     ),
     "D4": ExperimentProtocol(
         "D4",
@@ -243,6 +295,7 @@ _PROTOCOLS = {
             ("166", "313"),
             ("166", "311"),
         ),
+        knn_feature_columns=("sales",),
     ),
     "D5": ExperimentProtocol(
         "D5",
@@ -255,6 +308,7 @@ _PROTOCOLS = {
             ("48", "1349808"),
             ("48", "320682"),
         ),
+        knn_feature_columns=D5_KNN_FEATURES,
     ),
     "D6": ExperimentProtocol(
         "D6",
@@ -267,6 +321,7 @@ _PROTOCOLS = {
             ("CA_1", "FOODS_3_377"),
             ("CA_1", "FOODS_3_668"),
         ),
+        knn_feature_columns=("sales",),
     ),
 }
 

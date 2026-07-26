@@ -1,0 +1,1301 @@
+{
+  "consumer_fingerprint": "d18972fd93c6e6dc6b5158c51f9b071b0c8416a4da2f127eb8a8c29fea103617",
+  "consumer_fingerprint_input": {
+    "code_inventory_digest": "5d5f2d391c081f4bb91e8509810b7577da4338c5b0f5c89c3ffef663ecac77e3",
+    "dataset_id": "D4",
+    "readiness_proof_digest": "0a2bf31cd4fa61e63001ddb1b74cc211b1ad1fb6aeec1b367c70cb0f31163a90",
+    "source_schema_digest": "b0f606e217d398f793d706e4f7981e10bca1a4ee3bb104722c4ec9dd5128f33a",
+    "source_sha256": "17a1fa5bd1dddfd46bda2a6922ff7821aee2a7e79deca58a94ff7bf20821f7ef",
+    "target_schema_digest": "943432f68afa3ab8dd3286950566623ce8a6710bbea5ced0cc58cc460ad8f59a",
+    "target_sha256": "f0b83798ea265c6b79f09487903404c7c75acfcac2657f53e989ef59588e5946"
+  },
+  "dataset_id": "D4",
+  "dataset_manifest_identity": {
+    "path": "dataset4/manifest.json",
+    "sha256": "7696a02a8b4aa747f840faa3fcb0bb9e3fe8062a801248247d74b308674cc814"
+  },
+  "dataset_root": "dataset4",
+  "dataset_specific": {
+    "entity_key": [
+      "store_id",
+      "product_id"
+    ],
+    "exact_key_proof_digest": "2c2ba95c1906ed9ea0a11b22f15a005fb54de35a464292bc6cfd4a11907df0c6",
+    "exclusion_scope": "current_exact_target_tuple_only",
+    "scenario_files": {
+      "with": {
+        "manifest_identity": "130bb862c21f5048be66d75e4bdb42fd33b63834723a03595e892c934fec5850",
+        "path": "configs/solidified/knn/Dataset4/knn_with_info_sharing.json",
+        "sha256": "5f9b1b32e4930ff2307c2cd76472f802eaf79a85f27b6259472956772559c5e6",
+        "target_consumers": {
+          "166_258": {
+            "candidate_pool_digest": "689bbc5afe2765569f3281a7aea0f618d431fca4ac9c46da8c47bdeb6b5b2324",
+            "consumer_fingerprint": "223ec33ac089684969cea0744c993c053fc57eec8b8886a49eb04463fea12229",
+            "selection_result_digest": "59eb0cb06e387517262175d3e0c4c32d559fbe151036c306854b269dc41ecbb9",
+            "source_pool_fingerprint": "371659b9ecc16e74c37064a748b0816bcfa520b3dde5d3259636c456c2535f13",
+            "validation_proof_digest": "f47294d2406c931bac03b1d7dff4ab830427afce2a8903d396233adf0125cf9e"
+          },
+          "166_311": {
+            "candidate_pool_digest": "ac33eea274be62a0710de5cde4fe4ae369885886df9343b53a6d35b3dc5fe1f2",
+            "consumer_fingerprint": "ec56edfed70b88fa1b0e7cad7456c574ece8c089ae3db189336fc5d497ebbd2a",
+            "selection_result_digest": "6953e10cbd0cf26f4f2561c02711c1f582ae9a2f1c57d4fc26b52950155eb00c",
+            "source_pool_fingerprint": "8b16df1689f47a58ca469dc104e9fd941354c2d62bcc2a10c9c50c18773996e9",
+            "validation_proof_digest": "ccdc2eb773ba4a39692e4dea0d619a5a423155d6062390f3216de055374088be"
+          },
+          "166_313": {
+            "candidate_pool_digest": "055246939f80870e0201e926411218c6e2ea494a35dc97d465aacb8e79601b81",
+            "consumer_fingerprint": "5df4bdb9961d7a66e3e5e0fd9f0efbe8ef7da5ad244381bc0ca2ffec03d01487",
+            "selection_result_digest": "ac73ba61a26b16055fbeefe0e55c3c6cbf7e44ff5179df0c6a6bd3ecae4081c0",
+            "source_pool_fingerprint": "9062a24c414dd89e15e363cf7e0426027c489c4ff04b365a5cc1b25e9efd0498",
+            "validation_proof_digest": "b01c31ef3c4471e7f0a7b72d8d7a6ccd285c4be84ed5d87ce489ddee2c9a2116"
+          },
+          "166_432": {
+            "candidate_pool_digest": "1cdc6e0eba37f2da8c25abe509021483ad04888751bed1030cf77de23d96ec7d",
+            "consumer_fingerprint": "832a72697d10aa3ea2213e85fd2dc443224da4d34f803d09fc9addb2e11408e0",
+            "selection_result_digest": "ce41296fcbde2f65f8e80b09c55e4576fcb4998e5d8481518910addf6504fb60",
+            "source_pool_fingerprint": "2ef125e66b97f588a2b082e205f47bec2196ea4c7656d9cf0385d0bf9cca4259",
+            "validation_proof_digest": "e3aeacec3ec27a237b0be58c7cbd9e7ac356b0506dace15418b52a8ab5e8e020"
+          },
+          "166_433": {
+            "candidate_pool_digest": "88028bf54a3aa6ef2791d005a62cf4f20cbdf92834138be13e23e027b8a45fb7",
+            "consumer_fingerprint": "f854ef4c541bc1e64db2cd316a3faca9e2fd71662bd79ce829a42a536c6472de",
+            "selection_result_digest": "4a049298c815e25ee4736c9e460fdbd244c7bc423d558e299afd53a8af8e2419",
+            "source_pool_fingerprint": "e6376adf4c439a5da330713f1d65711e88d0358445d4cf76ee5fd81a83eb33cb",
+            "validation_proof_digest": "66c8985f9032ed89d1f90351ac576966be34445897a029ea41c3dbc62158f3dd"
+          }
+        }
+      },
+      "without": {
+        "manifest_identity": "9fbdbc04cc50f6c9cd6dc1af0c4254dc607fb9ec1f861ca1ab3d8f15d8cf5efd",
+        "path": "configs/solidified/knn/Dataset4/knn_without_info_sharing.json",
+        "sha256": "859dbc251c3b3ae253290fd15c3ee00142e9c713eb73fe5f597c2a4db0ed8fbe",
+        "target_consumers": {
+          "166_258": {
+            "candidate_pool_digest": "9aadcff7bc1ff2a934d54f1d742ec1e37b5a9734ec8db9c2c9ce32d2d0b18595",
+            "consumer_fingerprint": "fd699a583adacda0376e59861c83b767b2d0bf25f6f6d70ffae6a17ba2ea42b7",
+            "selection_result_digest": "1fb827abd06856e3cb58e1bcf188c26ee8c675e85a3109a2606717c7996c7d3e",
+            "source_pool_fingerprint": "0a81b194f3129a7f7ecc6271729225aadef3e15ad737e7b369d26106a15e0c9b",
+            "validation_proof_digest": "41d5dc201f19b2565593af692d0333514a38e99c1912168cb1a90b8a18732841"
+          },
+          "166_311": {
+            "candidate_pool_digest": "676a714367c10b6a184304709c219e9ad306c3eed4525cd3cd6b2c3e2af84f82",
+            "consumer_fingerprint": "6d2a8f79a5e865365e6f849f3004514a80d19f859b4cfef102a3118ad1040724",
+            "selection_result_digest": "5b2fc126b51d77e0640a2c39c7f1ef7b9acb47e04ad8a565a6a3eb850a7eab0f",
+            "source_pool_fingerprint": "1f64ed7a6818e324839d3fc102e4e38a8ddc269c1100cc5c0a417ffa87889f05",
+            "validation_proof_digest": "46c8bfd72638be902dfd7fe98c97e18741802401632212a580cc8cc54dfa6dc3"
+          },
+          "166_313": {
+            "candidate_pool_digest": "64ada900d78805b6f4760dd38f1d8350a531007908caf55aa646c1c84bd4ef6b",
+            "consumer_fingerprint": "375db5222dfff201881148b8912f968b420365568348cee363de81352bd9b423",
+            "selection_result_digest": "048ea580ed1c7830147927388fdd146d291916983b25661b899cf5aa41c7eee3",
+            "source_pool_fingerprint": "21d1691ab131e05c1b629797c6693f85f4d4cf0c6a64a415bbc093967d423402",
+            "validation_proof_digest": "844d74b09e408cc11a7d518853f1017e0dbe8ef3c3598665e57dc78feaab4559"
+          },
+          "166_432": {
+            "candidate_pool_digest": "7c25840c1aac96a4ae4ef88ec5f97d1f0914f2b6901f4aad7a074c2e8e61fa68",
+            "consumer_fingerprint": "7dd81ea267ad967d4afcd5c87e87e6dc2a88424e7052e1dffad34cff1e8aecb6",
+            "selection_result_digest": "469c68c959061401947de4eb7c2cb0e312d11e49e177bd8f5ecc33132a1be55d",
+            "source_pool_fingerprint": "ddb12799e53cd89491412c5538b5a6a381ae703aa9443ccef4959a39d69e17fb",
+            "validation_proof_digest": "4d7f25643cbc2ae01ac775c7ca0d43014f06cae2cf085864abc2d47dc8bfcb41"
+          },
+          "166_433": {
+            "candidate_pool_digest": "ccb09033537d93df51066f13ef091903e01f435cb1a5ab671b989a4c83b3c948",
+            "consumer_fingerprint": "18d121ec636d50f273cd6df5abbcfe27a94d852d52162940f690e6e3194e6db9",
+            "selection_result_digest": "4fd68d9bce86fd52e89f636ee0342bb46705ad6077be22921bb88e2b85b944e8",
+            "source_pool_fingerprint": "cb77bde36dc78d3da5314184b9d0e92595c8c41760bb06abf10ea2d19f596bc4",
+            "validation_proof_digest": "cf2cee40781d301bc91b839570da221b8a8c11c23afb89e72dc897fde832dce2"
+          }
+        }
+      }
+    },
+    "source_history_calendar": "Gregorian daily",
+    "source_history_completeness_policy": "exact_expected_date_set",
+    "source_history_days": 180,
+    "source_history_end": "2025-01-14",
+    "source_history_expected_date_count": 180,
+    "source_history_inclusive_end": true,
+    "source_history_start": "2024-07-19",
+    "target_scenario_matrix": {
+      "166/258": {
+        "with": {
+          "candidate_pool_digest": "689bbc5afe2765569f3281a7aea0f618d431fca4ac9c46da8c47bdeb6b5b2324",
+          "consumer_fingerprint": "223ec33ac089684969cea0744c993c053fc57eec8b8886a49eb04463fea12229",
+          "exact_key_proof": {
+            "candidate_digest_verified": true,
+            "consumer_fingerprint_verified": true,
+            "cross_store_other_product_retained_count": 6217,
+            "cross_store_same_product_available_count": 3,
+            "cross_store_same_product_retained_count": 3,
+            "entity_key_fields": [
+              "store_id",
+              "product_id"
+            ],
+            "exact_target_tuple": [
+              "166",
+              "258"
+            ],
+            "exact_target_tuple_excluded": true,
+            "same_store_other_product_retained_count": 20
+          },
+          "manifest_identity_digest": "130bb862c21f5048be66d75e4bdb42fd33b63834723a03595e892c934fec5850",
+          "selection_result_digest": "59eb0cb06e387517262175d3e0c4c32d559fbe151036c306854b269dc41ecbb9",
+          "source_pool_fingerprint": "371659b9ecc16e74c37064a748b0816bcfa520b3dde5d3259636c456c2535f13",
+          "validation_proof_digest": "f47294d2406c931bac03b1d7dff4ab830427afce2a8903d396233adf0125cf9e"
+        },
+        "without": {
+          "candidate_pool_digest": "9aadcff7bc1ff2a934d54f1d742ec1e37b5a9734ec8db9c2c9ce32d2d0b18595",
+          "consumer_fingerprint": "fd699a583adacda0376e59861c83b767b2d0bf25f6f6d70ffae6a17ba2ea42b7",
+          "exact_key_proof": {
+            "candidate_digest_verified": true,
+            "consumer_fingerprint_verified": true,
+            "cross_store_other_product_retained_count": 0,
+            "cross_store_same_product_available_count": 0,
+            "cross_store_same_product_retained_count": 0,
+            "entity_key_fields": [
+              "store_id",
+              "product_id"
+            ],
+            "exact_target_tuple": [
+              "166",
+              "258"
+            ],
+            "exact_target_tuple_excluded": true,
+            "same_store_other_product_retained_count": 20
+          },
+          "manifest_identity_digest": "9fbdbc04cc50f6c9cd6dc1af0c4254dc607fb9ec1f861ca1ab3d8f15d8cf5efd",
+          "selection_result_digest": "1fb827abd06856e3cb58e1bcf188c26ee8c675e85a3109a2606717c7996c7d3e",
+          "source_pool_fingerprint": "0a81b194f3129a7f7ecc6271729225aadef3e15ad737e7b369d26106a15e0c9b",
+          "validation_proof_digest": "41d5dc201f19b2565593af692d0333514a38e99c1912168cb1a90b8a18732841"
+        }
+      },
+      "166/311": {
+        "with": {
+          "candidate_pool_digest": "ac33eea274be62a0710de5cde4fe4ae369885886df9343b53a6d35b3dc5fe1f2",
+          "consumer_fingerprint": "ec56edfed70b88fa1b0e7cad7456c574ece8c089ae3db189336fc5d497ebbd2a",
+          "exact_key_proof": {
+            "candidate_digest_verified": true,
+            "consumer_fingerprint_verified": true,
+            "cross_store_other_product_retained_count": 6219,
+            "cross_store_same_product_available_count": 1,
+            "cross_store_same_product_retained_count": 1,
+            "entity_key_fields": [
+              "store_id",
+              "product_id"
+            ],
+            "exact_target_tuple": [
+              "166",
+              "311"
+            ],
+            "exact_target_tuple_excluded": true,
+            "same_store_other_product_retained_count": 20
+          },
+          "manifest_identity_digest": "130bb862c21f5048be66d75e4bdb42fd33b63834723a03595e892c934fec5850",
+          "selection_result_digest": "6953e10cbd0cf26f4f2561c02711c1f582ae9a2f1c57d4fc26b52950155eb00c",
+          "source_pool_fingerprint": "8b16df1689f47a58ca469dc104e9fd941354c2d62bcc2a10c9c50c18773996e9",
+          "validation_proof_digest": "ccdc2eb773ba4a39692e4dea0d619a5a423155d6062390f3216de055374088be"
+        },
+        "without": {
+          "candidate_pool_digest": "676a714367c10b6a184304709c219e9ad306c3eed4525cd3cd6b2c3e2af84f82",
+          "consumer_fingerprint": "6d2a8f79a5e865365e6f849f3004514a80d19f859b4cfef102a3118ad1040724",
+          "exact_key_proof": {
+            "candidate_digest_verified": true,
+            "consumer_fingerprint_verified": true,
+            "cross_store_other_product_retained_count": 0,
+            "cross_store_same_product_available_count": 0,
+            "cross_store_same_product_retained_count": 0,
+            "entity_key_fields": [
+              "store_id",
+              "product_id"
+            ],
+            "exact_target_tuple": [
+              "166",
+              "311"
+            ],
+            "exact_target_tuple_excluded": true,
+            "same_store_other_product_retained_count": 20
+          },
+          "manifest_identity_digest": "9fbdbc04cc50f6c9cd6dc1af0c4254dc607fb9ec1f861ca1ab3d8f15d8cf5efd",
+          "selection_result_digest": "5b2fc126b51d77e0640a2c39c7f1ef7b9acb47e04ad8a565a6a3eb850a7eab0f",
+          "source_pool_fingerprint": "1f64ed7a6818e324839d3fc102e4e38a8ddc269c1100cc5c0a417ffa87889f05",
+          "validation_proof_digest": "46c8bfd72638be902dfd7fe98c97e18741802401632212a580cc8cc54dfa6dc3"
+        }
+      },
+      "166/313": {
+        "with": {
+          "candidate_pool_digest": "055246939f80870e0201e926411218c6e2ea494a35dc97d465aacb8e79601b81",
+          "consumer_fingerprint": "5df4bdb9961d7a66e3e5e0fd9f0efbe8ef7da5ad244381bc0ca2ffec03d01487",
+          "exact_key_proof": {
+            "candidate_digest_verified": true,
+            "consumer_fingerprint_verified": true,
+            "cross_store_other_product_retained_count": 6194,
+            "cross_store_same_product_available_count": 26,
+            "cross_store_same_product_retained_count": 26,
+            "entity_key_fields": [
+              "store_id",
+              "product_id"
+            ],
+            "exact_target_tuple": [
+              "166",
+              "313"
+            ],
+            "exact_target_tuple_excluded": true,
+            "same_store_other_product_retained_count": 20
+          },
+          "manifest_identity_digest": "130bb862c21f5048be66d75e4bdb42fd33b63834723a03595e892c934fec5850",
+          "selection_result_digest": "ac73ba61a26b16055fbeefe0e55c3c6cbf7e44ff5179df0c6a6bd3ecae4081c0",
+          "source_pool_fingerprint": "9062a24c414dd89e15e363cf7e0426027c489c4ff04b365a5cc1b25e9efd0498",
+          "validation_proof_digest": "b01c31ef3c4471e7f0a7b72d8d7a6ccd285c4be84ed5d87ce489ddee2c9a2116"
+        },
+        "without": {
+          "candidate_pool_digest": "64ada900d78805b6f4760dd38f1d8350a531007908caf55aa646c1c84bd4ef6b",
+          "consumer_fingerprint": "375db5222dfff201881148b8912f968b420365568348cee363de81352bd9b423",
+          "exact_key_proof": {
+            "candidate_digest_verified": true,
+            "consumer_fingerprint_verified": true,
+            "cross_store_other_product_retained_count": 0,
+            "cross_store_same_product_available_count": 0,
+            "cross_store_same_product_retained_count": 0,
+            "entity_key_fields": [
+              "store_id",
+              "product_id"
+            ],
+            "exact_target_tuple": [
+              "166",
+              "313"
+            ],
+            "exact_target_tuple_excluded": true,
+            "same_store_other_product_retained_count": 20
+          },
+          "manifest_identity_digest": "9fbdbc04cc50f6c9cd6dc1af0c4254dc607fb9ec1f861ca1ab3d8f15d8cf5efd",
+          "selection_result_digest": "048ea580ed1c7830147927388fdd146d291916983b25661b899cf5aa41c7eee3",
+          "source_pool_fingerprint": "21d1691ab131e05c1b629797c6693f85f4d4cf0c6a64a415bbc093967d423402",
+          "validation_proof_digest": "844d74b09e408cc11a7d518853f1017e0dbe8ef3c3598665e57dc78feaab4559"
+        }
+      },
+      "166/432": {
+        "with": {
+          "candidate_pool_digest": "1cdc6e0eba37f2da8c25abe509021483ad04888751bed1030cf77de23d96ec7d",
+          "consumer_fingerprint": "832a72697d10aa3ea2213e85fd2dc443224da4d34f803d09fc9addb2e11408e0",
+          "exact_key_proof": {
+            "candidate_digest_verified": true,
+            "consumer_fingerprint_verified": true,
+            "cross_store_other_product_retained_count": 6079,
+            "cross_store_same_product_available_count": 141,
+            "cross_store_same_product_retained_count": 141,
+            "entity_key_fields": [
+              "store_id",
+              "product_id"
+            ],
+            "exact_target_tuple": [
+              "166",
+              "432"
+            ],
+            "exact_target_tuple_excluded": true,
+            "same_store_other_product_retained_count": 20
+          },
+          "manifest_identity_digest": "130bb862c21f5048be66d75e4bdb42fd33b63834723a03595e892c934fec5850",
+          "selection_result_digest": "ce41296fcbde2f65f8e80b09c55e4576fcb4998e5d8481518910addf6504fb60",
+          "source_pool_fingerprint": "2ef125e66b97f588a2b082e205f47bec2196ea4c7656d9cf0385d0bf9cca4259",
+          "validation_proof_digest": "e3aeacec3ec27a237b0be58c7cbd9e7ac356b0506dace15418b52a8ab5e8e020"
+        },
+        "without": {
+          "candidate_pool_digest": "7c25840c1aac96a4ae4ef88ec5f97d1f0914f2b6901f4aad7a074c2e8e61fa68",
+          "consumer_fingerprint": "7dd81ea267ad967d4afcd5c87e87e6dc2a88424e7052e1dffad34cff1e8aecb6",
+          "exact_key_proof": {
+            "candidate_digest_verified": true,
+            "consumer_fingerprint_verified": true,
+            "cross_store_other_product_retained_count": 0,
+            "cross_store_same_product_available_count": 0,
+            "cross_store_same_product_retained_count": 0,
+            "entity_key_fields": [
+              "store_id",
+              "product_id"
+            ],
+            "exact_target_tuple": [
+              "166",
+              "432"
+            ],
+            "exact_target_tuple_excluded": true,
+            "same_store_other_product_retained_count": 20
+          },
+          "manifest_identity_digest": "9fbdbc04cc50f6c9cd6dc1af0c4254dc607fb9ec1f861ca1ab3d8f15d8cf5efd",
+          "selection_result_digest": "469c68c959061401947de4eb7c2cb0e312d11e49e177bd8f5ecc33132a1be55d",
+          "source_pool_fingerprint": "ddb12799e53cd89491412c5538b5a6a381ae703aa9443ccef4959a39d69e17fb",
+          "validation_proof_digest": "4d7f25643cbc2ae01ac775c7ca0d43014f06cae2cf085864abc2d47dc8bfcb41"
+        }
+      },
+      "166/433": {
+        "with": {
+          "candidate_pool_digest": "88028bf54a3aa6ef2791d005a62cf4f20cbdf92834138be13e23e027b8a45fb7",
+          "consumer_fingerprint": "f854ef4c541bc1e64db2cd316a3faca9e2fd71662bd79ce829a42a536c6472de",
+          "exact_key_proof": {
+            "candidate_digest_verified": true,
+            "consumer_fingerprint_verified": true,
+            "cross_store_other_product_retained_count": 6143,
+            "cross_store_same_product_available_count": 77,
+            "cross_store_same_product_retained_count": 77,
+            "entity_key_fields": [
+              "store_id",
+              "product_id"
+            ],
+            "exact_target_tuple": [
+              "166",
+              "433"
+            ],
+            "exact_target_tuple_excluded": true,
+            "same_store_other_product_retained_count": 20
+          },
+          "manifest_identity_digest": "130bb862c21f5048be66d75e4bdb42fd33b63834723a03595e892c934fec5850",
+          "selection_result_digest": "4a049298c815e25ee4736c9e460fdbd244c7bc423d558e299afd53a8af8e2419",
+          "source_pool_fingerprint": "e6376adf4c439a5da330713f1d65711e88d0358445d4cf76ee5fd81a83eb33cb",
+          "validation_proof_digest": "66c8985f9032ed89d1f90351ac576966be34445897a029ea41c3dbc62158f3dd"
+        },
+        "without": {
+          "candidate_pool_digest": "ccb09033537d93df51066f13ef091903e01f435cb1a5ab671b989a4c83b3c948",
+          "consumer_fingerprint": "18d121ec636d50f273cd6df5abbcfe27a94d852d52162940f690e6e3194e6db9",
+          "exact_key_proof": {
+            "candidate_digest_verified": true,
+            "consumer_fingerprint_verified": true,
+            "cross_store_other_product_retained_count": 0,
+            "cross_store_same_product_available_count": 0,
+            "cross_store_same_product_retained_count": 0,
+            "entity_key_fields": [
+              "store_id",
+              "product_id"
+            ],
+            "exact_target_tuple": [
+              "166",
+              "433"
+            ],
+            "exact_target_tuple_excluded": true,
+            "same_store_other_product_retained_count": 20
+          },
+          "manifest_identity_digest": "9fbdbc04cc50f6c9cd6dc1af0c4254dc607fb9ec1f861ca1ab3d8f15d8cf5efd",
+          "selection_result_digest": "4fd68d9bce86fd52e89f636ee0342bb46705ad6077be22921bb88e2b85b944e8",
+          "source_pool_fingerprint": "cb77bde36dc78d3da5314184b9d0e92595c8c41760bb06abf10ea2d19f596bc4",
+          "validation_proof_digest": "cf2cee40781d301bc91b839570da221b8a8c11c23afb89e72dc897fde832dce2"
+        }
+      }
+    }
+  },
+  "date_key": "date",
+  "date_range": {
+    "source": [
+      "2024-07-19",
+      "2025-01-14"
+    ],
+    "target": [
+      "2024-12-16",
+      "2025-07-13"
+    ]
+  },
+  "entity_count": {
+    "source": 6240,
+    "target": 5
+  },
+  "entity_key": [
+    "store_id",
+    "product_id"
+  ],
+  "formal_identity": {
+    "combined_identity_sha256": "sha256:3d11fef7b4edeb9fc804cc61455095b59e2c995afda11ba7d2c2a8afed7000e6",
+    "contract_sha256": "sha256:85713b9d13cae3c017c4856b6a0f42a49d6074aebbb729171d60b95baa42eb74",
+    "decision_book_sha256": "sha256:4aaebe5f07d3dc0e61ada72dbe0625c82615ba74577e91b72b46b07a709c689d",
+    "freeze_commit": "9eb50948241dad2f01d6854ca3cb4bf4e9c363d7",
+    "matrix_sha256": "sha256:80545e2739dacdedfd8e60857bd8828dbf2102db37fc310ae4fc994b194e1da3",
+    "scope_sha256": "sha256:98107929ea310e7fc304d2631803092e68c01e51fa992da96a3c3118b628eeb4"
+  },
+  "key_date_uniqueness": {
+    "consumer_duplicate_exact_keys": 0,
+    "status": "passed"
+  },
+  "proof_identity_sha256": "e00111ac24e37f3b4e7b82168f524c2fa80b3f4737a0323fbc003a50e9ca673a",
+  "readiness_proof_digest": "0a2bf31cd4fa61e63001ddb1b74cc211b1ad1fb6aeec1b367c70cb0f31163a90",
+  "readiness_result": {
+    "failure_code": null,
+    "status": "passed"
+  },
+  "row_count": {
+    "source": 7935702,
+    "target": 3847
+  },
+  "schema_version": "d1_d6_formal_proof_v1",
+  "source": {
+    "dtypes": {
+      "activity_flag": "int32",
+      "avg_humidity": "double",
+      "avg_temperature": "double",
+      "avg_wind_level": "double",
+      "city_id": "int64",
+      "date": "timestamp[ns]",
+      "day": "int64",
+      "discount": "double",
+      "entity_id": "string",
+      "first_category_id": "int64",
+      "holiday_flag": "int32",
+      "hours_sale_max_leakage_risk": "double",
+      "hours_sale_nonzero_hours_leakage_risk": "int64",
+      "hours_sale_sum_leakage_risk": "double",
+      "hours_stock_max_leakage_risk": "int64",
+      "hours_stock_nonzero_hours_leakage_risk": "int64",
+      "hours_stock_sum_leakage_risk": "int64",
+      "item_id": "string",
+      "management_group_id": "int64",
+      "month": "int64",
+      "precpt": "double",
+      "product_id": "int64",
+      "sales": "double",
+      "second_category_id": "int64",
+      "stock_hour6_22_cnt": "int32",
+      "store_id": "int64",
+      "third_category_id": "int64",
+      "week": "int64",
+      "year": "int64"
+    },
+    "mtime_ns": 1782806760235478095,
+    "nullable": {
+      "activity_flag": true,
+      "avg_humidity": true,
+      "avg_temperature": true,
+      "avg_wind_level": true,
+      "city_id": true,
+      "date": true,
+      "day": true,
+      "discount": true,
+      "entity_id": true,
+      "first_category_id": true,
+      "holiday_flag": true,
+      "hours_sale_max_leakage_risk": true,
+      "hours_sale_nonzero_hours_leakage_risk": true,
+      "hours_sale_sum_leakage_risk": true,
+      "hours_stock_max_leakage_risk": true,
+      "hours_stock_nonzero_hours_leakage_risk": true,
+      "hours_stock_sum_leakage_risk": true,
+      "item_id": true,
+      "management_group_id": true,
+      "month": true,
+      "precpt": true,
+      "product_id": true,
+      "sales": true,
+      "second_category_id": true,
+      "stock_hour6_22_cnt": true,
+      "store_id": true,
+      "third_category_id": true,
+      "week": true,
+      "year": true
+    },
+    "ordered_columns": [
+      "city_id",
+      "store_id",
+      "management_group_id",
+      "first_category_id",
+      "second_category_id",
+      "third_category_id",
+      "product_id",
+      "date",
+      "sales",
+      "stock_hour6_22_cnt",
+      "activity_flag",
+      "discount",
+      "holiday_flag",
+      "precpt",
+      "avg_temperature",
+      "avg_humidity",
+      "avg_wind_level",
+      "entity_id",
+      "item_id",
+      "year",
+      "month",
+      "week",
+      "day",
+      "hours_sale_sum_leakage_risk",
+      "hours_sale_max_leakage_risk",
+      "hours_sale_nonzero_hours_leakage_risk",
+      "hours_stock_sum_leakage_risk",
+      "hours_stock_max_leakage_risk",
+      "hours_stock_nonzero_hours_leakage_risk"
+    ],
+    "path": "数据集/固化数据/d1_d6_sealed_v1/dataset4/source.parquet",
+    "rows": 7935702,
+    "schema": {
+      "columns": [
+        {
+          "dtype": "int64",
+          "name": "city_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "store_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "management_group_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "first_category_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "second_category_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "third_category_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "product_id",
+          "nullable": true
+        },
+        {
+          "dtype": "timestamp[ns]",
+          "name": "date",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "sales",
+          "nullable": true
+        },
+        {
+          "dtype": "int32",
+          "name": "stock_hour6_22_cnt",
+          "nullable": true
+        },
+        {
+          "dtype": "int32",
+          "name": "activity_flag",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "discount",
+          "nullable": true
+        },
+        {
+          "dtype": "int32",
+          "name": "holiday_flag",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "precpt",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "avg_temperature",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "avg_humidity",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "avg_wind_level",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "entity_id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "item_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "year",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "month",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "week",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "day",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "hours_sale_sum_leakage_risk",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "hours_sale_max_leakage_risk",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "hours_sale_nonzero_hours_leakage_risk",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "hours_stock_sum_leakage_risk",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "hours_stock_max_leakage_risk",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "hours_stock_nonzero_hours_leakage_risk",
+          "nullable": true
+        }
+      ],
+      "date_column": "date",
+      "key_columns": [
+        "store_id",
+        "product_id"
+      ],
+      "role": "source",
+      "schema_digest": "b0f606e217d398f793d706e4f7981e10bca1a4ee3bb104722c4ec9dd5128f33a"
+    },
+    "schema_digest": "b0f606e217d398f793d706e4f7981e10bca1a4ee3bb104722c4ec9dd5128f33a",
+    "sha256": "17a1fa5bd1dddfd46bda2a6922ff7821aee2a7e79deca58a94ff7bf20821f7ef",
+    "size_bytes": 117546804
+  },
+  "source_schema": {
+    "columns": [
+      {
+        "dtype": "int64",
+        "name": "city_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "store_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "management_group_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "first_category_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "second_category_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "third_category_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "product_id",
+        "nullable": true
+      },
+      {
+        "dtype": "timestamp[ns]",
+        "name": "date",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "sales",
+        "nullable": true
+      },
+      {
+        "dtype": "int32",
+        "name": "stock_hour6_22_cnt",
+        "nullable": true
+      },
+      {
+        "dtype": "int32",
+        "name": "activity_flag",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "discount",
+        "nullable": true
+      },
+      {
+        "dtype": "int32",
+        "name": "holiday_flag",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "precpt",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "avg_temperature",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "avg_humidity",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "avg_wind_level",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "entity_id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "item_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "year",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "month",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "week",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "day",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "hours_sale_sum_leakage_risk",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "hours_sale_max_leakage_risk",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "hours_sale_nonzero_hours_leakage_risk",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "hours_stock_sum_leakage_risk",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "hours_stock_max_leakage_risk",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "hours_stock_nonzero_hours_leakage_risk",
+        "nullable": true
+      }
+    ],
+    "date_column": "date",
+    "key_columns": [
+      "store_id",
+      "product_id"
+    ],
+    "role": "source",
+    "schema_digest": "b0f606e217d398f793d706e4f7981e10bca1a4ee3bb104722c4ec9dd5128f33a"
+  },
+  "supporting_proof_files": [
+    {
+      "path": "dataset4/adopt_validation_report.json",
+      "sha256": "4922a8248550ed7b053a3d3ae5eff92b21afec4e540db8e5be59f4515477eddb",
+      "size_bytes": 3337
+    },
+    {
+      "path": "dataset4/calendarization_audit.json",
+      "sha256": "b73a8cd557fc42ca15c153b3b87900ca123f4d0945b02b740b93acec73abef11",
+      "size_bytes": 196
+    },
+    {
+      "path": "dataset4/knn_schema.json",
+      "sha256": "76b822a145a02ece69e71ac20511cfcbe6d6e7a2aa81564120de3f4ca0967b65",
+      "size_bytes": 1773
+    },
+    {
+      "path": "dataset4/manifest.json",
+      "sha256": "7696a02a8b4aa747f840faa3fcb0bb9e3fe8062a801248247d74b308674cc814",
+      "size_bytes": 3304
+    },
+    {
+      "path": "dataset4/predictor_schema.json",
+      "sha256": "6c5c767976387ec247007c1ae5864cf6b283ab23f8c57f36094fd4cc6953633d",
+      "size_bytes": 968
+    },
+    {
+      "path": "dataset4/provenance.json",
+      "sha256": "ce82fc3826389d910caf4f2439e7835ff8a08ba31334504a4d21d9703774ac37",
+      "size_bytes": 889
+    },
+    {
+      "path": "dataset4/source_sales_canonicalization.json",
+      "sha256": "36a2fb0c81fc3e22710cfe8ee11561ac422ea5beb9bdede728f8aff3f602f31f",
+      "size_bytes": 150
+    },
+    {
+      "path": "dataset4/source_schema.json",
+      "sha256": "4759b9a9ae18a17a7388b009c9cb20e695ee4030f2e10a0bcfc751c5878fc325",
+      "size_bytes": 2876
+    },
+    {
+      "path": "dataset4/target_schema.json",
+      "sha256": "4759b9a9ae18a17a7388b009c9cb20e695ee4030f2e10a0bcfc751c5878fc325",
+      "size_bytes": 2876
+    },
+    {
+      "path": "dataset4/validation_report.json",
+      "sha256": "4922a8248550ed7b053a3d3ae5eff92b21afec4e540db8e5be59f4515477eddb",
+      "size_bytes": 3337
+    }
+  ],
+  "target": {
+    "dtypes": {
+      "activity_flag": "int32",
+      "avg_humidity": "double",
+      "avg_temperature": "double",
+      "avg_wind_level": "double",
+      "city_id": "int64",
+      "date": "timestamp[ns]",
+      "day": "int64",
+      "discount": "double",
+      "entity_id": "string",
+      "first_category_id": "int64",
+      "holiday_flag": "int32",
+      "hours_sale_max_leakage_risk": "double",
+      "hours_sale_nonzero_hours_leakage_risk": "int64",
+      "hours_sale_sum_leakage_risk": "double",
+      "hours_stock_max_leakage_risk": "int64",
+      "hours_stock_nonzero_hours_leakage_risk": "int64",
+      "hours_stock_sum_leakage_risk": "int64",
+      "item_id": "string",
+      "management_group_id": "int64",
+      "month": "int64",
+      "precpt": "double",
+      "product_id": "int64",
+      "sales": "double",
+      "second_category_id": "int64",
+      "stock_hour6_22_cnt": "int32",
+      "store_id": "int64",
+      "third_category_id": "int64",
+      "week": "int64",
+      "year": "int64"
+    },
+    "mtime_ns": 1782806760236713393,
+    "nullable": {
+      "activity_flag": true,
+      "avg_humidity": true,
+      "avg_temperature": true,
+      "avg_wind_level": true,
+      "city_id": true,
+      "date": true,
+      "day": true,
+      "discount": true,
+      "entity_id": true,
+      "first_category_id": true,
+      "holiday_flag": true,
+      "hours_sale_max_leakage_risk": true,
+      "hours_sale_nonzero_hours_leakage_risk": true,
+      "hours_sale_sum_leakage_risk": true,
+      "hours_stock_max_leakage_risk": true,
+      "hours_stock_nonzero_hours_leakage_risk": true,
+      "hours_stock_sum_leakage_risk": true,
+      "item_id": true,
+      "management_group_id": true,
+      "month": true,
+      "precpt": true,
+      "product_id": true,
+      "sales": true,
+      "second_category_id": true,
+      "stock_hour6_22_cnt": true,
+      "store_id": true,
+      "third_category_id": true,
+      "week": true,
+      "year": true
+    },
+    "ordered_columns": [
+      "city_id",
+      "store_id",
+      "management_group_id",
+      "first_category_id",
+      "second_category_id",
+      "third_category_id",
+      "product_id",
+      "date",
+      "sales",
+      "stock_hour6_22_cnt",
+      "activity_flag",
+      "discount",
+      "holiday_flag",
+      "precpt",
+      "avg_temperature",
+      "avg_humidity",
+      "avg_wind_level",
+      "entity_id",
+      "item_id",
+      "year",
+      "month",
+      "week",
+      "day",
+      "hours_sale_sum_leakage_risk",
+      "hours_sale_max_leakage_risk",
+      "hours_sale_nonzero_hours_leakage_risk",
+      "hours_stock_sum_leakage_risk",
+      "hours_stock_max_leakage_risk",
+      "hours_stock_nonzero_hours_leakage_risk"
+    ],
+    "path": "数据集/固化数据/d1_d6_sealed_v1/dataset4/target.parquet",
+    "rows": 3847,
+    "schema": {
+      "columns": [
+        {
+          "dtype": "int64",
+          "name": "city_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "store_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "management_group_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "first_category_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "second_category_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "third_category_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "product_id",
+          "nullable": true
+        },
+        {
+          "dtype": "timestamp[ns]",
+          "name": "date",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "sales",
+          "nullable": true
+        },
+        {
+          "dtype": "int32",
+          "name": "stock_hour6_22_cnt",
+          "nullable": true
+        },
+        {
+          "dtype": "int32",
+          "name": "activity_flag",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "discount",
+          "nullable": true
+        },
+        {
+          "dtype": "int32",
+          "name": "holiday_flag",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "precpt",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "avg_temperature",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "avg_humidity",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "avg_wind_level",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "entity_id",
+          "nullable": true
+        },
+        {
+          "dtype": "string",
+          "name": "item_id",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "year",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "month",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "week",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "day",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "hours_sale_sum_leakage_risk",
+          "nullable": true
+        },
+        {
+          "dtype": "double",
+          "name": "hours_sale_max_leakage_risk",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "hours_sale_nonzero_hours_leakage_risk",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "hours_stock_sum_leakage_risk",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "hours_stock_max_leakage_risk",
+          "nullable": true
+        },
+        {
+          "dtype": "int64",
+          "name": "hours_stock_nonzero_hours_leakage_risk",
+          "nullable": true
+        }
+      ],
+      "date_column": "date",
+      "key_columns": [
+        "store_id",
+        "product_id"
+      ],
+      "role": "target",
+      "schema_digest": "943432f68afa3ab8dd3286950566623ce8a6710bbea5ced0cc58cc460ad8f59a"
+    },
+    "schema_digest": "943432f68afa3ab8dd3286950566623ce8a6710bbea5ced0cc58cc460ad8f59a",
+    "sha256": "f0b83798ea265c6b79f09487903404c7c75acfcac2657f53e989ef59588e5946",
+    "size_bytes": 83217
+  },
+  "target_schema": {
+    "columns": [
+      {
+        "dtype": "int64",
+        "name": "city_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "store_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "management_group_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "first_category_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "second_category_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "third_category_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "product_id",
+        "nullable": true
+      },
+      {
+        "dtype": "timestamp[ns]",
+        "name": "date",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "sales",
+        "nullable": true
+      },
+      {
+        "dtype": "int32",
+        "name": "stock_hour6_22_cnt",
+        "nullable": true
+      },
+      {
+        "dtype": "int32",
+        "name": "activity_flag",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "discount",
+        "nullable": true
+      },
+      {
+        "dtype": "int32",
+        "name": "holiday_flag",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "precpt",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "avg_temperature",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "avg_humidity",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "avg_wind_level",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "entity_id",
+        "nullable": true
+      },
+      {
+        "dtype": "string",
+        "name": "item_id",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "year",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "month",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "week",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "day",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "hours_sale_sum_leakage_risk",
+        "nullable": true
+      },
+      {
+        "dtype": "double",
+        "name": "hours_sale_max_leakage_risk",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "hours_sale_nonzero_hours_leakage_risk",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "hours_stock_sum_leakage_risk",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "hours_stock_max_leakage_risk",
+        "nullable": true
+      },
+      {
+        "dtype": "int64",
+        "name": "hours_stock_nonzero_hours_leakage_risk",
+        "nullable": true
+      }
+    ],
+    "date_column": "date",
+    "key_columns": [
+      "store_id",
+      "product_id"
+    ],
+    "role": "target",
+    "schema_digest": "943432f68afa3ab8dd3286950566623ce8a6710bbea5ced0cc58cc460ad8f59a"
+  }
+}

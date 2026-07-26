@@ -201,6 +201,10 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
             run_unified_d1_d6,
             "_resolve_run_root",
             return_value=Path("/private/tmp/test-unified-failure-run"),
+        ), patch.object(
+            run_unified_d1_d6,
+            "run_formal_preflight",
+            return_value={"preflight_status": "ready"},
         ):
             parse_args.return_value = argparse.Namespace(
                 only=["d5"],

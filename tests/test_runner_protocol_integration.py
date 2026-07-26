@@ -12,13 +12,24 @@ from src.transfer_methods.source_failure_tolerance import enforce_formal_source_
 from src.experiment.experiment_runner import run_msml_rfe_experiment
 
 
-def _daily_rows(store, item, sales, *, group_col=None, group_value=None, periods=30):
+def _daily_rows(
+    store,
+    item,
+    sales,
+    *,
+    group_col=None,
+    group_value=None,
+    periods=30,
+    start="2020-01-01",
+):
     payload = {
         "entity_id": store,
         "store_id": store,
         "item_id": item,
-        "date": pd.date_range("2020-01-01", periods=periods, freq="D"),
+        "date": pd.date_range(start, periods=periods, freq="D"),
         "sales": np.full(periods, sales, dtype=float),
+        "onpromotion": np.zeros(periods, dtype=float),
+        "oil_price": np.full(periods, 50.0, dtype=float),
     }
     if group_col is not None:
         payload[group_col] = group_value
@@ -57,10 +68,10 @@ class RunnerProtocolIntegrationTest(unittest.TestCase):
         self.assertEqual(frame.loc[mask, "sales"].tolist(), [1.0])
 
     def test_d1_with_pool_is_exact_and_old_incomplete_pool_fails(self) -> None:
-        target = _daily_rows(1, 10, 0.0, periods=35)
+        target = _daily_rows(1, 10, 0.0, periods=35, start="2017-06-01")
         complete = pd.concat(
             [
-                _daily_rows(store, item, float(item))
+                _daily_rows(store, item, float(item), start="2017-06-01")
                 for store in range(1, 4)
                 for item in range(1, 10)
             ],
@@ -72,7 +83,7 @@ class RunnerProtocolIntegrationTest(unittest.TestCase):
             dataset_id="D1",
             scenario="with",
             group_cols=("store_id", "item_id"),
-            observed_start="2020-01-01",
+            observed_start="2017-06-01",
         )
         self.assertEqual(len(source.attrs["protocol_candidate_keys"]), 27)
         self.assertEqual(configured_target.attrs["protocol_target_key"], ("1", "10"))
@@ -85,7 +96,7 @@ class RunnerProtocolIntegrationTest(unittest.TestCase):
                 dataset_id="D1",
                 scenario="with",
                 group_cols=("store_id", "item_id"),
-                observed_start="2020-01-01",
+                observed_start="2017-06-01",
             )
 
     def test_d5_without_and_with_follow_same_family_store_semantics(self) -> None:

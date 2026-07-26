@@ -14,20 +14,31 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
 
 from src.data_processing.data_preprocessing import infer_source_selection_feature_columns
-from src.constants import D4_D6_RUNTIME_KNN_PROTOCOL_VERSION
-from src.protocols.candidate_pool import select_daily_sequence_sources
+from src.constants import D4_D6_RUNTIME_KNN_PROTOCOL_VERSION, SOURCE_HISTORY_DAYS
+from src.protocols.candidate_pool import (
+    build_candidate_pool_digest,
+    build_consumer_fingerprint,
+    build_source_pool_fingerprint,
+    select_daily_sequence_sources,
+)
 from src.protocols.d2_source_calendarization import build_d2_sealed_identity
 from src.protocols.experiment_protocol import (
     PROTOCOL_VERSION,
     ProtocolViolation,
     get_experiment_protocol,
+    normalize_scenario,
+    normalize_source_key,
 )
+from src.protocols.knn_frames import get_configured_knn_frame
+from src.protocols.selection_metadata import build_selection_metadata_contract
+from src.protocols.source_history import build_exact_source_history_candidate_frame
+from src.protocols.source_history import source_history_frame_digest
 from src.protocols.provenance import (
     build_cnn_tensor_provenance,
     extract_selected_source_slices,
@@ -55,6 +66,61 @@ def _get_logger() -> logging.Logger:
 class SourceSelector:
     """相似源选择器：构建签名、计算距离、生成 top-k 与权重。"""
 
+    def __init__(self) -> None:
+        self._runtime_source_eligibility_cache: Dict[tuple[object, ...], Any] = {}
+        self._runtime_source_signature_cache: Dict[
+            tuple[object, ...], Tuple[List[Tuple], np.ndarray]
+        ] = {}
+        self._runtime_source_selection_metadata_cache: Dict[
+            tuple[object, ...], Dict[str, Any]
+        ] = {}
+        self._runtime_source_group_indices_cache: Dict[
+            tuple[object, ...], Dict[Tuple, np.ndarray]
+        ] = {}
+
+    def _runtime_selected_consumer_frame(
+        self,
+        source_df: pd.DataFrame,
+        selected_key_set: set[Tuple],
+        group_cols: Tuple[str, str],
+    ) -> pd.DataFrame:
+        """Select the few chosen source histories without a row-wise apply."""
+        cache_key = (
+            str(source_df.attrs.get("source_history_frame_digest", "")),
+            int(len(source_df)),
+            tuple(group_cols),
+        )
+        group_indices = self._runtime_source_group_indices_cache.get(cache_key)
+        if group_indices is None:
+            raw_group_indices = source_df.groupby(
+                list(group_cols), sort=False, dropna=False
+            ).indices
+            group_indices = {}
+            for raw_key, positions in raw_group_indices.items():
+                normalized_key = normalize_source_key(
+                    raw_key if isinstance(raw_key, tuple) else (raw_key,)
+                )
+                if normalized_key in group_indices:
+                    raise ProtocolViolation(
+                        f"source frame has duplicate normalized source key: {normalized_key!r}"
+                    )
+                group_indices[normalized_key] = positions
+            self._runtime_source_group_indices_cache[cache_key] = group_indices
+
+        normalized_selected_keys = {
+            normalize_source_key(key) for key in selected_key_set
+        }
+        positions = [
+            group_indices[key]
+            for key in normalized_selected_keys
+            if key in group_indices
+        ]
+        if not positions:
+            return source_df.iloc[0:0].copy()
+        selected_positions = np.concatenate(positions)
+        selected_positions.sort()
+        return source_df.iloc[selected_positions].copy()
+
     @staticmethod
     def _declares_d1_d6(frame: pd.DataFrame) -> bool:
         dataset_name = str(frame.attrs.get("dataset_name", "")).strip().lower()
@@ -72,6 +138,7 @@ class SourceSelector:
         model_feature_cols: Sequence[str],
         weight_mode: str,
         include_sales_in_knn: bool,
+        consumer_source_df: pd.DataFrame | None = None,
     ) -> Dict[str, object]:
         if weight_mode != "inverse_distance":
             raise ProtocolViolation("formal D1-D6 selection requires inverse_distance weights")
@@ -106,6 +173,32 @@ class SourceSelector:
                 f"selector group_cols differ from protocol: {tuple(group_cols)!r} != {configured_group_cols!r}"
             )
         protocol = get_experiment_protocol(target_df.attrs["protocol_dataset_id"])
+        knn_feature_columns = tuple(protocol.knn_feature_columns)
+        source_history_metadata: Dict[str, Any] = {}
+        if protocol.dataset_id in {"D4", "D5", "D6"} and "source_history_days" in source_df.attrs:
+            source_history_metadata = {
+                key: source_df.attrs.get(key)
+                for key in (
+                    "source_history_days",
+                    "source_history_start",
+                    "source_history_end",
+                    "source_history_expected_date_count",
+                    "source_history_completeness_policy",
+                    "source_history_calendar",
+                    "source_history_inclusive_end",
+                    "source_history_calendarization_rule",
+                    "source_history_synthetic_row_count",
+                    "source_history_frame_digest",
+                )
+            }
+            missing_history = [
+                key for key, value in source_history_metadata.items() if value is None
+            ]
+            if missing_history or int(source_history_metadata["source_history_days"]) != SOURCE_HISTORY_DAYS:
+                raise ProtocolViolation(
+                    "D4-D6 shared selector received invalid source history identity: "
+                    f"missing={missing_history!r}"
+                )
         d2_identity_fields = (
             "d2_source_calendarization_rule_version",
             "d2_source_authority_digest",
@@ -128,10 +221,39 @@ class SourceSelector:
                     raise ProtocolViolation(
                         f"D2 source/target calendarization identity mismatch: {name}"
                     )
+        knn_target_df = get_configured_knn_frame(target_df, "target")
+        knn_source_df = get_configured_knn_frame(source_df, "source")
+        for role, frame in (("target", knn_target_df), ("source", knn_source_df)):
+            declared = tuple(frame.attrs.get("knn_feature_columns", ()))
+            if declared != knn_feature_columns:
+                raise ProtocolViolation(
+                    f"{role} configured KNN feature metadata does not match protocol: "
+                    f"expected {knn_feature_columns!r}, got {declared!r}"
+                )
+            missing = [column for column in knn_feature_columns if column not in frame.columns]
+            if missing:
+                raise ProtocolViolation(
+                    f"{role} configured KNN frame is missing protocol features: {missing!r}"
+                )
+        for identity_field in d2_identity_fields:
+            if identity_field in source_df.attrs:
+                knn_source_df.attrs[identity_field] = source_df.attrs[identity_field]
+            if identity_field in target_df.attrs:
+                knn_target_df.attrs[identity_field] = target_df.attrs[identity_field]
+        observed_start = pd.Timestamp(target_df.attrs["knn_observed_start"]).normalize()
+        observed_end = pd.Timestamp(target_df.attrs["knn_observed_end"]).normalize()
+        for role, frame in (("target", knn_target_df), ("source", knn_source_df)):
+            dates = pd.to_datetime(frame["date"], errors="coerce").dt.normalize()
+            if dates.isna().any():
+                raise ProtocolViolation(f"{role} configured KNN frame contains invalid dates")
+            if not dates.between(observed_start, observed_end, inclusive="both").all():
+                raise ProtocolViolation(
+                    f"{role} configured KNN frame contains dates outside the protocol window"
+                )
         prepared_pool = source_df.attrs.get("prepared_daily_sequence_pool")
         result = select_daily_sequence_sources(
-            target_df=target_df,
-            source_df=source_df,
+            target_df=knn_target_df,
+            source_df=knn_source_df,
             prepared_pool=prepared_pool,
             protocol=protocol,
             scenario=target_df.attrs["protocol_scenario"],
@@ -139,18 +261,29 @@ class SourceSelector:
             candidate_keys=target_df.attrs["protocol_candidate_keys"],
             group_cols=configured_group_cols,
             observed_start=target_df.attrs["knn_observed_start"],
-            feature_cols=("sales",),
+            feature_cols=knn_feature_columns,
             k=k,
         )
         provenance_source_df = source_df
         if prepared_pool is not None:
-            if tuple(model_feature_cols) != ("sales",):
-                raise ProtocolViolation(
-                    "prepared-pool source provenance currently supports sales-only preflight"
+            if tuple(model_feature_cols) == ("sales",) and knn_feature_columns == ("sales",):
+                provenance_source_df = prepared_pool.selected_sales_frame(
+                    result.ordered_source_keys
                 )
-            provenance_source_df = prepared_pool.selected_sales_frame(
-                result.ordered_source_keys
-            )
+            elif all(
+                column in prepared_pool.feature_matrices
+                for column in tuple(model_feature_cols)
+            ):
+                provenance_source_df = prepared_pool.selected_frame(
+                    result.ordered_source_keys,
+                    feature_cols=model_feature_cols,
+                )
+            # The prepared pool is the KNN authority and intentionally contains
+            # only the protocol KNN fields.  Model feature candidates remain a
+            # separate contract; retain the full consumer frame for CNN
+            # provenance when it contains fields outside the KNN pool.
+            elif consumer_source_df is not None:
+                provenance_source_df = consumer_source_df
         source_slices = extract_selected_source_slices(
             result,
             provenance_source_df,
@@ -206,6 +339,60 @@ class SourceSelector:
             for key in eligible_candidate_keys
             if tuple(key) not in excluded_candidate_keys
         ]
+        source_pool_fingerprint = build_source_pool_fingerprint(
+            protocol_version=protocol.protocol_version,
+            dataset_id=protocol.dataset_id,
+            scenario=target_df.attrs["protocol_scenario"],
+            target_key=target_df.attrs["protocol_target_key"],
+            group_cols=configured_group_cols,
+            candidate_keys=eligible_candidate_keys,
+        )
+        selected_key_set = {tuple(entry.source_key) for entry in result.entries}
+        consumer_source = consumer_source_df if consumer_source_df is not None else source_df
+        selected_consumer_frame = self._runtime_selected_consumer_frame(
+            consumer_source,
+            selected_key_set,
+            tuple(configured_group_cols),
+        )
+        consumer_frame_digest = source_history_frame_digest(
+            selected_consumer_frame,
+            key_fields=configured_group_cols,
+        )
+        consumer_fingerprint = build_consumer_fingerprint(
+            protocol_version=protocol.protocol_version,
+            dataset_id=protocol.dataset_id,
+            scenario=target_df.attrs["protocol_scenario"],
+            target_key=target_df.attrs["protocol_target_key"],
+            source_pool_fingerprint=source_pool_fingerprint,
+            candidate_pool_digest=result.candidate_pool_digest,
+            selection_result_digest=result.selection_result_digest,
+            ordered_top_k=sources,
+        )
+        candidate_digest_input = dict(result.candidate_pool_digest_input)
+        valid_distance_count = len(eligible_candidate_keys) - len(excluded)
+        runtime_knn_proof = {
+            "protocol_declared_knn_features": list(knn_feature_columns),
+            "configured_source_knn_features": list(
+                knn_source_df.attrs.get("knn_feature_columns", ())
+            ),
+            "configured_target_knn_features": list(
+                knn_target_df.attrs.get("knn_feature_columns", ())
+            ),
+            "pool_feature_matrices": list(
+                prepared_pool.feature_matrices.keys()
+            ) if prepared_pool is not None else [],
+            "target_exact_vector_feature_cols": list(knn_feature_columns),
+            "target_exact_vector_shape": [30 * len(knn_feature_columns)],
+            "source_matrix_shapes": {
+                column: [valid_distance_count, 30]
+                for column in knn_feature_columns
+            },
+            "distance_count": valid_distance_count,
+            "distance_shape": [valid_distance_count],
+            "distance_feature_columns": list(knn_feature_columns),
+            "nan_count": 0,
+            "inf_count": 0,
+        }
         meta = {
             "selection_authority": "shared_protocol",
             "selection_path": "shared_protocol",
@@ -214,17 +401,18 @@ class SourceSelector:
             "weight_mode": protocol.weight_mode,
             "distance_metric": "euclidean",
             "group_cols": list(configured_group_cols),
-            "target_signature_dim": 30,
-            "feature_cols": ["sales"],
-            "requested_feature_cols": ["sales"],
+            "target_signature_dim": 30 * len(knn_feature_columns),
+            "feature_cols": list(knn_feature_columns),
+            "requested_feature_cols": list(knn_feature_columns),
             "representation": protocol.knn_representation,
             "knn_representation": protocol.knn_representation,
             "scaling": "global_minmax_legal_observed_values",
             "scaler_fit_scope": "target_and_candidate_legal_observed_values",
-            "knn_observed_start": result.observed_start,
-            "knn_observed_end": result.observed_end,
+            "origin": result.observed_end,
             "protocol_observed_start": target_df.attrs["protocol_observed_start"],
             "protocol_observed_days": target_df.attrs["protocol_observed_days"],
+            "observed_days": target_df.attrs["protocol_observed_days"],
+            "boundary": "inclusive",
             "target_observed_start": result.observed_start,
             "target_observed_end": result.observed_end,
             "source_observation_cutoff": result.source_observation_cutoff,
@@ -232,8 +420,25 @@ class SourceSelector:
             "source_future_excluded": True,
             "source_alignment_mode": "exact_knn_observed_dates",
             "candidate_pool_digest": result.candidate_pool_digest,
-            "candidate_pool_digest_input": dict(result.candidate_pool_digest_input),
+            "candidate_pool_digest_input": candidate_digest_input,
             "selection_result_digest": result.selection_result_digest,
+            "selection_digest": result.selection_result_digest,
+            "source_frame_min_date": source_df.attrs["source_frame_min_date"],
+            "source_frame_max_date": source_df.attrs["source_frame_max_date"],
+            "target_frame_min_date": target_df.attrs["target_frame_min_date"],
+            "target_frame_max_date": target_df.attrs["target_frame_max_date"],
+            "source_frame_digest": candidate_digest_input.get(
+                "source_frame_digest",
+                source_df.attrs.get("source_frame_digest", ""),
+            ),
+            "target_frame_digest": candidate_digest_input.get(
+                "target_frame_digest",
+                target_df.attrs.get("target_frame_digest", ""),
+            ),
+            "source_pool_fingerprint": source_pool_fingerprint,
+            "consumer_fingerprint": consumer_fingerprint,
+            "consumer_frame_digest": consumer_frame_digest,
+            "consumer_frame_rows": int(len(selected_consumer_frame)),
             "selected_sources_runtime": list(sources),
             "source_skip_diagnostics": excluded,
             "candidate_source_count": len(target_df.attrs["protocol_candidate_keys"]),
@@ -243,7 +448,6 @@ class SourceSelector:
             "eligible_candidate_count": len(eligible_candidate_keys),
             "valid_30d_candidate_count": len(valid_30d_candidate_keys),
             "selected_count": len(sources),
-            "observed_days": len(result.entries[0].raw_vector),
             "skipped_source_count": len(excluded),
             "requested_k": int(k),
             "effective_k": int(k),
@@ -254,7 +458,15 @@ class SourceSelector:
             "cnn_provenance_sample_counts": [
                 int(item.input_tensor.shape[0]) for item in tensor_provenance
             ],
+            "runtime_knn_proof": runtime_knn_proof,
         }
+        meta.update(
+            build_selection_metadata_contract(
+                protocol,
+                observed_start=target_df.attrs["knn_observed_start"],
+            )
+        )
+        meta.update(source_history_metadata)
         if protocol.dataset_id == "D2":
             meta.update(
                 {
@@ -370,6 +582,15 @@ class SourceSelector:
                 "knn_feature_mode": "explicit_feature_cols",
                 "feature_resolution_source": "explicit_feature_cols",
             }
+            if self._runtime_protocol_requested(target_df, source_df):
+                info.update(
+                    {
+                        "runtime_inferred_features": list(resolved),
+                        "runtime_knn_feature_mode": "explicit_feature_cols",
+                        "runtime_excluded_by_rule": [],
+                    }
+                )
+                return resolved, info
             try:
                 runtime_info = infer_source_selection_feature_columns(
                     source_df=source_df,
@@ -508,6 +729,153 @@ class SourceSelector:
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
+    @staticmethod
+    def _runtime_target_key(
+        target_df: pd.DataFrame,
+        group_cols: Tuple[str, str],
+    ) -> Tuple[str, ...]:
+        """Resolve one runtime target composite key; reject ambiguous targets."""
+        missing = [column for column in group_cols if column not in target_df.columns]
+        if missing:
+            raise ProtocolViolation(
+                f"D4-D6 runtime target is missing key columns: {missing!r}"
+            )
+        unique = target_df.loc[:, list(group_cols)].drop_duplicates()
+        if len(unique) != 1:
+            raise ProtocolViolation(
+                "D4-D6 runtime target must contain exactly one composite key: "
+                f"count={len(unique)}"
+            )
+        values = tuple(unique.iloc[0].tolist())
+        return normalize_source_key(values)
+
+    def _runtime_candidate_identity(
+        self,
+        *,
+        target_df: pd.DataFrame,
+        source_df: pd.DataFrame,
+        source_keys: Sequence[Tuple],
+        protocol: Any,
+        group_cols: Tuple[str, str],
+        feature_cols: Sequence[str],
+        required_dates: pd.DatetimeIndex,
+        source_metadata: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        """Build target-specific candidate digest input from runtime source bytes."""
+        target_key = self._runtime_target_key(target_df, group_cols)
+        normalized_candidates = sorted(
+            {
+                normalize_source_key(key)
+                for key in source_keys
+                if normalize_source_key(key) != target_key
+            }
+        )
+        scenario = normalize_scenario(
+            source_df.attrs.get(
+                "information_sharing_scenario",
+                target_df.attrs.get("information_sharing_scenario", "with"),
+            )
+        )
+        digest_input: Dict[str, Any] = {
+            "protocol_version": protocol.protocol_version,
+            "dataset_id": protocol.dataset_id,
+            "scenario": scenario,
+            "target_key": list(target_key),
+            "group_cols": list(group_cols),
+            "candidate_keys": [list(key) for key in normalized_candidates],
+            "observed_start": required_dates[0].strftime("%Y-%m-%d"),
+            "observed_end": required_dates[-1].strftime("%Y-%m-%d"),
+            "feature_cols": [str(column) for column in feature_cols],
+            "source_history_days": int(source_metadata["source_history_days"]),
+            "source_history_start": str(source_metadata["source_history_start"]),
+            "source_history_end": str(source_metadata["source_history_end"]),
+            "source_history_completeness_policy": str(
+                source_metadata["source_history_completeness_policy"]
+            ),
+            "source_history_frame_digest": str(
+                source_metadata["source_history_frame_digest"]
+            ),
+        }
+        return {
+            "candidate_pool_digest_input": digest_input,
+            "candidate_pool_digest": build_candidate_pool_digest(**digest_input),
+            "candidate_source_count": len(normalized_candidates),
+        }
+
+    def _runtime_vectorized_source_signatures(
+        self,
+        source_df: pd.DataFrame,
+        required_dates: pd.DatetimeIndex,
+        feature_cols: Sequence[str],
+        group_cols: Tuple[str, str],
+        static_feature_cols: Sequence[str] | None,
+    ) -> Tuple[List[Tuple], np.ndarray] | None:
+        """Build aligned source signatures without iterating every entity.
+
+        D5 contains tens of thousands of exact 180-day source entities.  The
+        runtime selector only needs the shared 30-day slice, so group-level
+        statistics can be computed in one pandas aggregation.  Return ``None``
+        for malformed/non-numeric edge cases so the diagnostic loop below keeps
+        its detailed per-source rejection behavior.
+        """
+        if static_feature_cols:
+            return None
+
+        dates = source_df["date"]
+        if not pd.api.types.is_datetime64_any_dtype(dates):
+            dates = pd.to_datetime(dates, errors="coerce").dt.normalize()
+        if dates.isna().any():
+            return None
+
+        aligned = source_df.loc[
+            dates.isin(required_dates),
+            [*group_cols, "date", *feature_cols],
+        ].copy()
+        if aligned.empty:
+            return None
+        aligned["date"] = pd.to_datetime(aligned["date"], errors="coerce").dt.normalize()
+        if aligned["date"].isna().any():
+            return None
+
+        aligned["__runtime_group_order"] = aligned.groupby(
+            list(group_cols), sort=False, dropna=False
+        ).ngroup()
+        aligned = aligned.sort_values(
+            ["__runtime_group_order", "date"], kind="mergesort"
+        )
+        duplicate_mask = aligned.duplicated([*group_cols, "date"], keep=False)
+        grouped_sizes = aligned.groupby(list(group_cols), sort=False, dropna=False).size()
+        if duplicate_mask.any() or not grouped_sizes.eq(len(required_dates)).all():
+            return None
+
+        values = aligned.loc[:, list(feature_cols)].apply(pd.to_numeric, errors="coerce")
+        grouped = values.groupby(
+            [aligned[column] for column in group_cols],
+            sort=False,
+            dropna=False,
+        )
+        stats = (
+            grouped.mean(),
+            grouped.std(ddof=0),
+            grouped.min(),
+            grouped.max(),
+            grouped.last(),
+        )
+        signature_columns: list[np.ndarray] = []
+        for column in feature_cols:
+            signature_columns.append(
+                np.column_stack(
+                    [stat[column].fillna(0).to_numpy(dtype=np.float64) for stat in stats]
+                )
+            )
+        source_signatures = np.concatenate(signature_columns, axis=1)
+        raw_keys = list(grouped_sizes.index)
+        source_keys = [
+            tuple(raw_key) if isinstance(raw_key, tuple) else (raw_key,)
+            for raw_key in raw_keys
+        ]
+        return source_keys, source_signatures.astype(np.float64, copy=False)
+
     def _runtime_aligned_signatures(
         self,
         target_df: pd.DataFrame,
@@ -524,6 +892,14 @@ class SourceSelector:
             "target_observed_end",
             "source_history_start",
             "source_history_end",
+            "source_history_days",
+            "source_history_expected_date_count",
+            "source_history_completeness_policy",
+            "source_history_calendar",
+            "source_history_inclusive_end",
+            "source_history_calendarization_rule",
+            "source_history_synthetic_row_count",
+            "source_history_frame_digest",
             "target_test_excluded",
             "source_future_excluded",
             "source_alignment_mode",
@@ -553,14 +929,54 @@ class SourceSelector:
 
         target_observed_start = pd.Timestamp(target_df.attrs["target_observed_start"]).normalize()
         target_observed_end = pd.Timestamp(target_df.attrs["target_observed_end"]).normalize()
+        protocol_id = target_df.attrs.get("protocol_dataset_id") or target_df.attrs.get(
+            "dataset_name"
+        )
+        protocol = get_experiment_protocol(protocol_id)
+        protocol_window = protocol.observation_window(target_observed_start)
+        if target_observed_end != pd.Timestamp(protocol_window.knn_observed_end):
+            raise ValueError(
+                "D4-D6 runtime KNN observed end does not match protocol origin: "
+                f"expected={protocol_window.knn_observed_end.isoformat()}, "
+                f"got={target_observed_end.date().isoformat()}"
+            )
         source_history_start = pd.Timestamp(source_df.attrs["source_history_start"]).normalize()
         source_history_end = pd.Timestamp(source_df.attrs["source_history_end"]).normalize()
         if (target_observed_end - target_observed_start).days != 29:
             raise ValueError("D4-D6 runtime KNN observed window must contain exactly 30 calendar days")
-        if source_history_end != target_observed_end:
-            raise ValueError("D4-D6 runtime KNN source_history_end must equal target_observed_end")
-        if (source_history_end - source_history_start).days != 299:
-            raise ValueError("D4-D6 runtime KNN source history must contain exactly 300 calendar days")
+        source_history_days = int(source_df.attrs.get("source_history_days", 0))
+        if source_history_days != SOURCE_HISTORY_DAYS:
+            raise ValueError(
+                "D4-D6 runtime KNN source history must contain exactly "
+                f"{SOURCE_HISTORY_DAYS} calendar days"
+            )
+        if (source_history_end - source_history_start).days != SOURCE_HISTORY_DAYS - 1:
+            raise ValueError(
+                "D4-D6 runtime KNN source history bounds must span exactly "
+                f"{SOURCE_HISTORY_DAYS} calendar days"
+            )
+        source_cache_identity = id(source_df)
+        eligibility_key = (
+            source_cache_identity,
+            str(source_df.attrs.get("source_history_frame_digest", "")),
+            tuple(group_cols),
+            int(source_history_days),
+            int(pd.Timestamp(source_history_end).value),
+        )
+        eligibility = self._runtime_source_eligibility_cache.get(eligibility_key)
+        if eligibility is None:
+            eligibility = build_exact_source_history_candidate_frame(
+                source_df,
+                key_fields=group_cols,
+                origin=source_history_end,
+                source_history_days=source_history_days,
+            )
+            self._runtime_source_eligibility_cache[eligibility_key] = eligibility
+        if not eligibility.eligible_keys:
+            raise ValueError("D4-D6 runtime KNN source history has no eligible candidates")
+        source_attrs = source_df.attrs.copy()
+        source_df = eligibility.candidate_frame
+        source_df.attrs = {**source_attrs, **source_df.attrs}
 
         required_dates = pd.DatetimeIndex(
             pd.date_range(target_observed_start, target_observed_end, freq="D")
@@ -585,13 +1001,82 @@ class SourceSelector:
             feature_cols,
             static_feature_cols=static_feature_cols,
         )
+        target_key = self._runtime_target_key(target_df, group_cols)
         source_keys: List[Tuple] = []
         signatures: List[np.ndarray] = []
         skipped: List[Dict[str, Any]] = []
 
+        cache_key = (
+            source_cache_identity,
+            str(source_df.attrs.get("source_history_frame_digest", "")),
+            tuple(feature_cols),
+            tuple(group_cols),
+            tuple(static_feature_cols or ()),
+            int(required_dates[0].value),
+            int(required_dates[-1].value),
+        )
+        cached = self._runtime_source_signature_cache.get(cache_key)
+        if cached is not None:
+            vectorized = cached
+        else:
+            vectorized = self._runtime_vectorized_source_signatures(
+                source_df=source_df,
+                required_dates=required_dates,
+                feature_cols=feature_cols,
+                group_cols=group_cols,
+                static_feature_cols=static_feature_cols,
+            )
+        if vectorized is not None:
+            source_keys, source_signatures = vectorized
+            if cached is None:
+                self._runtime_source_signature_cache[cache_key] = (source_keys, source_signatures)
+            keep = [
+                normalize_source_key(key) != target_key
+                for key in source_keys
+            ]
+            source_keys = [key for key, include in zip(source_keys, keep) if include]
+            source_signatures = source_signatures[np.asarray(keep, dtype=bool)]
+            cached_metadata = self._runtime_source_selection_metadata_cache.get(cache_key)
+            if cached_metadata is None:
+                digest_keys = sorted(source_keys, key=lambda key: json.dumps(key, default=str))
+                cached_metadata = {
+                    "source_skip_diagnostics": [],
+                    "candidate_source_count": int(len(source_keys)),
+                    "skipped_source_count": 0,
+                }
+                self._runtime_source_selection_metadata_cache[cache_key] = cached_metadata
+            source_metadata = dict(cached_metadata)
+            metadata = {
+                key: target_df.attrs[key]
+                for key in required_attrs
+            }
+            for key in (
+                "target_observed_start",
+                "target_observed_end",
+                "source_history_start",
+                "source_history_end",
+            ):
+                metadata[key] = pd.Timestamp(metadata[key]).strftime("%Y-%m-%d")
+            metadata.update(source_metadata)
+            metadata.update(
+                self._runtime_candidate_identity(
+                    target_df=target_df,
+                    source_df=source_df,
+                    source_keys=source_keys,
+                    protocol=protocol,
+                    group_cols=group_cols,
+                    feature_cols=feature_cols,
+                    required_dates=required_dates,
+                    source_metadata=metadata,
+                )
+            )
+            return target_signature, source_keys, source_signatures, metadata
+
         grouped = source_df.groupby(list(group_cols), sort=False)
         for raw_key, raw_group in grouped:
             source_key = tuple(raw_key) if isinstance(raw_key, tuple) else (raw_key,)
+            if normalize_source_key(source_key) == target_key:
+                continue
             group = raw_group.copy()
             group["date"] = pd.to_datetime(group["date"], errors="coerce").dt.normalize()
             if group["date"].isna().any():
@@ -655,8 +1140,19 @@ class SourceSelector:
                 "source_skip_diagnostics": skipped,
                 "candidate_source_count": int(len(source_keys)),
                 "skipped_source_count": int(len(skipped)),
-                "candidate_pool_digest": self._strict_digest(digest_keys),
             }
+        )
+        metadata.update(
+            self._runtime_candidate_identity(
+                target_df=target_df,
+                source_df=source_df,
+                source_keys=source_keys,
+                protocol=protocol,
+                group_cols=group_cols,
+                feature_cols=feature_cols,
+                required_dates=required_dates,
+                source_metadata=metadata,
+            )
         )
         return target_signature, source_keys, source_signatures, metadata
 
@@ -838,6 +1334,7 @@ class SourceSelector:
         weight_mode: str = "inverse_distance",
         debug_mode: bool = False,
         include_sales_in_knn: bool = True,
+        consumer_source_df: pd.DataFrame | None = None,
     ) -> Dict[str, object]:
         """
         选择 top-k 相似 source，并返回距离与权重。
@@ -899,8 +1396,10 @@ class SourceSelector:
                 model_feature_cols=feature_cols,
                 weight_mode=weight_mode,
                 include_sales_in_knn=include_sales_in_knn,
+                consumer_source_df=consumer_source_df,
             )
-        if self._declares_d1_d6(target_df) or self._declares_d1_d6(source_df):
+        runtime_protocol = self._runtime_protocol_requested(target_df, source_df)
+        if (self._declares_d1_d6(target_df) or self._declares_d1_d6(source_df)) and not runtime_protocol:
             raise ProtocolViolation(
                 "D1-D6 selection requires shared protocol metadata; legacy fallback is forbidden"
             )
@@ -930,7 +1429,7 @@ class SourceSelector:
         )
 
         runtime_metadata: Dict[str, Any] = {}
-        if self._runtime_protocol_requested(target_df, source_df):
+        if runtime_protocol:
             target_signature, source_keys, source_signatures, runtime_metadata = (
                 self._runtime_aligned_signatures(
                     target_df=target_df,
@@ -938,6 +1437,16 @@ class SourceSelector:
                     feature_cols=resolved_feature_cols,
                     group_cols=group_cols,
                     static_feature_cols=static_feature_cols,
+                )
+            )
+            runtime_protocol_id = target_df.attrs.get("protocol_dataset_id") or target_df.attrs.get(
+                "dataset_name"
+            )
+            runtime_protocol_spec = get_experiment_protocol(runtime_protocol_id)
+            runtime_metadata.update(
+                build_selection_metadata_contract(
+                    runtime_protocol_spec,
+                    observed_start=target_df.attrs["target_observed_start"],
                 )
             )
         else:
@@ -1012,8 +1521,31 @@ class SourceSelector:
             row["source_rank"] = int(rank)
 
         if runtime_metadata:
+            selected_key_set = {tuple(row["source_key"]) for row in results}
+            selected_consumer_frame = self._runtime_selected_consumer_frame(
+                source_df,
+                selected_key_set,
+                tuple(group_cols),
+            )
+            runtime_metadata["consumer_frame_digest"] = source_history_frame_digest(
+                selected_consumer_frame,
+                key_fields=group_cols,
+            )
+            runtime_metadata["consumer_frame_rows"] = int(len(selected_consumer_frame))
             result_payload["meta"]["selected_sources_runtime"] = list(results)
             result_payload["meta"]["selection_result_digest"] = self._strict_digest(results)
+            result_payload["meta"]["consumer_frame_digest"] = runtime_metadata[
+                "consumer_frame_digest"
+            ]
+            result_payload["meta"]["consumer_frame_rows"] = runtime_metadata[
+                "consumer_frame_rows"
+            ]
+            runtime_metadata["selected_count"] = int(len(results))
+            runtime_metadata["requested_k"] = int(k)
+            runtime_metadata["effective_k"] = int(len(results))
+            result_payload["meta"]["selected_count"] = runtime_metadata["selected_count"]
+            result_payload["meta"]["requested_k"] = runtime_metadata["requested_k"]
+            result_payload["meta"]["effective_k"] = runtime_metadata["effective_k"]
 
         if debug_mode:
             self._log_debug_selection_details(

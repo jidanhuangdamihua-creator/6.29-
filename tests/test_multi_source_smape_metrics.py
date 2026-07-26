@@ -199,6 +199,8 @@ def test_entity_loop_writes_error_row_for_all_sources_failed(monkeypatch) -> Non
                     np.arange(2.0, len(dates) + 2.0),
                 ]
             ),
+            "onpromotion": np.zeros(len(dates) * 2),
+            "oil_price": np.full(len(dates) * 2, 50.0),
         }
     )
     target_df = pd.DataFrame(
@@ -208,6 +210,8 @@ def test_entity_loop_writes_error_row_for_all_sources_failed(monkeypatch) -> Non
             "item_id": ["364606"] * len(dates),
             "family": ["F1"] * len(dates),
             "sales": np.arange(10.0, len(dates) + 10.0),
+            "onpromotion": np.zeros(len(dates)),
+            "oil_price": np.full(len(dates), 50.0),
         }
     )
     source_df["store_nbr"] = source_df["entity_id"]
