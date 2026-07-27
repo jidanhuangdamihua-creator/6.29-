@@ -22,6 +22,7 @@ from scripts.run_full_paper_experiments import (
     _resolve_dataset_feature_cols,
     _save_dataset_result_csvs,
 )
+from src.protocols.experiment_protocol import get_experiment_protocol
 from src.utils.parquet_data_loader import attach_window_attrs
 
 
@@ -298,13 +299,66 @@ class FullPaperRunnerSolidifiedParquetTest(unittest.TestCase):
         self.assertTrue(feature_cols)
         self.assertTrue(all(source_df[c].dtype.kind in ("i", "u", "f") for c in feature_cols))
 
-        projected_source, projected_target = _project_modeling_frames(source_df, target_df, feature_cols)
+        projected_source, projected_target = _project_modeling_frames(
+            source_df,
+            target_df,
+            modeling_feature_cols=feature_cols,
+        )
 
         for bad_col in ("StoreType", "Assortment", "PromoInterval"):
             self.assertNotIn(bad_col, projected_source.columns)
             self.assertNotIn(bad_col, projected_target.columns)
         self.assertTrue(set(feature_cols).issubset(projected_source.columns))
         self.assertTrue(set(feature_cols).issubset(projected_target.columns))
+
+    def test_d2_projection_preserves_protocol_knn_promo_without_modeling_promo(self):
+        source_df = pd.DataFrame(
+            {
+                "date": pd.date_range("2018-06-01", periods=2),
+                "entity_id": ["source-1", "source-1"],
+                "item_id": [1, 1],
+                "brand_id": [1, 1],
+                "sales": [10.0, 11.0],
+                "promo": [0.0, 1.0],
+                "year": [2018, 2018],
+                "month": [6, 6],
+                "week": [22, 22],
+                "day": [1, 2],
+            }
+        )
+        target_df = source_df.copy()
+        target_df["entity_id"] = "target"
+        source_df.attrs["projection_test"] = "source"
+        target_df.attrs["projection_test"] = "target"
+
+        modeling_feature_cols = _resolve_dataset_feature_cols(
+            "Dataset2",
+            source_df,
+            target_df,
+            _load_config(),
+        )
+        self.assertEqual(
+            ["sales", "year", "month", "week", "day"],
+            modeling_feature_cols,
+        )
+        knn_required_cols = get_experiment_protocol("Dataset2").knn_feature_columns
+
+        projected_source, projected_target = _project_modeling_frames(
+            source_df,
+            target_df,
+            modeling_feature_cols=modeling_feature_cols,
+            required_passthrough_cols=knn_required_cols,
+        )
+
+        self.assertNotIn("promo", modeling_feature_cols)
+        self.assertIn("promo", projected_source.columns)
+        self.assertIn("promo", projected_target.columns)
+        self.assertEqual(source_df["promo"].tolist(), projected_source["promo"].tolist())
+        self.assertEqual(target_df["promo"].tolist(), projected_target["promo"].tolist())
+        self.assertEqual(source_df.attrs, projected_source.attrs)
+        self.assertEqual(target_df.attrs, projected_target.attrs)
+        self.assertEqual(len(projected_source.columns), len(set(projected_source.columns)))
+        self.assertEqual(len(projected_target.columns), len(set(projected_target.columns)))
 
     def test_d1_without_information_sharing_uses_store_domain_not_entity_overlap(self):
         source_df = pd.DataFrame(

@@ -60,6 +60,7 @@ from src.protocols.experiment_protocol import (
     get_experiment_protocol,
     serialize_canonical_target_key,
 )
+from src.protocols.formal_target_scope import scope_target_to_formal_window
 from src.utils.run_artifacts import publish_formal_cell_output_frame
 from src.evaluation.metric_contract import (
     MetricProtocolError,
@@ -706,6 +707,20 @@ def _load_solidified_base_data(
         strict_paper_mode=strict_paper_mode,
         strict_paper_split=strict_paper_split,
     )
+    if strict_paper_mode:
+        target_df = scope_target_to_formal_window(
+            target_df,
+            dataset_id=dataset_name,
+        )
+        target_df.attrs.update(
+            {
+                "target_window_expected_days": int(target_df["date"].nunique()),
+                "target_window_range_days": int(
+                    (target_df["date"].max() - target_df["date"].min()).days + 1
+                ),
+                "target_window_unique_days": int(target_df["date"].nunique()),
+            }
+        )
     processed_df = pd.concat([source_df, target_df], ignore_index=True)
     processed_df.attrs["dataset_name"] = str(dataset_name)
     return {
@@ -912,9 +927,10 @@ def _sanitize_feature_cols(
 def _project_modeling_frames(
     source_df: pd.DataFrame,
     target_df: pd.DataFrame,
-    feature_cols: Sequence[str],
+    modeling_feature_cols: Sequence[str],
+    required_passthrough_cols: Sequence[str] = (),
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Drop non-modeling baggage before normalize_features scans whole frames."""
+    """Project shared frames while preserving protocol-only downstream columns."""
     identity_cols = [
         "date",
         "entity_id",
@@ -927,7 +943,11 @@ def _project_modeling_frames(
         dict.fromkeys(
             [
                 c
-                for c in identity_cols + list(feature_cols)
+                for c in (
+                    identity_cols
+                    + list(modeling_feature_cols)
+                    + list(required_passthrough_cols)
+                )
                 if c in source_df.columns and c in target_df.columns
             ]
         )
@@ -1117,6 +1137,7 @@ def run_experiment(
     base_data: Dict[str, pd.DataFrame] | None = None,
 ) -> Dict[str, Any]:
     """Run one experiment with explicit method/scenario/sensitivity settings."""
+    _load_experiment_runners()
     ds_paths = cfg["dataset_paths"]
     exp_cfg = cfg["single_experiment"]
 
@@ -1136,7 +1157,7 @@ def run_experiment(
     target_df = base["target_df"].copy()
     target_metadata = _dataset3_target_metadata(target_df) if dataset_name == "Dataset3" else {}
 
-    feature_cols = _resolve_dataset_feature_cols(
+    modeling_feature_cols = _resolve_dataset_feature_cols(
         dataset_name=dataset_name,
         source_df=source_df,
         target_df=target_df,
@@ -1161,7 +1182,17 @@ def run_experiment(
     target_df.attrs["signature_static_feature_cols"] = list(source_df.attrs.get("signature_static_feature_cols", []))
     source_df.attrs["method"] = method_name
     target_df.attrs["method"] = method_name
-    source_df, target_df = _project_modeling_frames(source_df, target_df, feature_cols)
+    protocol_knn_feature_cols = get_experiment_protocol(dataset_name).knn_feature_columns
+    source_df, target_df = _project_modeling_frames(
+        source_df,
+        target_df,
+        modeling_feature_cols=modeling_feature_cols,
+        required_passthrough_cols=protocol_knn_feature_cols,
+    )
+    target_df = scope_target_to_formal_window(
+        target_df,
+        dataset_id=dataset_name,
+    )
     protocol_group_cols = {
         "Dataset1": ("store_id", "item_id"),
         "Dataset2": ("brand_id", "item_id"),
@@ -1209,7 +1240,7 @@ def run_experiment(
     common_kwargs: Dict[str, Any] = {
         "source_df": source_df,
         "target_df": target_df,
-        "feature_cols": feature_cols,
+        "feature_cols": modeling_feature_cols,
         "horizon": int(exp_cfg["horizon"]),
         "window_size": int(exp_cfg["window_size"]),
         "learning_rate": float(exp_cfg.get("learning_rate", 0.001)),
@@ -1239,7 +1270,7 @@ def run_experiment(
             target_epochs=int(exp_cfg["target_epochs"]),
             batch_size=int(exp_cfg["batch_size"]),
             metric_protocol=strict_metric_protocol,
-            feature_cols=feature_cols,
+            feature_cols=modeling_feature_cols,
             expected_metric_identity=expected_metric_identity,
         )
     elif method_name == "SS-TL":
@@ -1325,7 +1356,7 @@ def run_experiment(
                 "weight": float(method_meta.get("source_weight", 1.0)),
                 "source_pool_scope_mode": str(source_df.attrs.get("source_pool_scope_mode", "")),
                 "source_pool_scope_note": str(source_df.attrs.get("source_pool_scope_note", "")),
-                "signature_base_features": "|".join(feature_cols),
+                "signature_base_features": "|".join(modeling_feature_cols),
                 "signature_static_features": "|".join(source_df.attrs.get("signature_static_feature_cols", [])),
             }
         )
@@ -1355,7 +1386,7 @@ def run_experiment(
                         "weight": float(source_meta.get("weight", 0.0)),
                         "source_pool_scope_mode": str(source_df.attrs.get("source_pool_scope_mode", "")),
                         "source_pool_scope_note": str(source_df.attrs.get("source_pool_scope_note", "")),
-                        "signature_base_features": "|".join(feature_cols),
+                        "signature_base_features": "|".join(modeling_feature_cols),
                         "signature_static_features": "|".join(source_df.attrs.get("signature_static_feature_cols", [])),
                     }
                 )
@@ -1509,21 +1540,21 @@ def run_experiment(
         "source_identifier": _source_identifier_from_meta(method_name, method_meta),
         "selected_sources": _selected_sources_from_meta(method_name, method_meta),
         "selected_source_count": int(method_meta.get("selected_source_count", len(method_meta.get("selected_sources", [])) if isinstance(method_meta.get("selected_sources"), list) else 0)),
-        "source_selection_feature_cols": _stable_json_dumps(list(feature_cols)),
-        "model_feature_cols": _stable_json_dumps(list(feature_cols)),
+        "source_selection_feature_cols": _stable_json_dumps(list(modeling_feature_cols)),
+        "model_feature_cols": _stable_json_dumps(list(modeling_feature_cols)),
         "feature_source": "runtime_feature_cols",
         "knn_feature_mode": NOT_APPLICABLE,
         "feature_consistency_status": "runtime_no_knn_json",
         "json_only_features": NOT_APPLICABLE,
-        "runtime_only_features": _stable_json_dumps(list(feature_cols)),
+        "runtime_only_features": _stable_json_dumps(list(modeling_feature_cols)),
         "source_numeric_na_repaired": NOT_APPLICABLE,
         "repaired_columns": NOT_APPLICABLE,
         "source_failure_messages": _stable_json_dumps(method_meta.get("source_failure_messages", [])),
         "alignment_notes": alignment["alignment_notes"],
         "error": "",
         "source_identification": source_identification,
-        "feature_cols_final": list(feature_cols),
-        "rfe_candidate_features": list(feature_cols),
+        "feature_cols_final": list(modeling_feature_cols),
+        "rfe_candidate_features": list(modeling_feature_cols),
         "rfe_selected_features": list(
             ((raw.get("meta", {}) or {}).get("selected_feature_cols", []))
             if isinstance(raw, dict)
@@ -1531,7 +1562,7 @@ def run_experiment(
         ),
         "signature_components": {
             "scenario": str(source_df.attrs.get("information_sharing_scenario", "")),
-            "base_features": list(feature_cols),
+            "base_features": list(modeling_feature_cols),
             "static_features": list(source_df.attrs.get("signature_static_feature_cols", [])),
         },
     }
@@ -1699,8 +1730,14 @@ def _run_dry_run_checks(
         )
         source_df = base["source_df"]
         target_df = base["target_df"]
-        feature_cols = _resolve_dataset_feature_cols(dataset_name, source_df, target_df, cfg)
-        projected_source, projected_target = _project_modeling_frames(source_df, target_df, feature_cols)
+        modeling_feature_cols = _resolve_dataset_feature_cols(dataset_name, source_df, target_df, cfg)
+        protocol_knn_feature_cols = get_experiment_protocol(dataset_name).knn_feature_columns
+        projected_source, projected_target = _project_modeling_frames(
+            source_df,
+            target_df,
+            modeling_feature_cols=modeling_feature_cols,
+            required_passthrough_cols=protocol_knn_feature_cols,
+        )
         todo_found = any(
             frame.astype(str)
             .apply(lambda col: col.str.contains("TODO_REGION_UNAVAILABLE", regex=False).any())
@@ -1721,7 +1758,7 @@ def _run_dry_run_checks(
             f"{dataset_name}: "
             f"source={paths['source'].relative_to(ROOT)} rows={len(source_df)} columns={len(source_df.columns)} "
             f"target={paths['target'].relative_to(ROOT)} rows={len(target_df)} columns={len(target_df.columns)} "
-            f"feature_cols={feature_cols} "
+            f"feature_cols={modeling_feature_cols} "
             f"projected_string_feature_cols={bad_projected} "
             f"todo_region_unavailable={todo_found}"
         )

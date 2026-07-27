@@ -754,6 +754,19 @@ def temporal_split_by_ratio_or_dates(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd
         val_dates = eval_dates[train_days:train_days + val_days]
         test_dates = eval_dates[train_days + val_days:]
 
+        if role == "target" and df.attrs.get("protocol_sample_manifest") is not None:
+            observed_end = df.attrs.get("knn_observed_end")
+            if observed_end is not None and len(test_dates) > 0:
+                context_start = pd.Timestamp(observed_end).normalize() + pd.Timedelta(days=1)
+                test_start = pd.Timestamp(test_dates[0]).normalize()
+                if context_start < test_start:
+                    available_dates = pd.DatetimeIndex(pd.to_datetime(unique_dates)).normalize()
+                    leading_context = available_dates[
+                        (available_dates >= context_start) & (available_dates < test_start)
+                    ].to_numpy()
+                    if len(leading_context) > 0:
+                        test_dates = np.concatenate((leading_context, test_dates))
+
         train_df = ordered[ordered["date"].isin(train_dates)].copy()
         val_df = ordered[ordered["date"].isin(val_dates)].copy()
         test_df = ordered[ordered["date"].isin(test_dates)].copy()

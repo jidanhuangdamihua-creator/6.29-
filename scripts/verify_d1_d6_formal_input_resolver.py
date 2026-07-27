@@ -160,8 +160,8 @@ def _verify_parity(
 
 def _verify_frozen_rows_and_hashes(snapshot: Mapping[str, tuple[int, int, int, str]]) -> None:
     expected = {
-        (2, "source"): (48654, "466391bb7e89067663d2d8f882834819896620c56bbbdc1959b81df938080ab2"),
-        (2, "target"): (1802, "fbfe0df5a5624504b00a8ea701ca7dd250ab46232d29f82473dcf4d0df712588"),
+        (2, "source"): (48654, "04c316a7519e37c6f6712b5c34d25edb38e82833568102a22bd3961081d07409"),
+        (2, "target"): (1807, "e4893b3e2cc7c2d173cba4b76fc58ceac99515af2b89e999ce62531a01f8e009"),
         (4, "source"): (7935702, "17a1fa5bd1dddfd46bda2a6922ff7821aee2a7e79deca58a94ff7bf20821f7ef"),
         (4, "target"): (3847, "f0b83798ea265c6b79f09487903404c7c75acfcac2657f53e989ef59588e5946"),
     }

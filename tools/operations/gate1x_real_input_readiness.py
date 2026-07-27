@@ -57,6 +57,8 @@ from src.protocols.candidate_pool import (  # noqa: E402
 )
 from src.protocols.experiment_protocol import PROTOCOL_VERSION, get_experiment_protocol  # noqa: E402
 from src.protocols.formal_deployment_manifest import readiness_proof_digest  # noqa: E402
+from src.protocols.formal_target_scope import evaluate_formal_target_calendar  # noqa: E402
+from src.protocols.d2_target_calendarization import D2_TARGET_REPAIR_DATES  # noqa: E402
 
 
 PARQUET_DIR = ROOT / "数据集" / "固化数据"
@@ -540,9 +542,16 @@ def _verify_d2_sealed_identity(root: Path, source_path: Path, target_path: Path)
         raise Gate1Failure("D2_SEALED_IDENTITY", f"missing D2 manifest: {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     expected = {
-        "source": (source_path, 48654, "466391bb7e89067663d2d8f882834819896620c56bbbdc1959b81df938080ab2"),
-        "target": (target_path, 1802, "fbfe0df5a5624504b00a8ea701ca7dd250ab46232d29f82473dcf4d0df712588"),
+        "source": (source_path, 48654, "04c316a7519e37c6f6712b5c34d25edb38e82833568102a22bd3961081d07409"),
+        "target": (target_path, 1807, "__BOUND_FROM_MANIFEST_AFTER_REBUILD__"),
     }
+    target_manifest_artifact = manifest.get("artifacts", {}).get("target", {})
+    if not isinstance(target_manifest_artifact, Mapping):
+        raise Gate1Failure("D2_SEALED_IDENTITY", "D2 target manifest artifact is invalid")
+    target_expected_hash = target_manifest_artifact.get("sha256")
+    if not isinstance(target_expected_hash, str) or len(target_expected_hash) != 64:
+        raise Gate1Failure("D2_SEALED_IDENTITY", "D2 target manifest SHA-256 is missing")
+    expected["target"] = (target_path, 1807, target_expected_hash)
     artifacts: dict[str, object] = {}
     expected_schema_fingerprints = manifest.get("schema_fingerprints", {})
     for role, (path, expected_rows, expected_hash) in expected.items():
@@ -606,6 +615,19 @@ def _verify_d2_sealed_identity(root: Path, source_path: Path, target_path: Path)
         for date_text in D2_SOURCE_MISSING_DATES
     ):
         raise Gate1Failure("D2_SEALED_IDENTITY", "D2 frozen dates are missing or sales are not all zero")
+    target_frame = pd.read_parquet(target_path)
+    target_calendar = evaluate_formal_target_calendar(target_frame, dataset_id="D2")
+    if not target_calendar["ready"]:
+        raise Gate1Failure(
+            "SEALED_D2_TARGET_REPAIR_REQUIRED",
+            f"actual={target_calendar['actual']} expected={target_calendar['expected']} "
+            f"missing={target_calendar['missing_exact_keys']!r}",
+        )
+    repair_dates = tuple(pd.Timestamp(value) for value in D2_TARGET_REPAIR_DATES)
+    repair_mask = pd.to_datetime(target_frame["date"]).dt.normalize().isin(repair_dates)
+    repair_rows = target_frame.loc[repair_mask]
+    if len(repair_rows) != len(repair_dates) or not repair_rows["sales"].eq(0).all() or not repair_rows["promo"].eq(0).all():
+        raise Gate1Failure("SEALED_D2_TARGET_REPAIR_REQUIRED", "D2 repair rows must have sales=0 and promo=0")
     return {
         "status": "passed",
         "manifest_path": str(manifest_path),
@@ -615,6 +637,9 @@ def _verify_d2_sealed_identity(root: Path, source_path: Path, target_path: Path)
         "runtime_calendarization": False,
         "verified_zero_sales_dates": list(D2_SOURCE_MISSING_DATES),
         "zero_date_evidence": zero_dates,
+        "formal_target_calendar": target_calendar,
+        "target_repair_dates": list(D2_TARGET_REPAIR_DATES),
+        "target_repair_promo_zero": True,
     }
 
 
@@ -911,6 +936,11 @@ def _base_report(root: Path, parent_root: Path, old_root: Path, dataset: int, id
         "before_rows": {"source": _parquet_meta(source_path).get("row_count"), "target": _parquet_meta(target_path).get("row_count")},
         "after_slicing_rows": {},
         "expected_calendarized_rows": spec.expected_blind_rows,
+        "actual_formal_target_rows": 0,
+        "expected_formal_target_rows": int(
+            (spec.blind_end - spec.target_train_start).days + 1
+        ) * len(spec.target_keys),
+        "formal_target_calendar": {},
         "missing_exact_keys": [],
         "duplicate_exact_keys": 0,
         "post_origin_history_rows": _source_post_origin(source_path, spec.origin),
@@ -938,11 +968,17 @@ def _dataset_report(root: Path, parent_root: Path, old_root: Path, dataset_id: i
         if dataset_id == 6:
             target = _d6_target_with_calendar(root, target)
         counts, repairs, calendarized_rows = _calendarize_target_counts(target, spec)
-        report["missing_exact_keys"] = repairs
+        formal_calendar = evaluate_formal_target_calendar(target, dataset_id=spec.dataset)
+        report["formal_target_calendar"] = formal_calendar
+        report["actual_formal_target_rows"] = formal_calendar["actual"]
+        report["expected_formal_target_rows"] = formal_calendar["expected"]
+        report["missing_exact_keys"] = (
+            formal_calendar["missing_exact_keys"] if dataset_id == 2 else repairs
+        )
         report["duplicate_exact_keys"] = int(target.duplicated([*spec.key_fields, "date"]).sum())
-        report["after_slicing_rows"] = {"target_observed": int((pd.to_datetime(target.date) <= pd.Timestamp(spec.origin)).sum()), "target_train": int(pd.to_datetime(target.date).between(pd.Timestamp(spec.target_train_start), pd.Timestamp(spec.target_train_end)).sum()), "validation": int(pd.to_datetime(target.date).between(pd.Timestamp(spec.validation_start), pd.Timestamp(spec.validation_end)).sum()), "blind": calendarized_rows}
+        report["after_slicing_rows"] = {"target_observed": int((pd.to_datetime(target.date) <= pd.Timestamp(spec.origin)).sum()), "target_train": int(pd.to_datetime(target.date).between(pd.Timestamp(spec.target_train_start), pd.Timestamp(spec.target_train_end)).sum()), "validation": int(pd.to_datetime(target.date).between(pd.Timestamp(spec.validation_start), pd.Timestamp(spec.validation_end)).sum()), "blind": int(pd.to_datetime(target.date).between(pd.Timestamp(spec.blind_start), pd.Timestamp(spec.blind_end)).sum())}
         report["pre_or_equal_origin_forecast_rows"] = int(((pd.to_datetime(target.date) >= pd.Timestamp(spec.blind_start)) & (pd.to_datetime(target.date) <= pd.Timestamp(spec.origin))).sum())
-        report["cardinality"] = {"target_keys": counts, "worker_safe_blind": calendarized_rows, "evaluator_truth": calendarized_rows, "expected_blind": spec.expected_blind_rows}
+        report["cardinality"] = {"target_keys": counts, "worker_safe_blind": report["after_slicing_rows"]["blind"] if dataset_id == 2 else calendarized_rows, "evaluator_truth": report["after_slicing_rows"]["blind"] if dataset_id == 2 else calendarized_rows, "expected_blind": spec.expected_blind_rows, "formal_target_actual": formal_calendar["actual"], "formal_target_expected": formal_calendar["expected"]}
         report["evaluator_truth_fields"] = list(target.columns)
         report["audit_fields"] = list(target.columns)
         protocol = get_experiment_protocol(dataset_id)
@@ -1083,7 +1119,20 @@ def _dataset_report(root: Path, parent_root: Path, old_root: Path, dataset_id: i
             report["failure_code"] = "DUPLICATE_EXACT_KEY_DATE"
         if report["pre_or_equal_origin_forecast_rows"]:
             report["failure_code"] = "FORECAST_ORIGIN"
-        report["status"] = "passed" if report["failure_code"] is None and calendarized_rows == spec.expected_blind_rows else "failed"
+        if dataset_id == 2 and formal_calendar["missing_exact_keys"]:
+            report["failure_code"] = (
+                "SEALED_D2_TARGET_REPAIR_REQUIRED"
+                if dataset_id == 2
+                else "FORMAL_TARGET_CALENDAR_INCOMPLETE"
+            )
+        if dataset_id == 2 and (formal_calendar["extra_dates"] or formal_calendar["unexpected_keys"]):
+            report["failure_code"] = "FORMAL_TARGET_SCOPE_MISMATCH"
+        report["status"] = (
+            "passed"
+            if report["failure_code"] is None
+            and (formal_calendar["ready"] if dataset_id == 2 else calendarized_rows == spec.expected_blind_rows)
+            else "failed"
+        )
         return report
     except Exception as exc:
         return {"dataset": f"D{dataset_id}", "status": "failed", "failure_code": getattr(exc, "code", "READINESS_ERROR"), "error": f"{type(exc).__name__}: {exc}"}

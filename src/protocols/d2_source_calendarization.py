@@ -319,6 +319,99 @@ def calendarize_d2_source_frame(
     return result, report
 
 
+def repair_d2_source_calendar_fields(
+    source_frame: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Repair date-derived fields only on the four approved source dates.
+
+    The sealed source stores ``date`` and its calendar projections as separate
+    columns.  This producer repairs an already materialized frame without
+    changing demand, promotion, identity, or row/date keys.  Any non-finite
+    or date-inconsistent calendar field outside the approved repair dates is a
+    hard protocol violation.
+    """
+
+    _assert_source_role(source_frame)
+    required = (
+        *D2_SOURCE_GROUP_COLS,
+        "date",
+        "sales",
+        "promo",
+        "year",
+        "month",
+        "week",
+        "day",
+    )
+    missing_columns = [column for column in required if column not in source_frame.columns]
+    if missing_columns:
+        raise ProtocolViolation(
+            f"D2 source calendar-field repair missing columns: {missing_columns}"
+        )
+
+    result = source_frame.copy()
+    result.attrs = source_frame.attrs.copy()
+    result["date"] = pd.to_datetime(result["date"], errors="coerce").dt.normalize()
+    if result["date"].isna().any():
+        raise ProtocolViolation("D2 source calendar-field repair received invalid dates")
+
+    approved_mask = result["date"].isin(_ALLOWED_MISSING_DATES)
+    mismatch_masks: dict[str, pd.Series] = {}
+    for field in ("year", "month", "week", "day"):
+        numeric = pd.to_numeric(result[field], errors="coerce")
+        expected = result["date"].map(
+            lambda timestamp, field=field: _calendar_value(field, timestamp)
+        )
+        mismatch_masks[field] = numeric.isna() | ~np.isclose(
+            numeric.to_numpy(dtype=np.float64),
+            expected.to_numpy(dtype=np.float64),
+            equal_nan=False,
+        )
+
+    mismatch_frame = pd.DataFrame(mismatch_masks, index=result.index)
+    outside_approved = mismatch_frame.any(axis=1) & ~approved_mask
+    if outside_approved.any():
+        offending = result.loc[outside_approved, [*D2_SOURCE_GROUP_COLS, "date"]]
+        raise ProtocolViolation(
+            "D2 source calendar fields are non-finite or date-inconsistent "
+            f"outside approved repair dates: {offending.to_dict(orient='records')!r}"
+        )
+
+    changed = mismatch_frame.any(axis=1) & approved_mask
+    for field in ("year", "month", "week", "day"):
+        expected = result["date"].map(
+            lambda timestamp, field=field: _calendar_value(field, timestamp)
+        )
+        result.loc[approved_mask & changed, field] = expected.loc[approved_mask & changed]
+
+    remaining_nonfinite = {
+        field: int(
+            (~np.isfinite(pd.to_numeric(result[field], errors="coerce").to_numpy(dtype=np.float64)))
+            .sum()
+        )
+        for field in ("year", "month", "week", "day")
+    }
+    if any(remaining_nonfinite.values()):
+        raise ProtocolViolation(
+            f"D2 source calendar-field repair left non-finite values: {remaining_nonfinite}"
+        )
+
+    repaired_dates = sorted(
+        result.loc[approved_mask & changed, "date"].dt.strftime("%Y-%m-%d").unique().tolist()
+    )
+    evidence = {
+        "rule_version": D2_SOURCE_CALENDARIZATION_RULE_VERSION,
+        "repair_dates": repaired_dates,
+        "approved_dates": list(D2_SOURCE_MISSING_DATES),
+        "repaired_row_count": int(changed.sum()),
+        "changed_cell_count": int(mismatch_frame.loc[approved_mask].to_numpy(dtype=bool).sum()),
+        "calendar_fields": ["year", "month", "week", "day"],
+        "sales_unchanged": True,
+        "promo_unchanged": True,
+        "row_count": int(len(result)),
+    }
+    return result, evidence
+
+
 def verify_d2_source_frame(
     source_slice: pd.DataFrame,
     *,
@@ -348,6 +441,13 @@ def verify_d2_source_frame(
     if numeric_sales.isna().any() or not np.isfinite(numeric_sales.to_numpy(dtype=np.float64)).all():
         raise ProtocolViolation("D2 sealed source sales contain non-finite values")
     source["sales"] = numeric_sales.astype(float)
+
+    _, calendar_field_evidence = repair_d2_source_calendar_fields(source)
+    if int(calendar_field_evidence["changed_cell_count"]) != 0:
+        raise ProtocolViolation(
+            "D2 sealed source calendar repair requires producer repair: "
+            f"{calendar_field_evidence!r}"
+        )
 
     source_keys = _normalize_frame_keys(source)
     actual_keys = set(source_keys.tolist())

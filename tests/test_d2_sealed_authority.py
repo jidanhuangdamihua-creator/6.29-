@@ -4,6 +4,9 @@ import hashlib
 import json
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+
 from src.protocols.formal_input_paths import formal_input_paths
 
 
@@ -15,8 +18,8 @@ def test_d2_sealed_manifest_binds_the_declared_current_bytes() -> None:
     manifest_path = paths["source"].parent / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     expected = {
-        "source": (48654, "466391bb7e89067663d2d8f882834819896620c56bbbdc1959b81df938080ab2"),
-        "target": (1802, "fbfe0df5a5624504b00a8ea701ca7dd250ab46232d29f82473dcf4d0df712588"),
+        "source": (48654, "04c316a7519e37c6f6712b5c34d25edb38e82833568102a22bd3961081d07409"),
+        "target": (1807, "e4893b3e2cc7c2d173cba4b76fc58ceac99515af2b89e999ce62531a01f8e009"),
     }
     for role, (rows, digest) in expected.items():
         path = paths[role]
@@ -41,3 +44,18 @@ def test_d2_sealed_manifest_records_precalendarized_zero_dates() -> None:
         "2018-05-01",
         "2018-06-02",
     ]
+
+
+def test_d2_sealed_source_allowed_dates_have_finite_date_fields() -> None:
+    paths = formal_input_paths(ROOT, 2)
+    source = pd.read_parquet(paths["source"])
+    dates = pd.to_datetime(source["date"]).dt.normalize()
+    approved = pd.to_datetime(
+        ["2018-04-01", "2018-04-25", "2018-05-01", "2018-06-02"]
+    )
+    rows = source.loc[dates.isin(approved)]
+    assert len(rows) == 27 * len(approved)
+    assert rows["sales"].eq(0).all()
+    assert rows["promo"].eq(0).all()
+    assert rows[["year", "month", "week", "day"]].notna().all().all()
+    assert np.isfinite(rows[["year", "month", "week", "day"]].to_numpy(dtype=float)).all()

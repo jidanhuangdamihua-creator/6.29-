@@ -1,18 +1,18 @@
 {
-  "consumer_fingerprint": "271aee0f50b3da1413b1379d3eb8f0fce0123c1de6153a80cda9dd000ddeb5ca",
+  "consumer_fingerprint": "5bad663de916c9566897db2372ee6e83d2381d2539b646912b699715157aae2b",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "5d5f2d391c081f4bb91e8509810b7577da4338c5b0f5c89c3ffef663ecac77e3",
+    "code_inventory_digest": "f19e4a656cde955e20e52e3841be0370931d0171b78871c9075810c3fa8bacaa",
     "dataset_id": "D2",
-    "readiness_proof_digest": "f0e02f23b1be9a9daa9701dc95b9b880176e21a3d401dc17a4d6ac3d314ee964",
+    "readiness_proof_digest": "a3c4a57215091e1f0a62bfb82e3cc931e1eccfd8370d1566a8790213583675c1",
     "source_schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f",
-    "source_sha256": "466391bb7e89067663d2d8f882834819896620c56bbbdc1959b81df938080ab2",
+    "source_sha256": "04c316a7519e37c6f6712b5c34d25edb38e82833568102a22bd3961081d07409",
     "target_schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086",
-    "target_sha256": "fbfe0df5a5624504b00a8ea701ca7dd250ab46232d29f82473dcf4d0df712588"
+    "target_sha256": "e4893b3e2cc7c2d173cba4b76fc58ceac99515af2b89e999ce62531a01f8e009"
   },
   "dataset_id": "D2",
   "dataset_manifest_identity": {
     "path": "dataset2/manifest.json",
-    "sha256": "80674e823ff7b628ce0bee804e05ae04338c267941f3ab75a1efc3f145217abf"
+    "sha256": "6057be8294eccac98312d4aac098a61247915f3c464d8088ebd753ae5290d72a"
   },
   "dataset_root": "dataset2",
   "dataset_specific": {
@@ -126,7 +126,7 @@
         "source": {
           "path": "dataset2/source.parquet",
           "row_count": 48654,
-          "schema_digest": "e7c59c5f751ae614699a31f710e3091f3b96b2b6f50c3ecd6f00f1ad157749f7",
+          "schema_digest": "17b92c3d284475b9de8a1ab19cbe53cea781c5531614c25c61117d4a377aa1c3",
           "schema_fields": [
             "date",
             "brand_id",
@@ -139,12 +139,12 @@
             "week",
             "day"
           ],
-          "sha256": "466391bb7e89067663d2d8f882834819896620c56bbbdc1959b81df938080ab2",
-          "size_bytes": 126978
+          "sha256": "04c316a7519e37c6f6712b5c34d25edb38e82833568102a22bd3961081d07409",
+          "size_bytes": 126105
         },
         "target": {
           "path": "dataset2/target.parquet",
-          "row_count": 1802,
+          "row_count": 1807,
           "schema_digest": "77c0bbba1525b2dc78cbe3225f757017e008d707e43acfd914f4c6c42c361746",
           "schema_fields": [
             "date",
@@ -158,8 +158,8 @@
             "week",
             "day"
           ],
-          "sha256": "fbfe0df5a5624504b00a8ea701ca7dd250ab46232d29f82473dcf4d0df712588",
-          "size_bytes": 24984
+          "sha256": "e4893b3e2cc7c2d173cba4b76fc58ceac99515af2b89e999ce62531a01f8e009",
+          "size_bytes": 25130
         }
       },
       "manifest_path": "dataset2/manifest.json",
@@ -284,15 +284,15 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "f9a67ed32060d5cb526e1671ce2f07af20c1eeceba338d89492eb6e4c4cca065",
-  "readiness_proof_digest": "f0e02f23b1be9a9daa9701dc95b9b880176e21a3d401dc17a4d6ac3d314ee964",
+  "proof_identity_sha256": "cd1a30c71474208bfd664745fc8f54e35ecd201a122314b10f589b86130c294c",
+  "readiness_proof_digest": "a3c4a57215091e1f0a62bfb82e3cc931e1eccfd8370d1566a8790213583675c1",
   "readiness_result": {
     "failure_code": null,
     "status": "passed"
   },
   "row_count": {
     "source": 48654,
-    "target": 1802
+    "target": 1807
   },
   "schema_version": "d1_d6_formal_proof_v1",
   "source": {
@@ -308,7 +308,7 @@
       "week": "double",
       "year": "double"
     },
-    "mtime_ns": 1784287890489214078,
+    "mtime_ns": 1785128510417932323,
     "nullable": {
       "brand_id": true,
       "date": true,
@@ -397,8 +397,8 @@
       "schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f"
     },
     "schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f",
-    "sha256": "466391bb7e89067663d2d8f882834819896620c56bbbdc1959b81df938080ab2",
-    "size_bytes": 126978
+    "sha256": "04c316a7519e37c6f6712b5c34d25edb38e82833568102a22bd3961081d07409",
+    "size_bytes": 126105
   },
   "source_schema": {
     "columns": [
@@ -464,8 +464,8 @@
   "supporting_proof_files": [
     {
       "path": "dataset2/calendarization_audit.json",
-      "sha256": "f32541ba70100adb6c9a8c73e03dc14fea4b4bdd32f7fd3086a1fc195e59dff0",
-      "size_bytes": 1430
+      "sha256": "efae1b6ac1515d5d2043d6c62a1aae89c25fabd2d4f620ed976ecda3deb4d667",
+      "size_bytes": 5260
     },
     {
       "path": "dataset2/knn_schema.json",
@@ -474,8 +474,8 @@
     },
     {
       "path": "dataset2/manifest.json",
-      "sha256": "80674e823ff7b628ce0bee804e05ae04338c267941f3ab75a1efc3f145217abf",
-      "size_bytes": 3642
+      "sha256": "6057be8294eccac98312d4aac098a61247915f3c464d8088ebd753ae5290d72a",
+      "size_bytes": 6531
     },
     {
       "path": "dataset2/predictor_schema.json",
@@ -484,28 +484,28 @@
     },
     {
       "path": "dataset2/provenance.json",
-      "sha256": "9ba9834877b6681fb85f81c0dd694a16b6b58fe287c68d55fd9cada5dced8d3a",
-      "size_bytes": 832
+      "sha256": "4752146d94dae4346f840c1bf59c1e183d0daca62fa0b6aefda8db100545b039",
+      "size_bytes": 4478
     },
     {
       "path": "dataset2/source_sales_canonicalization.json",
-      "sha256": "73b4b85a12573bdb2393379c33a88331bdf0ef142a4bfc916a379bb6f9cea245",
-      "size_bytes": 681
+      "sha256": "9013f71c5b9c2d7907b01ad159cb58df963061177df750b7d4ee2bdd6fbffb23",
+      "size_bytes": 943
     },
     {
       "path": "dataset2/source_schema.json",
-      "sha256": "f1ae721c4892dd7025e4e84a4b4988fd7e232a17d886d6109d546574208c07ec",
-      "size_bytes": 1238
+      "sha256": "831042815de45e132d23fca4825a3855ac978a41917b1663031d11527cfc6bdc",
+      "size_bytes": 2701
     },
     {
       "path": "dataset2/target_schema.json",
-      "sha256": "a1dc21591e39248a0120eeef331f0d21dad68022b151295acc691c399ddbbaa2",
+      "sha256": "645fe6ddbd1993ebeadda1e20bd7567bf6219ee0d8d41f0d8259af8fcd3c62e5",
       "size_bytes": 1232
     },
     {
       "path": "dataset2/validation_report.json",
-      "sha256": "7d92167df3455590e7c2296792e96c2339da2f1ea9dd1710a89b97a9cb4b1268",
-      "size_bytes": 1343
+      "sha256": "2af2574e724ede3afeb378be0eccd875439dd1c9e25768d562f1d699391216dc",
+      "size_bytes": 3650
     }
   ],
   "target": {
@@ -521,7 +521,7 @@
       "week": "double",
       "year": "double"
     },
-    "mtime_ns": 1784287890563147085,
+    "mtime_ns": 1785085669374590295,
     "nullable": {
       "brand_id": true,
       "date": true,
@@ -547,7 +547,7 @@
       "day"
     ],
     "path": "数据集/固化数据/d1_d6_sealed_v1/dataset2/target.parquet",
-    "rows": 1802,
+    "rows": 1807,
     "schema": {
       "columns": [
         {
@@ -610,8 +610,8 @@
       "schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086"
     },
     "schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086",
-    "sha256": "fbfe0df5a5624504b00a8ea701ca7dd250ab46232d29f82473dcf4d0df712588",
-    "size_bytes": 24984
+    "sha256": "e4893b3e2cc7c2d173cba4b76fc58ceac99515af2b89e999ce62531a01f8e009",
+    "size_bytes": 25130
   },
   "target_schema": {
     "columns": [

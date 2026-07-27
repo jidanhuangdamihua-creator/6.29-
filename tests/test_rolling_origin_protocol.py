@@ -155,6 +155,49 @@ class RollingOriginProtocolTest(unittest.TestCase):
             )
             np.testing.assert_array_equal(cnn_labels, manifest_labels)
 
+    def test_target_test_sequence_keeps_protocol_leading_context(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "date": pd.date_range("2020-01-01", periods=210, freq="D"),
+                "entity_id": "1",
+                "item_id": "10",
+                "sales": np.arange(210, dtype=float),
+            }
+        )
+        frame.attrs.update(
+            {
+                "split_role": "target",
+                "split_mode": "days",
+                "split_config": {"train_days": 15, "val_days": 15, "test_days": 180},
+                "knn_observed_end": "2020-01-26",
+                "model_window_size": 10,
+            }
+        )
+        manifest = build_sample_manifest(
+            frame,
+            dataset_id="D1",
+            track="strict_paper",
+            scenario="without",
+            target_key=("1", "10"),
+            observed_end="2020-01-26",
+            first_forecast_origin="2020-02-05",
+            input_window=10,
+        )
+        frame.attrs["protocol_sample_manifest"] = manifest
+
+        _, _, test = temporal_split_by_ratio_or_dates(frame)
+
+        self.assertEqual("2020-01-27", test["date"].min().strftime("%Y-%m-%d"))
+        for horizon in range(1, 6):
+            X, y = build_tabular_sequence(
+                test,
+                horizon=horizon,
+                window_size=10,
+                feature_columns=("sales",),
+            )
+            self.assertEqual(len(manifest.for_horizon(horizon)), len(y))
+            self.assertEqual((len(y), 10, 1), X.shape)
+
     def test_cnn_sequence_rejects_manifest_input_date_mismatch(self) -> None:
         frame = pd.DataFrame(
             {

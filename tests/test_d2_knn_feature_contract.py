@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from scripts.run_full_paper_experiments import _project_modeling_frames
 from src.protocols.candidate_pool import select_daily_sequence_sources
 from src.protocols.experiment_protocol import (
     D1_KNN_FEATURES,
@@ -139,6 +140,36 @@ def test_d1_selection_and_digest_ignore_unrequested_promo() -> None:
     assert baseline.candidate_pool_digest == changed.candidate_pool_digest
 
 
+@pytest.mark.parametrize("dataset_id", ["D1", "D3", "D4", "D5", "D6"])
+def test_projection_passthrough_uses_each_formal_protocol_without_promo_drift(
+    dataset_id: str,
+) -> None:
+    protocol = get_experiment_protocol(dataset_id)
+    source = pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=2),
+            "sales": [1.0, 2.0],
+            "promo": [7.0, 8.0],
+            "onpromotion": [0.0, 1.0],
+            "oil_price": [90.0, 91.0],
+        }
+    )
+    target = source.copy()
+
+    projected_source, projected_target = _project_modeling_frames(
+        source,
+        target,
+        modeling_feature_cols=["sales"],
+        required_passthrough_cols=protocol.knn_feature_columns,
+    )
+
+    assert set(protocol.knn_feature_columns).issubset(projected_source.columns)
+    assert set(protocol.knn_feature_columns).issubset(projected_target.columns)
+    assert "promo" not in protocol.knn_feature_columns
+    assert "promo" not in projected_source.columns
+    assert "promo" not in projected_target.columns
+
+
 def test_d2_future_promo_and_post_origin_rows_do_not_change_selection_or_digest() -> None:
     source, target = _frames(source_promo=(1.0, 9.0), target_promo=1.0, future_promo=3.0)
     baseline = _select(source, target)
@@ -174,6 +205,45 @@ def test_d2_configured_forecast_consumer_excludes_real_promo() -> None:
     assert historical.attrs["knn_feature_columns"] == list(D2_KNN_FEATURES)
     assert historical["date"].max() == ORIGIN
     assert "promo" in historical.columns
+    assert "promo" not in forecast.columns
+    assert configured_target.loc[configured_target["date"] > ORIGIN, "promo"].isna().all()
+
+
+@pytest.mark.parametrize("scenario", ["with", "without"])
+def test_d2_projection_and_configured_frames_preserve_promo_only_for_history(
+    scenario: str,
+) -> None:
+    from tests.test_d1_d2_knn_window_closure import _strict_frames
+
+    source, target = _strict_frames("D2")
+    modeling_feature_cols = ["sales", "year", "month", "week", "day"]
+    knn_required_cols = get_experiment_protocol("D2").knn_feature_columns
+    projected_source, projected_target = _project_modeling_frames(
+        source,
+        target,
+        modeling_feature_cols=modeling_feature_cols,
+        required_passthrough_cols=knn_required_cols,
+    )
+
+    configured_source, configured_target = configure_protocol_frames(
+        projected_source,
+        projected_target,
+        dataset_id="D2",
+        scenario=scenario,
+        group_cols=GROUP_COLS,
+        observed_start=None,
+    )
+    source_observed = get_configured_knn_frame(configured_source, "source")
+    target_observed = get_configured_knn_frame(configured_target, "target")
+    forecast = configured_target.attrs["forecast_consumer_frame"]
+
+    assert "promo" not in modeling_feature_cols
+    assert list(source_observed.attrs["knn_feature_columns"]) == list(D2_KNN_FEATURES)
+    assert list(target_observed.attrs["knn_feature_columns"]) == list(D2_KNN_FEATURES)
+    assert set(D2_KNN_FEATURES).issubset(source_observed.columns)
+    assert set(D2_KNN_FEATURES).issubset(target_observed.columns)
+    assert source_observed["date"].max() <= ORIGIN
+    assert target_observed["date"].max() == ORIGIN
     assert "promo" not in forecast.columns
     assert configured_target.loc[configured_target["date"] > ORIGIN, "promo"].isna().all()
 
