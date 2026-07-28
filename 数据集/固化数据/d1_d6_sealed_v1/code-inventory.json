@@ -1,5 +1,5 @@
 {
-  "file_count": 163,
+  "file_count": 167,
   "files": [
     {
       "path": "configs/solidified/knn/Dataset1/knn_with_info_sharing.json",
@@ -166,6 +166,10 @@
       "sha256": "ead8d0af19f1bc5b7b1548a33a7312345b64fd48c4f3384b20fad1ea775b7898"
     },
     {
+      "path": "scripts/precompute_d5_source_history.py",
+      "sha256": "fc6facac8638a210bf9d62c999e7b4cab5cab23ae124a01fe33deda6b4f4692e"
+    },
+    {
       "path": "scripts/preprocess_clean_datasets.py",
       "sha256": "0af1de9fb2f32e60171ff87d2461dabb3ec2afa4507f19916f2de628cb1cac75"
     },
@@ -314,6 +318,10 @@
       "sha256": "db6f5e892d43d0f17251fa8d9180f7f69c010665e26fa5fec578ed58f63f73f2"
     },
     {
+      "path": "scripts/verify_d5_precomputed_source_history.py",
+      "sha256": "c1a4e240a5b8a81a862205189d6ca067543fdc3191a583c3ac8ab2f2ce2e33bb"
+    },
+    {
       "path": "scripts/verify_knn_distance_weight_fields.py",
       "sha256": "89c7a855a2a1b38d5b3bacd1cf8cb943a313e8a03c17e3c9964c17e431793aed"
     },
@@ -343,7 +351,7 @@
     },
     {
       "path": "src/data_processing/data_preprocessing.py",
-      "sha256": "3d4371a207ce5c1526b77b8784687894a79618e8b27f2d92fccb32d1799b85fe"
+      "sha256": "ce1ce83380045521de838a03a228c04815a86e228879281fd17fe99bb4e4d299"
     },
     {
       "path": "src/data_processing/dataset_loader.py",
@@ -447,7 +455,7 @@
     },
     {
       "path": "src/protocols/knn_frames.py",
-      "sha256": "6d8eb71f1b1551325667fab3cd8fab9c27ae472c321ce75440d5ddf204c464a5"
+      "sha256": "1bf8ab1b3e437e7a3a78bc691b7236f36668f5cf1608a220c9a4aae98f35f2b3"
     },
     {
       "path": "src/protocols/provenance.py",
@@ -463,7 +471,7 @@
     },
     {
       "path": "src/protocols/runner_adapter.py",
-      "sha256": "37a2898a69e30baaf250ac1c9c3cb50acf7b3c2d8f6f456e10d87e50d82ff31f"
+      "sha256": "85d06935690a10aeae9d8738c9559b700b6b70b995ca4cab327f277d54afd59d"
     },
     {
       "path": "src/protocols/selection_metadata.py",
@@ -471,7 +479,7 @@
     },
     {
       "path": "src/protocols/source_history.py",
-      "sha256": "da47474060e5c63405a215f5a85f0b408a3d9d20a653cc5d865d490d420ac4ea"
+      "sha256": "25c0564cd182719e2c813935d4680aed94897578d10e3fc6300b0d96c7cbbb92"
     },
     {
       "path": "src/results/__init__.py",
@@ -546,8 +554,16 @@
       "sha256": "1961a539f906715f3f4704fb2ee0edaa35cae3a7ed6c1181612c8592d4f7189b"
     },
     {
+      "path": "src/utils/d5_precomputed_source_history.py",
+      "sha256": "db74f5f7385954a8b352e651918ecb9808a28c4148d64beb0ad46110208899e5"
+    },
+    {
+      "path": "src/utils/dataframe_attrs.py",
+      "sha256": "6b8f70f69ee5e854ca7d2813c27a6734de5b73cdde8b2c8a01af261fd15ad2dc"
+    },
+    {
       "path": "src/utils/entity_experiment.py",
-      "sha256": "4df51917d9638d760bf7da99f4b67dcc4d4f41cd634c1cd807ee1301bdad7e0a"
+      "sha256": "4d4f61844bd87a9a26a38626ec590e36e3bab4c055c23da087a28c9f05d2579c"
     },
     {
       "path": "src/utils/environment.py",
@@ -579,7 +595,7 @@
     },
     {
       "path": "src/utils/parquet_data_loader.py",
-      "sha256": "a5c024c397703d0529a86075c27d8221d9f8b4d78760e0c356703f9b78a202ec"
+      "sha256": "ec8e57b38d56c8b94418fbbbcbfa0392846d6f73c6097efd4e569f988ba46d52"
     },
     {
       "path": "src/utils/progress_tracker.py",
@@ -654,6 +670,6 @@
       "sha256": "a8a1d6a43c87f01fc8ad010f594b7f51bf353d9788fd8a1d4b824f7325aa053c"
     }
   ],
-  "inventory_sha256": "f19e4a656cde955e20e52e3841be0370931d0171b78871c9075810c3fa8bacaa",
+  "inventory_sha256": "3460c61a132ba00d7d21c6b72a1e1f0ab3671a40be8904001b55eb8f24b3aa09",
   "schema_version": "d1_d6_code_inventory_v1"
 }
