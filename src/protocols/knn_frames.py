@@ -8,6 +8,10 @@ import pandas as pd
 
 from .experiment_protocol import ObservationWindow, ProtocolViolation
 from .gate1_transformation import normalized_frame_digest
+from src.utils.dataframe_attrs import (
+    lightweight_frame_attrs,
+    temporarily_detached_attrs,
+)
 
 
 _CONFIGURED_FRAME_ATTR = "protocol_knn_observed_frame"
@@ -30,8 +34,9 @@ def canonical_knn_frame_digest(
     ignore_columns: Sequence[str] = (),
 ) -> str:
     """Digest the actual KNN frame after deterministic key/date ordering."""
-    dates = _normalized_dates(frame, role="KNN")
-    ordered = frame.copy()
+    with temporarily_detached_attrs(frame):
+        dates = _normalized_dates(frame, role="KNN")
+        ordered = frame.copy()
     ordered["date"] = dates
     if ignore_columns:
         ordered = ordered.drop(columns=list(ignore_columns), errors="ignore")
@@ -59,13 +64,15 @@ def build_observed_knn_frame(
     feature_cols: Sequence[str] | None = None,
 ) -> pd.DataFrame:
     """Return the inclusive observed copy used by KNN, never the full model frame."""
-    parsed_dates = _normalized_dates(frame, role=role)
+    with temporarily_detached_attrs(frame):
+        parsed_dates = _normalized_dates(frame, role=role)
     observed_mask = parsed_dates.between(
         pd.Timestamp(window.knn_observed_start),
         pd.Timestamp(window.knn_observed_end),
         inclusive="both",
     )
-    observed = frame.loc[observed_mask].copy()
+    with temporarily_detached_attrs(frame):
+        observed = frame.loc[observed_mask].copy()
     if observed.empty:
         raise ProtocolViolation(f"{role} KNN observed frame is empty")
     if feature_cols is not None:
@@ -84,7 +91,7 @@ def build_observed_knn_frame(
     observed["date"] = parsed_dates.loc[observed_mask].to_numpy()
     observed.attrs = {
         key: value
-        for key, value in frame.attrs.items()
+        for key, value in lightweight_frame_attrs(frame.attrs).items()
         if key != _CONFIGURED_FRAME_ATTR
     }
     observed.attrs.update(

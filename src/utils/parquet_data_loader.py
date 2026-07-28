@@ -25,6 +25,9 @@ from src.utils.d5_calendar_reconstruction import (
     reconstruct_d5_target_calendar,
     reconstruct_d5_source_history_calendar,
 )
+from src.utils.d5_precomputed_source_history import (
+    load_precomputed_d5_source_history,
+)
 
 
 LOGGER = logging.getLogger("experiment")
@@ -416,10 +419,35 @@ def load_parquet_source_target_with_diagnostics(
         ("date", ">=", runtime_windows["source_history_start"]),
         ("date", "<=", runtime_windows["source_history_end"]),
     ]
-    source_df = pd.read_parquet(source_path, filters=source_filters)
     target_df = pd.read_parquet(target_path)
-    source_df = _coerce_known_model_candidate_columns(source_df, dataset_id=dataset_id, role="source")
     target_df = _coerce_known_model_candidate_columns(target_df, dataset_id=dataset_id, role="target")
+
+    key_fields = tuple(get_experiment_protocol(dataset_id).source_pool_rule.key_fields)
+    source_history_reconstruction: D5ReconstructionReport | None = None
+    source_history_precomputed = False
+    precomputed: tuple[pd.DataFrame, Dict[str, Any]] | None = None
+    if int(dataset_id) == 5:
+        if d5_authorities is None:
+            raise ValueError("D5 loader requires a preloaded D5AuthorityBundle for source history")
+        precomputed = load_precomputed_d5_source_history(
+            source_path=source_path,
+            authorities=d5_authorities,
+            source_history_start=runtime_windows["source_history_start"],
+            source_history_end=runtime_windows["source_history_end"],
+            source_history_days=int(source_history_days),
+            key_fields=key_fields,
+        )
+    if precomputed is not None:
+        source_df, _ = precomputed
+        source_history_precomputed = True
+    else:
+        source_df = pd.read_parquet(source_path, filters=source_filters)
+        source_df = _coerce_known_model_candidate_columns(
+            source_df,
+            dataset_id=dataset_id,
+            role="source",
+        )
+
     for role, frame in (("source", source_df), ("target", target_df)):
         if "date" not in frame.columns:
             raise ValueError(f"D4-D6 {role} dataframe requires date column")
@@ -427,68 +455,81 @@ def load_parquet_source_target_with_diagnostics(
         if frame["date"].isna().any():
             raise ValueError(f"D4-D6 {role} dataframe contains invalid date values")
 
-    source_df = source_df[
-        source_df["date"].between(
-            runtime_windows["source_history_start"],
-            runtime_windows["source_history_end"],
-            inclusive="both",
-        )
-    ].copy()
+    if not source_history_precomputed:
+        source_df = source_df[
+            source_df["date"].between(
+                runtime_windows["source_history_start"],
+                runtime_windows["source_history_end"],
+                inclusive="both",
+            )
+        ].copy()
 
-    key_fields = tuple(get_experiment_protocol(dataset_id).source_pool_rule.key_fields)
-    source_history_reconstruction: D5ReconstructionReport | None = None
+    source_history_eligibility: dict[str, object]
+    source_history_calendarization_rule = "not_applicable"
+    source_history_synthetic_row_count = 0
+    source_history_original_row_count = len(source_df)
     if int(dataset_id) == 5:
-        if d5_authorities is None:
-            raise ValueError("D5 loader requires a preloaded D5AuthorityBundle for source history")
-        source_history_dates = pd.date_range(
-            runtime_windows["source_history_start"],
-            runtime_windows["source_history_end"],
-            freq="D",
-        )
-        source_df, source_history_reconstruction = reconstruct_d5_source_history_calendar(
-            source_df,
-            expected_dates=source_history_dates,
-            authorities=d5_authorities,
-        )
-
-    eligibility = build_exact_source_history_candidate_frame(
-        source_df,
-        key_fields=key_fields,
-        origin=runtime_windows["source_history_end"],
-        source_history_days=int(source_history_days),
-    )
-    source_df = eligibility.candidate_frame
-
-    runtime_windows.update(
-        {
-            "source_history_days": int(source_history_days),
-            "source_history_expected_date_count": eligibility.expected_count,
-            "source_history_completeness_policy": source_df.attrs[
-                "source_history_completeness_policy"
-            ],
-            "source_history_calendar": source_df.attrs["source_history_calendar"],
-            "source_history_inclusive_end": source_df.attrs["source_history_inclusive_end"],
-            "source_history_calendarization_rule": (
+        if precomputed is not None:
+            source_df, precomputed_manifest = precomputed
+            history = precomputed_manifest["source_history"]
+            source_history_precomputed = True
+            source_history_calendarization_rule = (
                 "D5_APPROVED_SOURCE_HISTORY_CALENDARIZATION"
-                if source_history_reconstruction is not None
-                else "not_applicable"
-            ),
-            "source_history_synthetic_row_count": int(
-                source_history_reconstruction.synthetic_row_count
-                if source_history_reconstruction is not None
-                else 0
-            ),
-            "source_history_frame_digest": source_history_frame_digest(
+            )
+            source_history_synthetic_row_count = int(history["synthetic_row_count"])
+            source_history_original_row_count = max(
+                0,
+                int(len(source_df)) - source_history_synthetic_row_count,
+            )
+            source_history_frame_digest_value = str(
+                history["source_history_frame_digest"]
+            )
+            static_keys = (
+                source_df.loc[:, list(key_fields)]
+                .drop_duplicates()
+                .sort_values(list(key_fields), kind="mergesort")
+            )
+            source_history_eligibility = {
+                "eligible_keys": [
+                    [str(value) for value in raw_key]
+                    for raw_key in static_keys.itertuples(index=False, name=None)
+                ],
+                "incomplete_keys": {},
+                "duplicate_keys": [],
+                "outside_window_row_count": 0,
+            }
+        else:
+            source_history_dates = pd.date_range(
+                runtime_windows["source_history_start"],
+                runtime_windows["source_history_end"],
+                freq="D",
+            )
+            source_df, source_history_reconstruction = reconstruct_d5_source_history_calendar(
+                source_df,
+                expected_dates=source_history_dates,
+                authorities=d5_authorities,
+            )
+            eligibility = build_exact_source_history_candidate_frame(
                 source_df,
                 key_fields=key_fields,
-            ),
-        }
-    )
-
-    source_df = attach_window_attrs(source_df, runtime_windows, role="source")
-    source_df.attrs.update(
-        {
-            "source_history_eligibility": {
+                origin=runtime_windows["source_history_end"],
+                source_history_days=int(source_history_days),
+            )
+            source_df = eligibility.candidate_frame
+            source_history_calendarization_rule = (
+                "D5_APPROVED_SOURCE_HISTORY_CALENDARIZATION"
+            )
+            source_history_synthetic_row_count = int(
+                source_history_reconstruction.synthetic_row_count
+            )
+            source_history_original_row_count = int(
+                source_history_reconstruction.original_row_count
+            )
+            source_history_frame_digest_value = source_history_frame_digest(
+                source_df,
+                key_fields=key_fields,
+            )
+            source_history_eligibility = {
                 "eligible_keys": [list(key) for key in eligibility.eligible_keys],
                 "incomplete_keys": {
                     "/".join(key): count
@@ -496,31 +537,70 @@ def load_parquet_source_target_with_diagnostics(
                 },
                 "duplicate_keys": [list(key) for key in eligibility.duplicate_keys],
                 "outside_window_row_count": eligibility.outside_window_row_count,
+            }
+    else:
+        eligibility = build_exact_source_history_candidate_frame(
+            source_df,
+            key_fields=key_fields,
+            origin=runtime_windows["source_history_end"],
+            source_history_days=int(source_history_days),
+        )
+        source_df = eligibility.candidate_frame
+        source_history_frame_digest_value = source_history_frame_digest(
+            source_df,
+            key_fields=key_fields,
+        )
+        source_history_eligibility = {
+            "eligible_keys": [list(key) for key in eligibility.eligible_keys],
+            "incomplete_keys": {
+                "/".join(key): count
+                for key, count in eligibility.incomplete_keys.items()
             },
-            "source_history_key_fields": list(key_fields),
-            "source_history_calendarization": {
-                "rule": (
-                    "D5_APPROVED_SOURCE_HISTORY_CALENDARIZATION"
-                    if source_history_reconstruction is not None
-                    else "not_applicable"
-                ),
-                "synthetic_row_count": int(
-                    source_history_reconstruction.synthetic_row_count
-                    if source_history_reconstruction is not None
-                    else 0
-                ),
-                "original_row_count": int(
-                    source_history_reconstruction.original_row_count
-                    if source_history_reconstruction is not None
-                    else len(source_df)
-                ),
-            },
-            "source_history_frame_digest": source_history_frame_digest(
-                source_df,
-                key_fields=key_fields,
+            "duplicate_keys": [list(key) for key in eligibility.duplicate_keys],
+            "outside_window_row_count": eligibility.outside_window_row_count,
+        }
+
+    runtime_windows.update(
+        {
+            "source_history_days": int(source_history_days),
+            "source_history_expected_date_count": int(source_history_days),
+            "source_history_completeness_policy": source_df.attrs[
+                "source_history_completeness_policy"
+            ]
+            if "source_history_completeness_policy" in source_df.attrs
+            else "exact_expected_date_set",
+            "source_history_calendar": source_df.attrs.get(
+                "source_history_calendar", "Gregorian daily"
             ),
+            "source_history_inclusive_end": source_df.attrs.get(
+                "source_history_inclusive_end", True
+            ),
+            "source_history_calendarization_rule": source_history_calendarization_rule,
+            "source_history_synthetic_row_count": source_history_synthetic_row_count,
+            "source_history_frame_digest": source_history_frame_digest_value,
         }
     )
+
+    source_df = attach_window_attrs(source_df, runtime_windows, role="source")
+    source_df.attrs.update(
+        {
+            "source_history_eligibility": source_history_eligibility,
+            "source_history_key_fields": list(key_fields),
+            "source_history_calendarization": {
+                "rule": source_history_calendarization_rule,
+                "synthetic_row_count": source_history_synthetic_row_count,
+                "original_row_count": source_history_original_row_count,
+            },
+            "source_history_frame_digest": source_history_frame_digest_value,
+        }
+    )
+    if source_history_precomputed:
+        source_df.attrs.update(
+            {
+                "source_history_prevalidated_exact": True,
+                "source_history_validation_path": "precomputed_static_file",
+            }
+        )
     reconstruction: D5ReconstructionReport | None = None
     if int(dataset_id) == 5:
         if expected_dates is None:

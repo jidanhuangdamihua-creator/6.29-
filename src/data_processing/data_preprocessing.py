@@ -67,7 +67,7 @@ STRICT_DATASET_PROTOCOL = {
     },
     "Dataset3": {
         "target_store_id": 10,
-        "target_split_days": {"train_days": 16, "val_days": 15, "test_days": 181},
+        "target_split_days": {"train_days": 15, "val_days": 15, "test_days": 180},
         "source_split_ratio": {"train_ratio": 0.8, "val_ratio": 0.1, "test_ratio": 0.1},
         "without_information_sharing_scope": "same_region",
         "region_field": "region_id",

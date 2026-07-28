@@ -16,6 +16,11 @@ from .d2_source_calendarization import (
 )
 from .knn_frames import build_observed_knn_frame, canonical_knn_frame_digest
 from .selection_metadata import build_selection_metadata_contract
+from src.utils.dataframe_attrs import (
+    copy_frame_with_lightweight_attrs,
+    lightweight_frame_attrs,
+    select_rows_with_lightweight_attrs,
+)
 from .experiment_protocol import (
     EXTENDED_TRACK,
     STRICT_PAPER_TRACK,
@@ -64,9 +69,10 @@ def _available_keys(frame: pd.DataFrame, group_cols: Sequence[str]) -> Tuple[Tup
     missing = [column for column in group_cols if column not in frame.columns]
     if missing:
         raise ProtocolViolation(f"source frame missing protocol key columns: {missing}")
+    safe_frame = copy_frame_with_lightweight_attrs(frame, deep=False)
     keys = {
         normalize_source_key(tuple(row))
-        for row in frame.loc[:, list(group_cols)].drop_duplicates().itertuples(index=False, name=None)
+        for row in safe_frame.loc[:, list(group_cols)].drop_duplicates().itertuples(index=False, name=None)
     }
     return tuple(sorted(keys))
 
@@ -135,7 +141,8 @@ def _extended_candidates(
         )
     target_group = next(iter(target_groups))
     identities = []
-    grouped = source_df.groupby(list(group_cols), sort=False, dropna=False)
+    safe_source_df = copy_frame_with_lightweight_attrs(source_df, deep=False)
+    grouped = safe_source_df.groupby(list(group_cols), sort=False, dropna=False)
     for raw_key, rows in grouped:
         key = normalize_source_key(raw_key if isinstance(raw_key, tuple) else (raw_key,))
         group_values = {str(value).strip() for value in rows[grouping_col].dropna().unique()}
@@ -198,6 +205,7 @@ def configure_protocol_frames(
     observed_start: object,
     grouping_col: str | None = None,
     prepared_pool: PreparedDailySequencePool | None = None,
+    retain_source_frame: bool = False,
     enforce_formal_target: bool | None = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Attach strict metadata and clip source history before any fitted transform."""
@@ -333,8 +341,7 @@ def configure_protocol_frames(
     cutoff = pd.Timestamp(window.source_observation_cutoff).normalize()
     d2_calendarization_metadata = {}
     if prepared_pool is None:
-        source = source_df.copy()
-        source.attrs = source_df.attrs.copy()
+        source = copy_frame_with_lightweight_attrs(source_df)
         source_dates = pd.to_datetime(source["date"], errors="coerce").dt.normalize()
         if source_dates.isna().any():
             raise ProtocolViolation("source frame contains invalid dates")
@@ -365,7 +372,7 @@ def configure_protocol_frames(
                 "d2_source_calendarization_report": report.to_dict(),
             }
         else:
-            source = source.loc[source_dates <= cutoff].copy()
+            source = select_rows_with_lightweight_attrs(source, source_dates <= cutoff)
             if source.empty:
                 raise ProtocolViolation("source frame is empty at source_observation_cutoff")
     else:
@@ -373,7 +380,18 @@ def configure_protocol_frames(
             group_cols=normalized_group_cols,
             required_dates=pd.date_range(window.knn_observed_start, window.knn_observed_end),
         )
-        source = source_df.iloc[0:0].copy()
+        if retain_source_frame:
+            source = copy_frame_with_lightweight_attrs(source_df)
+            source_dates = pd.to_datetime(source["date"], errors="coerce").dt.normalize()
+            if source_dates.isna().any():
+                raise ProtocolViolation("source frame contains invalid dates")
+            source = select_rows_with_lightweight_attrs(source, source_dates <= cutoff)
+            if source.empty:
+                raise ProtocolViolation("source frame is empty at source_observation_cutoff")
+        else:
+            source_view = copy_frame_with_lightweight_attrs(source_df, deep=False)
+            source = source_view.iloc[0:0].copy()
+            source.attrs = source_view.attrs
         if protocol.dataset_id == "D2":
             required_d2_attrs = (
                 "d2_source_calendarization_rule_version",
@@ -491,14 +509,17 @@ def configure_protocol_frames(
                 f"{SOURCE_HISTORY_DAYS} days"
             )
         metadata.update({field: source_df.attrs[field] for field in source_history_fields})
-        metadata["source_history_eligible_keys"] = source_df.attrs.get(
-            "source_history_eligible_keys", []
-        )
+        if "source_history_eligible_key_count" in source_df.attrs:
+            metadata["source_history_eligible_key_count"] = int(
+                source_df.attrs["source_history_eligible_key_count"]
+            )
+        elif prepared_pool is not None:
+            metadata["source_history_eligible_key_count"] = len(prepared_pool.source_keys)
     metadata.update(d2_calendarization_metadata)
     source_knn_frame.attrs.update(metadata)
     target_knn_frame.attrs.update(metadata)
     source.attrs = {
-        **source_df.attrs,
+        **lightweight_frame_attrs(source_df.attrs),
         **metadata,
         "protocol_knn_observed_frame": source_knn_frame,
     }
@@ -512,7 +533,7 @@ def configure_protocol_frames(
         "forecast_excluded_columns": ["promo"] if protocol.dataset_id == "D2" else [],
     }
     target.attrs = {
-        **target_df.attrs,
+        **lightweight_frame_attrs(target_df.attrs),
         **metadata,
         "protocol_knn_observed_frame": target_knn_frame,
         "forecast_consumer_frame": forecast_consumer,

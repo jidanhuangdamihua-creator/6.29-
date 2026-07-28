@@ -9,6 +9,7 @@ from typing import Mapping, Sequence
 import pandas as pd
 
 from src.constants import SOURCE_HISTORY_CALENDAR, SOURCE_HISTORY_COMPLETENESS_POLICY
+from src.utils.dataframe_attrs import copy_frame_with_lightweight_attrs
 
 
 SOURCE_HISTORY_DIGEST_CHUNK_ROWS = 100_000
@@ -81,13 +82,14 @@ def source_history_frame_digest(
     missing = [field for field in (*fields, "date") if field not in frame.columns]
     if missing:
         raise ValueError(f"source history frame is missing columns: {missing!r}")
-    if frame.attrs.get("source_history_canonical_order") is True:
-        ordered = frame
+    canonical_order = frame.attrs.get("source_history_canonical_order") is True
+    if canonical_order:
+        ordered = copy_frame_with_lightweight_attrs(frame, deep=False)
         dates = pd.to_datetime(ordered["date"], errors="coerce")
         if dates.isna().any() or not dates.equals(dates.dt.normalize()):
             raise ValueError("source history frame contains invalid or non-normalized dates")
     else:
-        ordered = frame.copy()
+        ordered = copy_frame_with_lightweight_attrs(frame)
         ordered["date"] = pd.to_datetime(ordered["date"], errors="coerce").dt.normalize()
         if ordered["date"].isna().any():
             raise ValueError("source history frame contains invalid dates")
@@ -175,7 +177,7 @@ def build_exact_source_history_candidate_frame(
                         for raw_key in group_sizes.index
                     )
                 )
-                candidate = frame.copy(deep=False)
+                candidate = copy_frame_with_lightweight_attrs(frame, deep=False)
                 candidate.attrs.update(
                     {
                         "source_history_days": int(source_history_days),
@@ -185,9 +187,9 @@ def build_exact_source_history_candidate_frame(
                         "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
                         "source_history_calendar": SOURCE_HISTORY_CALENDAR,
                         "source_history_inclusive_end": True,
-                        "source_history_eligible_keys": [list(key) for key in eligible],
-                        "source_history_incomplete_keys": {},
-                        "source_history_duplicate_keys": [],
+                        "source_history_eligible_key_count": len(eligible),
+                        "source_history_incomplete_key_count": 0,
+                        "source_history_duplicate_key_count": 0,
                         "source_history_outside_window_row_count": 0,
                         "source_history_validation_path": "prevalidated_calendarized",
                     }
@@ -201,7 +203,7 @@ def build_exact_source_history_candidate_frame(
                     outside_window_row_count=0,
                 )
 
-    prepared = frame.copy()
+    prepared = copy_frame_with_lightweight_attrs(frame)
     prepared["date"] = pd.to_datetime(prepared["date"], errors="coerce").dt.normalize()
     if prepared["date"].isna().any():
         raise ValueError("source history frame contains invalid dates")
@@ -265,11 +267,9 @@ def build_exact_source_history_candidate_frame(
             "source_history_completeness_policy": SOURCE_HISTORY_COMPLETENESS_POLICY,
             "source_history_calendar": SOURCE_HISTORY_CALENDAR,
             "source_history_inclusive_end": True,
-            "source_history_eligible_keys": [list(key) for key in sorted(eligible)],
-            "source_history_incomplete_keys": {
-                "/".join(key): count for key, count in sorted(incomplete.items())
-            },
-            "source_history_duplicate_keys": [list(key) for key in sorted(duplicate_keys)],
+            "source_history_eligible_key_count": len(eligible),
+            "source_history_incomplete_key_count": len(incomplete),
+            "source_history_duplicate_key_count": len(duplicate_keys),
             "source_history_outside_window_row_count": outside_count,
         }
     )

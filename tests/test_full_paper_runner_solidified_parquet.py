@@ -488,7 +488,7 @@ class FullPaperRunnerSolidifiedParquetTest(unittest.TestCase):
         expected = {
             "Dataset1": {"train_days": 15, "val_days": 15, "test_days": 180},
             "Dataset2": {"train_days": 14, "val_days": 15, "test_days": 179},
-            "Dataset3": {"train_days": 16, "val_days": 15, "test_days": 181},
+            "Dataset3": {"train_days": 15, "val_days": 15, "test_days": 180},
         }
 
         for dataset_name, split_days in expected.items():
@@ -504,6 +504,24 @@ class FullPaperRunnerSolidifiedParquetTest(unittest.TestCase):
                 self.assertEqual("days", target_df.attrs["split_mode"])
                 self.assertEqual(split_days, target_df.attrs["split_config"])
                 self.assertTrue(all(v > 0 for v in target_df.attrs["split_config"].values()))
+
+    def test_d3_strict_split_is_contiguous_210_day_formal_window(self):
+        base = _load_solidified_base_data(
+            dataset_name="Dataset3",
+            cfg=_load_config(),
+            strict_paper_mode=True,
+            strict_paper_split=True,
+        )
+
+        train_df, val_df, test_df = temporal_split_by_ratio_or_dates(base["target_df"])
+
+        self.assertEqual([15, 15, 180], [part["date"].nunique() for part in (train_df, val_df, test_df)])
+        self.assertEqual(pd.Timestamp("2015-01-03"), train_df["date"].min())
+        self.assertEqual(pd.Timestamp("2015-01-17"), train_df["date"].max())
+        self.assertEqual(pd.Timestamp("2015-01-18"), val_df["date"].min())
+        self.assertEqual(pd.Timestamp("2015-02-01"), val_df["date"].max())
+        self.assertEqual(pd.Timestamp("2015-02-02"), test_df["date"].min())
+        self.assertEqual(pd.Timestamp("2015-07-31"), test_df["date"].max())
 
 
 if __name__ == "__main__":

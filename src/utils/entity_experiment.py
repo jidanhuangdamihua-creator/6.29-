@@ -36,6 +36,11 @@ from src.transfer_methods.source_failure_tolerance import (
 )
 from src.utils.finite_diagnostics import NonFiniteArrayError, validate_feature_frame_finite
 from src.utils.result_validation import annotate_silent_metric_failure
+from src.utils.dataframe_attrs import (
+    copy_frame_with_lightweight_attrs,
+    lightweight_frame_attrs,
+    temporarily_detached_attrs,
+)
 from src.protocols.runner_adapter import configure_protocol_frames
 from src.protocols.candidate_pool import prepare_daily_sequence_pool
 from src.protocols.experiment_protocol import (
@@ -268,20 +273,30 @@ def _build_model_dataframe(
     df: pd.DataFrame,
     model_feature_cols: Sequence[str],
     source_selection_group_cols: Sequence[str] = (),
+    required_passthrough_cols: Sequence[str] = (),
 ) -> pd.DataFrame:
-    """Return a dataframe containing only identifiers plus numeric/bool model features."""
+    """Return model features plus explicit non-model protocol passthrough columns."""
     metadata_cols = tuple(dict.fromkeys((*MODEL_METADATA_COLUMNS, *source_selection_group_cols)))
     keep_cols = [col for col in metadata_cols if col in df.columns]
     for col in model_feature_cols:
         if col in df.columns and col not in keep_cols:
             keep_cols.append(col)
+    passthrough_cols = tuple(
+        str(col)
+        for col in required_passthrough_cols
+        if str(col) not in metadata_cols
+    )
+    for col in passthrough_cols:
+        if col in df.columns and col not in keep_cols:
+            keep_cols.append(col)
 
-    model_df = df[keep_cols].copy()
+    attrs = lightweight_frame_attrs(df.attrs)
+    with temporarily_detached_attrs(df):
+        model_df = df[keep_cols].copy()
     for col in model_feature_cols:
         if col in model_df.columns and pd.api.types.is_bool_dtype(model_df[col]):
             model_df[col] = model_df[col].astype("int64")
-    model_df.attrs = df.attrs.copy()
-    attrs = model_df.attrs
+    model_df.attrs = attrs
     if attrs.get("role") == "target" and attrs.get("split_config", {}).get("mode") == "days":
         split_config = attrs["split_config"]
         train_days = int(split_config.get("train_days", 15))
@@ -301,8 +316,8 @@ def _build_model_dataframe(
             "val_days": val_days,
             "test_days": n - train_days - val_days,
         }
-    model_only_cols = set(model_df.columns) - set(metadata_cols)
-    expected_cols = set(str(col) for col in model_feature_cols)
+    model_only_cols = set(model_df.columns) - set(metadata_cols) - set(passthrough_cols)
+    expected_cols = set(str(col) for col in model_feature_cols) - set(passthrough_cols)
     assert model_only_cols == expected_cols, (
         f"CNN 输入列与 model_feature_cols 不一致: "
         f"多余列={model_only_cols - expected_cols}, "
@@ -662,8 +677,8 @@ def run_single_entity_experiment(
     """Run configured methods for one target entity and return CSV-ready rows."""
     rows: List[Dict[str, Any]] = []
     scenario = _scenario_name(config)
-    source_df = source_df.copy()
-    target_entity_df = target_entity_df.copy()
+    source_df = copy_frame_with_lightweight_attrs(source_df)
+    target_entity_df = copy_frame_with_lightweight_attrs(target_entity_df)
     source_selection_group_cols = tuple(
         str(col)
         for col in config.get(
@@ -713,6 +728,8 @@ def run_single_entity_experiment(
         group_cols=source_selection_group_cols,
         grouping_col=grouping_cols[dataset_id],
         observed_start=observed_start,
+        prepared_pool=prepared_pool if dataset_id == 5 else None,
+        retain_source_frame=dataset_id == 5,
         enforce_formal_target=True,
     )
     canonical_entity_key = serialize_canonical_target_key(
@@ -775,6 +792,7 @@ def run_single_entity_experiment(
         source_df,
         model_feature_cols,
         source_selection_group_cols=source_selection_group_cols,
+        required_passthrough_cols=get_experiment_protocol(dataset_id).knn_feature_columns,
     )
     source_model_df = _sanitize_source_model_dataframe(source_model_df, model_feature_cols)
     validate_feature_frame_finite(
@@ -790,6 +808,7 @@ def run_single_entity_experiment(
         target_entity_df,
         model_feature_cols,
         source_selection_group_cols=source_selection_group_cols,
+        required_passthrough_cols=get_experiment_protocol(dataset_id).knn_feature_columns,
     )
     config["target_split_config"] = dict(target_model_df.attrs.get("split_config", {}) or {})
     validate_feature_frame_finite(

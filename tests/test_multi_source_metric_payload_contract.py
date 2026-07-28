@@ -257,6 +257,29 @@ def test_d1_d3_formal_runner_builds_and_forwards_expected_metric_identity():
     assert "expected_metric_identity=expected_metric_identity" in source
 
 
+def test_d1_d3_run_experiment_loads_existing_runners_before_setup(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        d1_d3_runner,
+        "_load_experiment_runners",
+        lambda: calls.append("loader"),
+    )
+
+    with pytest.raises(KeyError, match="dataset_paths"):
+        d1_d3_runner.run_experiment(
+            dataset_name="Dataset1",
+            method_name="SS-TL",
+            source_count=1,
+            information_sharing_scenario="without_information_sharing",
+            cfg={"single_experiment": {}},
+            protocol={},
+            strict_paper_mode=True,
+            base_data={},
+        )
+
+    assert calls == ["loader"]
+
+
 def test_d1_d3_result_builder_copies_complete_metric_audit_and_identity():
     extracted = _extract_method_metrics(
         _payload(),
