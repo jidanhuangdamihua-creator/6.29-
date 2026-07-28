@@ -91,7 +91,7 @@
 - strict_paper_mode 下新增 dataset-specific target split：
 	- Dataset1: 15(train) + 15(val) + 180(test)
 	- Dataset2: 14(train) + 15(val) + 179(test)
-	- Dataset3: 16(train) + 15(val) + 181(test)
+	- Dataset3: 15(train) + 15(val) + 180(test)
 
 ### 3.4 是否完全一致
 

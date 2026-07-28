@@ -198,9 +198,9 @@
       "Dataset3": {
         "target_store_id": 10,
         "target_split_days": {
-          "train_days": 16,
+          "train_days": 15,
           "val_days": 15,
-          "test_days": 181
+          "test_days": 180
         },
         "source_split_ratio": {
           "train_ratio": 0.8,
