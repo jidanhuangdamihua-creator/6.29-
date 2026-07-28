@@ -1,7 +1,7 @@
 {
-  "consumer_fingerprint": "a5587eba7e9022cee3fa51c22a98b3548b4f4551d2772e35b4535146f2e3a353",
+  "consumer_fingerprint": "f117fe464806ed2e039a3fd9d0ceff5e9c5d90c6b3d86f2eab80ec9f919e4d14",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "3460c61a132ba00d7d21c6b72a1e1f0ab3671a40be8904001b55eb8f24b3aa09",
+    "code_inventory_digest": "13f0f90eeff3f65dc7ba3dd8f80c35f44e9c9fc95310116a414833fa0afa42fd",
     "dataset_id": "D4",
     "readiness_proof_digest": "670f99afb10eedb4d49df3b2652661123c6a232e9fc543e7588fb14fb1468a8a",
     "source_schema_digest": "b0f606e217d398f793d706e4f7981e10bca1a4ee3bb104722c4ec9dd5128f33a",
@@ -409,7 +409,7 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "e421ef36477c7a9be40eed17db518c8f251ee1205597e5305b3b0c4eff91bc3d",
+  "proof_identity_sha256": "7fd06dd2629bd8ffe3e267d5204f29147f0d94a0b393d407cd72f8dfb9562b3b",
   "readiness_proof_digest": "670f99afb10eedb4d49df3b2652661123c6a232e9fc543e7588fb14fb1468a8a",
   "readiness_result": {
     "failure_code": null,
@@ -452,7 +452,6 @@
       "week": "int64",
       "year": "int64"
     },
-    "mtime_ns": 1782806760235478095,
     "nullable": {
       "activity_flag": true,
       "avg_humidity": true,
@@ -917,7 +916,6 @@
       "week": "int64",
       "year": "int64"
     },
-    "mtime_ns": 1782806760236713393,
     "nullable": {
       "activity_flag": true,
       "avg_humidity": true,

@@ -439,7 +439,7 @@
     },
     {
       "path": "src/protocols/formal_deployment_manifest.py",
-      "sha256": "fcce3b81cbce822778f55bdec30fd440283fc7caf76c2e8e8c817f72a3d523ba"
+      "sha256": "68a69f451dd2254594895d6ba6fb55ab1286a4ff3256b7e66dabca0062d094cb"
     },
     {
       "path": "src/protocols/formal_input_paths.py",
@@ -670,6 +670,6 @@
       "sha256": "a8a1d6a43c87f01fc8ad010f594b7f51bf353d9788fd8a1d4b824f7325aa053c"
     }
   ],
-  "inventory_sha256": "3460c61a132ba00d7d21c6b72a1e1f0ab3671a40be8904001b55eb8f24b3aa09",
+  "inventory_sha256": "13f0f90eeff3f65dc7ba3dd8f80c35f44e9c9fc95310116a414833fa0afa42fd",
   "schema_version": "d1_d6_code_inventory_v1"
 }
