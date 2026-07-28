@@ -99,6 +99,74 @@ D1_D2_KNN = {
 
 D2_FROZEN_DATES = ("2018-04-01", "2018-04-25", "2018-05-01", "2018-06-02")
 
+REQUIRED_BLOCKING_FIELDS = frozenset(
+    {
+        "path",
+        "sha256",
+        "size_bytes",
+        "rows",
+        "ordered_columns",
+        "dtypes",
+        "nullable",
+        "schema_digest",
+        "schema",
+    }
+)
+OPTIONAL_DIAGNOSTIC_FIELDS = frozenset({"mtime_ns"})
+KNOWN_IDENTITY_FIELDS = REQUIRED_BLOCKING_FIELDS | OPTIONAL_DIAGNOSTIC_FIELDS
+_MISSING_IDENTITY_FIELD = object()
+
+FORMAL_PROOF_AUTHORITY_FIELDS = frozenset(
+    {
+        "schema_version",
+        "dataset_id",
+        "dataset_root",
+        "source",
+        "target",
+        "source_schema",
+        "target_schema",
+        "entity_key",
+        "date_key",
+        "row_count",
+        "entity_count",
+        "date_range",
+        "key_date_uniqueness",
+        "consumer_fingerprint",
+        "consumer_fingerprint_input",
+        "dataset_manifest_identity",
+        "supporting_proof_files",
+        "readiness_result",
+        "readiness_proof_digest",
+        "formal_identity",
+        "dataset_specific",
+    }
+)
+FORMAL_PROOF_DIGEST_FIELD = "proof_identity_sha256"
+FORMAL_PROOF_NON_AUTHORITY_FIELDS = frozenset(
+    {
+        "diagnostic",
+        "diagnostics",
+        "parquet_identity_diagnostics",
+        "warning",
+        "warnings",
+        "runtime_metadata",
+        "runtime_meta",
+        "runtime_info",
+        "runtime_diagnostics",
+    }
+)
+FORMAL_PROOF_KNOWN_FIELDS = (
+    FORMAL_PROOF_AUTHORITY_FIELDS
+    | {FORMAL_PROOF_DIGEST_FIELD}
+    | FORMAL_PROOF_NON_AUTHORITY_FIELDS
+)
+_SEMANTIC_NON_AUTHORITY_KEYS = frozenset(
+    {
+        "mtime_ns",
+        *FORMAL_PROOF_NON_AUTHORITY_FIELDS,
+    }
+)
+
 
 class DeploymentManifestError(RuntimeError):
     """Stable final-preflight error with a machine-readable code."""
@@ -548,7 +616,548 @@ def schema_descriptor(
         "date_column": date_column,
         "columns": columns,
     }
-    return {**payload, "schema_digest": sha256_bytes(canonical_json_bytes(payload))}
+    return {**payload, "schema_digest": _schema_digest(payload)}
+
+
+def _schema_digest(payload: Mapping[str, object]) -> str:
+    """Hash the exact schema payload emitted by :func:`schema_descriptor`."""
+
+    return sha256_bytes(canonical_json_bytes(dict(payload)))
+
+
+def _is_non_empty_string(value: object) -> bool:
+    return isinstance(value, str) and bool(value)
+
+
+def _is_repository_relative_posix_path(value: object) -> bool:
+    if not isinstance(value, str) or not value or "\\" in value:
+        return False
+    if value.startswith("/"):
+        return False
+    windows = PureWindowsPath(value)
+    if windows.is_absolute() or bool(windows.drive):
+        return False
+    parts = value.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        return False
+    candidate = PurePosixPath(value)
+    return not candidate.is_absolute() and candidate.as_posix() == value
+
+
+def _is_sha256_digest(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdefABCDEF" for character in value)
+    )
+
+
+def _is_non_negative_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _is_ordered_string_sequence(value: object) -> bool:
+    if not isinstance(value, (list, tuple)):
+        return False
+    if not all(_is_non_empty_string(item) for item in value):
+        return False
+    return len(set(value)) == len(value)
+
+
+def _identity_error(
+    *, side: str, field: str, reason: str, value: object = _MISSING_IDENTITY_FIELD
+) -> dict[str, object]:
+    error: dict[str, object] = {"side": side, "field": field, "reason": reason}
+    if value is not _MISSING_IDENTITY_FIELD:
+        error["value_type"] = type(value).__name__
+    return error
+
+
+def _validate_schema_structure(
+    schema: object,
+    *,
+    side: str,
+) -> list[dict[str, object]]:
+    errors: list[dict[str, object]] = []
+    if not isinstance(schema, Mapping):
+        return [
+            _identity_error(
+                side=side, field="schema", reason="must be a mapping", value=schema
+            )
+        ]
+    schema_values = dict(schema)
+    required = {"role", "key_columns", "date_column", "columns", "schema_digest"}
+    for field in sorted(required - set(schema_values)):
+        errors.append(
+            _identity_error(
+                side=side,
+                field="schema",
+                reason=f"missing nested field {field}",
+            )
+        )
+    for field in sorted(set(schema_values) - required):
+        errors.append(
+            _identity_error(
+                side=side,
+                field="schema",
+                reason=f"unknown nested field {field!r}",
+            )
+        )
+    if not _is_non_empty_string(schema_values.get("role")):
+        errors.append(
+            _identity_error(
+                side=side, field="schema", reason="role must be a non-empty string"
+            )
+        )
+    if not _is_ordered_string_sequence(schema_values.get("key_columns")):
+        errors.append(
+            _identity_error(
+                side=side,
+                field="schema",
+                reason="key_columns must be an ordered string sequence",
+            )
+        )
+    if not _is_non_empty_string(schema_values.get("date_column")):
+        errors.append(
+            _identity_error(
+                side=side,
+                field="schema",
+                reason="date_column must be a non-empty string",
+            )
+        )
+    columns = schema_values.get("columns")
+    if not isinstance(columns, (list, tuple)):
+        errors.append(
+            _identity_error(
+                side=side,
+                field="schema",
+                reason="columns must be an ordered sequence",
+                value=columns,
+            )
+        )
+    else:
+        column_names: list[str] = []
+        for index, column in enumerate(columns):
+            if not isinstance(column, Mapping):
+                errors.append(
+                    _identity_error(
+                        side=side,
+                        field="schema",
+                        reason=f"columns[{index}] must be a mapping",
+                        value=column,
+                    )
+                )
+                continue
+            column_values = dict(column)
+            required_column_fields = {"name", "dtype", "nullable"}
+            for field in sorted(required_column_fields - set(column_values)):
+                errors.append(
+                    _identity_error(
+                        side=side,
+                        field="schema",
+                        reason=f"columns[{index}] missing nested field {field}",
+                    )
+                )
+            for field in sorted(set(column_values) - required_column_fields):
+                errors.append(
+                    _identity_error(
+                        side=side,
+                        field="schema",
+                        reason=f"columns[{index}] has unknown nested field {field!r}",
+                    )
+                )
+            name = column_values.get("name")
+            if not _is_non_empty_string(name):
+                errors.append(
+                    _identity_error(
+                        side=side,
+                        field="schema",
+                        reason=f"columns[{index}].name must be a non-empty string",
+                    )
+                )
+            else:
+                column_names.append(name)
+            if not _is_non_empty_string(column_values.get("dtype")):
+                errors.append(
+                    _identity_error(
+                        side=side,
+                        field="schema",
+                        reason=f"columns[{index}].dtype must be a non-empty string",
+                    )
+                )
+            if not isinstance(column_values.get("nullable"), bool):
+                errors.append(
+                    _identity_error(
+                        side=side,
+                        field="schema",
+                        reason=f"columns[{index}].nullable must be bool",
+                    )
+                )
+        if len(column_names) != len(set(column_names)):
+            errors.append(
+                _identity_error(
+                    side=side,
+                    field="schema",
+                    reason="columns must not contain duplicate names",
+                )
+            )
+    if not _is_sha256_digest(schema_values.get("schema_digest")):
+        errors.append(
+            _identity_error(
+                side=side,
+                field="schema_digest",
+                reason="schema_digest must be a SHA-256 digest",
+            )
+        )
+    if not errors:
+        schema_payload = {
+            field: schema_values[field]
+            for field in ("role", "key_columns", "date_column", "columns")
+        }
+        if schema_values["schema_digest"] != _schema_digest(schema_payload):
+            errors.append(
+                _identity_error(
+                    side=side,
+                    field="schema_digest",
+                    reason="schema_digest does not match canonical schema payload",
+                )
+            )
+    return errors
+
+
+def _validate_parquet_identity(
+    identity: object,
+    *,
+    side: str,
+) -> tuple[dict[str, object] | None, list[dict[str, object]]]:
+    if not isinstance(identity, Mapping):
+        return (
+            None,
+            [
+                _identity_error(
+                    side=side,
+                    field="identity",
+                    reason="identity must be a mapping",
+                    value=identity,
+                )
+            ],
+        )
+    try:
+        values = dict(identity)
+    except Exception as exc:  # pragma: no cover - defensive for custom mappings
+        return (
+            None,
+            [
+                _identity_error(
+                    side=side,
+                    field="identity",
+                    reason=f"identity mapping could not be read: {type(exc).__name__}",
+                )
+            ],
+        )
+
+    errors: list[dict[str, object]] = []
+    missing = REQUIRED_BLOCKING_FIELDS - set(values)
+    unknown = set(values) - KNOWN_IDENTITY_FIELDS
+    for field in sorted(missing):
+        errors.append(
+            _identity_error(
+                side=side, field=field, reason="required blocking field is missing"
+            )
+        )
+    for field in sorted(unknown, key=repr):
+        errors.append(
+            _identity_error(
+                side=side,
+                field=f"<unknown:{field!r}>",
+                reason="unknown identity field",
+            )
+        )
+
+    for field in sorted(set(values) & KNOWN_IDENTITY_FIELDS):
+        value = values[field]
+        reason: str | None = None
+        if field == "path" and not _is_repository_relative_posix_path(value):
+            reason = "must be a repository-relative POSIX path"
+        elif field in {"sha256", "schema_digest"} and not _is_sha256_digest(value):
+            reason = "must be a SHA-256 digest"
+        elif field in {"size_bytes", "rows", "mtime_ns"} and not _is_non_negative_int(value):
+            reason = "must be a non-negative integer and must not be bool"
+        elif field == "ordered_columns" and not _is_ordered_string_sequence(value):
+            reason = "must be an ordered sequence of unique non-empty strings"
+        elif field == "dtypes":
+            if not isinstance(value, Mapping):
+                reason = "must be a mapping of column names to dtype strings"
+            elif not all(
+                _is_non_empty_string(key) and _is_non_empty_string(dtype)
+                for key, dtype in value.items()
+            ):
+                reason = "must map non-empty strings to non-empty strings"
+        elif field == "nullable":
+            if not isinstance(value, Mapping):
+                reason = "must be a mapping of column names to bool"
+            elif not all(
+                _is_non_empty_string(key) and isinstance(nullable, bool)
+                for key, nullable in value.items()
+            ):
+                reason = "must map non-empty strings to bool"
+        elif field == "schema":
+            errors.extend(_validate_schema_structure(value, side=side))
+        if reason is not None:
+            errors.append(_identity_error(side=side, field=field, reason=reason, value=value))
+
+    ordered_columns = values.get("ordered_columns")
+    dtypes = values.get("dtypes")
+    nullable = values.get("nullable")
+    schema = values.get("schema")
+    if _is_ordered_string_sequence(ordered_columns):
+        expected_columns = set(ordered_columns)
+        if isinstance(dtypes, Mapping) and set(dtypes) != expected_columns:
+            errors.append(
+                _identity_error(
+                    side=side,
+                    field="dtypes",
+                    reason="keys must match ordered_columns",
+                )
+            )
+        if isinstance(nullable, Mapping) and set(nullable) != expected_columns:
+            errors.append(
+                _identity_error(
+                    side=side,
+                    field="nullable",
+                    reason="keys must match ordered_columns",
+                )
+            )
+        if isinstance(schema, Mapping):
+            schema_columns = schema.get("columns")
+            if isinstance(schema_columns, (list, tuple)):
+                schema_names = [
+                    column.get("name")
+                    for column in schema_columns
+                    if isinstance(column, Mapping)
+                ]
+                if schema_names != list(ordered_columns):
+                    errors.append(
+                        _identity_error(
+                            side=side,
+                            field="schema",
+                            reason="columns must match ordered_columns",
+                        )
+                    )
+                if (
+                    schema_names == list(ordered_columns)
+                    and isinstance(dtypes, Mapping)
+                    and set(dtypes) == expected_columns
+                    and isinstance(nullable, Mapping)
+                    and set(nullable) == expected_columns
+                    and len(schema_columns) == len(ordered_columns)
+                    and all(isinstance(column, Mapping) for column in schema_columns)
+                ):
+                    for column_name, column in zip(ordered_columns, schema_columns):
+                        if column.get("dtype") != dtypes[column_name]:  # type: ignore[index]
+                            errors.append(
+                                _identity_error(
+                                    side=side,
+                                    field="dtypes",
+                                    reason=(
+                                        "schema column dtype must match top-level "
+                                        f"dtypes[{column_name!r}]"
+                                    ),
+                                )
+                            )
+                        if column.get("nullable") != nullable[column_name]:  # type: ignore[index]
+                            errors.append(
+                                _identity_error(
+                                    side=side,
+                                    field="nullable",
+                                    reason=(
+                                        "schema column nullable must match top-level "
+                                        f"nullable[{column_name!r}]"
+                                    ),
+                                )
+                            )
+    if isinstance(schema, Mapping):
+        if schema.get("schema_digest") != values.get("schema_digest"):
+            errors.append(
+                _identity_error(
+                    side=side,
+                    field="schema",
+                    reason="nested schema_digest must match schema_digest",
+                )
+            )
+    return values, errors
+
+
+def parquet_content_identity(identity: object) -> dict[str, object]:
+    """Return the validated parquet identity used by content-level digests.
+
+    Filesystem diagnostics such as ``mtime_ns`` are intentionally absent.  The
+    identity is validated before projection so unknown or malformed fields
+    cannot be silently discarded.
+    """
+
+    values, errors = _validate_parquet_identity(identity, side="content_projection")
+    if errors or values is None:
+        raise DeploymentManifestError(
+            "PARQUET_IDENTITY_INVALID", repr(errors)
+        )
+    return {
+        field: values[field]
+        for field in sorted(REQUIRED_BLOCKING_FIELDS)
+    }
+
+
+def _strip_semantic_non_authority_metadata(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {
+            key: _strip_semantic_non_authority_metadata(item)
+            for key, item in value.items()
+            if key not in _SEMANTIC_NON_AUTHORITY_KEYS
+        }
+    if isinstance(value, list):
+        return [_strip_semantic_non_authority_metadata(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_strip_semantic_non_authority_metadata(item) for item in value)
+    return value
+
+
+def formal_proof_authority_payload(
+    proof: Mapping[str, object],
+) -> dict[str, object]:
+    """Project a raw formal proof onto its semantic authority fields.
+
+    The raw proof is validated before projection.  This is deliberately a
+    strict allow-list: unknown proof fields cannot become silently accepted
+    authority inputs.  ``mtime_ns`` and explicitly named diagnostic/warning/
+    runtime metadata are non-authoritative and are removed only after the
+    source and target identities have passed their full structural checks.
+    """
+
+    if not isinstance(proof, Mapping):
+        raise DeploymentManifestError(
+            "FORMAL_PROOF_STRUCTURE_INVALID", "proof must be a mapping"
+        )
+    try:
+        values = dict(proof)
+    except Exception as exc:  # pragma: no cover - defensive for custom mappings
+        raise DeploymentManifestError(
+            "FORMAL_PROOF_STRUCTURE_INVALID", type(exc).__name__
+        ) from exc
+
+    unknown = set(values) - FORMAL_PROOF_KNOWN_FIELDS
+    if unknown:
+        raise DeploymentManifestError(
+            "FORMAL_PROOF_STRUCTURE_INVALID",
+            f"unknown fields={sorted(unknown, key=repr)!r}",
+        )
+    missing = FORMAL_PROOF_AUTHORITY_FIELDS - set(values)
+    if missing:
+        raise DeploymentManifestError(
+            "FORMAL_PROOF_STRUCTURE_INVALID",
+            f"missing fields={sorted(missing)!r}",
+        )
+    if FORMAL_PROOF_DIGEST_FIELD in values and not _is_sha256_digest(
+        values[FORMAL_PROOF_DIGEST_FIELD]
+    ):
+        raise DeploymentManifestError(
+            "FORMAL_PROOF_STRUCTURE_INVALID", "proof digest must be SHA-256"
+        )
+
+    projected: dict[str, object] = {
+        field: values[field] for field in sorted(FORMAL_PROOF_AUTHORITY_FIELDS)
+    }
+    for role, schema_field in (("source", "source_schema"), ("target", "target_schema")):
+        projected_identity = parquet_content_identity(values[role])
+        if projected[schema_field] != projected_identity["schema"]:
+            raise DeploymentManifestError(
+                "FORMAL_PROOF_PARQUET_MISMATCH",
+                f"{role}_schema does not match {role} identity",
+            )
+        projected[role] = projected_identity
+    return _strip_semantic_non_authority_metadata(projected)  # type: ignore[return-value]
+
+
+def formal_proof_authority_digest(proof: Mapping[str, object]) -> str:
+    """Hash exactly the semantic projection used by formal authority."""
+
+    return sha256_bytes(canonical_json_bytes(formal_proof_authority_payload(proof)))
+
+
+def _identity_values_equal(left: object, right: object) -> bool:
+    try:
+        return bool(left == right)
+    except Exception:
+        return False
+
+
+def compare_parquet_identity(
+    authority: object,
+    current: object,
+) -> dict[str, object]:
+    """Compare parquet identity without treating filesystem metadata as content.
+
+    Missing blocking fields remain fail-closed.  ``mtime_ns`` is optional for
+    compatibility with older manifests and is only reported diagnostically
+    when both sides contain different values.
+    """
+
+    expected_values, expected_errors = _validate_parquet_identity(
+        authority, side="expected"
+    )
+    actual_values, actual_errors = _validate_parquet_identity(current, side="actual")
+    structural_errors = [*expected_errors, *actual_errors]
+    blocking_mismatches: dict[str, object] = {}
+    if expected_values is not None and actual_values is not None:
+        for field in sorted(REQUIRED_BLOCKING_FIELDS):
+            expected_missing = field not in expected_values
+            actual_missing = field not in actual_values
+            if expected_missing or actual_missing or not _identity_values_equal(
+                expected_values.get(field, _MISSING_IDENTITY_FIELD),
+                actual_values.get(field, _MISSING_IDENTITY_FIELD),
+            ):
+                blocking_mismatches[field] = {
+                    "authority": (
+                        "<missing>"
+                        if expected_missing
+                        else expected_values[field]
+                    ),
+                    "current": (
+                        "<missing>" if actual_missing else actual_values[field]
+                    ),
+                }
+
+    diagnostics: list[dict[str, object]] = []
+    for field in sorted(OPTIONAL_DIAGNOSTIC_FIELDS):
+        expected_value = (
+            expected_values.get(field, _MISSING_IDENTITY_FIELD)
+            if expected_values is not None
+            else _MISSING_IDENTITY_FIELD
+        )
+        actual_value = (
+            actual_values.get(field, _MISSING_IDENTITY_FIELD)
+            if actual_values is not None
+            else _MISSING_IDENTITY_FIELD
+        )
+        if (
+            not structural_errors
+            and not blocking_mismatches
+            and expected_value is not _MISSING_IDENTITY_FIELD
+            and actual_value is not _MISSING_IDENTITY_FIELD
+            and not _identity_values_equal(expected_value, actual_value)
+        ):
+            diagnostics.append(
+                {
+                    "code": "PARQUET_MTIME_DIFFERENCE_ACCEPTED",
+                    "field": field,
+                    "authority": expected_value,
+                    "current": actual_value,
+                }
+            )
+    return {
+        "structural_errors": structural_errors,
+        "blocking_mismatches": blocking_mismatches,
+        "diagnostics": diagnostics,
+    }
 
 
 def parquet_identity(
@@ -989,14 +1598,16 @@ def build_formal_proof(
     paths = resolve_all_formal_dataset_paths(repository_root=root)[dataset_id - 1]
     spec = dataset_contract(dataset_id)
     identities = snapshot["datasets"][f"D{dataset_id}"]  # type: ignore[index]
+    source_identity = parquet_content_identity(identities["source"])  # type: ignore[index]
+    target_identity = parquet_content_identity(identities["target"])  # type: ignore[index]
     readiness_digest = readiness_proof_digest(readiness, repository_root=root)
     manifest_path = paths.dataset_manifest_path
     consumer_payload = {
         "dataset_id": f"D{dataset_id}",
-        "source_sha256": identities["source"]["sha256"],  # type: ignore[index]
-        "target_sha256": identities["target"]["sha256"],  # type: ignore[index]
-        "source_schema_digest": identities["source"]["schema_digest"],  # type: ignore[index]
-        "target_schema_digest": identities["target"]["schema_digest"],  # type: ignore[index]
+        "source_sha256": source_identity["sha256"],
+        "target_sha256": target_identity["sha256"],
+        "source_schema_digest": source_identity["schema_digest"],
+        "target_schema_digest": target_identity["schema_digest"],
         "readiness_proof_digest": readiness_digest,
         "code_inventory_digest": inventory_sha256,
     }
@@ -1064,15 +1675,15 @@ def build_formal_proof(
         "schema_version": PROOF_SCHEMA_VERSION,
         "dataset_id": f"D{dataset_id}",
         "dataset_root": f"dataset{dataset_id}",
-        "source": identities["source"],  # type: ignore[index]
-        "target": identities["target"],  # type: ignore[index]
-        "source_schema": identities["source"]["schema"],  # type: ignore[index]
-        "target_schema": identities["target"]["schema"],  # type: ignore[index]
+        "source": source_identity,
+        "target": target_identity,
+        "source_schema": source_identity["schema"],
+        "target_schema": target_identity["schema"],
         "entity_key": list(spec.key_fields),
         "date_key": "date",
         "row_count": {
-            "source": identities["source"]["rows"],  # type: ignore[index]
-            "target": identities["target"]["rows"],  # type: ignore[index]
+            "source": source_identity["rows"],
+            "target": target_identity["rows"],
         },
         "entity_count": {"source": len(source_entities), "target": len(target_entities)},
         "date_range": {
@@ -1098,7 +1709,10 @@ def build_formal_proof(
         "formal_identity": dict(formal_identity),
         "dataset_specific": dataset_specific,
     }
-    return {**payload, "proof_identity_sha256": sha256_bytes(canonical_json_bytes(payload))}
+    return {
+        **payload,
+        FORMAL_PROOF_DIGEST_FIELD: formal_proof_authority_digest(payload),
+    }
 
 
 def verify_formal_proof(
@@ -1106,18 +1720,31 @@ def verify_formal_proof(
     *,
     dataset_id: int,
     formal_identity: Mapping[str, str],
+    authority_digest: str | None = None,
+    allow_legacy_raw_digest: bool = False,
 ) -> None:
-    if proof.get("schema_version") != PROOF_SCHEMA_VERSION or proof.get("dataset_id") != f"D{dataset_id}":
+    projected = formal_proof_authority_payload(proof)
+    if projected.get("schema_version") != PROOF_SCHEMA_VERSION or projected.get("dataset_id") != f"D{dataset_id}":
         raise DeploymentManifestError("FORMAL_PROOF_SCHEMA_MISMATCH", f"D{dataset_id}")
-    expected_digest = proof.get("proof_identity_sha256")
-    payload = {key: value for key, value in proof.items() if key != "proof_identity_sha256"}
-    if expected_digest != sha256_bytes(canonical_json_bytes(payload)):
+    expected_digest = proof.get(FORMAL_PROOF_DIGEST_FIELD)
+    if not _is_sha256_digest(expected_digest):
         raise DeploymentManifestError("FORMAL_PROOF_TAMPERED", f"D{dataset_id}")
-    if proof.get("formal_identity") != dict(formal_identity):
+    semantic_digest = sha256_bytes(canonical_json_bytes(projected))
+    if authority_digest is not None:
+        if (
+            not _is_sha256_digest(authority_digest)
+            or authority_digest != semantic_digest
+            or expected_digest != semantic_digest
+        ):
+            raise DeploymentManifestError("FORMAL_PROOF_TAMPERED", f"D{dataset_id}")
+    elif not allow_legacy_raw_digest and expected_digest != semantic_digest:
+        raise DeploymentManifestError("FORMAL_PROOF_TAMPERED", f"D{dataset_id}")
+    if projected.get("formal_identity") != dict(formal_identity):
         raise DeploymentManifestError("FORMAL_PROOF_IDENTITY_MISMATCH", f"D{dataset_id}")
-    if proof.get("readiness_result") != {"status": "passed", "failure_code": None}:
+    if projected.get("readiness_result") != {"status": "passed", "failure_code": None}:
         raise DeploymentManifestError("FINAL_PREFLIGHT_NOT_READY", f"D{dataset_id}")
-    if proof.get("key_date_uniqueness", {}).get("status") != "passed":  # type: ignore[union-attr]
+    key_date_uniqueness = projected.get("key_date_uniqueness")
+    if not isinstance(key_date_uniqueness, Mapping) or key_date_uniqueness.get("status") != "passed":
         raise DeploymentManifestError("KEY_DATE_NOT_UNIQUE", f"D{dataset_id}")
 
 
@@ -1135,27 +1762,29 @@ def build_root_manifest(
     for dataset_id in range(1, 7):
         key = f"D{dataset_id}"
         proof = proofs[key]
-        proof_path = sealed / f"dataset{dataset_id}" / "formal-proof.json"
+        authority_proof = formal_proof_authority_payload(proof)
         datasets[key] = {
             "dataset_directory": f"dataset{dataset_id}",
-            "source": proof["source"],
-            "target": proof["target"],
-            "dataset_manifest": proof["dataset_manifest_identity"],
+            "source": authority_proof["source"],
+            "target": authority_proof["target"],
+            "dataset_manifest": authority_proof["dataset_manifest_identity"],
             "formal_proof": {
                 "path": f"dataset{dataset_id}/formal-proof.json",
-                "sha256": sha256_bytes(pretty_json_bytes(proof)),
-                "proof_identity_sha256": proof["proof_identity_sha256"],
+                "authority_sha256": formal_proof_authority_digest(proof),
             },
-            "source_schema_digest": proof["source"]["schema_digest"],  # type: ignore[index]
-            "target_schema_digest": proof["target"]["schema_digest"],  # type: ignore[index]
-            "consumer_fingerprint": proof["consumer_fingerprint"],
-            "readiness_proof_digest": proof["readiness_proof_digest"],
+            "source_schema_digest": authority_proof["source"]["schema_digest"],  # type: ignore[index]
+            "target_schema_digest": authority_proof["target"]["schema_digest"],  # type: ignore[index]
+            "consumer_fingerprint": authority_proof["consumer_fingerprint"],
+            "readiness_proof_digest": authority_proof["readiness_proof_digest"],
         }
-    d1 = proofs["D1"]["dataset_specific"]
-    d2 = proofs["D2"]["dataset_specific"]
-    d4 = proofs["D4"]["dataset_specific"]
-    d5 = proofs["D5"]["dataset_specific"]
-    d6 = proofs["D6"]["dataset_specific"]
+    authority_proofs = {
+        key: formal_proof_authority_payload(proof) for key, proof in proofs.items()
+    }
+    d1 = authority_proofs["D1"]["dataset_specific"]
+    d2 = authority_proofs["D2"]["dataset_specific"]
+    d4 = authority_proofs["D4"]["dataset_specific"]
+    d5 = authority_proofs["D5"]["dataset_specific"]
+    d6 = authority_proofs["D6"]["dataset_specific"]
     payload: dict[str, object] = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "publication_state": "authoritative",
@@ -1244,6 +1873,7 @@ def validate_deployment_manifest(
     if not isinstance(datasets, Mapping) or set(datasets) != {f"D{i}" for i in range(1, 7)}:
         raise DeploymentManifestError("DATASET_ENTRY_MISSING")
     proofs: dict[str, object] = {}
+    parquet_identity_diagnostics: list[dict[str, object]] = []
     resolved = resolve_all_formal_dataset_paths(repository_root=root)
     for paths in resolved:
         key = f"D{paths.dataset_id}"
@@ -1253,18 +1883,79 @@ def validate_deployment_manifest(
         source = entry.get("source")
         target = entry.get("target")
         current = snapshot["datasets"][key]  # type: ignore[index]
-        if source != current["source"] or target != current["target"]:  # type: ignore[index]
+        if not isinstance(current, Mapping):
             raise DeploymentManifestError("PARQUET_IDENTITY_MISMATCH", key)
+        for role, authority_identity in (("source", source), ("target", target)):
+            current_identity = current.get(role)
+            if not isinstance(authority_identity, Mapping) or not isinstance(
+                current_identity, Mapping
+            ):
+                raise DeploymentManifestError(
+                    "PARQUET_IDENTITY_MISMATCH", f"{key}/{role}: identity object missing"
+                )
+            comparison = compare_parquet_identity(authority_identity, current_identity)
+            structural_errors = comparison["structural_errors"]
+            blocking_mismatches = comparison["blocking_mismatches"]
+            if structural_errors or blocking_mismatches:
+                raise DeploymentManifestError(
+                    "PARQUET_IDENTITY_MISMATCH",
+                    f"{key}/{role}: structural_errors={structural_errors!r}; "
+                    f"fields={sorted(blocking_mismatches)}",
+                )
+            for diagnostic in comparison["diagnostics"]:
+                parquet_identity_diagnostics.append(
+                    {"dataset": key, "role": role, "against": "current", **diagnostic}
+                )
         proof_entry = entry.get("formal_proof")
         if not isinstance(proof_entry, Mapping):
             raise DeploymentManifestError("FORMAL_PROOF_MISSING", key)
         proof_path = _resolve_bound_path(sealed, proof_entry.get("path"), code="FORMAL_PROOF_PATH_INVALID")
-        if sha256_file(proof_path) != proof_entry.get("sha256"):
-            raise DeploymentManifestError("FORMAL_PROOF_TAMPERED", key)
         proof = _json(proof_path, "FORMAL_PROOF_UNREADABLE")
-        verify_formal_proof(proof, dataset_id=paths.dataset_id, formal_identity=formal_identity)
-        if proof.get("source") != source or proof.get("target") != target:
-            raise DeploymentManifestError("FORMAL_PROOF_PARQUET_MISMATCH", key)
+        authority_digest = proof_entry.get("authority_sha256")
+        if authority_digest is not None:
+            if not _is_sha256_digest(authority_digest):
+                raise DeploymentManifestError("FORMAL_PROOF_TAMPERED", key)
+            verify_formal_proof(
+                proof,
+                dataset_id=paths.dataset_id,
+                formal_identity=formal_identity,
+                authority_digest=authority_digest,
+            )
+        else:
+            legacy_raw_file_sha256 = proof_entry.get("sha256")
+            if not _is_sha256_digest(legacy_raw_file_sha256):
+                raise DeploymentManifestError("FORMAL_PROOF_TAMPERED", key)
+            # ``sha256`` was the historical raw JSON-file hash.  It is kept
+            # only so old manifests can be read; consulting it here would make
+            # an mtime-only proof rewrite block semantic authority.
+            verify_formal_proof(
+                proof,
+                dataset_id=paths.dataset_id,
+                formal_identity=formal_identity,
+                allow_legacy_raw_digest=True,
+            )
+        for role, authority_identity in (("source", source), ("target", target)):
+            proof_identity = proof.get(role)
+            if not isinstance(authority_identity, Mapping) or not isinstance(
+                proof_identity, Mapping
+            ):
+                raise DeploymentManifestError(
+                    "FORMAL_PROOF_PARQUET_MISMATCH",
+                    f"{key}/{role}: identity object missing",
+                )
+            proof_comparison = compare_parquet_identity(authority_identity, proof_identity)
+            proof_structural_errors = proof_comparison["structural_errors"]
+            proof_mismatches = proof_comparison["blocking_mismatches"]
+            if proof_structural_errors or proof_mismatches:
+                raise DeploymentManifestError(
+                    "FORMAL_PROOF_PARQUET_MISMATCH",
+                    f"{key}/{role}: structural_errors={proof_structural_errors!r}; "
+                    f"fields={sorted(proof_mismatches)}",
+                )
+            for diagnostic in proof_comparison["diagnostics"]:
+                parquet_identity_diagnostics.append(
+                    {"dataset": key, "role": role, "against": "formal_proof", **diagnostic}
+                )
         if proof.get("consumer_fingerprint") != entry.get("consumer_fingerprint"):
             raise DeploymentManifestError("CONSUMER_FINGERPRINT_MISMATCH", key)
         proofs[key] = proof
@@ -1326,6 +2017,7 @@ def validate_deployment_manifest(
         "manifest_sha256": sha256_file(sealed / "deployment-manifest.json"),
         "root_identity_sha256": manifest["root_identity_sha256"],
         "code_inventory_sha256": inventory["inventory_sha256"],
+        "parquet_identity_diagnostics": parquet_identity_diagnostics,
         "proofs": proofs,
     }
 
@@ -1378,11 +2070,16 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
 
 __all__ = [
     "D1_D2_KNN", "D4_KNN", "D4_D6_KNN", "EXPECTED_BRANCH", "EXPECTED_HEAD", "FROZEN_PARQUETS",
-    "DeploymentManifestError", "atomic_write_bytes", "atomic_write_json",
+    "DeploymentManifestError", "FORMAL_PROOF_AUTHORITY_FIELDS",
+    "FORMAL_PROOF_DIGEST_FIELD", "KNOWN_IDENTITY_FIELDS", "OPTIONAL_DIAGNOSTIC_FIELDS",
+    "REQUIRED_BLOCKING_FIELDS", "atomic_write_bytes", "atomic_write_json",
     "build_code_inventory", "build_formal_proof", "build_root_manifest",
-    "canonical_json_bytes", "canonical_readiness_proof_payload", "formal_identity_payload",
+    "canonical_json_bytes", "canonical_readiness_proof_payload", "compare_parquet_identity",
+    "formal_identity_payload", "formal_proof_authority_digest",
+    "formal_proof_authority_payload",
     "frozen_artifact_snapshot",
     "load_deployment_manifest", "parquet_identity", "pretty_json_bytes",
+    "parquet_content_identity",
     "readiness_proof_digest", "repository_identity", "require_repository_identity", "sha256_bytes",
     "sha256_file", "validate_deployment_manifest", "verify_frozen_snapshot",
 ]
