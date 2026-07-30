@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -12,6 +13,8 @@ from src.utils.result_acceptance import (
     AggregateProfile,
     ExpectedResultContract,
     ResultAcceptanceError,
+    _read_csv,
+    _same_candidate_content,
     accept_cell_csv,
     accept_global_aggregate,
     accept_mode_matrix,
@@ -77,6 +80,40 @@ def _write(path: Path, frame: pd.DataFrame) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(path, index=False)
     return path
+
+
+CSV_FLOAT64_SENTINEL = np.float64(99.55002834343927)
+REAL_FLOAT64_REPRESENTATIVES = (
+    1.8733843701179975,
+    3988.5717485263062,
+    228158973078.64197,
+    2119980886335.1516,
+    23067.708026457934,
+    190.21684898242836,
+    30.586227816995237,
+)
+
+
+def test_candidate_csv_reader_preserves_legal_float64_content(tmp_path: Path) -> None:
+    frame = _cell_rows().copy()
+    frame.loc[0, "rmse"] = CSV_FLOAT64_SENTINEL
+    frame.loc[0, "smape"] = REAL_FLOAT64_REPRESENTATIVES[0]
+    frame.loc[1, "rmse"] = REAL_FLOAT64_REPRESENTATIVES[1]
+    frame.loc[1, "smape"] = REAL_FLOAT64_REPRESENTATIVES[2]
+    frame.loc[2, "rmse"] = REAL_FLOAT64_REPRESENTATIVES[3]
+    frame.loc[2, "smape"] = REAL_FLOAT64_REPRESENTATIVES[4]
+    frame.loc[3, "rmse"] = REAL_FLOAT64_REPRESENTATIVES[5]
+    frame.loc[3, "smape"] = REAL_FLOAT64_REPRESENTATIVES[6]
+    path = _write(tmp_path / "candidate.csv", frame)
+
+    reread, reasons = _read_csv(path)
+
+    assert reasons == []
+    assert np.array_equal(
+        reread["rmse"].to_numpy(dtype=np.float64).view(np.int64),
+        frame["rmse"].to_numpy(dtype=np.float64).view(np.int64),
+    )
+    assert _same_candidate_content(frame, reread)
 
 
 def test_cell_acceptance_requires_exact_formal_coverage(tmp_path: Path) -> None:
@@ -169,6 +206,121 @@ def test_mode_matrix_requires_25_accepted_cells_and_is_only_promoter(tmp_path: P
     assert "cell_matrix_mismatch" in incomplete.report.reasons
 
 
+def _with_representative_floats(frame: pd.DataFrame) -> pd.DataFrame:
+    enriched = frame.copy()
+    enriched.loc[0, "rmse"] = CSV_FLOAT64_SENTINEL
+    enriched.loc[0, "smape"] = REAL_FLOAT64_REPRESENTATIVES[0]
+    enriched.loc[1, "rmse"] = REAL_FLOAT64_REPRESENTATIVES[1]
+    enriched.loc[1, "smape"] = REAL_FLOAT64_REPRESENTATIVES[2]
+    enriched.loc[2, "rmse"] = REAL_FLOAT64_REPRESENTATIVES[3]
+    enriched.loc[2, "smape"] = REAL_FLOAT64_REPRESENTATIVES[4]
+    enriched.loc[3, "rmse"] = REAL_FLOAT64_REPRESENTATIVES[5]
+    enriched.loc[3, "smape"] = REAL_FLOAT64_REPRESENTATIVES[6]
+    return enriched
+
+
+def _mode_matrix_candidate_fixture(
+    tmp_path: Path,
+) -> tuple[list[Path], ExpectedResultContract, pd.DataFrame, Path]:
+    paths = []
+    for horizon in range(1, 6):
+        for seed in range(42, 47):
+            frame = _cell_rows(horizon=horizon, seed=seed)
+            if (horizon, seed) == (1, 42):
+                frame = _with_representative_floats(frame)
+            paths.append(_write(tmp_path / f"h{horizon}_s{seed}.csv", frame))
+    expected = _contract(
+        scope=AcceptanceScope.MODE_MATRIX,
+        horizons=(1, 2, 3, 4, 5),
+        seeds=(42, 43, 44, 45, 46),
+    )
+    accepted = accept_mode_matrix(paths, expected=expected)
+    assert accepted.report.passed
+    candidate = _write(tmp_path / "candidate_mode.csv", accepted.accepted_rows)
+    return paths, expected, accepted.accepted_rows, candidate
+
+
+def test_mode_matrix_candidate_accepts_legal_float64_round_trip(tmp_path: Path) -> None:
+    paths, expected, accepted_rows, candidate = _mode_matrix_candidate_fixture(tmp_path)
+
+    outcome = accept_mode_matrix(
+        paths,
+        expected=expected,
+        candidate_mode_csv=candidate,
+    )
+
+    assert outcome.report.passed
+    assert outcome.report.reasons == ()
+    assert outcome.report.counts == {"cells": 25, "rows": 150}
+    assert len(accepted_rows) == 150
+
+
+def test_mode_matrix_candidate_rejects_material_numeric_mutation(tmp_path: Path) -> None:
+    paths, expected, accepted_rows, _ = _mode_matrix_candidate_fixture(tmp_path)
+    candidate_frame = accepted_rows.copy()
+    candidate_frame.loc[0, "smape"] = float(candidate_frame.loc[0, "smape"]) + 0.01
+    candidate = _write(tmp_path / "candidate_mode_smape_mutation.csv", candidate_frame)
+
+    outcome = accept_mode_matrix(
+        paths,
+        expected=expected,
+        candidate_mode_csv=candidate,
+    )
+
+    assert not outcome.report.passed
+    assert outcome.report.reasons == ("candidate_mode_mismatch",)
+
+
+def test_mode_matrix_candidate_rejects_one_float64_unit_mutation(tmp_path: Path) -> None:
+    paths, expected, accepted_rows, _ = _mode_matrix_candidate_fixture(tmp_path)
+    candidate_frame = accepted_rows.copy()
+    original = np.float64(candidate_frame.loc[0, "smape"])
+    mutated = np.nextafter(original, np.inf)
+    assert mutated != original
+    candidate_frame.loc[0, "smape"] = mutated
+    candidate = _write(tmp_path / "candidate_mode_nextafter_mutation.csv", candidate_frame)
+
+    outcome = accept_mode_matrix(
+        paths,
+        expected=expected,
+        candidate_mode_csv=candidate,
+    )
+
+    assert not outcome.report.passed
+    assert outcome.report.reasons == ("candidate_mode_mismatch",)
+
+
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [
+        ("scenario", "with"),
+        ("information_sharing", "with"),
+        ("method", "changed-method"),
+        ("target_entity_key", "changed-target"),
+        ("horizon", 2),
+        ("seed", 99),
+        ("result_status", "trial"),
+        ("schema_family", "changed-schema-family"),
+    ],
+)
+def test_mode_matrix_candidate_rejects_identity_or_schema_mutation(
+    tmp_path: Path, column: str, value: object
+) -> None:
+    paths, expected, accepted_rows, _ = _mode_matrix_candidate_fixture(tmp_path)
+    candidate_frame = accepted_rows.copy()
+    candidate_frame.loc[0, column] = value
+    candidate = _write(tmp_path / f"candidate_{column}_mutation.csv", candidate_frame)
+
+    outcome = accept_mode_matrix(
+        paths,
+        expected=expected,
+        candidate_mode_csv=candidate,
+    )
+
+    assert not outcome.report.passed
+    assert "candidate_mode_mismatch" in outcome.report.reasons
+
+
 FULL_TARGETS = {
     (dataset_id, mode): tuple(
         f"D{dataset_id}-T{index}"
@@ -203,6 +355,68 @@ def _confirmed_mode_rows(dataset_id: int, mode: str, targets: tuple[str, ...]) -
                         }
                     )
     return pd.DataFrame(rows)
+
+
+def _selection_aggregate_candidate_fixture(
+    tmp_path: Path,
+) -> tuple[list[Path], ExpectedResultContract, pd.DataFrame, Path]:
+    d5_targets = FULL_TARGETS[(5, "without")]
+    mode_paths = []
+    for mode in ("without", "with"):
+        frame = _confirmed_mode_rows(5, mode, d5_targets)
+        if mode == "without":
+            frame = _with_representative_floats(frame)
+        mode_paths.append(_write(tmp_path / f"d5_{mode}.csv", frame))
+    expected = _contract(
+        scope=AcceptanceScope.GLOBAL_AGGREGATE,
+        dataset_ids=(5,),
+        modes=("without", "with"),
+        targets={(5, mode): d5_targets for mode in ("without", "with")},
+        horizons=(1, 2, 3, 4, 5),
+        seeds=(42, 43, 44, 45, 46),
+        profile=AggregateProfile.RUN_SELECTION_AGGREGATE,
+    )
+    accepted = accept_global_aggregate(mode_paths, expected=expected)
+    assert accepted.report.passed
+    candidate = _write(tmp_path / "candidate_aggregate.csv", accepted.accepted_rows)
+    return mode_paths, expected, accepted.accepted_rows, candidate
+
+
+def test_global_aggregate_candidate_accepts_and_rejects_float64_content(
+    tmp_path: Path,
+) -> None:
+    mode_paths, expected, accepted_rows, candidate = _selection_aggregate_candidate_fixture(
+        tmp_path
+    )
+
+    accepted = accept_global_aggregate(
+        mode_paths,
+        expected=expected,
+        candidate_aggregate_csv=candidate,
+    )
+
+    assert accepted.report.passed
+    assert accepted.report.reasons == ()
+    assert accepted.report.counts == {
+        "mode_files": 2,
+        "rows": 1500,
+        "dataset_mode_groups": 2,
+    }
+
+    mutated_frame = accepted_rows.copy()
+    mutated_frame.loc[0, "smape"] = float(mutated_frame.loc[0, "smape"]) + 0.01
+    mutated_candidate = _write(
+        tmp_path / "candidate_aggregate_smape_mutation.csv",
+        mutated_frame,
+    )
+    rejected = accept_global_aggregate(
+        mode_paths,
+        expected=expected,
+        candidate_aggregate_csv=mutated_candidate,
+    )
+
+    assert not rejected.report.passed
+    assert rejected.report.reasons == ("candidate_aggregate_mismatch",)
 
 
 def test_global_profiles_distinguish_selection_from_full_baseline(tmp_path: Path) -> None:

@@ -178,7 +178,11 @@ def _read_csv(path: Path) -> tuple[pd.DataFrame, list[str]]:
     if not candidate.is_file():
         return pd.DataFrame(), ["csv_missing"]
     try:
-        frame = pd.read_csv(candidate, keep_default_na=False)
+        frame = pd.read_csv(
+            candidate,
+            keep_default_na=False,
+            float_precision="round_trip",
+        )
     except (OSError, ValueError, pd.errors.ParserError):
         return pd.DataFrame(), ["csv_unreadable"]
     if frame.empty:
