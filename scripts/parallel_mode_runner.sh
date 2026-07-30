@@ -53,8 +53,12 @@ fi
 readonly FORMAL_RUN_ROOT
 
 ALL_TASKS=(
-    d1_without d1_with d2_without d2_with d3_without d3_with
-    d4_without d4_with d5_without d5_with d6_without d6_with
+    d5_without d5_with
+    d6_without d6_with
+    d4_without d4_with
+    d3_without d3_with
+    d2_without d2_with
+    d1_without d1_with
 )
 if [[ "${PROBE}" == "1" ]]; then
     [[ "${MAX_JOBS}" == "4" ]] || fail_usage "PROBE=1 requires MAX_JOBS=4"
