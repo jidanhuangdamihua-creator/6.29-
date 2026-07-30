@@ -159,7 +159,7 @@
     },
     {
       "path": "scripts/parallel_mode_runner.sh",
-      "sha256": "c2d072a466bccca1475bb021ba8eda488a4950473598dc6a1fae171df9fee813"
+      "sha256": "3ab4c37821722d160996e0e1a4dee5667e29fc8709ad477b438be44e5a84ca76"
     },
     {
       "path": "scripts/parallel_runner.sh",
@@ -603,7 +603,7 @@
     },
     {
       "path": "src/utils/result_acceptance.py",
-      "sha256": "19c642ec3e36e136e942ea990317a919fec580907101080832289d25ef9f4aee"
+      "sha256": "a50a310e2ddbfb299eec762de83ae856f869a717d70b63fa3fe71b878e46ed65"
     },
     {
       "path": "src/utils/result_schema.py",
@@ -670,6 +670,6 @@
       "sha256": "a8a1d6a43c87f01fc8ad010f594b7f51bf353d9788fd8a1d4b824f7325aa053c"
     }
   ],
-  "inventory_sha256": "13f0f90eeff3f65dc7ba3dd8f80c35f44e9c9fc95310116a414833fa0afa42fd",
+  "inventory_sha256": "beeded0a93348f7fe7dd5594f03b2499c7ba6ba090cea689b75356ae7d541468",
   "schema_version": "d1_d6_code_inventory_v1"
 }
