@@ -1,5 +1,5 @@
 {
-  "file_count": 167,
+  "file_count": 168,
   "files": [
     {
       "path": "configs/solidified/knn/Dataset1/knn_with_info_sharing.json",
@@ -152,6 +152,10 @@
     {
       "path": "scripts/generate_results_report.py",
       "sha256": "a4eecda38c46cb30abb2c58e28e1f2a9ef11d95990b0d09c3f396d5412c3e3d5"
+    },
+    {
+      "path": "scripts/operations/repair_d5_target_calendar_gap.py",
+      "sha256": "98d073e81f521286a7d4bb0ff52bdec779dc41c45684bad284c96aee829f2e38"
     },
     {
       "path": "scripts/organize_dataset_profiles.py",
@@ -439,7 +443,7 @@
     },
     {
       "path": "src/protocols/formal_deployment_manifest.py",
-      "sha256": "68a69f451dd2254594895d6ba6fb55ab1286a4ff3256b7e66dabca0062d094cb"
+      "sha256": "149ccb2fff22f1a9bbdbf83db0b68886f66ac73f6739edf72937fd2f403509f6"
     },
     {
       "path": "src/protocols/formal_input_paths.py",
@@ -670,6 +674,6 @@
       "sha256": "a8a1d6a43c87f01fc8ad010f594b7f51bf353d9788fd8a1d4b824f7325aa053c"
     }
   ],
-  "inventory_sha256": "beeded0a93348f7fe7dd5594f03b2499c7ba6ba090cea689b75356ae7d541468",
+  "inventory_sha256": "5c794c95908ab99145fef8b8e57c98bc6d7a5a471085cb8e76ccf253424e59e3",
   "schema_version": "d1_d6_code_inventory_v1"
 }

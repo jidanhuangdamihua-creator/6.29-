@@ -1,13 +1,13 @@
 {
-  "consumer_fingerprint": "ec677189f965d178fa62e75d7efed279545a197c371117a6882a2be2ecaa18c2",
+  "consumer_fingerprint": "d7de06948c95dce621448f20efbaa3bb38117d417505bcc329700d2681330a5e",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "beeded0a93348f7fe7dd5594f03b2499c7ba6ba090cea689b75356ae7d541468",
+    "code_inventory_digest": "5c794c95908ab99145fef8b8e57c98bc6d7a5a471085cb8e76ccf253424e59e3",
     "dataset_id": "D5",
-    "readiness_proof_digest": "c0a967fba96d9f60b8010af60498120c00e50febbe7471780f3d3778894eea80",
+    "readiness_proof_digest": "a0a053491de608cfd2a077da91c87ac1aa92d185a80b58684fcef8c442018c6e",
     "source_schema_digest": "79adba300871317bcf9f40dc2b038536e3b371f1ecc6693ce1e77beb2310d537",
     "source_sha256": "368d896b0a7d2849ba2984e1bb3f4f07d36cf9175087ee755d6cd2a6c1c790b3",
     "target_schema_digest": "5f531ee2175bd9cc93552b5717f769fd794978e97023aef9e6ae959482947032",
-    "target_sha256": "89df965859b3b563d178c0341039acc44ad6192a53196c8974f256ebd400edff"
+    "target_sha256": "e01cdb828b0669b6aab9cb7e92f60c2a6a283ad8cdb3f5ec9bbd6ad61d11f263"
   },
   "dataset_id": "D5",
   "dataset_manifest_identity": {
@@ -204,15 +204,15 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "9f82827c4f701bd1a01ba4240dd98986455e492412715a165a3f486c44c2294b",
-  "readiness_proof_digest": "c0a967fba96d9f60b8010af60498120c00e50febbe7471780f3d3778894eea80",
+  "proof_identity_sha256": "83a3551b1a05af9652e61a066d035a01729315320b50ee52e106696bb7c2bf07",
+  "readiness_proof_digest": "a0a053491de608cfd2a077da91c87ac1aa92d185a80b58684fcef8c442018c6e",
   "readiness_result": {
     "failure_code": null,
     "status": "passed"
   },
   "row_count": {
     "source": 45401018,
-    "target": 7323
+    "target": 7338
   },
   "schema_version": "d1_d6_formal_proof_v1",
   "source": {
@@ -651,7 +651,7 @@
       "is_holiday"
     ],
     "path": "数据集/固化数据/d1_d6_sealed_v1/dataset5/target.parquet",
-    "rows": 7323,
+    "rows": 7338,
     "schema": {
       "columns": [
         {
@@ -769,8 +769,8 @@
       "schema_digest": "5f531ee2175bd9cc93552b5717f769fd794978e97023aef9e6ae959482947032"
     },
     "schema_digest": "5f531ee2175bd9cc93552b5717f769fd794978e97023aef9e6ae959482947032",
-    "sha256": "89df965859b3b563d178c0341039acc44ad6192a53196c8974f256ebd400edff",
-    "size_bytes": 189057
+    "sha256": "e01cdb828b0669b6aab9cb7e92f60c2a6a283ad8cdb3f5ec9bbd6ad61d11f263",
+    "size_bytes": 71791
   },
   "target_schema": {
     "columns": [

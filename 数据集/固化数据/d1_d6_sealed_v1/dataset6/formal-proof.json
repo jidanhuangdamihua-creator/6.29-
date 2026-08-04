@@ -1,7 +1,7 @@
 {
-  "consumer_fingerprint": "6db38cfeedf94d68232c604d26bdeae20b86e885cb71abd801e54357ae3dd0f2",
+  "consumer_fingerprint": "4ede6f0a6e88107090b6941777f7f01783390a0c9dc2b209349c1eeedeb935e0",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "beeded0a93348f7fe7dd5594f03b2499c7ba6ba090cea689b75356ae7d541468",
+    "code_inventory_digest": "5c794c95908ab99145fef8b8e57c98bc6d7a5a471085cb8e76ccf253424e59e3",
     "dataset_id": "D6",
     "readiness_proof_digest": "8a2ed19cfde52e33ee4343df217a0e91f95fdedcde16ac5b43d3a1b7a71f286d",
     "source_schema_digest": "d9ced790cfe72d43b3e76b033fbe8f2d92d124a3aa7f631391741ee855fb5932",
@@ -202,7 +202,7 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "b1f90e1f0efbd10c8a45ec6e86140b4a031c382b0222b8d80fe7f5e2e9a58d3e",
+  "proof_identity_sha256": "0190c08c792d7beb47c74523922b638d359db22b9bdfe3a447b78df66ef27c4e",
   "readiness_proof_digest": "8a2ed19cfde52e33ee4343df217a0e91f95fdedcde16ac5b43d3a1b7a71f286d",
   "readiness_result": {
     "failure_code": null,
