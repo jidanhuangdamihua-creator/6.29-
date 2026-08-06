@@ -1172,6 +1172,7 @@ def run_readiness(
     parent_root: Path | None = None,
     old_sealed_root: Path | None = None,
     require_deployment: bool = False,
+    deployment_preflight: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     root = Path(root).resolve()
     parent_root = Path(parent_root or root).resolve()
@@ -1201,7 +1202,10 @@ def run_readiness(
                 validate_deployment_manifest,
             )
 
-            preflight = validate_deployment_manifest(root)
+            if deployment_preflight is None:
+                preflight = validate_deployment_manifest(root)
+            else:
+                preflight = deployment_preflight
             manifest = preflight["manifest"]
             proofs = preflight["proofs"]
             for item in datasets:

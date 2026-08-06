@@ -97,21 +97,34 @@ def test_runtime_readiness_uses_shared_digest_and_fails_closed_on_identity_chang
     monkeypatch.setattr(readiness, "_dataset_report", fake_report)
     monkeypatch.setattr(readiness, "_source_history_static_audit", lambda root: {"status": "passed"})
     monkeypatch.setattr(readiness, "load_formal_identity", lambda root: identity)
+    deployment_preflight = {
+        "manifest": {"datasets": entries, "formal_identity": identity},
+        "proofs": proofs,
+    }
+
+    def unexpected_manifest_revalidation(repository_root):
+        raise AssertionError("deployment manifest was revalidated instead of reused")
+
     monkeypatch.setattr(
         deployment,
         "validate_deployment_manifest",
-        lambda repository_root: {
-            "manifest": {"datasets": entries, "formal_identity": identity},
-            "proofs": proofs,
-        },
+        unexpected_manifest_revalidation,
     )
     assert readiness.readiness_proof_digest is deployment.readiness_proof_digest
 
-    accepted = readiness.run_readiness(root=root, require_deployment=True)
+    accepted = readiness.run_readiness(
+        root=root,
+        require_deployment=True,
+        deployment_preflight=deployment_preflight,
+    )
     assert accepted["status"] == "passed"
     assert accepted["preflight_status"] == "ready"
 
     mutate = True
-    rejected = readiness.run_readiness(root=root, require_deployment=True)
+    rejected = readiness.run_readiness(
+        root=root,
+        require_deployment=True,
+        deployment_preflight=deployment_preflight,
+    )
     assert rejected["status"] == "failed"
     assert rejected["failure_code"] == "READINESS_PROOF_MISMATCH"

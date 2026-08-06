@@ -110,6 +110,7 @@ def run_formal_preflight(project_root: Path = PROJECT_ROOT) -> dict[str, object]
         parent_root=root,
         old_sealed_root=root,
         require_deployment=True,
+        deployment_preflight=manifest_report,
     )
     if (
         readiness.get("status") != "passed"

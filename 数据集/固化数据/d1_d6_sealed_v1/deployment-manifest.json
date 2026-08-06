@@ -1,9 +1,9 @@
 {
   "code_inventory": {
     "file_count": 168,
-    "inventory_sha256": "5c794c95908ab99145fef8b8e57c98bc6d7a5a471085cb8e76ccf253424e59e3",
+    "inventory_sha256": "7ac93cfbee3f08ad4e1c4f64654babee401ba33f6b5036420f0d2f0f3f7623d9",
     "path": "code-inventory.json",
-    "sha256": "015c81f226179fcc6f90e72bb3d78ff345287149757c5e80f6853f6cec67a217"
+    "sha256": "ba4cc419fedb25ecea1eac1b69700bc0959b9e886edde4e7b6d5a13e06411370"
   },
   "d1_d2_knn_selection_authority": {
     "D1": {
@@ -899,14 +899,14 @@
   },
   "datasets": {
     "D1": {
-      "consumer_fingerprint": "5fe35b4905ec6d8961e93c42c661e0658573119448e1f10d4a08991e78df58dc",
+      "consumer_fingerprint": "0a528bf1c7ca6e05ccbfaeb73798f5a12d7e332af5e59916a13b10454b33717c",
       "dataset_directory": "dataset1",
       "dataset_manifest": {
         "path": "dataset1/manifest.json",
         "sha256": "f0d7a2f2b72e7707a9983e3adee1886d57a5cf849666b65ba8c0cc75fee31e9d"
       },
       "formal_proof": {
-        "authority_sha256": "77e9a5563f6f0564a77fe70d34a18cd16b339d66912c9add1fdfbf71bbac63d9",
+        "authority_sha256": "39a691de19ec82c4e49928e50d3725b80b07ac49cf68bd055c5b5ea6c39f1c50",
         "path": "dataset1/formal-proof.json"
       },
       "readiness_proof_digest": "1363e26b8abb78f4a8cb730acdc78156d7cd4c2934e9b1f7af410306e41c11c8",
@@ -1106,14 +1106,14 @@
       "target_schema_digest": "6d5c94965593d1ac45d4e7ee5263a3d8a49d6754721744f2861610e2658a2d87"
     },
     "D2": {
-      "consumer_fingerprint": "018ac5b446d4fd0f38d7bd74bd8c6b253f1f62ff02b482f78f75fed8fdc2e7ca",
+      "consumer_fingerprint": "433e1ca9f34a4d06de268ee4d963bd9902726056cb7b2d068480dc896ffd0add",
       "dataset_directory": "dataset2",
       "dataset_manifest": {
         "path": "dataset2/manifest.json",
         "sha256": "6057be8294eccac98312d4aac098a61247915f3c464d8088ebd753ae5290d72a"
       },
       "formal_proof": {
-        "authority_sha256": "1e2f578ebfd54687876bf37ca701ac547fba779123f17ef32be517ace03dc445",
+        "authority_sha256": "078ec421b7a411fcc78c6ccbabde1d0c0ea68d359574d3c3ff8b0bea0ee0862b",
         "path": "dataset2/formal-proof.json"
       },
       "readiness_proof_digest": "a3c4a57215091e1f0a62bfb82e3cc931e1eccfd8370d1566a8790213583675c1",
@@ -1329,14 +1329,14 @@
       "target_schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086"
     },
     "D3": {
-      "consumer_fingerprint": "e9a5ee57712f6272d2dd9af17f24829b160fbda7a2bedbaa2050e7efb206eaba",
+      "consumer_fingerprint": "22f28bd7e06f03d4094240d86b76b9ec6bada0b1487f44371aeb6fa59833260e",
       "dataset_directory": "dataset3",
       "dataset_manifest": {
         "path": "dataset3/manifest.json",
         "sha256": "7c221852f9616d82d533710bf9d765cb683ab4189c4ad8acf767709884dbab1d"
       },
       "formal_proof": {
-        "authority_sha256": "9e6a26335c9878ef4967059a94486ad8f3c1ba32f6a2c71e7b2b0a9aed03e6be",
+        "authority_sha256": "9c8c1a34ef58aca343cf860367284aee66ea06085761e394e6524dfb8199a091",
         "path": "dataset3/formal-proof.json"
       },
       "readiness_proof_digest": "bf07e2c088a9d99cb829151e8b18fabe9bbeef08f441f2dee00ab3dfaed3398c",
@@ -1614,14 +1614,14 @@
       "target_schema_digest": "d72670d88a4f4614f523cbfcd523f3702905dc1b1b47a3e2f4ffc8093653c481"
     },
     "D4": {
-      "consumer_fingerprint": "7950a5694480db225d9883a395c58b82abab96689a0eab32ff3e687536a0ec46",
+      "consumer_fingerprint": "78a23c70fbbe4c5ab376cc2a33e9dd0000ccfa724e3a4cab84b08647f7f23aab",
       "dataset_directory": "dataset4",
       "dataset_manifest": {
         "path": "dataset4/manifest.json",
         "sha256": "7696a02a8b4aa747f840faa3fcb0bb9e3fe8062a801248247d74b308674cc814"
       },
       "formal_proof": {
-        "authority_sha256": "782fa8d09af7a4216ab032a90285a489f4498ad5c4623e91a216889c3460dc85",
+        "authority_sha256": "af72167838b0160b9a91e7435024ee4d40dd425214d376a2e80dcab84b760bdb",
         "path": "dataset4/formal-proof.json"
       },
       "readiness_proof_digest": "670f99afb10eedb4d49df3b2652661123c6a232e9fc543e7588fb14fb1468a8a",
@@ -2141,17 +2141,17 @@
       "target_schema_digest": "943432f68afa3ab8dd3286950566623ce8a6710bbea5ced0cc58cc460ad8f59a"
     },
     "D5": {
-      "consumer_fingerprint": "d7de06948c95dce621448f20efbaa3bb38117d417505bcc329700d2681330a5e",
+      "consumer_fingerprint": "3ed8ea35fe66f8343262ae7c69cb9fe30b8e4c4ef028b3cbdeee2388c8ea14e1",
       "dataset_directory": "dataset5",
       "dataset_manifest": {
         "path": "dataset5/manifest.json",
         "sha256": "345a56d608d13b65040a77a1e08420636e0f3dd4496b2ec6d204270d709287a0"
       },
       "formal_proof": {
-        "authority_sha256": "83a3551b1a05af9652e61a066d035a01729315320b50ee52e106696bb7c2bf07",
+        "authority_sha256": "08cc46b3c547c19db40135906cf2eae717ba2ee272ce34d3353c90966a3948b3",
         "path": "dataset5/formal-proof.json"
       },
-      "readiness_proof_digest": "a0a053491de608cfd2a077da91c87ac1aa92d185a80b58684fcef8c442018c6e",
+      "readiness_proof_digest": "7d8d7e0bc63387434741b01eb68aae7af4d57aed7003f2f2d7e773c3a3a0457d",
       "source": {
         "dtypes": {
           "city": "string",
@@ -2540,14 +2540,14 @@
       "target_schema_digest": "5f531ee2175bd9cc93552b5717f769fd794978e97023aef9e6ae959482947032"
     },
     "D6": {
-      "consumer_fingerprint": "4ede6f0a6e88107090b6941777f7f01783390a0c9dc2b209349c1eeedeb935e0",
+      "consumer_fingerprint": "0b2f08bde416ba98999df2ecf7fd02d1340a69d3edebff88c6ab538713940089",
       "dataset_directory": "dataset6",
       "dataset_manifest": {
         "path": "dataset6/manifest.json",
         "sha256": "ddce0ead262ab36d3cbf830e58b0d40c1595010179186c5ad6ab61dbe92ce45e"
       },
       "formal_proof": {
-        "authority_sha256": "0190c08c792d7beb47c74523922b638d359db22b9bdfe3a447b78df66ef27c4e",
+        "authority_sha256": "cbde17f35e458a8dd7470d9da1e2a43af12a45a6417e45d0a3e83b0ff5563371",
         "path": "dataset6/formal-proof.json"
       },
       "readiness_proof_digest": "8a2ed19cfde52e33ee4343df217a0e91f95fdedcde16ac5b43d3a1b7a71f286d",
@@ -2980,7 +2980,7 @@
     "scope_sha256": "sha256:98107929ea310e7fc304d2631803092e68c01e51fa992da96a3c3118b628eeb4"
   },
   "publication_state": "authoritative",
-  "root_identity_sha256": "6d47324f115abdabe5cd5b445807d92d09afb10183d0958307723d7c328052e1",
+  "root_identity_sha256": "e617abd7cda1b955c757117f2f2aa8d02c89afda40cda34d48380524e20a986c",
   "schema_version": "d1_d6_deployment_manifest_v1",
   "sealed_root": "数据集/固化数据/d1_d6_sealed_v1"
 }
