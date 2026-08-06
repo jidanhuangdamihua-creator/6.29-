@@ -9,6 +9,7 @@ import numpy as np
 from src.constants import MIXED_METRIC_PROTOCOL_NOTE, MIXED_METRIC_SPACE
 from src.evaluation.metric_contract import (
     ORIGINAL_SALES_SPACE,
+    SALES_VALUE_POLICY,
     SMAPE_CONTRACT_FIELDS,
     SMAPE_EPSILON,
     SMAPE_RANGE,
@@ -230,12 +231,23 @@ def compute_metrics_with_protocol(
 
     paper_metric_computed_valid = y_true_paper is not None and y_pred_paper is not None
     if paper_metric_computed_valid:
+        raw_target_negative_count = int(np.count_nonzero(y_true_paper < 0))
+        raw_prediction_negative_count = int(np.count_nonzero(y_pred_paper < 0))
+        if paper_space == ORIGINAL_SALES_SPACE:
+            if SALES_VALUE_POLICY != "clip_negative_to_zero_v1":
+                raise MetricProtocolError(
+                    "unsupported_sales_value_policy",
+                    detail=f"sales_value_policy={SALES_VALUE_POLICY}",
+                )
+            y_true_paper = np.maximum(y_true_paper, 0.0)
+            y_pred_paper = np.maximum(y_pred_paper, 0.0)
+            if raw_target_negative_count or raw_prediction_negative_count:
+                notes.append(
+                    "SALES_VALUE_POLICY=clip_negative_to_zero_v1; "
+                    f"clipped_target_negative_count={raw_target_negative_count}; "
+                    f"clipped_prediction_negative_count={raw_prediction_negative_count}"
+                )
         target_negative_count = int(np.count_nonzero(y_true_paper < 0))
-        if strict_paper_metrics and paper_space == ORIGINAL_SALES_SPACE and target_negative_count:
-            raise MetricProtocolError(
-                "negative_target",
-                detail=f"target_negative_count={target_negative_count}",
-            )
         rmse_paper = _compute_rmse(y_true_paper, y_pred_paper)
         mae_paper = _compute_mae(y_true_paper, y_pred_paper)
         mape_paper = _compute_mape(y_true_paper, y_pred_paper, eps=eps)

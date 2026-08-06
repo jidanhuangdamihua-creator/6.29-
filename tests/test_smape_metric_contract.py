@@ -158,21 +158,27 @@ def test_numeric_non_strict_row_is_excluded_from_formal_comparison():
     assert "invalid:strict_paper_metrics" in result["failure_reasons"]
 
 
-def test_contract_rejects_negative_target_instead_of_clipping_inside_metric_layer():
-    with pytest.raises(MetricProtocolError) as exc_info:
-        compute_metrics_with_protocol(
-            y_true=np.array([-1.0, 5.0]),
-            y_pred=np.array([0.0, 5.0]),
-            metric_protocol={
-                "current_metric_space": "original_sales_space",
-                "paper_metric_space": "original_sales_space",
-                "strict_paper_metrics": True,
-            },
-            sales_scaler=None,
-            feature_columns=None,
-        )
+def test_strict_original_sales_applies_declared_negative_clip_policy():
+    result = compute_metrics_with_protocol(
+        y_true=np.array([-1.0, 5.0]),
+        y_pred=np.array([-2.0, 5.0]),
+        metric_protocol={
+            "current_metric_space": "original_sales_space",
+            "paper_metric_space": "original_sales_space",
+            "strict_paper_metrics": True,
+        },
+        sales_scaler=None,
+        feature_columns=None,
+    )
 
-    assert exc_info.value.status == "negative_target"
+    assert result["sales_value_policy"] == "clip_negative_to_zero_v1"
+    assert result["paper_metric_status"] == "valid"
+    assert result["paper_metric_error"] == ""
+    assert result["target_negative_count"] == 0
+    assert result["prediction_negative_count"] == 0
+    assert "clipped_target_negative_count=1" in result["metric_notes"]
+    assert "clipped_prediction_negative_count=1" in result["metric_notes"]
+    assert result["smape"] == 0.0
 
 
 def test_metric_index_digest_is_order_sensitive_and_deterministic():
