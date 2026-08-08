@@ -7,8 +7,8 @@ import subprocess
 import pandas as pd
 import pytest
 
-from src.constants import SCHEMA_FAMILY_D1_D3
-from src.protocols.experiment_protocol import FORMAL_METHODS
+from src.constants import SCHEMA_FAMILY_D1_D3, SCHEMA_FAMILY_D4_D6
+from src.protocols.experiment_protocol import FORMAL_METHODS, formal_target_entity_keys
 from src.utils.result_acceptance import (
     AcceptanceScope,
     AggregateProfile,
@@ -20,6 +20,7 @@ from src.utils.run_artifacts import (
     CodeIdentity,
     discover_code_identity,
     publish_formal_cell_frame,
+    publish_formal_cell_output_frame,
     publish_global_aggregate,
     publish_mode_matrix,
     resumable_formal_cell,
@@ -138,7 +139,6 @@ def test_accepted_cell_is_atomic_hashed_and_resume_requires_same_code(tmp_path: 
         expected=expected,
         code_identity=CodeIdentity("different", True, "1" * 64),
     )
-
     stable.write_text(stable.read_text(encoding="utf-8") + "\n", encoding="utf-8")
     assert not resumable_formal_cell(
         stable_path=stable,
@@ -146,6 +146,53 @@ def test_accepted_cell_is_atomic_hashed_and_resume_requires_same_code(tmp_path: 
         expected=expected,
         code_identity=identity,
     )
+
+
+def test_d4_formal_publication_derives_result_track_from_source_pool_track(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    targets = formal_target_entity_keys(4)
+    frame = pd.concat(
+        [
+            _valid_cell().assign(
+                dataset_id="D4",
+                target_entity_key=target,
+                schema_family=SCHEMA_FAMILY_D4_D6,
+                protocol_track="extended",
+                source_pool_track="extended",
+                domain_filter_applied_to_source=False,
+                domain_filter_scope="target_only",
+                domain_filter_column="first_category_id",
+                domain_filter_value=15,
+                target_domain_validation_passed=True,
+                target_domain_validation_target_count=len(targets),
+                source_pool_policy="without_information_sharing_same_store",
+            )
+            for target in targets
+        ],
+        ignore_index=True,
+    )
+    stable = tmp_path / "dataset4_without_results.csv"
+    monkeypatch.setattr(
+        "src.utils.run_artifacts.discover_code_identity",
+        lambda _root: CodeIdentity("abc", False, "0" * 64),
+    )
+
+    publish_formal_cell_output_frame(
+        frame,
+        stable_path=stable,
+        dataset_id=4,
+        mode="without",
+        targets=targets,
+        horizon=1,
+        seed=42,
+        project_root=tmp_path,
+    )
+
+    published = pd.read_csv(stable, keep_default_na=False)
+    assert set(published["protocol_track"]) == {"strict_paper"}
+    assert set(published["source_pool_track"]) == {"extended"}
 
 
 def test_verify_cell_requires_passing_acceptance_sidecar(tmp_path: Path) -> None:

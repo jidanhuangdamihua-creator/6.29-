@@ -14,6 +14,10 @@ from uuid import uuid4
 
 import pandas as pd
 
+from src.protocols.experiment_protocol import (
+    ProtocolViolation,
+    resolve_result_protocol_tracks,
+)
 from src.utils.result_acceptance import (
     AcceptanceOutcome,
     ExpectedResultContract,
@@ -332,8 +336,30 @@ def publish_formal_cell_output_frame(
         horizon=horizon,
         seed=seed,
     )
+    publication_frame = frame
+    if int(dataset_id) in {4, 5, 6}:
+        required_tracks = {"protocol_track", "source_pool_track"}
+        missing_tracks = required_tracks.difference(frame.columns)
+        if missing_tracks:
+            raise ResultAcceptanceError(
+                "formal D4-D6 publication requires track columns: "
+                + ",".join(sorted(missing_tracks))
+            )
+        try:
+            for track in frame["protocol_track"]:
+                resolve_result_protocol_tracks(track, formal=False)
+            canonical_tracks = [
+                resolve_result_protocol_tracks(track, formal=True)[0]
+                for track in frame["source_pool_track"]
+            ]
+        except ProtocolViolation as exc:
+            raise ResultAcceptanceError(
+                f"formal D4-D6 publication has invalid protocol track: {exc}"
+            ) from exc
+        publication_frame = frame.copy()
+        publication_frame["protocol_track"] = canonical_tracks
     return publish_formal_cell_frame(
-        frame,
+        publication_frame,
         stable_path=stable_path,
         expected=expected,
         code_identity=identity,
