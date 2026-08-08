@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.constants import SCHEMA_FAMILY_D1_D3
+from src.constants import SCHEMA_FAMILY_D1_D3, SCHEMA_FAMILY_D4_D6
 from src.protocols.experiment_protocol import FORMAL_METHODS
 from src.utils.result_acceptance import (
     AcceptanceScope,
@@ -135,6 +135,34 @@ def test_cell_acceptance_requires_exact_formal_coverage(tmp_path: Path) -> None:
     )
     assert built == _contract()
     assert len(require_accepted(outcome)) == 6
+
+
+def test_d4_runtime_audit_columns_are_accepted_as_registered_schema(
+    tmp_path: Path,
+) -> None:
+    frame = _cell_rows(dataset_id=4, target="166/258").assign(
+        schema_family=SCHEMA_FAMILY_D4_D6,
+        source_pool_track="extended",
+        domain_filter_applied_to_source=False,
+        domain_filter_scope="target_only",
+        domain_filter_column="first_category_id",
+        domain_filter_value=15,
+        target_domain_validation_passed=True,
+        target_domain_validation_target_count=5,
+        source_pool_policy="without_information_sharing_same_store",
+    )
+    path = _write(tmp_path / "d4_cell.csv", frame)
+
+    outcome = accept_cell_csv(
+        path,
+        expected=_contract(
+            dataset_ids=(4,),
+            targets={(4, "without"): ("166/258",)},
+        ),
+    )
+
+    assert outcome.report.passed
+    assert outcome.report.reasons == ()
 
 
 @pytest.mark.parametrize(

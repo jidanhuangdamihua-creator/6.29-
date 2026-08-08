@@ -41,6 +41,16 @@ def test_result_extra_registry_is_explicit_and_deterministic() -> None:
         "rfe_selected_features",
         "signature_components",
     )
+    assert REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY[SCHEMA_FAMILY_D4_D6] == (
+        "sample_count",
+        "domain_filter_applied_to_source",
+        "domain_filter_scope",
+        "domain_filter_column",
+        "domain_filter_value",
+        "target_domain_validation_passed",
+        "target_domain_validation_target_count",
+        "source_pool_policy",
+    )
     assert len(result_schema_registry_digest()) == 64
     assert result_schema_registry_digest() == result_schema_registry_digest()
 
