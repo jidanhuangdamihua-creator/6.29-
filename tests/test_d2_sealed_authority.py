@@ -19,7 +19,7 @@ def test_d2_sealed_manifest_binds_the_declared_current_bytes() -> None:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     expected = {
         "source": (48654, "04c316a7519e37c6f6712b5c34d25edb38e82833568102a22bd3961081d07409"),
-        "target": (1807, "e4893b3e2cc7c2d173cba4b76fc58ceac99515af2b89e999ce62531a01f8e009"),
+        "target": (1807, "d2bb78a71cccc0012f0f4f5175d80615565078b0cf7328d6741ab11063ec93c3"),
     }
     for role, (rows, digest) in expected.items():
         path = paths[role]
@@ -59,3 +59,18 @@ def test_d2_sealed_source_allowed_dates_have_finite_date_fields() -> None:
     assert rows["promo"].eq(0).all()
     assert rows[["year", "month", "week", "day"]].notna().all().all()
     assert np.isfinite(rows[["year", "month", "week", "day"]].to_numpy(dtype=float)).all()
+
+
+def test_d2_sealed_target_has_complete_date_identity() -> None:
+    paths = formal_input_paths(ROOT, 2)
+    target = pd.read_parquet(paths["target"])
+    dates = pd.to_datetime(target["date"]).dt.normalize()
+    fields = ["year", "month", "week", "day"]
+
+    assert target["entity_id"].notna().all()
+    assert target[fields].notna().all().all()
+    assert np.isfinite(target[fields].to_numpy(dtype=float)).all()
+    assert target["year"].to_numpy(dtype=float).tolist() == dates.dt.year.astype(float).tolist()
+    assert target["month"].to_numpy(dtype=float).tolist() == dates.dt.month.astype(float).tolist()
+    assert target["week"].to_numpy(dtype=float).tolist() == dates.dt.isocalendar().week.astype(float).tolist()
+    assert target["day"].to_numpy(dtype=float).tolist() == dates.dt.day.astype(float).tolist()

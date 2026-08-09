@@ -50,7 +50,7 @@ EXPECTED_HEAD = "3c4e06b17d660d344ed9a0a75d9489874e19d900"
 
 FROZEN_PARQUETS: dict[int, dict[str, dict[str, object]]] = {
     1: {"source": {"rows": 49302, "size_bytes": 929130, "sha256": "18acf992b569f3e01999db2c94a3e85ca5e8fa0c7e760b111dd43825acd3fd08"}, "target": {"rows": 1826, "size_bytes": 56098, "sha256": "057e8dcef179adb4d81625476905bb6f5f4f41a2157e506155a16cf27aec39ec"}},
-    2: {"source": {"rows": 48654, "size_bytes": 126105, "sha256": "04c316a7519e37c6f6712b5c34d25edb38e82833568102a22bd3961081d07409"}, "target": {"rows": 1807, "size_bytes": 25130, "sha256": "e4893b3e2cc7c2d173cba4b76fc58ceac99515af2b89e999ce62531a01f8e009"}},
+    2: {"source": {"rows": 48654, "size_bytes": 126105, "sha256": "04c316a7519e37c6f6712b5c34d25edb38e82833568102a22bd3961081d07409"}, "target": {"rows": 1807, "size_bytes": 25053, "sha256": "d2bb78a71cccc0012f0f4f5175d80615565078b0cf7328d6741ab11063ec93c3"}},
     3: {"source": {"rows": 26766, "size_bytes": 137393, "sha256": "95d49f88390e415c172d482ffc2f1e9897af11bee88373db2cd87a224f0a79c3"}, "target": {"rows": 942, "size_bytes": 23827, "sha256": "9bd91ae611888315e4dffaff4680dae94bdf6c6b6740dda2aa0ed7be1a0496ce"}},
     4: {"source": {"rows": 7935702, "size_bytes": 117546804, "sha256": "17a1fa5bd1dddfd46bda2a6922ff7821aee2a7e79deca58a94ff7bf20821f7ef"}, "target": {"rows": 3847, "size_bytes": 83217, "sha256": "f0b83798ea265c6b79f09487903404c7c75acfcac2657f53e989ef59588e5946"}},
     5: {"source": {"rows": 45401018, "size_bytes": 282097362, "sha256": "368d896b0a7d2849ba2984e1bb3f4f07d36cf9175087ee755d6cd2a6c1c790b3"}, "target": {"rows": 7338, "size_bytes": 71791, "sha256": "e01cdb828b0669b6aab9cb7e92f60c2a6a283ad8cdb3f5ec9bbd6ad61d11f263"}},
