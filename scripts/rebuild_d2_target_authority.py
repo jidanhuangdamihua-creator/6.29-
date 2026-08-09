@@ -73,7 +73,10 @@ def rebuild_d2_target_authority(
     )
     if len(repaired) != 1807:
         raise RuntimeError(f"D2 target producer expected 1807 rows, got {len(repaired)}")
-    if evidence["inserted_count"]:
+    existing_row_changed_cell_count = int(
+        evidence["existing_row_repair"]["changed_cell_count"]
+    )
+    if evidence["inserted_count"] or existing_row_changed_cell_count:
         _write_parquet_atomically(repaired, target_path)
     elif input_sha != str(evidence.get("output_target_sha256") or input_sha):
         raise RuntimeError("D2 idempotence evidence does not bind current target bytes")
@@ -101,6 +104,7 @@ def rebuild_d2_target_authority(
             "output_target_sha256": output_sha,
             "rows": len(repaired),
             "inserted_count": 0,
+            "existing_row_changed_cell_count": 0,
             "audit_path": str(audit_path),
             "evidence": previous_target_repair,
         }
@@ -120,6 +124,9 @@ def rebuild_d2_target_authority(
     target_schema = json.loads(target_schema_path.read_text(encoding="utf-8"))
     target_schema["row_count"] = 1807
     target_schema["parquet_sha256"] = output_sha
+    target_schema["null_counts"] = {
+        column: int(count) for column, count in repaired.isna().sum().items()
+    }
     atomic_write_json(target_schema_path, target_schema)
 
     provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
@@ -145,6 +152,7 @@ def rebuild_d2_target_authority(
             "source and target row counts match rebuilt formal identity",
             "formal target calendar is exactly 2018-06-01..2018-12-27 (210/210)",
             "five authorized store-closed target rows have sales=0 and promo=0",
+            "authorized 2018-06-02 target identity and calendar fields are finite and date-consistent",
             "forecast consumer excludes future promo",
         ]
     )
@@ -153,6 +161,7 @@ def rebuild_d2_target_authority(
         "audit_sha256": audit_sha,
         "repair_date_digest": evidence["repair_date_digest"],
         "inserted_dates": list(D2_TARGET_REPAIR_DATES),
+        "existing_row_repair": evidence["existing_row_repair"],
     }
     atomic_write_json(validation_path, validation)
 
@@ -176,6 +185,7 @@ def rebuild_d2_target_authority(
             "target_repair_reason": evidence["reason"],
             "target_repair_mask_sha256": evidence["repair_date_digest"],
             "target_synthetic_date_count": 5,
+            "target_existing_row_repair": evidence["existing_row_repair"],
         }
     )
     manifest["target_calendarization_evidence"] = {
@@ -185,6 +195,7 @@ def rebuild_d2_target_authority(
         "input_target_sha256": input_sha,
         "output_target_sha256": output_sha,
         "output_semantic_digest": evidence["output_semantic_digest"],
+        "existing_row_repair": evidence["existing_row_repair"],
     }
     manifest["sealed_identity"]["target_normalized_frame_digest"] = evidence[
         "output_semantic_digest"
@@ -201,6 +212,7 @@ def rebuild_d2_target_authority(
         "output_semantic_digest": evidence["output_semantic_digest"],
         "rows": 1807,
         "inserted_count": evidence["inserted_count"],
+        "existing_row_changed_cell_count": existing_row_changed_cell_count,
         "audit_path": str(audit_path),
         "audit_sha256": audit_sha,
         "manifest_path": str(manifest_path),

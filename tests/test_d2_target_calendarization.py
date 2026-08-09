@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 
 _REPAIR_DATES = (
@@ -83,3 +84,45 @@ def test_d2_target_producer_preserves_original_rows_and_is_idempotent() -> None:
     ]
     assert target_semantic_digest(rerun_original) == target_semantic_digest(original)
     assert first_evidence["policy"] == "closed_day_zero_demand"
+
+
+def test_d2_target_producer_repairs_only_authorized_existing_row() -> None:
+    from src.protocols.d2_target_calendarization import calendarize_d2_target_frame
+
+    original = _target_frame()
+    repair_mask = original["date"].eq(pd.Timestamp("2018-06-02"))
+    original.loc[repair_mask, ["entity_id", "year", "month", "week", "day"]] = None
+
+    repaired, evidence = calendarize_d2_target_frame(original)
+    repaired_row = repaired.loc[repaired["date"].eq(pd.Timestamp("2018-06-02"))].iloc[0]
+
+    assert repaired_row[["entity_id", "year", "month", "week", "day"]].tolist() == [
+        1,
+        2018.0,
+        6.0,
+        22.0,
+        2.0,
+    ]
+    assert evidence["existing_row_repair"]["changed_fields"] == [
+        "entity_id",
+        "year",
+        "month",
+        "week",
+        "day",
+    ]
+    assert evidence["existing_row_repair"]["changed_cell_count"] == 5
+
+    rerun, rerun_evidence = calendarize_d2_target_frame(repaired)
+    assert rerun_evidence["existing_row_repair"]["changed_cell_count"] == 0
+    pd.testing.assert_frame_equal(repaired, rerun)
+
+
+def test_d2_target_producer_rejects_calendar_defect_outside_authorized_row() -> None:
+    from src.protocols.d2_target_calendarization import calendarize_d2_target_frame
+    from src.protocols.experiment_protocol import ProtocolViolation
+
+    original = _target_frame()
+    original.loc[original["date"].eq(pd.Timestamp("2018-06-03")), "week"] = None
+
+    with pytest.raises(ProtocolViolation, match="outside the authorized"):
+        calendarize_d2_target_frame(original)
