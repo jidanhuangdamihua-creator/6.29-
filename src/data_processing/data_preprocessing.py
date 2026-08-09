@@ -61,7 +61,7 @@ STRICT_DATASET_PROTOCOL = {
         "target_entity_id": "B1",
         "target_item_id": 10,
         "source_item_policy": "all_except_target_item",
-        "target_split_days": {"train_days": 14, "val_days": 15, "test_days": 179},
+        "target_split_days": {"train_days": 15, "val_days": 15, "test_days": 180},
         "source_split_ratio": {"train_ratio": 0.8, "val_ratio": 0.1, "test_ratio": 0.1},
         "without_information_sharing_scope": "same_brand",
     },
