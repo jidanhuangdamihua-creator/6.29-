@@ -191,7 +191,7 @@
     },
     {
       "path": "scripts/rebuild_d2_target_authority.py",
-      "sha256": "a3ba4f355cc7ae092c49a7f0e8e6f097cf7241c77292ca91ae1f6d10fe67c4df"
+      "sha256": "76f391d455791a2a6cec0e697858629ff9fec854f5d0278134a8381e0475033d"
     },
     {
       "path": "scripts/regenerate_d1_d2_parquets.py",
@@ -315,7 +315,7 @@
     },
     {
       "path": "scripts/verify_d1_d6_formal_input_resolver.py",
-      "sha256": "cecdc8f86750e80fae414eb8126d167f2ce4d8209f25960d1c4dbc6488c8424a"
+      "sha256": "e3f2aad1dfb48444be2dc6e050e2318fe2e7e346b12824cbe7f614ba8f398db2"
     },
     {
       "path": "scripts/verify_d4_exact_key_closure.py",
@@ -435,7 +435,7 @@
     },
     {
       "path": "src/protocols/d2_target_calendarization.py",
-      "sha256": "12c95f8cabe8b43c7ba21864a109af49c3f6e4b7e87fd30a73236e8df72ad6f4"
+      "sha256": "d5365d49eb88ecd603857bc55740246a85ab5d838e1ca87b800a52c07f74b718"
     },
     {
       "path": "src/protocols/experiment_protocol.py",
@@ -443,7 +443,7 @@
     },
     {
       "path": "src/protocols/formal_deployment_manifest.py",
-      "sha256": "149ccb2fff22f1a9bbdbf83db0b68886f66ac73f6739edf72937fd2f403509f6"
+      "sha256": "75636571906636e978033181cd39aca86f5971969cb2898e2b5faf0ed26d7d73"
     },
     {
       "path": "src/protocols/formal_input_paths.py",
@@ -674,6 +674,6 @@
       "sha256": "a8a1d6a43c87f01fc8ad010f594b7f51bf353d9788fd8a1d4b824f7325aa053c"
     }
   ],
-  "inventory_sha256": "370c012fe85e50c8b43497392fa297ba9ab7b0b81b2609840897dcadb5228e14",
+  "inventory_sha256": "c499ec6ec142ac8821ce6ee75d012e9fd2a5d044e6b5c7963212d65f28e913ec",
   "schema_version": "d1_d6_code_inventory_v1"
 }

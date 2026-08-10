@@ -1,18 +1,18 @@
 {
-  "consumer_fingerprint": "990f1d3c4be745f4aaeb1ebef4aeedb52aa575655b229ac8d8eab3a2ff45bea2",
+  "consumer_fingerprint": "164f75b151f1292462a476c98825852a17965f0a00e331859496551a9493a616",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "370c012fe85e50c8b43497392fa297ba9ab7b0b81b2609840897dcadb5228e14",
+    "code_inventory_digest": "c499ec6ec142ac8821ce6ee75d012e9fd2a5d044e6b5c7963212d65f28e913ec",
     "dataset_id": "D2",
-    "readiness_proof_digest": "a3c4a57215091e1f0a62bfb82e3cc931e1eccfd8370d1566a8790213583675c1",
+    "readiness_proof_digest": "bd27049d5c58e8f552b61c41514c6a7d7659f5f335b11ccb1619a99ef0ff98fb",
     "source_schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f",
     "source_sha256": "04c316a7519e37c6f6712b5c34d25edb38e82833568102a22bd3961081d07409",
     "target_schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086",
-    "target_sha256": "e4893b3e2cc7c2d173cba4b76fc58ceac99515af2b89e999ce62531a01f8e009"
+    "target_sha256": "d2bb78a71cccc0012f0f4f5175d80615565078b0cf7328d6741ab11063ec93c3"
   },
   "dataset_id": "D2",
   "dataset_manifest_identity": {
     "path": "dataset2/manifest.json",
-    "sha256": "6057be8294eccac98312d4aac098a61247915f3c464d8088ebd753ae5290d72a"
+    "sha256": "984cab0a0c8e7bcc2fdb222da39e1d21fae134125e0db4753ff1e3fbdc999b99"
   },
   "dataset_root": "dataset2",
   "dataset_specific": {
@@ -145,7 +145,7 @@
         "target": {
           "path": "dataset2/target.parquet",
           "row_count": 1807,
-          "schema_digest": "77c0bbba1525b2dc78cbe3225f757017e008d707e43acfd914f4c6c42c361746",
+          "schema_digest": "b248a47e94245cd3b39be02c5696dbd56ca6462d4246f4c4879bb726cc006aa2",
           "schema_fields": [
             "date",
             "brand_id",
@@ -158,8 +158,8 @@
             "week",
             "day"
           ],
-          "sha256": "e4893b3e2cc7c2d173cba4b76fc58ceac99515af2b89e999ce62531a01f8e009",
-          "size_bytes": 25130
+          "sha256": "d2bb78a71cccc0012f0f4f5175d80615565078b0cf7328d6741ab11063ec93c3",
+          "size_bytes": 25053
         }
       },
       "manifest_path": "dataset2/manifest.json",
@@ -284,8 +284,8 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "c68cb49fb0bcd139fc7f2f8899978e0fd2c78408dd46239b1ca1d9adef8ec684",
-  "readiness_proof_digest": "a3c4a57215091e1f0a62bfb82e3cc931e1eccfd8370d1566a8790213583675c1",
+  "proof_identity_sha256": "635a788fe41697f2ed6fee4c36b952eec5956c45512b0f60dc30cbcf7c1ec9f4",
+  "readiness_proof_digest": "bd27049d5c58e8f552b61c41514c6a7d7659f5f335b11ccb1619a99ef0ff98fb",
   "readiness_result": {
     "failure_code": null,
     "status": "passed"
@@ -463,8 +463,8 @@
   "supporting_proof_files": [
     {
       "path": "dataset2/calendarization_audit.json",
-      "sha256": "efae1b6ac1515d5d2043d6c62a1aae89c25fabd2d4f620ed976ecda3deb4d667",
-      "size_bytes": 5260
+      "sha256": "120b0797a2d3af1c09fbef654ca57b3a9e0fe51becf9bb715844bd9fb87ed217",
+      "size_bytes": 5616
     },
     {
       "path": "dataset2/knn_schema.json",
@@ -473,8 +473,8 @@
     },
     {
       "path": "dataset2/manifest.json",
-      "sha256": "6057be8294eccac98312d4aac098a61247915f3c464d8088ebd753ae5290d72a",
-      "size_bytes": 6531
+      "sha256": "984cab0a0c8e7bcc2fdb222da39e1d21fae134125e0db4753ff1e3fbdc999b99",
+      "size_bytes": 7468
     },
     {
       "path": "dataset2/predictor_schema.json",
@@ -483,8 +483,8 @@
     },
     {
       "path": "dataset2/provenance.json",
-      "sha256": "4752146d94dae4346f840c1bf59c1e183d0daca62fa0b6aefda8db100545b039",
-      "size_bytes": 4478
+      "sha256": "6fc7cbd346b7dc29530fc10a927d85683262231898fc2a8a8b13eff56775bd1e",
+      "size_bytes": 4834
     },
     {
       "path": "dataset2/source_sales_canonicalization.json",
@@ -498,13 +498,13 @@
     },
     {
       "path": "dataset2/target_schema.json",
-      "sha256": "645fe6ddbd1993ebeadda1e20bd7567bf6219ee0d8d41f0d8259af8fcd3c62e5",
+      "sha256": "d3e55c7af31604c50df5abf5d9e17a477903bd7c6a085084135ec40c7d0d7acf",
       "size_bytes": 1232
     },
     {
       "path": "dataset2/validation_report.json",
-      "sha256": "2af2574e724ede3afeb378be0eccd875439dd1c9e25768d562f1d699391216dc",
-      "size_bytes": 3650
+      "sha256": "8ae80434bc3113f38ca3b08f41df0886cb9e5f76fcd01e08c3cc227129a4693c",
+      "size_bytes": 4207
     }
   ],
   "target": {
@@ -608,8 +608,8 @@
       "schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086"
     },
     "schema_digest": "3e92427025007ad876a5c4985fe628198ef2f6f3abe2a913631f668559adb086",
-    "sha256": "e4893b3e2cc7c2d173cba4b76fc58ceac99515af2b89e999ce62531a01f8e009",
-    "size_bytes": 25130
+    "sha256": "d2bb78a71cccc0012f0f4f5175d80615565078b0cf7328d6741ab11063ec93c3",
+    "size_bytes": 25053
   },
   "target_schema": {
     "columns": [
