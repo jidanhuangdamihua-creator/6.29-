@@ -191,6 +191,18 @@ def main() -> None:
     if runtime_inputs.calendar_reconstruction is None:
         raise AssertionError("D5 runtime loader did not return reconstruction diagnostics")
     config["d5_calendar_reconstruction"] = runtime_inputs.calendar_reconstruction.to_dict()
+    config["d5_source_history_validation_path"] = str(
+        source_df.attrs.get("source_history_validation_path", "runtime_reconstruction")
+    )
+    config["d5_precomputed_source_history_active"] = (
+        config["d5_source_history_validation_path"] == "precomputed_static_file"
+    )
+    print(
+        "[D5 SOURCE HISTORY] "
+        f"validation_path={config['d5_source_history_validation_path']} "
+        f"precomputed_active={str(config['d5_precomputed_source_history_active']).lower()} "
+        f"rows={len(source_df)}"
+    )
     (run_dir / "run_config.json").write_text(
         json.dumps(config, indent=2, ensure_ascii=False),
         encoding="utf-8",
