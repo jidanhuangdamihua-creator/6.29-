@@ -163,7 +163,7 @@
     },
     {
       "path": "scripts/parallel_mode_runner.sh",
-      "sha256": "3ab4c37821722d160996e0e1a4dee5667e29fc8709ad477b438be44e5a84ca76"
+      "sha256": "e987960d5345a6989461505257b9a820733182c13ca4d177dc2573e48163ab1b"
     },
     {
       "path": "scripts/parallel_runner.sh",
@@ -211,7 +211,7 @@
     },
     {
       "path": "scripts/run_d5_experiment.py",
-      "sha256": "a62b7c113ca77f7ec9ba9464aedce79ecb005f654859a87b19ba9d90205bfac0"
+      "sha256": "66427e42b093a3f567fb7bcbe612126953546b9a17682a6254846a7e6c79aa26"
     },
     {
       "path": "scripts/run_d6_experiment.py",
@@ -263,7 +263,7 @@
     },
     {
       "path": "scripts/run_unified_d1_d6.py",
-      "sha256": "5a1402e725a963438b3ddf4978cb4b4339a6c4f706cfb960641f97e4d1ff141d"
+      "sha256": "43dee04766de4cfffa813b249bef0abff235061555df498116e3f124f39bc955"
     },
     {
       "path": "scripts/scan_d4_d5_d6_full.py",
@@ -674,6 +674,6 @@
       "sha256": "a8a1d6a43c87f01fc8ad010f594b7f51bf353d9788fd8a1d4b824f7325aa053c"
     }
   ],
-  "inventory_sha256": "c499ec6ec142ac8821ce6ee75d012e9fd2a5d044e6b5c7963212d65f28e913ec",
+  "inventory_sha256": "f88b96b88e820de7de98772332f64f60176b9ca569cab121daf991d1fa977ed6",
   "schema_version": "d1_d6_code_inventory_v1"
 }
