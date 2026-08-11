@@ -113,7 +113,13 @@ def build_sample_manifest(
     if track not in {"strict_paper", "extended"}:
         raise ProtocolViolation(f"unsupported protocol track: {track!r}")
 
-    prepared = frame.loc[:, [date_col, sales_col]].copy()
+    original_attrs = frame.attrs.copy()
+    frame.attrs.clear()
+    try:
+        prepared = frame.loc[:, [date_col, sales_col]].copy()
+    finally:
+        frame.attrs.clear()
+        frame.attrs.update(original_attrs)
     prepared[date_col] = pd.to_datetime(prepared[date_col], errors="coerce").dt.normalize()
     prepared[sales_col] = pd.to_numeric(prepared[sales_col], errors="coerce")
     if prepared[date_col].isna().any() or not np.isfinite(

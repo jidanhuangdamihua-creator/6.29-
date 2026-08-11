@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,11 @@ from src.protocols.rolling_origin import (
     build_sample_manifest,
     validate_feature_availability,
 )
+
+
+class NonDeepcopyable:
+    def __deepcopy__(self, memo):
+        raise AssertionError("unexpected deepcopy")
 
 
 class RollingOriginProtocolTest(unittest.TestCase):
@@ -61,6 +67,107 @@ class RollingOriginProtocolTest(unittest.TestCase):
                 input_window=5,
             ).digest,
         )
+
+    def test_manifest_does_not_deepcopy_unrelated_heavy_attrs(self) -> None:
+        sentinel = NonDeepcopyable()
+        self.frame.attrs["heavy_test_attr"] = sentinel
+
+        manifest = build_sample_manifest(
+            self.frame,
+            dataset_id="D1",
+            track="strict_paper",
+            scenario="without",
+            target_key=("1", "10"),
+            observed_end="2020-01-30",
+            input_window=5,
+        )
+
+        self.assertTrue(manifest.records)
+        self.assertIs(self.frame.attrs["heavy_test_attr"], sentinel)
+
+    def test_heavy_attrs_do_not_change_manifest_records_or_digest(self) -> None:
+        plain = self.frame.copy()
+        attributed = self.frame.copy()
+        attributed.attrs["heavy_test_attr"] = NonDeepcopyable()
+        kwargs = {
+            "dataset_id": "D1",
+            "track": "strict_paper",
+            "scenario": "without",
+            "target_key": ("1", "10"),
+            "observed_end": "2020-01-30",
+            "input_window": 5,
+        }
+
+        plain_manifest = build_sample_manifest(plain, **kwargs)
+        attributed_manifest = build_sample_manifest(attributed, **kwargs)
+
+        self.assertEqual(plain_manifest.records, attributed_manifest.records)
+        self.assertEqual(plain_manifest.digest, attributed_manifest.digest)
+
+    def test_manifest_preserves_input_protocol_attrs_and_object_identity(self) -> None:
+        candidate_keys = (("1", "1"), ("1", "2"))
+        knn_frame = pd.DataFrame({"distance": [0.0]})
+        consumer_frame = pd.DataFrame({"sales": [1.0]})
+        sentinel = NonDeepcopyable()
+        self.frame.attrs.update(
+            {
+                "protocol_candidate_keys": candidate_keys,
+                "protocol_knn_observed_frame": knn_frame,
+                "forecast_consumer_frame": consumer_frame,
+                "heavy_test_attr": sentinel,
+                "protocol_provenance": {"authority": "sealed"},
+            }
+        )
+        original_keys = set(self.frame.attrs)
+        original_values = dict(self.frame.attrs)
+
+        build_sample_manifest(
+            self.frame,
+            dataset_id="D1",
+            track="strict_paper",
+            scenario="without",
+            target_key=("1", "10"),
+            observed_end="2020-01-30",
+            input_window=5,
+        )
+
+        self.assertEqual(set(self.frame.attrs), original_keys)
+        for key, value in original_values.items():
+            self.assertIs(self.frame.attrs[key], value)
+
+    def test_manifest_restores_input_attrs_when_prepared_copy_raises(self) -> None:
+        sentinel = NonDeepcopyable()
+        authority = pd.DataFrame({"sales": [1.0]})
+        self.frame.attrs.update(
+            {
+                "protocol_candidate_keys": (("1", "1"),),
+                "protocol_knn_observed_frame": authority,
+                "forecast_consumer_frame": authority,
+                "heavy_test_attr": sentinel,
+            }
+        )
+        original_keys = set(self.frame.attrs)
+        original_values = dict(self.frame.attrs)
+
+        with patch.object(
+            pd.DataFrame,
+            "copy",
+            side_effect=RuntimeError("prepared copy failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "prepared copy failed"):
+                build_sample_manifest(
+                    self.frame,
+                    dataset_id="D1",
+                    track="strict_paper",
+                    scenario="without",
+                    target_key=("1", "10"),
+                    observed_end="2020-01-30",
+                    input_window=5,
+                )
+
+        self.assertEqual(set(self.frame.attrs), original_keys)
+        for key, value in original_values.items():
+            self.assertIs(self.frame.attrs[key], value)
 
     def test_methods_must_use_same_ordered_sample_keys(self) -> None:
         manifest = build_sample_manifest(
