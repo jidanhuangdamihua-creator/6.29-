@@ -137,6 +137,97 @@ def test_load_validated_run_plan_returns_locked_code_identity(
     assert loaded_identity == identity
 
 
+def test_normal_plan_validation_still_rejects_cross_head_reuse(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_root = tmp_path / "run"
+    producer = _identity("producer", "a" * 64)
+    publisher = _identity("publisher", "b" * 64)
+    monkeypatch.setattr(unified, "discover_code_identity", lambda _: producer)
+    monkeypatch.setattr(unified, "discover_formal_input_identity", lambda _: {})
+    unified.prepare_formal_run(
+        run_root,
+        resume=False,
+        only=["d1"],
+        info_sharing="without",
+        horizons=[1],
+        seeds=[42],
+    )
+    monkeypatch.setattr(unified, "discover_code_identity", lambda _: publisher)
+
+    with pytest.raises(RuntimeError, match="plan|identity"):
+        unified.load_validated_run_plan(run_root)
+
+
+def test_aggregate_only_uses_stored_producer_and_current_publisher_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_root = tmp_path / "run"
+    producer = _identity("producer", "a" * 64)
+    publisher = _identity("publisher", "b" * 64)
+    monkeypatch.setattr(unified, "discover_code_identity", lambda _: producer)
+    monkeypatch.setattr(unified, "discover_formal_input_identity", lambda _: {})
+    plan = unified.prepare_formal_run(
+        run_root,
+        resume=False,
+        only=["d1"],
+        info_sharing="without",
+        horizons=[1],
+        seeds=[42],
+    )
+    monkeypatch.setattr(unified, "discover_code_identity", lambda _: publisher)
+    verified_identities: list[CodeIdentity] = []
+    publication: dict[str, object] = {}
+
+    def verify(_path: Path, **kwargs) -> None:
+        verified_identities.append(kwargs["code_identity"])
+
+    def publish(paths, **kwargs) -> None:
+        publication.update({"paths": list(paths), **kwargs})
+
+    monkeypatch.setattr(unified, "verify_formal_mode_artifact", verify)
+    monkeypatch.setattr(unified, "publish_global_aggregate", publish)
+
+    unified.aggregate_prepared_run(run_root)
+
+    assert verified_identities == [producer]
+    assert publication["code_identity"] == publisher
+    assert publication["upstream_code_identity"] == producer
+    assert publication["upstream_run_identity"] == plan["run_identity"]
+
+
+def test_aggregate_only_rejects_changed_upstream_experiment_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_root = tmp_path / "run"
+    producer = _identity("producer", "a" * 64)
+    publisher = _identity("publisher", "b" * 64)
+    original_input = {"input": {"sha256": "c" * 64, "bytes": 1}}
+    changed_input = {"input": {"sha256": "d" * 64, "bytes": 1}}
+    monkeypatch.setattr(unified, "discover_code_identity", lambda _: producer)
+    monkeypatch.setattr(
+        unified, "discover_formal_input_identity", lambda _: original_input
+    )
+    unified.prepare_formal_run(
+        run_root,
+        resume=False,
+        only=["d1"],
+        info_sharing="without",
+        horizons=[1],
+        seeds=[42],
+    )
+    monkeypatch.setattr(unified, "discover_code_identity", lambda _: publisher)
+    monkeypatch.setattr(
+        unified, "discover_formal_input_identity", lambda _: changed_input
+    )
+
+    with pytest.raises(RuntimeError, match="experiment identity"):
+        unified.load_aggregate_compatible_run_plan(run_root)
+
+
 @pytest.fixture
 def prepared_run(
     tmp_path: Path,
