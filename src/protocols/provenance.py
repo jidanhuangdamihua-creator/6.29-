@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence, Tuple
+from typing import Mapping, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
 
-from .candidate_pool import SelectionResult
+from .candidate_pool import CanonicalSourceIndex, SelectionResult
 from .experiment_protocol import ProtocolViolation, SourceKey, normalize_source_key
+from src.utils.dataframe_attrs import (
+    context_with,
+    get_protocol_frame_context,
+    select_rows_with_lightweight_attrs,
+    set_protocol_frame_context,
+)
 
 
 def bind_actual_cnn_source_frame(
@@ -21,6 +27,8 @@ def bind_actual_cnn_source_frame(
 ) -> None:
     """Bind an exact selected key to the dataframe that will enter CNN training."""
     normalized_key = normalize_source_key(source_key)
+    # The frame entering CNN training is already a selected small frame.  Scan
+    # it locally so a stale parent index can never hide an extra/wrong key.
     prepared = _prepare_source(frame, group_cols)
     actual_keys = tuple(sorted(set(prepared["__protocol_source_key__"])))
     if actual_keys != (normalized_key,):
@@ -30,16 +38,26 @@ def bind_actual_cnn_source_frame(
     missing = [column for column in feature_cols if column not in frame.columns]
     if missing:
         raise ProtocolViolation(f"actual CNN source frame missing features: {missing!r}")
-    audit = frame.attrs.get("protocol_actual_cnn_audit")
-    if not isinstance(audit, dict):
-        audit = {}
+    context = get_protocol_frame_context(frame)
+    audit = (
+        {key: dict(value) for key, value in (context.actual_cnn_audit or {}).items()}
+        if context is not None
+        else {}
+    )
     audit[normalized_key] = {
         "bound": True,
         "actual_tensor_validated": False,
         "feature_cols": tuple(str(column) for column in feature_cols),
     }
-    frame.attrs["protocol_actual_cnn_audit"] = audit
     frame.attrs["protocol_actual_source_key"] = normalized_key
+    set_protocol_frame_context(
+        frame,
+        context_with(
+            context,
+            actual_source_key=normalized_key,
+            actual_cnn_audit=audit,
+        ),
+    )
 
 
 def validate_actual_cnn_arrays_against_raw(
@@ -52,12 +70,15 @@ def validate_actual_cnn_arrays_against_raw(
     horizon: int,
 ) -> None:
     """Rebuild the exact normalized CNN arrays from raw rows and compare elementwise."""
-    source_key = frame.attrs.get("protocol_actual_source_key")
+    context = get_protocol_frame_context(frame)
+    source_key = (
+        context.actual_source_key if context is not None else frame.attrs.get("protocol_actual_source_key")
+    )
     if source_key is None:
         return
-    raw = frame.attrs.get("protocol_raw_partition")
-    scaler = frame.attrs.get("protocol_fitted_scaler")
-    scaler_features = tuple(frame.attrs.get("protocol_scaler_feature_cols", ()))
+    raw = context.raw_partition if context is not None else None
+    scaler = context.fitted_scaler if context is not None else None
+    scaler_features = tuple(context.scaler_feature_cols if context is not None else ())
     features = tuple(str(column) for column in feature_cols)
     if not isinstance(raw, pd.DataFrame) or scaler is None or scaler_features != features:
         raise ProtocolViolation("actual CNN provenance is missing raw partition or fitted scaler")
@@ -90,7 +111,11 @@ def validate_actual_cnn_arrays_against_raw(
     if not np.array_equal(actual_x, rebuilt_x) or not np.array_equal(actual_y, rebuilt_y):
         raise ProtocolViolation("actual CNN input tensor or labels differ from raw source mapping")
 
-    audit = frame.attrs.get("protocol_actual_cnn_audit")
+    audit = (
+        {key: dict(value) for key, value in (context.actual_cnn_audit or {}).items()}
+        if context is not None
+        else {}
+    )
     normalized_key = normalize_source_key(source_key)
     if not isinstance(audit, dict) or normalized_key not in audit:
         raise ProtocolViolation("actual CNN provenance audit binding is missing")
@@ -104,6 +129,10 @@ def validate_actual_cnn_arrays_against_raw(
             "label_dates": tuple(label_dates),
         }
     )
+    set_protocol_frame_context(
+        frame,
+        context_with(context, actual_cnn_audit=audit),
+    )
 
 
 def assert_actual_cnn_training_validated(
@@ -113,8 +142,9 @@ def assert_actual_cnn_training_validated(
 ) -> None:
     """Fail unless the arrays actually sent to CNN training passed provenance."""
     normalized_key = normalize_source_key(source_key)
-    audit = frame.attrs.get("protocol_actual_cnn_audit")
-    entry = audit.get(normalized_key, {}) if isinstance(audit, dict) else {}
+    context = get_protocol_frame_context(frame)
+    audit = context.actual_cnn_audit if context is not None else None
+    entry = audit.get(normalized_key, {}) if isinstance(audit, Mapping) else {}
     if not entry.get("actual_tensor_validated") or int(entry.get("sample_count", 0)) <= 0:
         raise ProtocolViolation(
             f"actual CNN training provenance was not validated for {normalized_key!r}"
@@ -171,6 +201,48 @@ def _prepare_source(
     return prepared
 
 
+def _selected_source_rows(
+    source_df: pd.DataFrame,
+    source_key: Sequence[object],
+    group_cols: Sequence[str],
+) -> pd.DataFrame:
+    """Use the shared index for lookup, then validate only selected rows."""
+
+    normalized_key = normalize_source_key(source_key)
+    missing = [column for column in (*group_cols, "date") if column not in source_df.columns]
+    if missing:
+        raise ProtocolViolation(f"source provenance dataframe missing columns: {missing}")
+    if not source_df.columns.is_unique:
+        return _prepare_source(source_df, group_cols).loc[
+            lambda frame: frame["__protocol_source_key__"] == normalized_key
+        ].copy()
+    context = get_protocol_frame_context(source_df)
+    source_index = context.source_index if context is not None else None
+    mask = None
+    if (
+        isinstance(source_index, CanonicalSourceIndex)
+        and source_index.group_cols == tuple(str(column) for column in group_cols)
+    ):
+        mask = source_index.mask_for_normalized_key(source_df, normalized_key)
+    if mask is None:
+        prepared = _prepare_source(source_df, group_cols)
+        return prepared[prepared["__protocol_source_key__"] == normalized_key].copy()
+    selected = select_rows_with_lightweight_attrs(source_df, mask)
+    selected["date"] = pd.to_datetime(selected["date"], errors="coerce").dt.normalize()
+    if selected["date"].isna().any():
+        raise ProtocolViolation("source provenance dataframe contains invalid dates")
+    selected_keys = [
+        normalize_source_key(tuple(row))
+        for row in selected.loc[:, list(group_cols)].itertuples(index=False, name=None)
+    ]
+    if any(key != normalized_key for key in selected_keys):
+        raise ProtocolViolation(
+            f"canonical source index returned incorrect rows for {normalized_key!r}"
+        )
+    selected["__protocol_source_key__"] = selected_keys
+    return selected
+
+
 def extract_selected_source_slices(
     selection: SelectionResult,
     source_df: pd.DataFrame,
@@ -205,13 +277,14 @@ def extract_selected_source_slices(
             "CNN source training end exceeds source_observation_cutoff"
         )
 
-    prepared = _prepare_source(source_df, selection.group_cols)
     expected_dates = pd.date_range(start, end, freq="D")
     extracted = []
     for entry in selection.entries:
-        candidate = prepared[
-            prepared["__protocol_source_key__"] == entry.source_key
-        ]
+        candidate = _selected_source_rows(
+            source_df,
+            entry.source_key,
+            selection.group_cols,
+        )
         if candidate.empty:
             raise ProtocolViolation(
                 f"selected source key is absent from CNN extractor: {entry.source_key!r}"
@@ -325,9 +398,8 @@ def validate_cnn_tensor_provenance(
 ) -> None:
     """Validate every CNN tensor element and label against the original source rows."""
 
-    prepared = _prepare_source(source_df, group_cols)
     normalized_key = normalize_source_key(provenance.source_key)
-    source = prepared[prepared["__protocol_source_key__"] == normalized_key].copy()
+    source = _selected_source_rows(source_df, normalized_key, group_cols)
     if source.empty:
         raise ProtocolViolation(f"CNN provenance source key is absent: {normalized_key!r}")
     if source["date"].duplicated().any():

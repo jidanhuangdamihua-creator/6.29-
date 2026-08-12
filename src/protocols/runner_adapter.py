@@ -8,18 +8,33 @@ import pandas as pd
 
 from src.constants import SOURCE_HISTORY_DAYS
 
-from .candidate_pool import PreparedDailySequencePool
+from .candidate_pool import (
+    CanonicalSourceIndex,
+    PreparedDailySequencePool,
+    build_canonical_source_index,
+    classify_prepared_candidate_dates,
+    prepare_daily_sequence_pool,
+    validate_prepared_candidate_date_eligibility,
+)
 from .d2_source_calendarization import (
     D2_SOURCE_CALENDARIZATION_RULE_VERSION,
     slice_d2_source_frame,
     verify_d2_source_frame,
 )
-from .knn_frames import build_observed_knn_frame, canonical_knn_frame_digest
+from .knn_frames import (
+    build_observed_knn_frame,
+    build_prepared_pool_observed_knn_frame,
+    canonical_knn_frame_digest,
+    seal_canonical_knn_digest_evidence,
+)
 from .selection_metadata import build_selection_metadata_contract
 from src.utils.dataframe_attrs import (
+    ProtocolFrameContext,
     copy_frame_with_lightweight_attrs,
+    get_protocol_frame_context,
     lightweight_frame_attrs,
     select_rows_with_lightweight_attrs,
+    set_protocol_frame_context,
 )
 from .experiment_protocol import (
     EXTENDED_TRACK,
@@ -46,6 +61,15 @@ def source_key_mask(
     missing = [column for column in group_cols if column not in frame.columns]
     if missing:
         raise ProtocolViolation(f"source key lookup is missing columns: {missing}")
+    context = get_protocol_frame_context(frame)
+    source_index = context.source_index if context is not None else None
+    if (
+        isinstance(source_index, CanonicalSourceIndex)
+        and source_index.group_cols == tuple(str(column) for column in group_cols)
+    ):
+        indexed_mask = source_index.mask_for_normalized_key(frame, normalized_key)
+        if indexed_mask is not None:
+            return indexed_mask
     mask = pd.Series(True, index=frame.index)
     for column, expected in zip(group_cols, normalized_key):
         mask &= frame[column].map(lambda value: normalize_source_key((value,))[0]).eq(expected)
@@ -65,10 +89,16 @@ def _unique_key(frame: pd.DataFrame, group_cols: Sequence[str], *, role: str) ->
     return next(iter(keys))
 
 
-def _available_keys(frame: pd.DataFrame, group_cols: Sequence[str]) -> Tuple[Tuple[str, ...], ...]:
+def _available_keys(
+    frame: pd.DataFrame,
+    group_cols: Sequence[str],
+    source_index: CanonicalSourceIndex | None = None,
+) -> Tuple[Tuple[str, ...], ...]:
     missing = [column for column in group_cols if column not in frame.columns]
     if missing:
         raise ProtocolViolation(f"source frame missing protocol key columns: {missing}")
+    if source_index is not None and source_index.group_cols == tuple(group_cols):
+        return source_index.source_keys
     safe_frame = copy_frame_with_lightweight_attrs(frame, deep=False)
     keys = {
         normalize_source_key(tuple(row))
@@ -118,10 +148,14 @@ def _extended_candidates(
     grouping_col: str | None,
     require_same_group: bool,
     candidate_exclusion_positions: Sequence[int],
+    source_index: CanonicalSourceIndex | None = None,
 ) -> Tuple[Tuple[str, ...], ...]:
     if not require_same_group:
         return _extended_candidates_from_identities(
-            tuple(SourceIdentity(key) for key in _available_keys(source_df, group_cols)),
+            tuple(
+                SourceIdentity(key)
+                for key in _available_keys(source_df, group_cols, source_index)
+            ),
             scenario=scenario,
             target_key=target_key,
             target_group=None,
@@ -140,6 +174,20 @@ def _extended_candidates(
             f"extended target must contain exactly one {grouping_col}, got {sorted(target_groups)!r}"
         )
     target_group = next(iter(target_groups))
+    if (
+        source_index is not None
+        and source_index.group_cols == tuple(group_cols)
+        and grouping_col in source_index.metadata_by_col
+    ):
+        values = source_index.metadata_by_col[grouping_col]
+        return _extended_candidates_from_identities(
+            tuple(SourceIdentity(key, values[key]) for key in source_index.source_keys),
+            scenario=scenario,
+            target_key=target_key,
+            target_group=target_group,
+            require_same_group=True,
+            candidate_exclusion_positions=candidate_exclusion_positions,
+        )
     identities = []
     safe_source_df = copy_frame_with_lightweight_attrs(source_df, deep=False)
     grouped = safe_source_df.groupby(list(group_cols), sort=False, dropna=False)
@@ -226,19 +274,29 @@ def configure_protocol_frames(
         None if knn_feature_columns == ("sales",) else knn_feature_columns
     )
     digest_ignored_columns = ("promo",) if digest_feature_columns is None else ()
-    if prepared_pool is None:
-        source_knn_candidate_frame = build_observed_knn_frame(
+    index_metadata_cols = (
+        (grouping_col,)
+        if grouping_col is not None and grouping_col in source_df.columns
+        else ()
+    )
+    source_index = (
+        prepared_pool.source_index
+        if prepared_pool is not None
+        else build_canonical_source_index(
             source_df,
-            window=window,
-            role="source",
             group_cols=normalized_group_cols,
-            feature_cols=knn_feature_columns,
+            metadata_cols=index_metadata_cols,
         )
-    else:
-        source_knn_candidate_frame = prepared_pool.selected_frame(
-            prepared_pool.source_keys,
-            feature_cols=knn_feature_columns,
-        )
+    )
+    runtime_pool = prepared_pool or prepare_daily_sequence_pool(
+        source_df,
+        group_cols=normalized_group_cols,
+        observed_start=window.knn_observed_start,
+        observed_end=window.knn_observed_end,
+        metadata_cols=index_metadata_cols,
+        feature_cols=knn_feature_columns,
+        source_index=source_index,
+    )
     target_knn_frame = build_observed_knn_frame(
         target_df,
         window=window,
@@ -272,16 +330,7 @@ def configure_protocol_frames(
             runtime_target_key,
             expected_arity=expected_arity,
         )
-    available = (
-        prepared_pool.source_keys
-        if prepared_pool is not None
-        else _available_keys(
-            source_knn_candidate_frame
-            if protocol.dataset_id in {"D1", "D2"}
-            else source_df,
-            normalized_group_cols,
-        )
-    )
+    available = runtime_pool.source_keys
     if protocol.track == EXTENDED_TRACK:
         rule = protocol.source_pool_rule
         expected_group_col = grouping_col or rule.grouping_field
@@ -296,6 +345,7 @@ def configure_protocol_frames(
                 grouping_col=expected_group_col,
                 require_same_group=rule.require_same_group,
                 candidate_exclusion_positions=exclusion_positions,
+                source_index=source_index,
             )
         else:
             if rule.require_same_group:
@@ -338,6 +388,28 @@ def configure_protocol_frames(
             available,
         )
 
+    prepared_date_eligibility = None
+    if prepared_pool is not None:
+        required_dates = pd.date_range(
+            window.knn_observed_start,
+            window.knn_observed_end,
+        )
+        prepared_date_eligibility = classify_prepared_candidate_dates(
+            runtime_pool,
+            candidates,
+            group_cols=normalized_group_cols,
+            required_dates=required_dates,
+            feature_cols=knn_feature_columns,
+        )
+        validate_prepared_candidate_date_eligibility(
+            runtime_pool,
+            prepared_date_eligibility,
+            candidates,
+            group_cols=normalized_group_cols,
+            required_dates=required_dates,
+            feature_cols=knn_feature_columns,
+        )
+
     cutoff = pd.Timestamp(window.source_observation_cutoff).normalize()
     d2_calendarization_metadata = {}
     if prepared_pool is None:
@@ -352,11 +424,13 @@ def configure_protocol_frames(
                 slice_d2_source_frame(sealed_source),
                 candidate_keys=candidates,
             )
-            source_keys = source.loc[:, list(normalized_group_cols)].apply(
-                lambda row: normalize_source_key(tuple(row.tolist())),
-                axis=1,
-            )
-            source = source.loc[source_keys.isin(set(candidates))].copy()
+            candidate_mask = pd.Series(False, index=source.index)
+            for candidate_key in candidates:
+                indexed = source_index.mask_for_normalized_key(source, candidate_key)
+                if indexed is None:
+                    indexed = source_key_mask(source, normalized_group_cols, candidate_key)
+                candidate_mask |= indexed
+            source = select_rows_with_lightweight_attrs(source, candidate_mask)
             source.attrs = {**sealed_source.attrs, **verified_source.attrs}
             source.attrs.update(
                 {
@@ -423,20 +497,31 @@ def configure_protocol_frames(
     if not (target_dates > cutoff).any():
         raise ProtocolViolation("target frame has no test dates after knn_observed_end")
 
-    if prepared_pool is None:
+    source_knn_input = (
+        source
+        if prepared_pool is None
+        else runtime_pool.selected_frame(
+            candidates, feature_cols=knn_feature_columns
+        )
+    )
+    if prepared_date_eligibility is None:
         source_knn_frame = build_observed_knn_frame(
-            source,
+            source_knn_input,
             window=window,
             role="source",
             group_cols=normalized_group_cols,
             feature_cols=knn_feature_columns,
         )
     else:
-        source_knn_frame = prepared_pool.selected_frame(
-            candidates,
+        source_knn_frame = build_prepared_pool_observed_knn_frame(
+            source_knn_input,
+            window=window,
+            role="source",
+            group_cols=normalized_group_cols,
             feature_cols=knn_feature_columns,
+            eligibility_proof=prepared_date_eligibility,
+            pool_identity=id(runtime_pool),
         )
-        source_knn_frame.attrs = source.attrs.copy()
     metadata = {
         "selection_authority": "shared_protocol",
         "protocol_version": protocol.protocol_version,
@@ -444,7 +529,6 @@ def configure_protocol_frames(
         "protocol_dataset_id": protocol.dataset_id,
         "protocol_scenario": normalized_scenario,
         "protocol_target_key": target_key,
-        "protocol_candidate_keys": candidates,
         "protocol_group_cols": normalized_group_cols,
         "protocol_observed_start": window.knn_observed_start.isoformat(),
         "protocol_observed_days": window.observed_days,
@@ -468,18 +552,6 @@ def configure_protocol_frames(
         "source_frame_max_date": source_knn_frame["date"].max().strftime("%Y-%m-%d"),
         "target_frame_min_date": target_knn_frame["date"].min().strftime("%Y-%m-%d"),
         "target_frame_max_date": target_knn_frame["date"].max().strftime("%Y-%m-%d"),
-        "source_frame_digest": canonical_knn_frame_digest(
-            source_knn_frame,
-            group_cols=normalized_group_cols,
-            feature_cols=digest_feature_columns,
-            ignore_columns=digest_ignored_columns,
-        ),
-        "target_frame_digest": canonical_knn_frame_digest(
-            target_knn_frame,
-            group_cols=normalized_group_cols,
-            feature_cols=digest_feature_columns,
-            ignore_columns=digest_ignored_columns,
-        ),
     }
     metadata.update(build_selection_metadata_contract(protocol, window=window))
     if protocol.dataset_id in {"D4", "D5", "D6"} and "source_history_days" in source_df.attrs:
@@ -516,13 +588,58 @@ def configure_protocol_frames(
         elif prepared_pool is not None:
             metadata["source_history_eligible_key_count"] = len(prepared_pool.source_keys)
     metadata.update(d2_calendarization_metadata)
+    protocol_report = metadata.pop("d2_source_calendarization_report", None)
     source_knn_frame.attrs.update(metadata)
     target_knn_frame.attrs.update(metadata)
-    source.attrs = {
-        **lightweight_frame_attrs(source_df.attrs),
-        **metadata,
-        "protocol_knn_observed_frame": source_knn_frame,
-    }
+    shared_digest_identity = (
+        ("dataset_id", protocol.dataset_id),
+        ("scenario", normalized_scenario),
+        ("target_key", target_key),
+        ("candidate_scope", tuple(candidates)),
+        ("group_cols", normalized_group_cols),
+        ("observed_start", window.knn_observed_start.isoformat()),
+        ("observed_end", window.knn_observed_end.isoformat()),
+        ("feature_cols", knn_feature_columns),
+        ("ignored_columns", digest_ignored_columns),
+    )
+    if prepared_date_eligibility is not None:
+        shared_digest_identity = (
+            *shared_digest_identity,
+            (
+                "complete_candidate_scope",
+                prepared_date_eligibility.complete_candidate_scope,
+            ),
+            (
+                "excluded_candidate_scope",
+                prepared_date_eligibility.excluded_candidate_scope,
+            ),
+        )
+    seal_canonical_knn_digest_evidence(
+        source_knn_frame,
+        context_identity=((*shared_digest_identity, ("role", "source"))),
+    )
+    seal_canonical_knn_digest_evidence(
+        target_knn_frame,
+        context_identity=((*shared_digest_identity, ("role", "target"))),
+    )
+    metadata.update(
+        {
+            "source_frame_digest": canonical_knn_frame_digest(
+                source_knn_frame,
+                group_cols=normalized_group_cols,
+                feature_cols=digest_feature_columns,
+                ignore_columns=digest_ignored_columns,
+            ),
+            "target_frame_digest": canonical_knn_frame_digest(
+                target_knn_frame,
+                group_cols=normalized_group_cols,
+                feature_cols=digest_feature_columns,
+                ignore_columns=digest_ignored_columns,
+            ),
+        }
+    )
+    source_knn_frame.attrs.update(metadata)
+    target_knn_frame.attrs.update(metadata)
     forecast_consumer = target.loc[target_dates > cutoff].copy()
     if protocol.dataset_id == "D2":
         forecast_consumer = forecast_consumer.drop(columns=["promo"], errors="ignore")
@@ -532,12 +649,26 @@ def configure_protocol_frames(
         "feature_scope": "forecast_consumer",
         "forecast_excluded_columns": ["promo"] if protocol.dataset_id == "D2" else [],
     }
+    runtime_context = ProtocolFrameContext(
+        source_index=source_index,
+        observed_frames={"source": source_knn_frame, "target": target_knn_frame},
+        observed_carrier_ids={"source": id(source), "target": id(target)},
+        candidate_keys=tuple(candidates),
+        forecast_frame=forecast_consumer,
+        prepared_pool=runtime_pool,
+        protocol_report=protocol_report,
+    )
+    for role, carrier in (("source", source), ("target", target)):
+        if runtime_context.observed_carrier_ids.get(role) != id(carrier):
+            raise ProtocolViolation(f"{role} configured carrier identity mismatch")
+    source.attrs = {
+        **lightweight_frame_attrs(source_df.attrs),
+        **metadata,
+    }
     target.attrs = {
         **lightweight_frame_attrs(target_df.attrs),
         **metadata,
-        "protocol_knn_observed_frame": target_knn_frame,
-        "forecast_consumer_frame": forecast_consumer,
     }
-    if prepared_pool is not None:
-        source.attrs["prepared_daily_sequence_pool"] = prepared_pool
+    set_protocol_frame_context(source, runtime_context)
+    set_protocol_frame_context(target, runtime_context)
     return source, target

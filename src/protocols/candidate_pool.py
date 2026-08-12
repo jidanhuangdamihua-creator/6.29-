@@ -20,6 +20,10 @@ from .experiment_protocol import (
     normalize_source_key,
 )
 from .knn_frames import canonical_knn_frame_digest
+from src.utils.dataframe_attrs import (
+    copy_frame_with_lightweight_attrs,
+    temporarily_detached_attrs,
+)
 
 
 def _iso_date(value: object) -> str:
@@ -443,6 +447,126 @@ class InsufficientCandidatePoolError(ProtocolViolation):
 
 
 @dataclass(frozen=True)
+class CanonicalSourceIndex:
+    """One canonical key/date index for an immutable source context."""
+
+    group_cols: Tuple[str, ...]
+    row_count: int
+    source_keys: Tuple[SourceKey, ...]
+    keys_by_position: Tuple[SourceKey, ...]
+    normalized_dates: Tuple[pd.Timestamp, ...]
+    row_labels_by_key: Mapping[SourceKey, Tuple[object, ...]]
+    duplicate_date_keys: frozenset[SourceKey]
+    metadata_by_col: Mapping[str, Mapping[SourceKey, str]]
+    keys_by_metadata_value: Mapping[str, Mapping[str, Tuple[SourceKey, ...]]]
+    unique_row_labels: bool
+
+    def __deepcopy__(self, memo: Dict[int, Any]) -> "CanonicalSourceIndex":
+        memo[id(self)] = self
+        return self
+
+    def mask_for_normalized_key(
+        self,
+        frame: pd.DataFrame,
+        key: SourceKey,
+    ) -> pd.Series | None:
+        if not self.unique_row_labels or not frame.index.is_unique:
+            return None
+        labels = self.row_labels_by_key.get(key)
+        if labels is None:
+            return pd.Series(False, index=frame.index)
+        return pd.Series(frame.index.isin(labels), index=frame.index)
+
+
+def build_canonical_source_index(
+    source_df: pd.DataFrame,
+    *,
+    group_cols: Sequence[str],
+    metadata_cols: Sequence[str] = (),
+) -> CanonicalSourceIndex:
+    """Normalize every full-source key exactly once using protocol semantics."""
+
+    normalized_group_cols = tuple(str(column) for column in group_cols)
+    normalized_metadata_cols = tuple(str(column) for column in metadata_cols)
+    required = [*normalized_group_cols, "date", *normalized_metadata_cols]
+    missing = [column for column in required if column not in source_df.columns]
+    if missing:
+        raise ProtocolViolation(f"source dataframe missing canonical-index columns: {missing}")
+    if not source_df.columns.is_unique:
+        duplicates = list(
+            dict.fromkeys(source_df.columns[source_df.columns.duplicated(keep=False)].tolist())
+        )
+        raise ProtocolViolation(
+            f"source provenance dataframe contains duplicate columns: {duplicates!r}"
+        )
+    with temporarily_detached_attrs(source_df):
+        dates = pd.to_datetime(source_df["date"], errors="coerce").dt.normalize()
+        key_rows = tuple(
+            source_df.loc[:, list(normalized_group_cols)].itertuples(
+                index=False, name=None
+            )
+        )
+        metadata_arrays = {
+            column: source_df[column].to_numpy(copy=False)
+            for column in normalized_metadata_cols
+        }
+    if dates.isna().any():
+        raise ProtocolViolation("source provenance dataframe contains invalid dates")
+
+    keys_by_position = tuple(
+        normalize_source_key(tuple(row)) for row in key_rows
+    )
+    source_keys = tuple(sorted(set(keys_by_position)))
+    labels_by_key: Dict[SourceKey, list[object]] = {key: [] for key in source_keys}
+    dates_by_key: Dict[SourceKey, set[pd.Timestamp]] = {key: set() for key in source_keys}
+    duplicate_date_keys: set[SourceKey] = set()
+    for label, key, raw_date in zip(source_df.index, keys_by_position, dates):
+        labels_by_key[key].append(label)
+        normalized_date = pd.Timestamp(raw_date)
+        if normalized_date in dates_by_key[key]:
+            duplicate_date_keys.add(key)
+        dates_by_key[key].add(normalized_date)
+
+    metadata_maps: Dict[str, Mapping[SourceKey, str]] = {}
+    metadata_indexes: Dict[str, Mapping[str, Tuple[SourceKey, ...]]] = {}
+    for column in normalized_metadata_cols:
+        values_by_key: Dict[SourceKey, str] = {}
+        for key, raw_value in zip(keys_by_position, metadata_arrays[column]):
+            if pd.isna(raw_value) or not str(raw_value).strip():
+                raise ProtocolViolation(
+                    f"source grouping metadata {column!r} contains null/empty values"
+                )
+            value = str(raw_value).strip()
+            previous = values_by_key.setdefault(key, value)
+            if previous != value:
+                raise ProtocolViolation(
+                    f"source key {key!r} maps to multiple {column} values"
+                )
+        keys_by_value: Dict[str, list[SourceKey]] = {}
+        for key in source_keys:
+            keys_by_value.setdefault(values_by_key[key], []).append(key)
+        metadata_maps[column] = MappingProxyType(dict(values_by_key))
+        metadata_indexes[column] = MappingProxyType(
+            {value: tuple(sorted(keys)) for value, keys in keys_by_value.items()}
+        )
+
+    return CanonicalSourceIndex(
+        group_cols=normalized_group_cols,
+        row_count=int(len(source_df)),
+        source_keys=source_keys,
+        keys_by_position=keys_by_position,
+        normalized_dates=tuple(pd.Timestamp(value) for value in dates),
+        row_labels_by_key=MappingProxyType(
+            {key: tuple(labels_by_key[key]) for key in source_keys}
+        ),
+        duplicate_date_keys=frozenset(duplicate_date_keys),
+        metadata_by_col=MappingProxyType(metadata_maps),
+        keys_by_metadata_value=MappingProxyType(metadata_indexes),
+        unique_row_labels=bool(source_df.index.is_unique),
+    )
+
+
+@dataclass(frozen=True)
 class PreparedDailySequencePool:
     """One immutable vectorized source observation index reusable across targets."""
 
@@ -458,6 +582,7 @@ class PreparedDailySequencePool:
     nonfinite_feature_keys: Mapping[str, frozenset[SourceKey]]
     metadata_by_col: Mapping[str, Mapping[SourceKey, str]]
     keys_by_metadata_value: Mapping[str, Mapping[str, Tuple[SourceKey, ...]]]
+    source_index: CanonicalSourceIndex
 
     def __deepcopy__(self, memo: Dict[int, Any]) -> "PreparedDailySequencePool":
         """Keep pandas attrs operations from copying the immutable pool."""
@@ -545,6 +670,116 @@ class PreparedDailySequencePool:
         return pd.concat(frames, ignore_index=True)
 
 
+@dataclass(frozen=True)
+class PreparedCandidateDateEligibility:
+    """Read-only candidate date facts bound to one prepared-pool window."""
+
+    pool_id: int
+    group_cols: Tuple[str, ...]
+    required_dates: Tuple[str, ...]
+    feature_cols: Tuple[str, ...]
+    candidate_scope: Tuple[SourceKey, ...]
+    complete_candidate_scope: Tuple[SourceKey, ...]
+    excluded_candidate_scope: Tuple[SourceKey, ...]
+    missing_dates_by_candidate: Tuple[Tuple[SourceKey, Tuple[str, ...]], ...]
+
+    def __deepcopy__(self, memo: Dict[int, Any]) -> "PreparedCandidateDateEligibility":
+        memo[id(self)] = self
+        return self
+
+    def exclusion_records(self) -> Tuple[Mapping[str, Any], ...]:
+        return tuple(
+            {
+                "source_key": key,
+                "reason": "missing_observed_dates",
+                "missing_dates": missing_dates,
+            }
+            for key, missing_dates in self.missing_dates_by_candidate
+        )
+
+
+def classify_prepared_candidate_dates(
+    pool: PreparedDailySequencePool,
+    candidate_keys: Iterable[Sequence[object]],
+    *,
+    group_cols: Sequence[str],
+    required_dates: pd.DatetimeIndex,
+    feature_cols: Sequence[str],
+) -> PreparedCandidateDateEligibility:
+    """Classify duplicate/missing dates before any candidate numeric validation."""
+
+    normalized_group_cols = tuple(str(column) for column in group_cols)
+    normalized_features = tuple(str(column) for column in feature_cols)
+    normalized_candidates = tuple(
+        normalize_source_key(key) for key in candidate_keys
+    )
+    if len(set(normalized_candidates)) != len(normalized_candidates):
+        raise ProtocolViolation("candidate pool contains duplicate source keys")
+    pool.validate_for(
+        group_cols=normalized_group_cols,
+        required_dates=required_dates,
+    )
+    missing_features = [
+        column for column in normalized_features if column not in pool.feature_matrices
+    ]
+    if missing_features:
+        raise ProtocolViolation(
+            f"prepared pool is missing declared feature columns: {missing_features!r}"
+        )
+
+    complete = []
+    missing_by_candidate = []
+    for candidate_key in normalized_candidates:
+        if candidate_key in pool.duplicate_date_keys:
+            raise ProtocolViolation(
+                f"source {candidate_key!r} contains duplicate observed dates"
+            )
+        missing_dates = pool.missing_dates_for(candidate_key)
+        if missing_dates:
+            missing_by_candidate.append((candidate_key, tuple(missing_dates)))
+            continue
+        complete.append(candidate_key)
+
+    excluded = tuple(key for key, _ in missing_by_candidate)
+    return PreparedCandidateDateEligibility(
+        pool_id=id(pool),
+        group_cols=normalized_group_cols,
+        required_dates=tuple(required_dates.strftime("%Y-%m-%d")),
+        feature_cols=normalized_features,
+        candidate_scope=normalized_candidates,
+        complete_candidate_scope=tuple(complete),
+        excluded_candidate_scope=excluded,
+        missing_dates_by_candidate=tuple(missing_by_candidate),
+    )
+
+
+def validate_prepared_candidate_date_eligibility(
+    pool: PreparedDailySequencePool,
+    proof: PreparedCandidateDateEligibility,
+    candidate_keys: Iterable[Sequence[object]],
+    *,
+    group_cols: Sequence[str],
+    required_dates: pd.DatetimeIndex,
+    feature_cols: Sequence[str],
+) -> PreparedCandidateDateEligibility:
+    """Fail closed unless a proof exactly matches current pool date facts."""
+
+    if not isinstance(proof, PreparedCandidateDateEligibility):
+        raise ProtocolViolation("prepared-pool date eligibility proof is invalid")
+    expected = classify_prepared_candidate_dates(
+        pool,
+        candidate_keys,
+        group_cols=group_cols,
+        required_dates=required_dates,
+        feature_cols=feature_cols,
+    )
+    if proof != expected:
+        raise ProtocolViolation(
+            "prepared-pool date eligibility proof does not match current pool identity"
+        )
+    return proof
+
+
 def prepare_daily_sequence_pool(
     source_df: pd.DataFrame,
     *,
@@ -553,6 +788,7 @@ def prepare_daily_sequence_pool(
     observed_end: object | None = None,
     metadata_cols: Sequence[str] = (),
     feature_cols: Sequence[str] | None = None,
+    source_index: CanonicalSourceIndex | None = None,
 ) -> PreparedDailySequencePool:
     """Prepare all source keys and aligned 30-day feature matrices exactly once."""
     normalized_group_cols = tuple(str(column) for column in group_cols)
@@ -574,59 +810,44 @@ def prepare_daily_sequence_pool(
     if len(required_dates) != 30:
         raise ProtocolViolation("prepared source observation window must contain exactly 30 days")
 
-    parsed_dates = pd.to_datetime(source_df["date"], errors="coerce").dt.normalize()
-    if parsed_dates.isna().any():
-        raise ProtocolViolation("source dataframe contains invalid dates")
-
-    raw_key_table = source_df.loc[:, list(normalized_group_cols)].drop_duplicates().reset_index(drop=True)
-    normalized_arrays = [_normalize_key_column(raw_key_table[column]) for column in normalized_group_cols]
-    raw_key_table["__protocol_source_key__"] = list(zip(*normalized_arrays))
-    normalized_keys = tuple(sorted(set(raw_key_table["__protocol_source_key__"])))
+    if source_index is None:
+        source_index = build_canonical_source_index(
+            source_df,
+            group_cols=normalized_group_cols,
+            metadata_cols=metadata_cols,
+        )
+    elif (
+        source_index.group_cols != normalized_group_cols
+        or source_index.row_count != len(source_df)
+    ):
+        raise ProtocolViolation("canonical source index does not match prepared-pool frame")
+    missing_metadata = [
+        str(column)
+        for column in metadata_cols
+        if str(column) not in source_index.metadata_by_col
+    ]
+    if missing_metadata:
+        raise ProtocolViolation(
+            f"canonical source index is missing metadata columns: {missing_metadata!r}"
+        )
+    parsed_dates = pd.Series(source_index.normalized_dates, index=source_df.index)
+    working_source = copy_frame_with_lightweight_attrs(source_df, deep=False)
+    normalized_keys = source_index.source_keys
     key_to_index = {key: index for index, key in enumerate(normalized_keys)}
-    raw_key_table["__protocol_key_index__"] = raw_key_table["__protocol_source_key__"].map(key_to_index)
-
-    metadata_maps: Dict[str, Mapping[SourceKey, str]] = {}
-    metadata_key_indexes: Dict[str, Mapping[str, Tuple[SourceKey, ...]]] = {}
-    if metadata_cols:
-        metadata_table = source_df.loc[:, [*normalized_group_cols, *metadata_cols]].drop_duplicates()
-        metadata_table = metadata_table.merge(raw_key_table, on=list(normalized_group_cols), how="left", validate="many_to_one")
-        for column in metadata_cols:
-            normalized_values = metadata_table[column].astype("string").str.strip()
-            if normalized_values.isna().any() or normalized_values.eq("").any():
-                raise ProtocolViolation(f"source grouping metadata {column!r} contains null/empty values")
-            metadata_table[f"__meta_{column}"] = normalized_values
-            grouped = metadata_table.groupby("__protocol_source_key__", sort=False)[f"__meta_{column}"]
-            counts = grouped.nunique(dropna=False)
-            conflicts = counts[counts != 1]
-            if not conflicts.empty:
-                raise ProtocolViolation(
-                    f"source key {conflicts.index[0]!r} maps to multiple {column} values"
-                )
-            values = grouped.first().to_dict()
-            metadata_maps[str(column)] = MappingProxyType(
-                {key: str(values[key]) for key in normalized_keys}
-            )
-            keys_by_value: Dict[str, list[SourceKey]] = {}
-            for key in normalized_keys:
-                keys_by_value.setdefault(str(values[key]), []).append(key)
-            metadata_key_indexes[str(column)] = MappingProxyType(
-                {
-                    value: tuple(sorted(keys))
-                    for value, keys in keys_by_value.items()
-                }
-            )
 
     observed_mask = parsed_dates.isin(required_dates)
-    observed = source_df.loc[
+    observed = working_source.loc[
         observed_mask, [*normalized_group_cols, *normalized_features]
     ].copy()
     observed["date"] = parsed_dates.loc[observed_mask].to_numpy()
-    observed = observed.merge(
-        raw_key_table.loc[:, [*normalized_group_cols, "__protocol_key_index__"]],
-        on=list(normalized_group_cols),
-        how="left",
-        validate="many_to_one",
-    )
+    observed_positions = np.flatnonzero(observed_mask.to_numpy())
+    observed["__protocol_source_key__"] = [
+        source_index.keys_by_position[int(position)]
+        for position in observed_positions
+    ]
+    observed["__protocol_key_index__"] = observed[
+        "__protocol_source_key__"
+    ].map(key_to_index)
     for column in normalized_features:
         observed[column] = pd.to_numeric(observed[column], errors="coerce")
 
@@ -681,8 +902,9 @@ def prepare_daily_sequence_pool(
                 for column, indices in nonfinite_feature_indices.items()
             }
         ),
-        metadata_by_col=MappingProxyType(metadata_maps),
-        keys_by_metadata_value=MappingProxyType(metadata_key_indexes),
+        metadata_by_col=source_index.metadata_by_col,
+        keys_by_metadata_value=source_index.keys_by_metadata_value,
+        source_index=source_index,
     )
 
 
@@ -823,36 +1045,6 @@ def select_daily_sequence_sources(
         role="target",
         feature_cols=declared_features,
     )
-    source_frame_digest = None
-    target_frame_digest = None
-    if protocol.dataset_id in {"D1", "D2"}:
-        digest_feature_cols = (
-            None if declared_features == ("sales",) else declared_features
-        )
-        digest_ignored_columns = ("promo",) if digest_feature_cols is None else ()
-        target_frame_digest = canonical_knn_frame_digest(
-            target_legal,
-            group_cols=group_cols,
-            feature_cols=digest_feature_cols,
-            ignore_columns=digest_ignored_columns,
-        )
-        if prepared_pool is None:
-            source_prepared = _prepare_dates(source_df, role="source")
-            source_legal = source_prepared.loc[
-                source_prepared["date"].isin(required_dates)
-            ].copy()
-        else:
-            source_legal = prepared_pool.selected_frame(
-                [key for key in normalized_candidates if key in prepared_pool.key_to_index],
-                feature_cols=declared_features,
-            )
-        source_frame_digest = canonical_knn_frame_digest(
-            source_legal,
-            group_cols=group_cols,
-            feature_cols=digest_feature_cols,
-            ignore_columns=digest_ignored_columns,
-        )
-
     pool = prepared_pool or prepare_daily_sequence_pool(
         source_df,
         group_cols=group_cols,
@@ -861,25 +1053,56 @@ def select_daily_sequence_sources(
         feature_cols=declared_features,
     )
     pool.validate_for(group_cols=group_cols, required_dates=required_dates)
+    date_eligibility = classify_prepared_candidate_dates(
+        pool,
+        normalized_candidates,
+        group_cols=group_cols,
+        required_dates=required_dates,
+        feature_cols=declared_features,
+    )
+
+    source_frame_digest = None
+    target_frame_digest = None
+    if protocol.dataset_id in {"D1", "D2"}:
+        digest_feature_cols = (
+            None if declared_features == ("sales",) else declared_features
+        )
+        digest_ignored_columns = ("promo",) if digest_feature_cols is None else ()
+        target_digest_frame = (
+            target_df
+            if len(target_df) == len(target_legal)
+            else target_legal
+        )
+        source_dates = pd.to_datetime(source_df["date"], errors="coerce").dt.normalize()
+        source_is_observed = bool(
+            not source_dates.isna().any()
+            and source_dates.isin(required_dates).all()
+        )
+        source_digest_frame = (
+            source_df
+            if source_is_observed
+            else pool.selected_frame(
+                normalized_candidates,
+                feature_cols=declared_features,
+            )
+        )
+        target_frame_digest = canonical_knn_frame_digest(
+            target_digest_frame,
+            group_cols=group_cols,
+            feature_cols=digest_feature_cols,
+            ignore_columns=digest_ignored_columns,
+        )
+        source_frame_digest = canonical_knn_frame_digest(
+            source_digest_frame,
+            group_cols=group_cols,
+            feature_cols=digest_feature_cols,
+            ignore_columns=digest_ignored_columns,
+        )
 
     valid_keys = []
     raw_vectors = []
-    excluded = []
-    for candidate_key in normalized_candidates:
-        if candidate_key in pool.duplicate_date_keys:
-            raise ProtocolViolation(
-                f"source {candidate_key!r} contains duplicate observed dates"
-            )
-        missing = pool.missing_dates_for(candidate_key)
-        if missing:
-            excluded.append(
-                {
-                    "source_key": candidate_key,
-                    "reason": "missing_observed_dates",
-                    "missing_dates": tuple(missing),
-                }
-            )
-            continue
+    excluded = list(date_eligibility.exclusion_records())
+    for candidate_key in date_eligibility.complete_candidate_scope:
         for column in declared_features:
             if candidate_key in pool.nonfinite_feature_keys.get(column, frozenset()):
                 raise ProtocolViolation(

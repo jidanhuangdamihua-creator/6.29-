@@ -12,6 +12,7 @@ from src.protocols.experiment_protocol import ProtocolViolation, get_experiment_
 from src.protocols.runner_adapter import configure_protocol_frames
 from src.source_selection.source_selector import SourceSelector
 from src.utils.knn_feature_loader import resolve_knn_feature_columns
+from src.utils.dataframe_attrs import get_protocol_frame_context
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -121,7 +122,7 @@ def test_d5_three_fields_reach_frames_pool_and_distance() -> None:
 
     assert configured_source.attrs["knn_feature_columns"] == expected
     assert configured_target.attrs["knn_feature_columns"] == expected
-    pool = configured_source.attrs["prepared_daily_sequence_pool"]
+    pool = get_protocol_frame_context(configured_source).prepared_pool
     assert list(pool.feature_matrices.keys()) == expected
     assert result["meta"]["knn_feature_columns"] == expected
     assert result["meta"]["feature_cols"] == expected

@@ -8,6 +8,11 @@ import pandas as pd
 from src.protocols.experiment_protocol import ProtocolViolation
 from src.protocols.runner_adapter import configure_protocol_frames
 from src.source_selection.source_selector import SourceSelector
+from src.utils.dataframe_attrs import (
+    context_with,
+    get_protocol_frame_context,
+    set_protocol_frame_context,
+)
 
 
 class SourceSelectorSharedProtocolTest(unittest.TestCase):
@@ -42,6 +47,41 @@ class SourceSelectorSharedProtocolTest(unittest.TestCase):
                 )
             ],
             ignore_index=True,
+        )
+
+    def _configured_d4(self) -> tuple[pd.DataFrame, pd.DataFrame]:
+        return configure_protocol_frames(
+            self.source,
+            self.target,
+            dataset_id="D4",
+            scenario="with",
+            group_cols=("store_id", "item_id"),
+            observed_start="2020-01-01",
+        )
+
+    def _select_d4(
+        self,
+        source: pd.DataFrame,
+        target: pd.DataFrame,
+    ) -> dict[str, object]:
+        return SourceSelector().select_top_k_sources(
+            target,
+            source,
+            feature_cols=("sales",),
+            k=2,
+            group_cols=("store_id", "item_id"),
+        )
+
+    def _replace_candidate_context(
+        self,
+        frame: pd.DataFrame,
+        candidate_keys: tuple[tuple[object, ...], ...],
+    ) -> None:
+        context = get_protocol_frame_context(frame)
+        self.assertIsNotNone(context)
+        set_protocol_frame_context(
+            frame,
+            context_with(context, candidate_keys=candidate_keys),
         )
 
     def test_d4_formal_selection_uses_cross_group_candidates_and_ignores_model_ids(
@@ -109,6 +149,86 @@ class SourceSelectorSharedProtocolTest(unittest.TestCase):
                 group_cols=("store_id", "item_id"),
                 weight_mode="raw_distance",
             )
+
+    def test_candidate_scope_exact_match_passes_without_legacy_attrs(self) -> None:
+        source, target = self._configured_d4()
+        self.assertNotIn("protocol_candidate_keys", source.attrs)
+        self.assertNotIn("protocol_candidate_keys", target.attrs)
+
+        selection = self._select_d4(source, target)
+
+        self.assertEqual(selection["meta"]["candidate_source_count"], 3)
+
+    def test_source_candidate_scope_extra_key_fails_closed(self) -> None:
+        source, target = self._configured_d4()
+        context = get_protocol_frame_context(source)
+        self.assertIsNotNone(context)
+        self._replace_candidate_context(
+            source,
+            (*context.candidate_keys, ("SX", "IX")),
+        )
+
+        with self.assertRaisesRegex(
+            ProtocolViolation,
+            "target/source protocol candidate scope mismatch",
+        ):
+            self._select_d4(source, target)
+
+    def test_target_candidate_scope_extra_key_fails_at_bilateral_gate(self) -> None:
+        source, target = self._configured_d4()
+        context = get_protocol_frame_context(target)
+        self.assertIsNotNone(context)
+        self._replace_candidate_context(
+            target,
+            (*context.candidate_keys, ("TX", "IX")),
+        )
+
+        with self.assertRaisesRegex(
+            ProtocolViolation,
+            "target/source protocol candidate scope mismatch",
+        ):
+            self._select_d4(source, target)
+
+    def test_candidate_scope_order_change_fails_closed(self) -> None:
+        source, target = self._configured_d4()
+        context = get_protocol_frame_context(source)
+        self.assertIsNotNone(context)
+        self._replace_candidate_context(
+            source,
+            tuple(reversed(context.candidate_keys)),
+        )
+
+        with self.assertRaisesRegex(
+            ProtocolViolation,
+            "target/source protocol candidate scope mismatch",
+        ):
+            self._select_d4(source, target)
+
+    def test_normalized_candidate_identity_change_fails_closed(self) -> None:
+        source, target = self._configured_d4()
+        context = get_protocol_frame_context(source)
+        self.assertIsNotNone(context)
+        changed = (("DIFFERENT", context.candidate_keys[0][1]), *context.candidate_keys[1:])
+        self._replace_candidate_context(source, changed)
+
+        with self.assertRaisesRegex(
+            ProtocolViolation,
+            "target/source protocol candidate scope mismatch",
+        ):
+            self._select_d4(source, target)
+
+    def test_candidate_context_key_spec_mismatch_fails_closed(self) -> None:
+        source, target = self._configured_d4()
+        context = get_protocol_frame_context(source)
+        self.assertIsNotNone(context)
+        malformed = ((context.candidate_keys[0][0],), *context.candidate_keys[1:])
+        self._replace_candidate_context(source, malformed)
+
+        with self.assertRaisesRegex(
+            ProtocolViolation,
+            "target/source protocol candidate scope mismatch",
+        ):
+            self._select_d4(source, target)
 
     def test_d4_formal_selection_supports_required_k_three_across_groups(self) -> None:
         source, target = configure_protocol_frames(

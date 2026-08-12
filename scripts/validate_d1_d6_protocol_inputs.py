@@ -37,6 +37,7 @@ from src.protocols.formal_input_paths import (
 )
 from src.source_selection.source_selector import SourceSelector
 from src.constants import SOURCE_HISTORY_DAYS
+from src.utils.dataframe_attrs import get_protocol_frame_context
 
 
 def resolve_preflight_formal_input_identity(
@@ -137,7 +138,7 @@ def validate_protocol_frames(
             }
             for item in selection["sources"]
         ]
-        candidate_keys = tuple(target.attrs["protocol_candidate_keys"])
+        candidate_keys = tuple(get_protocol_frame_context(target).candidate_keys)
         source_pool_fingerprint = build_source_pool_fingerprint(
             protocol_version=meta["protocol_version"],
             dataset_id=target.attrs["protocol_dataset_id"],
@@ -192,7 +193,7 @@ def validate_protocol_frames(
             "dataset_id": target.attrs["protocol_dataset_id"],
             "scenario": target.attrs["protocol_scenario"],
             "target_key": target.attrs["protocol_target_key"],
-            "candidate_count": len(target.attrs["protocol_candidate_keys"]),
+            "candidate_count": len(candidate_keys),
             "candidate_pool_digest": meta["candidate_pool_digest"],
             "candidate_pool_digest_input_summary": summarize_candidate_digest_input(
                 meta["candidate_pool_digest_input"],

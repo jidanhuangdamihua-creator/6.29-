@@ -4,6 +4,8 @@ from typing import Sequence
 
 import pandas as pd
 
+from src.utils.dataframe_attrs import copy_frame_with_lightweight_attrs
+
 
 def _is_numeric_like_model_column(series: pd.Series) -> bool:
     if pd.api.types.is_bool_dtype(series) or isinstance(series.dtype, pd.CategoricalDtype):
@@ -23,8 +25,7 @@ def fill_source_numeric_na(
     feature_columns: Sequence[str] | None = None,
 ) -> pd.DataFrame:
     """Fill source NaNs for numeric model columns, preserving attrs and schema."""
-    attrs = df.attrs.copy()
-    out = df.copy()
+    out = copy_frame_with_lightweight_attrs(df)
 
     if feature_columns is None:
         numeric_cols = out.select_dtypes(include=["number"]).columns
@@ -41,5 +42,4 @@ def fill_source_numeric_na(
             elif _is_numeric_like_model_column(out[col]):
                 out[col] = pd.to_numeric(out[col], errors="coerce").fillna(0)
 
-    out.attrs.update(attrs)
     return out

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 
+from src.constants import RESULT_SCHEMA_COLUMNS
+from src.protocols import experiment_protocol
 from src.protocols.candidate_pool import (
     build_candidate_pool_digest,
     prepare_daily_sequence_pool,
@@ -19,6 +22,12 @@ from src.protocols.runner_adapter import configure_protocol_frames
 from src.utils.d4_d6_runtime import (
     apply_runtime_source_domain_policy,
     validate_runtime_target_domain,
+)
+from src.utils import entity_experiment
+from src.utils.dataframe_attrs import get_protocol_frame_context
+from src.utils.result_schema import (
+    REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY,
+    align_d4_d6_result_records,
 )
 
 
@@ -91,10 +100,90 @@ def _candidate_keys(
         observed_start="2020-01-01",
         prepared_pool=pool,
     )
-    return configured_source.attrs["protocol_candidate_keys"]
+    return get_protocol_frame_context(configured_source).candidate_keys
 
 
 class Dataset4CandidateProtocolTest(unittest.TestCase):
+    def test_formal_d4_row_preserves_tracks_and_uses_only_registered_columns(self) -> None:
+        source, target = _d4_frames()
+        source = source.assign(
+            entity_id=source["store_id"].astype(str)
+            + "_"
+            + source["product_id"].astype(str)
+        )
+        target = target.assign(entity_id="166_258")
+        config = {
+            "dataset_id": 4,
+            "dataset_name": "Dataset4",
+            "info_sharing": "without",
+            "entity_col": "entity_id",
+            "group_cols": ("store_id", "product_id"),
+            "source_count": 3,
+            "horizon": 1,
+            "window_size": 1,
+            "learning_rate": 0.001,
+            "source_epochs": 1,
+            "target_epochs": 1,
+            "batch_size": 1,
+            "smoke": False,
+            "metric_protocol": {
+                "current_metric_space": "normalized_minmax_space",
+                "paper_metric_space": "original_sales_space",
+                "strict_paper_metrics": False,
+            },
+        }
+        knn_data = {
+            "domain_filter": {"column": "first_category_id", "value": 15},
+            "group_cols": ["store_id", "product_id"],
+        }
+        source = apply_runtime_source_domain_policy(source, knn_data, config)
+        validate_runtime_target_domain(target, ["166_258"], knn_data, config)
+
+        def fake_no_tl(**_kwargs):
+            return {
+                "rmse": 1.0,
+                "accuracy": 0.5,
+                "mae": 0.5,
+                "mape": 1.0,
+                "smape": 2.0,
+                "rmse_metric_space": "original_sales_space",
+                "smape_metric_space": "original_sales_space",
+                "paper_metric_computed_valid": True,
+                "paper_metric_status": "valid",
+                "paper_metric_error": "",
+                "paper_metric_aligned": True,
+                "inverse_transform_applied": True,
+                "inverse_transform_available": True,
+                "error": "",
+            }
+
+        with patch.object(
+            entity_experiment,
+            "_method_runner",
+            return_value=fake_no_tl,
+        ):
+            rows = entity_experiment.run_single_entity_experiment(
+                entity_key="166_258",
+                source_df=source,
+                target_entity_df=target,
+                feature_cols=["sales"],
+                config=config,
+                enabled_methods=["No-TL"],
+            )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["protocol_track"], experiment_protocol.FORMAL_PROTOCOL_TRACK)
+        self.assertEqual(rows[0]["source_pool_track"], experiment_protocol.EXTENDED_TRACK)
+
+        aligned = align_d4_d6_result_records(rows)
+        allowed = set(RESULT_SCHEMA_COLUMNS)
+        allowed.update(
+            REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY[
+                aligned.loc[0, "schema_family"]
+            ]
+        )
+        self.assertEqual(set(aligned.columns).difference(allowed), set())
+
     def test_d4_without_domain_filter_keeps_all_source_categories(self) -> None:
         source, _ = _d4_frames()
         config = {"dataset_id": 4, "info_sharing": "without"}
@@ -237,7 +326,7 @@ class Dataset4CandidateProtocolTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            configured_source.attrs["protocol_candidate_keys"],
+            get_protocol_frame_context(configured_source).candidate_keys,
             (("166", "259"), ("167", "260")),
         )
 
