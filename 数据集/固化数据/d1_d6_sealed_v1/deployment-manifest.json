@@ -906,7 +906,7 @@
         "sha256": "f0d7a2f2b72e7707a9983e3adee1886d57a5cf849666b65ba8c0cc75fee31e9d"
       },
       "formal_proof": {
-        "authority_sha256": "7ea59529b947f39881c212a841c57e5836032eefe5401a68d76369160f2a5e23",
+        "authority_sha256": "d7b61987012b76c310a94c5b56bd810d0fb33850e0b75f44a9ec14512b1a1dd8",
         "path": "dataset1/formal-proof.json"
       },
       "readiness_proof_digest": "1363e26b8abb78f4a8cb730acdc78156d7cd4c2934e9b1f7af410306e41c11c8",
@@ -1113,7 +1113,7 @@
         "sha256": "984cab0a0c8e7bcc2fdb222da39e1d21fae134125e0db4753ff1e3fbdc999b99"
       },
       "formal_proof": {
-        "authority_sha256": "5ecf34b529d893a753ca1e4f0477cd45fa39e479b34bad2280b5adb944a56d27",
+        "authority_sha256": "43462b813b27f7f42c4da19679caa8280aefe96dd2fc5a52560bebfee4c32c75",
         "path": "dataset2/formal-proof.json"
       },
       "readiness_proof_digest": "bd27049d5c58e8f552b61c41514c6a7d7659f5f335b11ccb1619a99ef0ff98fb",
@@ -1336,7 +1336,7 @@
         "sha256": "7c221852f9616d82d533710bf9d765cb683ab4189c4ad8acf767709884dbab1d"
       },
       "formal_proof": {
-        "authority_sha256": "a5400da55324f28cbac00d8e2c12210569d07fcf1c6414c79be0c8940365762d",
+        "authority_sha256": "da98ae9ee2e67a4230d316bc945a29f2ee0f6d2cb2564bb2f04e9eadd054e39c",
         "path": "dataset3/formal-proof.json"
       },
       "readiness_proof_digest": "bf07e2c088a9d99cb829151e8b18fabe9bbeef08f441f2dee00ab3dfaed3398c",
@@ -1621,7 +1621,7 @@
         "sha256": "7696a02a8b4aa747f840faa3fcb0bb9e3fe8062a801248247d74b308674cc814"
       },
       "formal_proof": {
-        "authority_sha256": "80a1d43bb8816a05d82aa02c4573ca7cef5239811f84b106740174391e5b8e93",
+        "authority_sha256": "65be506e73868c244186a57a398f4abe6c17ffac3a1ba706d8fa9989665761b3",
         "path": "dataset4/formal-proof.json"
       },
       "readiness_proof_digest": "670f99afb10eedb4d49df3b2652661123c6a232e9fc543e7588fb14fb1468a8a",
@@ -2148,7 +2148,7 @@
         "sha256": "345a56d608d13b65040a77a1e08420636e0f3dd4496b2ec6d204270d709287a0"
       },
       "formal_proof": {
-        "authority_sha256": "4319b790801585f1da70185b2a67d1b7c4842264defb2023360c89eb9c72481c",
+        "authority_sha256": "69b749f337c6de78ae3a11b08c616683500fc3e94b18400ceb903bcb3a220d43",
         "path": "dataset5/formal-proof.json"
       },
       "readiness_proof_digest": "a0a053491de608cfd2a077da91c87ac1aa92d185a80b58684fcef8c442018c6e",
@@ -2547,7 +2547,7 @@
         "sha256": "ddce0ead262ab36d3cbf830e58b0d40c1595010179186c5ad6ab61dbe92ce45e"
       },
       "formal_proof": {
-        "authority_sha256": "877df269cba1effd2efa10fd49c6b7c785813e5ec9e01af2437c8247d1be3453",
+        "authority_sha256": "d3ed16967e52798ca68ad5cbb766ede230f110ea8ef9cf03525961b6aed8cb56",
         "path": "dataset6/formal-proof.json"
       },
       "readiness_proof_digest": "8a2ed19cfde52e33ee4343df217a0e91f95fdedcde16ac5b43d3a1b7a71f286d",
@@ -2980,7 +2980,7 @@
     "scope_sha256": "sha256:98107929ea310e7fc304d2631803092e68c01e51fa992da96a3c3118b628eeb4"
   },
   "publication_state": "authoritative",
-  "root_identity_sha256": "a6089accb7133717a227787f2d417349fce5588625a7d81fec12dd19e66acf88",
+  "root_identity_sha256": "5fb579c8fb43f5b7cab13936aaf9c9e75b154bac7d3c5c6beecdaa3999e9f044",
   "schema_version": "d1_d6_deployment_manifest_v1",
   "sealed_root": "数据集/固化数据/d1_d6_sealed_v1"
 }

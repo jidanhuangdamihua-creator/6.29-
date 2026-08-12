@@ -53,7 +53,7 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "a5400da55324f28cbac00d8e2c12210569d07fcf1c6414c79be0c8940365762d",
+  "proof_identity_sha256": "da98ae9ee2e67a4230d316bc945a29f2ee0f6d2cb2564bb2f04e9eadd054e39c",
   "readiness_proof_digest": "bf07e2c088a9d99cb829151e8b18fabe9bbeef08f441f2dee00ab3dfaed3398c",
   "readiness_result": {
     "failure_code": null,
@@ -281,9 +281,39 @@
   },
   "supporting_proof_files": [
     {
+      "path": "dataset3/adopt_validation_report.json",
+      "sha256": "b08d6626fb83070b42e78a75ea6a786df582f0dc8650acb9ced4b1584c792aff",
+      "size_bytes": 2341
+    },
+    {
+      "path": "dataset3/calendarization_audit.json",
+      "sha256": "b73a8cd557fc42ca15c153b3b87900ca123f4d0945b02b740b93acec73abef11",
+      "size_bytes": 196
+    },
+    {
+      "path": "dataset3/knn_schema.json",
+      "sha256": "06f4d97702ec8f0b6abc913685c87d1437a01445e189eb2da180e06b4c5a335b",
+      "size_bytes": 616
+    },
+    {
       "path": "dataset3/manifest.json",
       "sha256": "7c221852f9616d82d533710bf9d765cb683ab4189c4ad8acf767709884dbab1d",
       "size_bytes": 3295
+    },
+    {
+      "path": "dataset3/predictor_schema.json",
+      "sha256": "179e0d2895d2deac55f4d250a2d99af310441f65055cb71385134bda34478005",
+      "size_bytes": 969
+    },
+    {
+      "path": "dataset3/provenance.json",
+      "sha256": "c476cd702915848a27fabaf49e627169b8def842ad266fdba6ce9f058d6b7ac7",
+      "size_bytes": 886
+    },
+    {
+      "path": "dataset3/source_sales_canonicalization.json",
+      "sha256": "36a2fb0c81fc3e22710cfe8ee11561ac422ea5beb9bdede728f8aff3f602f31f",
+      "size_bytes": 150
     },
     {
       "path": "dataset3/source_schema.json",
@@ -294,6 +324,11 @@
       "path": "dataset3/target_schema.json",
       "sha256": "d19ce6b7b14577a722754af5c2bca97914586f08747100c535bbc780a8336d95",
       "size_bytes": 1178
+    },
+    {
+      "path": "dataset3/validation_report.json",
+      "sha256": "b08d6626fb83070b42e78a75ea6a786df582f0dc8650acb9ced4b1584c792aff",
+      "size_bytes": 2341
     }
   ],
   "target": {

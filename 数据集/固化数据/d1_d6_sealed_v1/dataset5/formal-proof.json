@@ -204,7 +204,7 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "4319b790801585f1da70185b2a67d1b7c4842264defb2023360c89eb9c72481c",
+  "proof_identity_sha256": "69b749f337c6de78ae3a11b08c616683500fc3e94b18400ceb903bcb3a220d43",
   "readiness_proof_digest": "a0a053491de608cfd2a077da91c87ac1aa92d185a80b58684fcef8c442018c6e",
   "readiness_result": {
     "failure_code": null,
@@ -525,6 +525,16 @@
   },
   "supporting_proof_files": [
     {
+      "path": "dataset5/adopt_validation_report.json",
+      "sha256": "8adc4c6bd1b24c2c6ed70be3e4438a48901f9147e7f918d5308bddf9c701da37",
+      "size_bytes": 2557
+    },
+    {
+      "path": "dataset5/calendarization_audit.json",
+      "sha256": "b73a8cd557fc42ca15c153b3b87900ca123f4d0945b02b740b93acec73abef11",
+      "size_bytes": 196
+    },
+    {
       "path": "dataset5/knn_schema.json",
       "sha256": "0c692a9c6c35deb19f9133446c028e11a6031ddc97e18b1c886897e2ff5c0bda",
       "size_bytes": 525
@@ -535,6 +545,26 @@
       "size_bytes": 4117
     },
     {
+      "path": "dataset5/predictor_schema.json",
+      "sha256": "567a42911b6602be2d21b43729afbe61463c1b7f69c12f8069e394f90f1f9d73",
+      "size_bytes": 1091
+    },
+    {
+      "path": "dataset5/prepared_180day_source_manifest.json",
+      "sha256": "2de1721493ae2519f7804ac879167e7d2775c11b341a1864ec01ef5e0a3a656d",
+      "size_bytes": 5163
+    },
+    {
+      "path": "dataset5/provenance.json",
+      "sha256": "e5da0069da8605c42afe64f0e38e4c6fa04212856406412d2e51d4fe8eedfd33",
+      "size_bytes": 890
+    },
+    {
+      "path": "dataset5/source_sales_canonicalization.json",
+      "sha256": "36a2fb0c81fc3e22710cfe8ee11561ac422ea5beb9bdede728f8aff3f602f31f",
+      "size_bytes": 150
+    },
+    {
       "path": "dataset5/source_schema.json",
       "sha256": "7a268fefaf5c15c6d56079496316c2756edd5a0290e10a1c21696ada425542f0",
       "size_bytes": 1773
@@ -543,6 +573,11 @@
       "path": "dataset5/target_schema.json",
       "sha256": "7a268fefaf5c15c6d56079496316c2756edd5a0290e10a1c21696ada425542f0",
       "size_bytes": 1773
+    },
+    {
+      "path": "dataset5/validation_report.json",
+      "sha256": "8adc4c6bd1b24c2c6ed70be3e4438a48901f9147e7f918d5308bddf9c701da37",
+      "size_bytes": 2557
     }
   ],
   "target": {
