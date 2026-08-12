@@ -1,7 +1,7 @@
 {
-  "consumer_fingerprint": "9bb48a537fec34f2987a622c7462b4d524af9b2dcb85ff70db42dd69be0452e6",
+  "consumer_fingerprint": "fc04f0645bcf5c9005eb141ea1e0c99b3be083ea53987e994756c7bdc58a9aed",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "f88b96b88e820de7de98772332f64f60176b9ca569cab121daf991d1fa977ed6",
+    "code_inventory_digest": "03d93f737bc8f740deec861ae83e7c97d6d73b0e81fdf1d95cadb00c79102062",
     "dataset_id": "D1",
     "readiness_proof_digest": "1363e26b8abb78f4a8cb730acdc78156d7cd4c2934e9b1f7af410306e41c11c8",
     "source_schema_digest": "f1961aa4d31543aa1afd9b8e7030b0af3da8f44c63426419bf6daf7af858a45f",
@@ -142,7 +142,7 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "8085e6874ad3a89378629c59f94ffacbf3e157e5dce7c95937af56244c2c45fe",
+  "proof_identity_sha256": "7ea59529b947f39881c212a841c57e5836032eefe5401a68d76369160f2a5e23",
   "readiness_proof_digest": "1363e26b8abb78f4a8cb730acdc78156d7cd4c2934e9b1f7af410306e41c11c8",
   "readiness_result": {
     "failure_code": null,
@@ -307,34 +307,9 @@
   },
   "supporting_proof_files": [
     {
-      "path": "dataset1/calendarization_audit.json",
-      "sha256": "9b22c4adab810c5b08316451051ae05499c4d8751c20701cb2fad2581e8f0308",
-      "size_bytes": 410
-    },
-    {
-      "path": "dataset1/knn_schema.json",
-      "sha256": "a05a287b6d1e443dec0198ec6ff1ac6f44a4bc87d91fdf5df21bdbc937782af4",
-      "size_bytes": 319
-    },
-    {
       "path": "dataset1/manifest.json",
       "sha256": "f0d7a2f2b72e7707a9983e3adee1886d57a5cf849666b65ba8c0cc75fee31e9d",
       "size_bytes": 3050
-    },
-    {
-      "path": "dataset1/predictor_schema.json",
-      "sha256": "216864633db839586bbfe1a7e9c917747924b096fa3ed5e1a1fd3b6dad29aff4",
-      "size_bytes": 841
-    },
-    {
-      "path": "dataset1/provenance.json",
-      "sha256": "56ec8740839f6085496c99345af3f18feb68f4afacd9b3ad61712b31d995a4d8",
-      "size_bytes": 343
-    },
-    {
-      "path": "dataset1/source_sales_canonicalization.json",
-      "sha256": "2fbf62238cb388f0cf7007635ec02331037e25523ec14bc2b52fcfc0b8bb8bd5",
-      "size_bytes": 408
     },
     {
       "path": "dataset1/source_schema.json",
@@ -345,11 +320,6 @@
       "path": "dataset1/target_schema.json",
       "sha256": "ceb4415cd7090f692d4058f1373da751573a6775edeb46ce1a28b1f314fc15a3",
       "size_bytes": 765
-    },
-    {
-      "path": "dataset1/validation_report.json",
-      "sha256": "3745911a9e393fb9ba2e76b05a5fdafd4faf23db6cdeb454c203a87cb2981152",
-      "size_bytes": 491
     }
   ],
   "target": {

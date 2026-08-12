@@ -1,7 +1,7 @@
 {
-  "consumer_fingerprint": "66c029b84b95b0581ea80694d7bc067f7ab804f6d24e15527dba7bd44d61a954",
+  "consumer_fingerprint": "3c370b616dfa17366d9613c65a0ff022580b43c9d628748b066d7e899f6bbe52",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "f88b96b88e820de7de98772332f64f60176b9ca569cab121daf991d1fa977ed6",
+    "code_inventory_digest": "03d93f737bc8f740deec861ae83e7c97d6d73b0e81fdf1d95cadb00c79102062",
     "dataset_id": "D2",
     "readiness_proof_digest": "bd27049d5c58e8f552b61c41514c6a7d7659f5f335b11ccb1619a99ef0ff98fb",
     "source_schema_digest": "45930c02b0aecb6df41c285311a162e4ead56f656d4f9f809400dbafc1faec4f",
@@ -284,7 +284,7 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "c9b585540489b72698f66c7d0083d0debf071da99df46947e9e3d98c0d779638",
+  "proof_identity_sha256": "5ecf34b529d893a753ca1e4f0477cd45fa39e479b34bad2280b5adb944a56d27",
   "readiness_proof_digest": "bd27049d5c58e8f552b61c41514c6a7d7659f5f335b11ccb1619a99ef0ff98fb",
   "readiness_result": {
     "failure_code": null,
@@ -467,29 +467,14 @@
       "size_bytes": 5616
     },
     {
-      "path": "dataset2/knn_schema.json",
-      "sha256": "86f86b3adc637b24b856c58e5dc8bbf6d1cfe5bde52f254b2338bec4a9f422f1",
-      "size_bytes": 771
-    },
-    {
       "path": "dataset2/manifest.json",
       "sha256": "984cab0a0c8e7bcc2fdb222da39e1d21fae134125e0db4753ff1e3fbdc999b99",
       "size_bytes": 7468
     },
     {
-      "path": "dataset2/predictor_schema.json",
-      "sha256": "1015715a2d2e0cfe73e5d0238f033de3802bed92c77958cd5ea817a6948555d5",
-      "size_bytes": 841
-    },
-    {
       "path": "dataset2/provenance.json",
       "sha256": "6fc7cbd346b7dc29530fc10a927d85683262231898fc2a8a8b13eff56775bd1e",
       "size_bytes": 4834
-    },
-    {
-      "path": "dataset2/source_sales_canonicalization.json",
-      "sha256": "9013f71c5b9c2d7907b01ad159cb58df963061177df750b7d4ee2bdd6fbffb23",
-      "size_bytes": 943
     },
     {
       "path": "dataset2/source_schema.json",

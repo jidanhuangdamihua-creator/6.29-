@@ -1,7 +1,7 @@
 {
-  "consumer_fingerprint": "01adef18f69c0f94989b2a04c386413a43b77ded4fa8fab1f6382309177cc435",
+  "consumer_fingerprint": "d4831dd35bdb3509c5be9e62e493775bb9fd2c950be7603412d6e016ce6b8d60",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "f88b96b88e820de7de98772332f64f60176b9ca569cab121daf991d1fa977ed6",
+    "code_inventory_digest": "03d93f737bc8f740deec861ae83e7c97d6d73b0e81fdf1d95cadb00c79102062",
     "dataset_id": "D6",
     "readiness_proof_digest": "8a2ed19cfde52e33ee4343df217a0e91f95fdedcde16ac5b43d3a1b7a71f286d",
     "source_schema_digest": "d9ced790cfe72d43b3e76b033fbe8f2d92d124a3aa7f631391741ee855fb5932",
@@ -202,7 +202,7 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "f74361fd3100589c1d9669fa902c572398e5976863ce1bb0ccdbe174326ae829",
+  "proof_identity_sha256": "877df269cba1effd2efa10fd49c6b7c785813e5ec9e01af2437c8247d1be3453",
   "readiness_proof_digest": "8a2ed19cfde52e33ee4343df217a0e91f95fdedcde16ac5b43d3a1b7a71f286d",
   "readiness_result": {
     "failure_code": null,
@@ -549,39 +549,9 @@
   },
   "supporting_proof_files": [
     {
-      "path": "dataset6/adopt_validation_report.json",
-      "sha256": "486fc07ae89c52b17d21c2e351d3a4ff2370230d9b9d03ce8202dbdbdee20a98",
-      "size_bytes": 2667
-    },
-    {
-      "path": "dataset6/calendarization_audit.json",
-      "sha256": "b73a8cd557fc42ca15c153b3b87900ca123f4d0945b02b740b93acec73abef11",
-      "size_bytes": 196
-    },
-    {
-      "path": "dataset6/knn_schema.json",
-      "sha256": "19ad9b5a8fbcddb69e4c0a569f60a1e3c1c436367a4d4340d54b8887b5741845",
-      "size_bytes": 422
-    },
-    {
       "path": "dataset6/manifest.json",
       "sha256": "ddce0ead262ab36d3cbf830e58b0d40c1595010179186c5ad6ab61dbe92ce45e",
       "size_bytes": 3301
-    },
-    {
-      "path": "dataset6/predictor_schema.json",
-      "sha256": "0c1a17565891b3876b7a8746600c2ed2864f9fc39d31fa1a7ccb03ebd199e0fc",
-      "size_bytes": 1332
-    },
-    {
-      "path": "dataset6/provenance.json",
-      "sha256": "7e983bb76d000ec3d0952a3073a4d2876b740afd2a1164fd0cd1f1177f4f41a7",
-      "size_bytes": 888
-    },
-    {
-      "path": "dataset6/source_sales_canonicalization.json",
-      "sha256": "36a2fb0c81fc3e22710cfe8ee11561ac422ea5beb9bdede728f8aff3f602f31f",
-      "size_bytes": 150
     },
     {
       "path": "dataset6/source_schema.json",
@@ -592,11 +562,6 @@
       "path": "dataset6/target_schema.json",
       "sha256": "859904ab9ffe0dfd22fdc61dde63aa4a9a5a4b198759b9242fd95068724dcf9c",
       "size_bytes": 1968
-    },
-    {
-      "path": "dataset6/validation_report.json",
-      "sha256": "486fc07ae89c52b17d21c2e351d3a4ff2370230d9b9d03ce8202dbdbdee20a98",
-      "size_bytes": 2667
     }
   ],
   "target": {
