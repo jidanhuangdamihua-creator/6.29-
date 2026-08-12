@@ -276,4 +276,7 @@ class SourceIdentityRegressionTest(TestCase):
         self.assertIn("date", source_frame.columns)
         self.assertFalse(set(group_cols).intersection(result["rfe_info"]["selected_feature_cols"]))
         self.assertFalse(set(group_cols).intersection(captured["feature_cols"]))
-        self.assertTrue(source_frame.attrs["protocol_actual_cnn_audit"][source_key]["bound"])
+        from src.utils.dataframe_attrs import get_protocol_frame_context
+
+        audit = get_protocol_frame_context(source_frame).actual_cnn_audit
+        self.assertTrue(audit[source_key]["bound"])

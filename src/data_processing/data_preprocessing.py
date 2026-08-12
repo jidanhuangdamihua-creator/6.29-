@@ -15,6 +15,13 @@ from sklearn.preprocessing import MinMaxScaler
 
 from dataset_registry import get_dataset_profile, normalize_dataset_name
 from src.utils.finite_diagnostics import validate_feature_frame_finite, validate_finite_array
+from src.utils.dataframe_attrs import (
+    context_with,
+    copy_frame_with_lightweight_attrs,
+    get_protocol_frame_context,
+    lightweight_frame_attrs,
+    set_protocol_frame_context,
+)
 
 try:
     from src.utils.environment import setup_logging
@@ -729,6 +736,7 @@ def temporal_split_by_ratio_or_dates(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd
     if mode == "paper_split_protocol":
         mode = "days"
         split_config = {"train_days": 15, "val_days": 15, "test_days": 180}
+    df = copy_frame_with_lightweight_attrs(df, deep=False)
 
     logger.info("[temporal_split_by_ratio_or_dates] Start. role=%s mode=%s", role, mode)
 
@@ -754,7 +762,8 @@ def temporal_split_by_ratio_or_dates(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd
         val_dates = eval_dates[train_days:train_days + val_days]
         test_dates = eval_dates[train_days + val_days:]
 
-        if role == "target" and df.attrs.get("protocol_sample_manifest") is not None:
+        context = get_protocol_frame_context(df)
+        if role == "target" and context is not None and context.sample_manifest is not None:
             observed_end = df.attrs.get("knn_observed_end")
             if observed_end is not None and len(test_dates) > 0:
                 context_start = pd.Timestamp(observed_end).normalize() + pd.Timedelta(days=1)
@@ -779,7 +788,7 @@ def temporal_split_by_ratio_or_dates(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd
             val_ratio = float(split_config.get("val_ratio", 0.1))
         train_df, val_df, test_df = _split_by_ratio(df, train_ratio, val_ratio)
 
-    inherited_attrs = dict(df.attrs)
+    inherited_attrs = lightweight_frame_attrs(df.attrs)
     for partition, split_frame in (
         ("train", train_df),
         ("validation", val_df),
@@ -1003,9 +1012,9 @@ def normalize_features(
         )
 
     scaler = MinMaxScaler()
-    train_scaled = train_df.copy()
-    val_scaled = val_df.copy()
-    test_scaled = test_df.copy()
+    train_scaled = copy_frame_with_lightweight_attrs(train_df)
+    val_scaled = copy_frame_with_lightweight_attrs(val_df)
+    test_scaled = copy_frame_with_lightweight_attrs(test_df)
 
     # 先显式转为float，避免将浮点归一化结果写回整型列触发兼容性告警。
     for frame in (train_scaled, val_scaled, test_scaled):
@@ -1028,12 +1037,23 @@ def normalize_features(
         (val_df, val_scaled),
         (test_df, test_scaled),
     ):
-        if raw_frame.attrs.get("protocol_actual_source_key") is not None:
-            scaled_frame.attrs = dict(raw_frame.attrs)
-            scaled_frame.attrs["protocol_raw_partition"] = raw_frame.copy()
-            scaled_frame.attrs["protocol_fitted_scaler"] = scaler
-            scaled_frame.attrs["protocol_scaler_feature_cols"] = tuple(
-                resolved_feature_columns
+        raw_context = get_protocol_frame_context(raw_frame)
+        actual_source_key = (
+            raw_context.actual_source_key
+            if raw_context is not None
+            else raw_frame.attrs.get("protocol_actual_source_key")
+        )
+        if actual_source_key is not None:
+            scaled_frame.attrs = lightweight_frame_attrs(raw_frame.attrs)
+            set_protocol_frame_context(
+                scaled_frame,
+                context_with(
+                    raw_context,
+                    actual_source_key=tuple(actual_source_key),
+                    raw_partition=raw_frame,
+                    fitted_scaler=scaler,
+                    scaler_feature_cols=tuple(resolved_feature_columns),
+                ),
             )
 
     if validate_finite:
@@ -1082,7 +1102,8 @@ def build_tabular_sequence(
     if window_size <= 0:
         raise ValueError("window_size must be positive")
 
-    ordered = df.sort_values(["entity_id", "item_id", "date"]).reset_index(drop=True)
+    working_df = copy_frame_with_lightweight_attrs(df, deep=False)
+    ordered = working_df.sort_values(["entity_id", "item_id", "date"]).reset_index(drop=True)
     if feature_columns is None:
         logger.warning(
             "[build_tabular_sequence] 未提供显式特征列表，已回退到自动推断，结果可能与 KNN 选源特征不一致"
@@ -1127,7 +1148,8 @@ def build_tabular_sequence(
         X = np.empty((0, window_size, len(resolved_feature_columns)), dtype=np.float32)
         y = np.empty((0,), dtype=np.float32)
 
-    manifest = df.attrs.get("protocol_sample_manifest")
+    context = get_protocol_frame_context(working_df)
+    manifest = context.sample_manifest if context is not None else None
     if manifest is not None and df.attrs.get("temporal_partition") == "test":
         records = tuple(manifest.for_horizon(int(horizon)))
         actual_date_pairs = []
@@ -1151,17 +1173,20 @@ def build_tabular_sequence(
                 f"actual={len(actual_date_pairs)} expected={len(expected_date_pairs)}"
             )
 
-    if df.attrs.get("protocol_actual_source_key") is not None:
+    if context is not None and context.actual_source_key is not None:
         from src.protocols.provenance import validate_actual_cnn_arrays_against_raw
 
         validate_actual_cnn_arrays_against_raw(
-            df,
+            working_df,
             input_tensor=X,
             labels=y,
             feature_cols=resolved_feature_columns,
             window_size=window_size,
             horizon=horizon,
         )
+        validated_context = get_protocol_frame_context(working_df)
+        if validated_context is not None:
+            set_protocol_frame_context(df, validated_context)
 
     if validate_finite:
         validate_finite_array(X, name="X")

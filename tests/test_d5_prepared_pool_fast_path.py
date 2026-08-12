@@ -9,6 +9,7 @@ from src.protocols.runner_adapter import configure_protocol_frames
 from src.protocols.source_history import build_exact_source_history_candidate_frame
 from src.protocols.knn_frames import build_observed_knn_frame
 from src.utils import entity_experiment
+from src.utils.dataframe_attrs import get_protocol_frame_context
 
 
 class _DeepcopyBomb:
@@ -145,8 +146,9 @@ def test_prepared_pool_path_keeps_model_source_and_never_calls_full_groupby(monk
 
     expected_source_rows = int((source["date"] <= pd.Timestamp("2020-01-30")).sum())
     assert len(configured_source) == expected_source_rows
-    assert configured_source.attrs["prepared_daily_sequence_pool"] is pool
-    assert configured_source.attrs["protocol_candidate_keys"] == (("48", "S1"),)
+    context = get_protocol_frame_context(configured_source)
+    assert context.prepared_pool is pool
+    assert context.candidate_keys == (("48", "S1"),)
 
 
 def test_fallback_candidate_groupby_also_ignores_large_source_attrs():

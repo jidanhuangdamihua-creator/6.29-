@@ -24,6 +24,7 @@ from src.utils.d4_d6_runtime import (
     validate_runtime_target_domain,
 )
 from src.utils import entity_experiment
+from src.utils.dataframe_attrs import get_protocol_frame_context
 from src.utils.result_schema import (
     REGISTERED_RESULT_EXTRA_COLUMNS_BY_SCHEMA_FAMILY,
     align_d4_d6_result_records,
@@ -99,7 +100,7 @@ def _candidate_keys(
         observed_start="2020-01-01",
         prepared_pool=pool,
     )
-    return configured_source.attrs["protocol_candidate_keys"]
+    return get_protocol_frame_context(configured_source).candidate_keys
 
 
 class Dataset4CandidateProtocolTest(unittest.TestCase):
@@ -325,7 +326,7 @@ class Dataset4CandidateProtocolTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            configured_source.attrs["protocol_candidate_keys"],
+            get_protocol_frame_context(configured_source).candidate_keys,
             (("166", "259"), ("167", "260")),
         )
 

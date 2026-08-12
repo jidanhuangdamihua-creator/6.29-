@@ -8,6 +8,7 @@ import pandas as pd
 
 from src.protocols.experiment_protocol import ProtocolViolation
 from src.protocols.runner_adapter import configure_protocol_frames, source_key_mask
+from src.utils.dataframe_attrs import get_protocol_frame_context
 from src.transfer_methods.source_failure_tolerance import enforce_formal_source_success
 from src.experiment.experiment_runner import run_msml_rfe_experiment
 
@@ -85,7 +86,7 @@ class RunnerProtocolIntegrationTest(unittest.TestCase):
             group_cols=("store_id", "item_id"),
             observed_start="2017-06-01",
         )
-        self.assertEqual(len(source.attrs["protocol_candidate_keys"]), 27)
+        self.assertEqual(len(get_protocol_frame_context(source).candidate_keys), 27)
         self.assertEqual(configured_target.attrs["protocol_target_key"], ("1", "10"))
 
         incomplete = complete[complete["entity_id"] == 1]
@@ -129,9 +130,12 @@ class RunnerProtocolIntegrationTest(unittest.TestCase):
             grouping_col="family",
             observed_start="2020-01-01",
         )
-        self.assertEqual(without.attrs["protocol_candidate_keys"], (("48", "1159415"),))
         self.assertEqual(
-            with_sharing.attrs["protocol_candidate_keys"],
+            get_protocol_frame_context(without).candidate_keys,
+            (("48", "1159415"),),
+        )
+        self.assertEqual(
+            get_protocol_frame_context(with_sharing).candidate_keys,
             (("48", "1159415"), ("49", "1159415")),
         )
 

@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import src.source_selection.source_selector as source_selector
 from scripts.run_full_paper_experiments import _project_modeling_frames
 from src.protocols.candidate_pool import select_daily_sequence_sources
 from src.protocols.experiment_protocol import (
@@ -15,6 +16,9 @@ from src.protocols.experiment_protocol import (
 from src.protocols.knn_frames import get_configured_knn_frame
 from src.protocols.runner_adapter import configure_protocol_frames
 from src.source_selection.source_selector import SourceSelector
+from src.utils.dataframe_attrs import (
+    get_protocol_frame_context,
+)
 
 
 ORIGIN = pd.Timestamp("2018-06-30")
@@ -201,7 +205,7 @@ def test_d2_configured_forecast_consumer_excludes_real_promo() -> None:
     )
 
     historical = get_configured_knn_frame(configured_target, "target")
-    forecast = configured_target.attrs["forecast_consumer_frame"]
+    forecast = get_protocol_frame_context(configured_target).forecast_frame
     assert historical.attrs["knn_feature_columns"] == list(D2_KNN_FEATURES)
     assert historical["date"].max() == ORIGIN
     assert "promo" in historical.columns
@@ -235,7 +239,7 @@ def test_d2_projection_and_configured_frames_preserve_promo_only_for_history(
     )
     source_observed = get_configured_knn_frame(configured_source, "source")
     target_observed = get_configured_knn_frame(configured_target, "target")
-    forecast = configured_target.attrs["forecast_consumer_frame"]
+    forecast = get_protocol_frame_context(configured_target).forecast_frame
 
     assert "promo" not in modeling_feature_cols
     assert list(source_observed.attrs["knn_feature_columns"]) == list(D2_KNN_FEATURES)
@@ -274,7 +278,9 @@ def test_d2_selection_metadata_keeps_window_days_separate_from_signature_dim() -
     assert metadata["target_signature_dim"] == 60
 
 
-def test_d2_sales_only_configured_metadata_fails_closed() -> None:
+def test_d2_sales_only_configured_metadata_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from tests.test_d1_d2_knn_window_closure import _strict_frames
 
     source, target = _strict_frames("D2")
@@ -286,12 +292,28 @@ def test_d2_sales_only_configured_metadata_fails_closed() -> None:
         group_cols=GROUP_COLS,
         observed_start=None,
     )
-    configured_knn = configured_source.attrs["protocol_knn_observed_frame"].copy()
-    configured_knn.attrs = configured_knn.attrs.copy()
+    context = get_protocol_frame_context(configured_source)
+    configured_knn = context.observed_frames["source"]
     configured_knn.attrs["knn_feature_columns"] = ["sales"]
-    configured_source.attrs["protocol_knn_observed_frame"] = configured_knn
 
-    with pytest.raises(ProtocolViolation, match="feature metadata"):
+    retrieved_builder_frames = []
+    real_get_configured_knn_frame = source_selector.get_configured_knn_frame
+
+    def record_builder_owned_frame(frame, role):
+        observed = real_get_configured_knn_frame(frame, role)
+        retrieved_builder_frames.append((role, id(observed)))
+        return observed
+
+    monkeypatch.setattr(
+        source_selector,
+        "get_configured_knn_frame",
+        record_builder_owned_frame,
+    )
+
+    with pytest.raises(
+        ProtocolViolation,
+        match="source configured KNN feature metadata",
+    ) as exc_info:
         SourceSelector().select_top_k_sources(
             configured_target,
             configured_source,
@@ -299,6 +321,16 @@ def test_d2_sales_only_configured_metadata_fails_closed() -> None:
             k=3,
             group_cols=GROUP_COLS,
         )
+    assert [role for role, _frame_id in retrieved_builder_frames] == ["target", "source"]
+    assert all(
+        frame_id != id(context.observed_frames[role])
+        for role, frame_id in retrieved_builder_frames
+    )
+    assert any(
+        entry.name == "_select_with_shared_protocol"
+        and entry.path.name == "source_selector.py"
+        for entry in exc_info.traceback
+    )
 
 
 def test_d2_missing_or_misordered_features_fail_closed() -> None:

@@ -44,6 +44,10 @@ from src.protocols.provenance import (
     extract_selected_source_slices,
     validate_cnn_tensor_provenance,
 )
+from src.utils.dataframe_attrs import (
+    get_protocol_frame_context,
+    promote_protocol_frame_context,
+)
 
 try:
     from src.utils.environment import setup_logging
@@ -148,12 +152,33 @@ class SourceSelector:
             "protocol_dataset_id",
             "protocol_scenario",
             "protocol_target_key",
-            "protocol_candidate_keys",
             "protocol_group_cols",
             "knn_observed_start",
             "knn_observed_end",
             "source_observation_cutoff",
         )
+        promote_protocol_frame_context(target_df)
+        promote_protocol_frame_context(source_df)
+        target_context = get_protocol_frame_context(target_df)
+        source_context = get_protocol_frame_context(source_df)
+        if (
+            target_context is None
+            or source_context is None
+            or not target_context.candidate_keys
+            or not source_context.candidate_keys
+        ):
+            raise ProtocolViolation("shared protocol context is missing candidate keys")
+        target_candidate_keys = tuple(
+            normalize_source_key(key) for key in target_context.candidate_keys
+        )
+        source_candidate_keys = tuple(
+            normalize_source_key(key) for key in source_context.candidate_keys
+        )
+        if target_candidate_keys != source_candidate_keys:
+            raise ProtocolViolation(
+                "target/source protocol candidate scope mismatch"
+            )
+        candidate_keys = target_candidate_keys
         for role, frame in (("target", target_df), ("source", source_df)):
             missing = [name for name in required_attrs if name not in frame.attrs]
             if missing:
@@ -250,7 +275,9 @@ class SourceSelector:
                 raise ProtocolViolation(
                     f"{role} configured KNN frame contains dates outside the protocol window"
                 )
-        prepared_pool = source_df.attrs.get("prepared_daily_sequence_pool")
+        prepared_pool = (
+            source_context.prepared_pool if source_context is not None else None
+        )
         result = select_daily_sequence_sources(
             target_df=knn_target_df,
             source_df=knn_source_df,
@@ -258,7 +285,7 @@ class SourceSelector:
             protocol=protocol,
             scenario=target_df.attrs["protocol_scenario"],
             target_key=target_df.attrs["protocol_target_key"],
-            candidate_keys=target_df.attrs["protocol_candidate_keys"],
+            candidate_keys=candidate_keys,
             group_cols=configured_group_cols,
             observed_start=target_df.attrs["knn_observed_start"],
             feature_cols=knn_feature_columns,
@@ -272,11 +299,13 @@ class SourceSelector:
                 )
             elif all(
                 column in prepared_pool.feature_matrices
-                for column in tuple(model_feature_cols)
+                for column in tuple(dict.fromkeys((*model_feature_cols, *knn_feature_columns)))
             ):
                 provenance_source_df = prepared_pool.selected_frame(
                     result.ordered_source_keys,
-                    feature_cols=model_feature_cols,
+                    feature_cols=tuple(
+                        dict.fromkeys((*model_feature_cols, *knn_feature_columns))
+                    ),
                 )
             # The prepared pool is the KNN authority and intentionally contains
             # only the protocol KNN fields.  Model feature candidates remain a
@@ -329,7 +358,7 @@ class SourceSelector:
             for entry in result.entries
         ]
         excluded = [dict(item) for item in result.excluded_candidates]
-        eligible_candidate_keys = list(target_df.attrs["protocol_candidate_keys"])
+        eligible_candidate_keys = list(candidate_keys)
         excluded_candidate_keys = {
             tuple(item["source_key"])
             for item in excluded
@@ -441,8 +470,8 @@ class SourceSelector:
             "consumer_frame_rows": int(len(selected_consumer_frame)),
             "selected_sources_runtime": list(sources),
             "source_skip_diagnostics": excluded,
-            "candidate_source_count": len(target_df.attrs["protocol_candidate_keys"]),
-            "valid_source_count": len(target_df.attrs["protocol_candidate_keys"]) - len(excluded),
+            "candidate_source_count": len(candidate_keys),
+            "valid_source_count": len(candidate_keys) - len(excluded),
             "eligible_candidate_keys": eligible_candidate_keys,
             "valid_30d_candidate_keys": valid_30d_candidate_keys,
             "eligible_candidate_count": len(eligible_candidate_keys),

@@ -14,6 +14,7 @@ from src.protocols.candidate_pool import InsufficientCandidatePoolError
 from src.protocols.experiment_protocol import PROTOCOL_VERSION, ProtocolViolation
 from src.protocols.runner_adapter import configure_protocol_frames
 from src.source_selection.source_selector import SourceSelector
+from src.utils.dataframe_attrs import get_protocol_frame_context
 from src.utils.d4_d6_runtime import (
     apply_runtime_source_domain_policy,
     validate_runtime_target_domain,
@@ -197,7 +198,7 @@ class Dataset4RegenerateRuntimeProtocolParityTest(unittest.TestCase):
         self.assertEqual(target.attrs["protocol_observed_start"], "2024-01-01")
         self.assertEqual(target.attrs["protocol_observed_days"], 30)
         self.assertEqual(
-            _key_set(target.attrs["protocol_candidate_keys"]),
+            _key_set(get_protocol_frame_context(target).candidate_keys),
             {("166", "259"), ("166", "260"), ("166", "261"), ("166", "262")},
         )
 
@@ -329,6 +330,6 @@ class Dataset4RegenerateRuntimeProtocolParityTest(unittest.TestCase):
                 observed_start="2024-01-01",
             )
             self.assertEqual(
-                configured_target.attrs["protocol_candidate_keys"],
+                get_protocol_frame_context(configured_target).candidate_keys,
                 (("166", "259"), ("167", "260")),
             )
