@@ -7,13 +7,27 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
 from dataset_registry import get_dataset_profile, normalize_dataset_name
+from src.protocols.experiment_protocol import ProtocolViolation
+from src.protocols.transformation_identity import (
+    NORMALIZATION_EVIDENCE_ATTR,
+    SEQUENCE_EVIDENCE_ATTR,
+    build_normalization_evidence,
+    build_normalization_identity,
+    build_sequence_evidence,
+    build_sequence_identity,
+    make_sample_boundary,
+    transformation_identity_requested,
+)
+
+if TYPE_CHECKING:
+    from src.protocols.transformation_reuse import TargetTransformationReuseContext
 from src.utils.finite_diagnostics import validate_feature_frame_finite, validate_finite_array
 from src.utils.dataframe_attrs import (
     context_with,
@@ -958,6 +972,7 @@ def normalize_features(
     test_df: pd.DataFrame,
     feature_columns: Optional[Sequence[str]] = None,
     validate_finite: bool = True,
+    reuse_context: "TargetTransformationReuseContext | None" = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, MinMaxScaler, List[str]]:
     """
     对数值特征进行 MinMax 归一化。
@@ -1009,6 +1024,35 @@ def normalize_features(
         )
         validate_feature_frame_finite(
             test_df, resolved_feature_columns, context="pre_normalize_test", stage="pre_normalize_test"
+        )
+
+    identity_requested = tuple(
+        transformation_identity_requested(frame) for frame in (train_df, val_df, test_df)
+    )
+    if any(identity_requested) and not all(identity_requested):
+        raise ProtocolViolation("normalization partitions have inconsistent identity lifecycle markers")
+    if reuse_context is not None:
+        if not all(identity_requested):
+            raise ProtocolViolation("normalization reuse requires formal identity-aware partitions")
+        lookup_identity = build_normalization_identity(
+            train_df,
+            val_df,
+            test_df,
+            feature_cols=resolved_feature_columns,
+            scaler=MinMaxScaler(),
+            target_column="sales",
+        )
+        return reuse_context.normalize(
+            identity=lookup_identity,
+            raw_frames=(train_df, val_df, test_df),
+            heavy_builder=lambda: normalize_features(
+                train_df,
+                val_df,
+                test_df,
+                feature_columns=resolved_feature_columns,
+                validate_finite=validate_finite,
+                reuse_context=None,
+            ),
         )
 
     scaler = MinMaxScaler()
@@ -1067,6 +1111,21 @@ def normalize_features(
             test_scaled, resolved_feature_columns, context="post_normalize_test", stage="post_normalize_test"
         )
 
+    if any(identity_requested):
+        evidence = build_normalization_evidence(
+            train_df,
+            val_df,
+            test_df,
+            train_scaled,
+            val_scaled,
+            test_scaled,
+            feature_cols=resolved_feature_columns,
+            scaler=scaler,
+            target_column="sales",
+        )
+        for scaled_frame in (train_scaled, val_scaled, test_scaled):
+            scaled_frame.attrs[NORMALIZATION_EVIDENCE_ATTR] = evidence
+
     logger.info("[normalize_features] Finished. features=%s", resolved_feature_columns)
     return train_scaled, val_scaled, test_scaled, scaler, resolved_feature_columns
 
@@ -1077,6 +1136,7 @@ def build_tabular_sequence(
     window_size: int = 10,
     feature_columns: Optional[Sequence[str]] = None,
     validate_finite: bool = True,
+    reuse_context: "TargetTransformationReuseContext | None" = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     构建滑窗序列数据。
@@ -1102,8 +1162,39 @@ def build_tabular_sequence(
     if window_size <= 0:
         raise ValueError("window_size must be positive")
 
+    if feature_columns is None:
+        resolved_for_identity = _infer_feature_columns(df)
+    else:
+        resolved_for_identity = [str(col) for col in feature_columns]
+    if reuse_context is not None:
+        lookup_identity = build_sequence_identity(
+            df,
+            feature_cols=resolved_for_identity,
+            horizon=horizon,
+            window_size=window_size,
+            target_column="sales",
+            group_cols=("entity_id", "item_id"),
+            date_col="date",
+            x_dtype="float32",
+            y_dtype="float32",
+        )
+        return reuse_context.sequence(
+            identity=lookup_identity,
+            frame=df,
+            heavy_builder=lambda: build_tabular_sequence(
+                df,
+                horizon=horizon,
+                window_size=window_size,
+                feature_columns=resolved_for_identity,
+                validate_finite=validate_finite,
+                reuse_context=None,
+            ),
+        )
+
     working_df = copy_frame_with_lightweight_attrs(df, deep=False)
-    ordered = working_df.sort_values(["entity_id", "item_id", "date"]).reset_index(drop=True)
+    ordered = working_df.sort_values(
+        ["entity_id", "item_id", "date"], kind="mergesort"
+    ).reset_index(drop=True)
     if feature_columns is None:
         logger.warning(
             "[build_tabular_sequence] 未提供显式特征列表，已回退到自动推断，结果可能与 KNN 选源特征不一致"
@@ -1125,11 +1216,14 @@ def build_tabular_sequence(
     group_cols = ["entity_id", "item_id"]
     x_list: List[np.ndarray] = []
     y_list: List[float] = []
+    sample_evidence = []
 
-    for _, group in ordered.groupby(group_cols, sort=False):
-        g = group.sort_values("date").reset_index(drop=True)
+    for group_key, group in ordered.groupby(group_cols, sort=False):
+        g = group.sort_values("date", kind="mergesort").reset_index(drop=True)
         values = g[resolved_feature_columns].to_numpy(dtype=np.float32)
         sales_values = g["sales"].to_numpy(dtype=np.float32)
+        group_dates = pd.to_datetime(g["date"], errors="raise", utc=True)
+        normalized_group_key = group_key if isinstance(group_key, tuple) else (group_key,)
         n = len(g)
         max_end = n - horizon
 
@@ -1140,6 +1234,16 @@ def build_tabular_sequence(
                 continue
             x_list.append(values[start_idx : end_idx + 1])
             y_list.append(float(sales_values[target_idx]))
+            sample_evidence.append(
+                make_sample_boundary(
+                    group_key=normalized_group_key,
+                    window_start=group_dates.iloc[start_idx],
+                    window_end=group_dates.iloc[end_idx],
+                    label_date=group_dates.iloc[target_idx],
+                    horizon=horizon,
+                    partition_role=str(df.attrs.get("temporal_partition", "unsplit")),
+                )
+            )
 
     if x_list:
         X = np.asarray(x_list, dtype=np.float32)
@@ -1154,7 +1258,7 @@ def build_tabular_sequence(
         records = tuple(manifest.for_horizon(int(horizon)))
         actual_date_pairs = []
         for _, group in ordered.groupby(group_cols, sort=False):
-            g = group.sort_values("date").reset_index(drop=True)
+            g = group.sort_values("date", kind="mergesort").reset_index(drop=True)
             dates = pd.to_datetime(g["date"], errors="raise").dt.strftime("%Y-%m-%d")
             max_end = len(g) - horizon
             for end_idx in range(window_size - 1, max_end):
@@ -1191,6 +1295,21 @@ def build_tabular_sequence(
     if validate_finite:
         validate_finite_array(X, name="X")
         validate_finite_array(y, name="y")
+
+    if NORMALIZATION_EVIDENCE_ATTR in df.attrs:
+        sequence_evidence = build_sequence_evidence(
+            df,
+            X,
+            y,
+            feature_cols=resolved_feature_columns,
+            horizon=horizon,
+            window_size=window_size,
+            samples=sample_evidence,
+            target_column="sales",
+            group_cols=group_cols,
+            date_col="date",
+        )
+        df.attrs[SEQUENCE_EVIDENCE_ATTR] = sequence_evidence
 
     logger.info("[build_tabular_sequence] Finished. X_shape=%s y_shape=%s", X.shape, y.shape)
     return X, y

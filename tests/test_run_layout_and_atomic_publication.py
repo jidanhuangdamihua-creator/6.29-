@@ -7,8 +7,8 @@ import subprocess
 import pandas as pd
 import pytest
 
-from src.constants import SCHEMA_FAMILY_D1_D3
-from src.protocols.experiment_protocol import FORMAL_METHODS
+from src.constants import SCHEMA_FAMILY_D1_D3, SCHEMA_FAMILY_D4_D6
+from src.protocols.experiment_protocol import FORMAL_METHODS, formal_target_entity_keys
 from src.utils.result_acceptance import (
     AcceptanceScope,
     AggregateProfile,
@@ -20,6 +20,7 @@ from src.utils.run_artifacts import (
     CodeIdentity,
     discover_code_identity,
     publish_formal_cell_frame,
+    publish_formal_cell_output_frame,
     publish_global_aggregate,
     publish_mode_matrix,
     resumable_formal_cell,
@@ -138,7 +139,6 @@ def test_accepted_cell_is_atomic_hashed_and_resume_requires_same_code(tmp_path: 
         expected=expected,
         code_identity=CodeIdentity("different", True, "1" * 64),
     )
-
     stable.write_text(stable.read_text(encoding="utf-8") + "\n", encoding="utf-8")
     assert not resumable_formal_cell(
         stable_path=stable,
@@ -146,6 +146,53 @@ def test_accepted_cell_is_atomic_hashed_and_resume_requires_same_code(tmp_path: 
         expected=expected,
         code_identity=identity,
     )
+
+
+def test_d4_formal_publication_derives_result_track_from_source_pool_track(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    targets = formal_target_entity_keys(4)
+    frame = pd.concat(
+        [
+            _valid_cell().assign(
+                dataset_id="D4",
+                target_entity_key=target,
+                schema_family=SCHEMA_FAMILY_D4_D6,
+                protocol_track="extended",
+                source_pool_track="extended",
+                domain_filter_applied_to_source=False,
+                domain_filter_scope="target_only",
+                domain_filter_column="first_category_id",
+                domain_filter_value=15,
+                target_domain_validation_passed=True,
+                target_domain_validation_target_count=len(targets),
+                source_pool_policy="without_information_sharing_same_store",
+            )
+            for target in targets
+        ],
+        ignore_index=True,
+    )
+    stable = tmp_path / "dataset4_without_results.csv"
+    monkeypatch.setattr(
+        "src.utils.run_artifacts.discover_code_identity",
+        lambda _root: CodeIdentity("abc", False, "0" * 64),
+    )
+
+    publish_formal_cell_output_frame(
+        frame,
+        stable_path=stable,
+        dataset_id=4,
+        mode="without",
+        targets=targets,
+        horizon=1,
+        seed=42,
+        project_root=tmp_path,
+    )
+
+    published = pd.read_csv(stable, keep_default_na=False)
+    assert set(published["protocol_track"]) == {"strict_paper"}
+    assert set(published["source_pool_track"]) == {"extended"}
 
 
 def test_verify_cell_requires_passing_acceptance_sidecar(tmp_path: Path) -> None:
@@ -252,6 +299,16 @@ def test_mode_and_selection_aggregate_are_also_acceptance_gated(tmp_path: Path) 
     assert invalid_mode.is_file()
     assert layout.mode_manifest(1, "without").is_file()
 
+    publisher_identity = CodeIdentity("publisher", False, "3" * 64)
+    with pytest.raises(ResultAcceptanceError, match="code identity"):
+        verify_formal_mode_artifact(
+            invalid_mode,
+            acceptance_path=layout.mode_acceptance_report(1, "without"),
+            cell_paths=cell_paths,
+            expected=mode_expected,
+            code_identity=publisher_identity,
+        )
+
     aggregate_expected = ExpectedResultContract(
         **{
             **mode_expected.__dict__,
@@ -263,10 +320,28 @@ def test_mode_and_selection_aggregate_are_also_acceptance_gated(tmp_path: Path) 
         [invalid_mode],
         stable_path=layout.aggregate_result,
         expected=aggregate_expected,
-        code_identity=identity,
+        code_identity=publisher_identity,
+        upstream_code_identity=identity,
+        upstream_run_identity="f" * 64,
     )
     assert layout.aggregate_result.is_file()
     assert layout.aggregate_manifest.is_file()
+    aggregate_manifest = json.loads(
+        layout.aggregate_manifest.read_text(encoding="utf-8")
+    )
+    assert aggregate_manifest["code_identity"] == publisher_identity.to_dict()
+    assert aggregate_manifest["publisher_code_identity"] == publisher_identity.to_dict()
+    assert aggregate_manifest["upstream_producer_code_identity"] == identity.to_dict()
+    assert aggregate_manifest["upstream_run_identity"] == "f" * 64
+    assert aggregate_manifest["input_mode_artifacts"] == [
+        {
+            "path": str(invalid_mode),
+            "artifact_type": "formal_mode_matrix",
+            "sha256": json.loads(
+                layout.mode_manifest(1, "without").read_text(encoding="utf-8")
+            )["sha256"],
+        }
+    ]
 
 
 def test_verify_mode_rejects_manifest_hash_mismatch(tmp_path: Path) -> None:

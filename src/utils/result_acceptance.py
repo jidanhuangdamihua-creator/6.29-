@@ -264,6 +264,24 @@ def _same_candidate_content(left: pd.DataFrame, right: pd.DataFrame) -> bool:
     return normalized[0].equals(normalized[1])
 
 
+def _align_structurally_missing_columns(
+    frames: Sequence[pd.DataFrame],
+) -> list[pd.DataFrame]:
+    """Align heterogeneous mode schemas without changing existing missing values."""
+    union_columns = tuple(
+        dict.fromkeys(column for frame in frames for column in frame.columns)
+    )
+    aligned: list[pd.DataFrame] = []
+    for frame in frames:
+        original_columns = set(frame.columns)
+        value = frame.copy()
+        for column in union_columns:
+            if column not in original_columns:
+                value[column] = ""
+        aligned.append(value.reindex(columns=union_columns))
+    return aligned
+
+
 def _schema_reasons(frame: pd.DataFrame) -> list[str]:
     reasons: list[str] = []
     if "schema_family" not in frame.columns:
@@ -498,8 +516,11 @@ def accept_global_aggregate(
         reasons.extend(read_reasons)
         if not read_reasons:
             frames.append(frame)
+    aligned_frames = _align_structurally_missing_columns(frames)
     combined = (
-        pd.concat(frames, ignore_index=True, sort=False) if frames else pd.DataFrame()
+        pd.concat(aligned_frames, ignore_index=True, sort=False)
+        if aligned_frames
+        else pd.DataFrame()
     )
     counts = {"mode_files": len(mode_paths), "rows": len(combined), "dataset_mode_groups": 0}
     if combined.empty and "csv_empty" not in reasons:

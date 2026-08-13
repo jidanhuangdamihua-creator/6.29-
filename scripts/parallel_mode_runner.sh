@@ -10,6 +10,10 @@ readonly DRY_RUN="${DRY_RUN-0}"
 readonly PROBE="${PROBE-0}"
 readonly PUBLISH_GLOBAL="${PUBLISH_GLOBAL-1}"
 readonly D5_MAX_JOBS=1
+readonly DATASETS="${DATASETS-d1,d2,d3,d4,d5,d6}"
+readonly MODES="${MODES-without,with}"
+readonly HORIZONS="${HORIZONS-1,2,3,4,5}"
+readonly SEEDS="${SEEDS-42,43,44,45,46}"
 readonly TERMINATION_GRACE_SECONDS="${TERMINATION_GRACE_SECONDS-10}"
 readonly RUN_STAMP="$(date '+%Y%m%d_%H%M%S')"
 
@@ -40,6 +44,43 @@ validate_bool DRY_RUN "${DRY_RUN}"
 validate_bool PROBE "${PROBE}"
 validate_bool PUBLISH_GLOBAL "${PUBLISH_GLOBAL}"
 
+validate_csv_selection() {
+    local name="$1"
+    local allowed="$2"
+    shift 2
+    local values=("$@")
+    local item
+    local existing
+    local candidate
+    ((${#values[@]} > 0)) || fail_usage "${name} must not be empty"
+    for item in "${values[@]}"; do
+        [[ -n "${item}" && ",${allowed}," == *",${item},"* ]] \
+            || fail_usage "${name} contains invalid value: ${item:-<empty>}"
+    done
+    for item in "${values[@]}"; do
+        existing=0
+        for candidate in "${values[@]}"; do
+            if [[ "${candidate}" == "${item}" ]]; then
+                existing=$((existing + 1))
+            fi
+        done
+        ((existing == 1)) || fail_usage "${name} contains duplicate value: ${item}"
+    done
+}
+
+SELECTED_DATASETS=()
+SELECTED_MODES=()
+SELECTED_HORIZONS=()
+SELECTED_SEEDS=()
+IFS=',' read -r -a SELECTED_DATASETS <<<"${DATASETS}"
+IFS=',' read -r -a SELECTED_MODES <<<"${MODES}"
+IFS=',' read -r -a SELECTED_HORIZONS <<<"${HORIZONS}"
+IFS=',' read -r -a SELECTED_SEEDS <<<"${SEEDS}"
+validate_csv_selection DATASETS "d1,d2,d3,d4,d5,d6" "${SELECTED_DATASETS[@]}"
+validate_csv_selection MODES "without,with" "${SELECTED_MODES[@]}"
+validate_csv_selection HORIZONS "1,2,3,4,5" "${SELECTED_HORIZONS[@]}"
+validate_csv_selection SEEDS "42,43,44,45,46" "${SELECTED_SEEDS[@]}"
+
 if [[ -n "${RUN_ROOT+x}" ]]; then
     [[ -n "${RUN_ROOT}" ]] || fail_usage "RUN_ROOT must not be empty"
     if [[ "${RUN_ROOT}" = /* ]]; then
@@ -64,11 +105,24 @@ if [[ "${PROBE}" == "1" ]]; then
     [[ "${MAX_JOBS}" == "4" ]] || fail_usage "PROBE=1 requires MAX_JOBS=4"
     [[ "${PUBLISH_GLOBAL}" == "0" ]] || fail_usage "PROBE=1 requires PUBLISH_GLOBAL=0"
     TASKS=(d1_without d1_with d2_without d2_with)
+    SELECTED_DATASETS=(d1 d2)
+    SELECTED_MODES=(without with)
+    SELECTED_HORIZONS=(1 2 3 4 5)
+    SELECTED_SEEDS=(42 43 44 45 46)
 else
     [[ "${PUBLISH_GLOBAL}" == "1" ]] || fail_usage "full execution requires PUBLISH_GLOBAL=1"
-    TASKS=("${ALL_TASKS[@]}")
+    TASKS=()
+    for task in "${ALL_TASKS[@]}"; do
+        dataset="${task%%_*}"
+        mode="${task#*_}"
+        if [[ " ${SELECTED_DATASETS[*]} " == *" ${dataset} "* \
+            && " ${SELECTED_MODES[*]} " == *" ${mode} "* ]]; then
+            TASKS+=("${task}")
+        fi
+    done
 fi
 readonly TASK_COUNT="${#TASKS[@]}"
+readonly CELL_COUNT="$((TASK_COUNT * ${#SELECTED_HORIZONS[@]} * ${#SELECTED_SEEDS[@]}))"
 
 task_dataset() {
     printf '%s\n' "${1%%_*}"
@@ -102,10 +156,13 @@ if [[ "${DRY_RUN}" == "1" ]]; then
     printf '[DRY-RUN] run_root=%s\n' "${FORMAL_RUN_ROOT}"
     printf '[CAPS] MAX_JOBS=%s D5_MAX_JOBS=%s publish_global=%s\n' \
         "${MAX_JOBS}" "${D5_MAX_JOBS}" "${PUBLISH_GLOBAL}"
+    printf '[SELECTION] datasets=%s modes=%s horizons=%s seeds=%s\n' \
+        "${SELECTED_DATASETS[*]}" "${SELECTED_MODES[*]}" \
+        "${SELECTED_HORIZONS[*]}" "${SELECTED_SEEDS[*]}"
     for task in "${TASKS[@]}"; do
         print_mode_command "${task}"
     done
-    printf '[FORMAL PLAN] cells=%s unique=%s\n' "$((TASK_COUNT * 25))" "$((TASK_COUNT * 25))"
+    printf '[FORMAL PLAN] cells=%s unique=%s\n' "${CELL_COUNT}" "${CELL_COUNT}"
     exit 0
 fi
 
@@ -163,6 +220,18 @@ PREPARE_COMMAND=(
     --operation prepare
     --output-dir "${FORMAL_RUN_ROOT}"
 )
+for dataset in "${SELECTED_DATASETS[@]}"; do
+    PREPARE_COMMAND+=(--only "${dataset}")
+done
+if ((${#SELECTED_MODES[@]} == 1)); then
+    PREPARE_COMMAND+=(--info-sharing "${SELECTED_MODES[0]}")
+fi
+for horizon in "${SELECTED_HORIZONS[@]}"; do
+    PREPARE_COMMAND+=(--horizon "${horizon}")
+done
+for seed in "${SELECTED_SEEDS[@]}"; do
+    PREPARE_COMMAND+=(--seed "${seed}")
+done
 if [[ "${RESUME}" == "1" ]]; then
     PREPARE_COMMAND+=(--resume)
 fi
@@ -444,7 +513,7 @@ reap_finished() {
     return 0
 }
 
-log_message "[START] run_root=${FORMAL_RUN_ROOT} MAX_JOBS=${MAX_JOBS} D5_MAX_JOBS=${D5_MAX_JOBS}"
+log_message "[START] run_root=${FORMAL_RUN_ROOT} MAX_JOBS=${MAX_JOBS} D5_MAX_JOBS=${D5_MAX_JOBS} cells=${CELL_COUNT}"
 while ((COMPLETED_COUNT < TASK_COUNT)); do
     while ((RUNNING_COUNT < MAX_JOBS)); do
         candidate=-1

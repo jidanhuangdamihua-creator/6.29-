@@ -27,6 +27,9 @@ from src.utils.d5_calendar_reconstruction import load_d5_authorities
 from src.utils.d4_d6_runtime import apply_runtime_source_domain_policy, load_default_metric_protocol
 from src.utils.finite_diagnostics import validate_feature_frame_finite
 from src.utils.knn_feature_loader import resolve_knn_feature_columns
+from src.protocols.candidate_pool import prepare_daily_sequence_pool
+from src.protocols.experiment_protocol import get_experiment_protocol
+from src.protocols.transformation_identity import validate_runtime_feature_contract
 from src.protocols.reproducibility import set_protocol_seed
 from src.protocols.formal_input_paths import (
     require_explicit_formal_paths,
@@ -191,6 +194,18 @@ def main() -> None:
     if runtime_inputs.calendar_reconstruction is None:
         raise AssertionError("D5 runtime loader did not return reconstruction diagnostics")
     config["d5_calendar_reconstruction"] = runtime_inputs.calendar_reconstruction.to_dict()
+    config["d5_source_history_validation_path"] = str(
+        source_df.attrs.get("source_history_validation_path", "runtime_reconstruction")
+    )
+    config["d5_precomputed_source_history_active"] = (
+        config["d5_source_history_validation_path"] == "precomputed_static_file"
+    )
+    print(
+        "[D5 SOURCE HISTORY] "
+        f"validation_path={config['d5_source_history_validation_path']} "
+        f"precomputed_active={str(config['d5_precomputed_source_history_active']).lower()} "
+        f"rows={len(source_df)}"
+    )
     (run_dir / "run_config.json").write_text(
         json.dumps(config, indent=2, ensure_ascii=False),
         encoding="utf-8",
@@ -204,6 +219,11 @@ def main() -> None:
         knn_payload=knn_data,
     )
     feature_cols = list(feature_info["selected_features"])
+    validate_runtime_feature_contract(
+        "D5",
+        model_feature_cols=feature_cols,
+        knn_feature_cols=get_experiment_protocol("D5").knn_feature_columns,
+    )
     if feature_info["feature_consistency_status"] != "aligned":
         print(
             "[FEATURE WARNING] solidified JSON features differ from runtime inferred features "
@@ -265,6 +285,21 @@ def main() -> None:
         if selected_source_entities:
             source_df = source_df[source_df[config["entity_col"]].astype(str).isin(selected_source_entities)].copy()
 
+    observed_start = target_df.attrs.get(
+        "knn_observed_start",
+        target_df.attrs.get(
+            "target_observed_start",
+            pd.to_datetime(target_df["date"], errors="raise").min(),
+        ),
+    )
+    prepared_pool = prepare_daily_sequence_pool(
+        source_df,
+        group_cols=tuple(str(column) for column in config["group_cols"]),
+        observed_start=observed_start,
+        feature_cols=get_experiment_protocol(5).knn_feature_columns,
+        metadata_cols=("family",),
+    )
+
     all_rows = []
     for entity_key in target_entity_keys:
         target_entity_df = target_df[target_df[config["entity_col"]] == entity_key].copy()
@@ -279,6 +314,7 @@ def main() -> None:
             feature_cols=feature_cols,
             config=config,
             enabled_methods=config["enabled_methods"],
+            prepared_pool=prepared_pool,
         )
         all_rows.extend(rows)
 

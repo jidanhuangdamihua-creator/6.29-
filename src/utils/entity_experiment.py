@@ -42,13 +42,19 @@ from src.utils.dataframe_attrs import (
     temporarily_detached_attrs,
 )
 from src.protocols.runner_adapter import configure_protocol_frames
-from src.protocols.candidate_pool import prepare_daily_sequence_pool
+from src.protocols.candidate_pool import (
+    PreparedDailySequencePool,
+    prepare_daily_sequence_pool,
+)
 from src.protocols.experiment_protocol import (
     get_experiment_protocol,
     resolve_result_protocol_tracks,
     serialize_canonical_target_key,
 )
 from src.protocols.rolling_origin import build_sample_manifest
+from src.source_selection.source_selector import TargetK3SelectionContext
+from src.protocols.raw_preprocessing import TargetK3RawSourceContext
+from src.protocols.transformation_reuse import TargetTransformationReuseContext
 from src.utils.source_fillna import fill_source_numeric_na
 
 
@@ -673,6 +679,7 @@ def run_single_entity_experiment(
     feature_cols: Sequence[str],
     config: Dict[str, Any],
     enabled_methods: Sequence[str],
+    prepared_pool: PreparedDailySequencePool | None = None,
 ) -> List[Dict[str, Any]]:
     """Run configured methods for one target entity and return CSV-ready rows."""
     rows: List[Dict[str, Any]] = []
@@ -711,15 +718,17 @@ def run_single_entity_experiment(
         ),
     )
     if dataset_id == 5:
-        protocol = get_experiment_protocol(dataset_id)
-        prepared_pool = prepare_daily_sequence_pool(
-            source_df,
-            group_cols=source_selection_group_cols,
-            observed_start=observed_start,
-            feature_cols=protocol.knn_feature_columns,
-            metadata_cols=("family",),
-        )
-        source_df.attrs["prepared_daily_sequence_pool"] = prepared_pool
+        if prepared_pool is None:
+            protocol = get_experiment_protocol(dataset_id)
+            prepared_pool = prepare_daily_sequence_pool(
+                source_df,
+                group_cols=source_selection_group_cols,
+                observed_start=observed_start,
+                feature_cols=protocol.knn_feature_columns,
+                metadata_cols=("family",),
+            )
+    elif prepared_pool is not None and dataset_id not in {4, 6}:
+        raise ValueError("prepared_pool is supported only for dataset_id=4, 5, or 6")
     source_df, target_entity_df = configure_protocol_frames(
         source_df,
         target_entity_df,
@@ -728,8 +737,8 @@ def run_single_entity_experiment(
         group_cols=source_selection_group_cols,
         grouping_col=grouping_cols[dataset_id],
         observed_start=observed_start,
-        prepared_pool=prepared_pool if dataset_id == 5 else None,
-        retain_source_frame=dataset_id == 5,
+        prepared_pool=prepared_pool,
+        retain_source_frame=prepared_pool is not None,
         enforce_formal_target=True,
     )
     canonical_entity_key = serialize_canonical_target_key(
@@ -822,6 +831,21 @@ def run_single_entity_experiment(
     )
     source_model_df.attrs["information_sharing_scenario"] = scenario
     target_model_df.attrs["information_sharing_scenario"] = scenario
+    target_k3_context = TargetK3SelectionContext(
+        lifecycle_identity=(
+            f"D{dataset_id}",
+            scenario,
+            int(config["horizon"]),
+            int(config.get("random_state", config.get("seed", 42))),
+            tuple(target_model_df.attrs["protocol_target_key"]),
+        )
+    )
+    target_k3_raw_context = TargetK3RawSourceContext(
+        lifecycle_identity=target_k3_context.lifecycle_identity
+    )
+    transformation_reuse_context = TargetTransformationReuseContext(
+        lifecycle_identity=target_k3_context.lifecycle_identity
+    )
 
     for method in enabled_methods:
         if method not in {"No-TL", "SS-TL", "MSWA-TL", "MSSB-TL", "MSML-TL", "MSML-TL-RFE"}:
@@ -868,9 +892,14 @@ def run_single_entity_experiment(
                 "metric_protocol": metric_protocol,
                 "group_cols": source_selection_group_cols,
                 "expected_metric_identity": expected_metric_identity,
+                "transformation_reuse_context": transformation_reuse_context,
             }
             if method not in {"SS-TL"}:
-                kwargs["number_of_sources"] = _source_count_for_method(method, config)
+                method_source_count = _source_count_for_method(method, config)
+                kwargs["number_of_sources"] = method_source_count
+                if method_source_count == 3:
+                    kwargs["k3_selection_context"] = target_k3_context
+                    kwargs["k3_raw_source_context"] = target_k3_raw_context
             if method == "MSML-TL-RFE":
                 kwargs["random_state"] = int(
                     config.get("random_state", config.get("seed", 42))

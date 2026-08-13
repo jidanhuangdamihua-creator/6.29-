@@ -11,10 +11,12 @@ Module 5: Similar Source Selection (KNN-style + Distance Weights)
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import hashlib
 import json
 import logging
-from typing import Any, Dict, List, Mapping, Sequence, Tuple
+import pickle
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -56,6 +58,189 @@ except ImportError:
 
 
 LOGGER_NAME = "experiment"
+
+
+@dataclass(frozen=True)
+class K3SelectionEvidence:
+    """Effectively immutable, target-local snapshot of one formal K3 selection."""
+
+    lifecycle_identity: Tuple[object, ...]
+    dataset_id: str
+    scenario: str
+    target_key: Tuple[object, ...]
+    candidate_keys: Tuple[Tuple[object, ...], ...]
+    group_cols: Tuple[str, ...]
+    model_feature_cols: Tuple[str, ...]
+    knn_feature_cols: Tuple[str, ...]
+    target_frame_digest: str
+    source_frame_digest: str
+    candidate_pool_digest: str
+    selection_result_digest: str
+    prepared_pool_id: int
+    _selection_payload: bytes = field(repr=False, compare=False)
+
+    def __deepcopy__(self, memo: Dict[int, object]) -> "K3SelectionEvidence":
+        memo[id(self)] = self
+        return self
+
+    @classmethod
+    def build(
+        cls,
+        *,
+        lifecycle_identity: Sequence[object],
+        target_df: pd.DataFrame,
+        source_df: pd.DataFrame,
+        feature_cols: Sequence[str],
+        group_cols: Sequence[str],
+        weight_mode: str = "inverse_distance",
+    ) -> "K3SelectionEvidence":
+        """Execute the legacy selector exactly once and seal its K3 result."""
+
+        selection = SourceSelector().select_top_k_sources(
+            target_df=target_df,
+            source_df=source_df,
+            feature_cols=feature_cols,
+            k=3,
+            group_cols=tuple(group_cols),
+            weight_mode=weight_mode,
+        )
+        target_context = get_protocol_frame_context(target_df)
+        source_context = get_protocol_frame_context(source_df)
+        if target_context is None or source_context is None:
+            raise ProtocolViolation("K3 selection evidence requires protocol frame context")
+        candidate_keys = tuple(
+            normalize_source_key(key) for key in target_context.candidate_keys
+        )
+        source_candidate_keys = tuple(
+            normalize_source_key(key) for key in source_context.candidate_keys
+        )
+        if candidate_keys != source_candidate_keys:
+            raise ProtocolViolation("K3 selection evidence candidate scope mismatch")
+        prepared_pool = source_context.prepared_pool
+        if prepared_pool is None or target_context.prepared_pool is not prepared_pool:
+            raise ProtocolViolation("K3 selection evidence requires one shared prepared pool")
+        meta = selection.get("meta", {})
+        if not isinstance(meta, dict):
+            raise ProtocolViolation("K3 selection metadata must be a mapping")
+        if int(meta.get("requested_k", -1)) != 3 or int(meta.get("effective_k", -1)) != 3:
+            raise ProtocolViolation("K3 selection evidence requires exact K=3")
+        protocol = get_experiment_protocol(target_df.attrs["protocol_dataset_id"])
+        return cls(
+            lifecycle_identity=tuple(lifecycle_identity),
+            dataset_id=str(protocol.dataset_id),
+            scenario=str(target_df.attrs["protocol_scenario"]),
+            target_key=normalize_source_key(target_df.attrs["protocol_target_key"]),
+            candidate_keys=candidate_keys,
+            group_cols=tuple(str(column) for column in group_cols),
+            model_feature_cols=tuple(str(column) for column in feature_cols),
+            knn_feature_cols=tuple(protocol.knn_feature_columns),
+            target_frame_digest=str(target_df.attrs.get("target_frame_digest", "")),
+            source_frame_digest=str(source_df.attrs.get("source_frame_digest", "")),
+            candidate_pool_digest=str(meta.get("candidate_pool_digest", "")),
+            selection_result_digest=str(meta.get("selection_result_digest", "")),
+            prepared_pool_id=id(prepared_pool),
+            _selection_payload=pickle.dumps(selection, protocol=5),
+        )
+
+    def method_wrapper(
+        self,
+        *,
+        lifecycle_identity: Sequence[object],
+        target_df: pd.DataFrame,
+        source_df: pd.DataFrame,
+        feature_cols: Sequence[str],
+        group_cols: Sequence[str],
+        k: int,
+        weight_mode: str,
+    ) -> Dict[str, object]:
+        """Validate the consumer input and return a distinct mutable wrapper."""
+
+        if int(k) != 3:
+            raise ProtocolViolation("K3 selection evidence cannot serve a non-K3 consumer")
+        if str(weight_mode) != "inverse_distance":
+            raise ProtocolViolation("K3 selection evidence requires inverse_distance weights")
+        if tuple(lifecycle_identity) != self.lifecycle_identity:
+            raise ProtocolViolation("K3 selection lifecycle identity mismatch")
+        if tuple(str(column) for column in group_cols) != self.group_cols:
+            raise ProtocolViolation("K3 selection group column identity mismatch")
+        if tuple(str(column) for column in feature_cols) != self.model_feature_cols:
+            raise ProtocolViolation("K3 selection model feature identity mismatch")
+        target_context = get_protocol_frame_context(target_df)
+        source_context = get_protocol_frame_context(source_df)
+        if target_context is None or source_context is None:
+            raise ProtocolViolation("K3 selection consumer is missing protocol context")
+        target_candidates = tuple(
+            normalize_source_key(key) for key in target_context.candidate_keys
+        )
+        source_candidates = tuple(
+            normalize_source_key(key) for key in source_context.candidate_keys
+        )
+        if target_candidates != self.candidate_keys or source_candidates != self.candidate_keys:
+            raise ProtocolViolation("K3 selection candidate scope identity mismatch")
+        if str(target_df.attrs.get("protocol_dataset_id", "")).upper() != self.dataset_id:
+            raise ProtocolViolation("K3 selection dataset identity mismatch")
+        if str(target_df.attrs.get("protocol_scenario", "")) != self.scenario:
+            raise ProtocolViolation("K3 selection scenario identity mismatch")
+        if normalize_source_key(target_df.attrs.get("protocol_target_key", ())) != self.target_key:
+            raise ProtocolViolation("K3 selection target key identity mismatch")
+        if tuple(get_experiment_protocol(self.dataset_id).knn_feature_columns) != self.knn_feature_cols:
+            raise ProtocolViolation("K3 selection KNN feature schema identity mismatch")
+        for role, frame in (("target", target_df), ("source", source_df)):
+            observed = get_configured_knn_frame(frame, role)
+            if tuple(observed.attrs.get("knn_feature_columns", ())) != self.knn_feature_cols:
+                raise ProtocolViolation("K3 selection KNN feature schema identity mismatch")
+        if str(target_df.attrs.get("target_frame_digest", "")) != self.target_frame_digest:
+            raise ProtocolViolation("K3 selection target KNN digest mismatch")
+        if str(source_df.attrs.get("source_frame_digest", "")) != self.source_frame_digest:
+            raise ProtocolViolation("K3 selection source KNN digest mismatch")
+        prepared_pool = source_context.prepared_pool
+        if (
+            prepared_pool is None
+            or target_context.prepared_pool is not prepared_pool
+            or id(prepared_pool) != self.prepared_pool_id
+        ):
+            raise ProtocolViolation("K3 selection prepared-pool identity mismatch")
+        wrapper = pickle.loads(self._selection_payload)
+        meta = wrapper.get("meta", {})
+        if (
+            not isinstance(meta, dict)
+            or str(meta.get("candidate_pool_digest", "")) != self.candidate_pool_digest
+            or str(meta.get("selection_result_digest", ""))
+            != self.selection_result_digest
+        ):
+            raise ProtocolViolation("K3 selection evidence digest identity mismatch")
+        return wrapper
+
+
+@dataclass
+class TargetK3SelectionContext:
+    """One natural target lifecycle; deliberately not a cache or registry."""
+
+    lifecycle_identity: Tuple[object, ...]
+    _evidence: Optional[K3SelectionEvidence] = field(default=None, init=False, repr=False)
+
+    def selection_for_method(
+        self,
+        *,
+        target_df: pd.DataFrame,
+        source_df: pd.DataFrame,
+        feature_cols: Sequence[str],
+        group_cols: Sequence[str],
+        k: int,
+        weight_mode: str,
+    ) -> K3SelectionEvidence:
+        if int(k) != 3:
+            raise ProtocolViolation("target K3 context accepts only K=3")
+        if self._evidence is None:
+            self._evidence = K3SelectionEvidence.build(
+                lifecycle_identity=self.lifecycle_identity,
+                target_df=target_df,
+                source_df=source_df,
+                feature_cols=feature_cols,
+                group_cols=group_cols,
+                weight_mode=weight_mode,
+            )
+        return self._evidence
 
 
 def _get_logger() -> logging.Logger:

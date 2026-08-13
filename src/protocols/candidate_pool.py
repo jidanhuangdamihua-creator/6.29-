@@ -583,6 +583,7 @@ class PreparedDailySequencePool:
     metadata_by_col: Mapping[str, Mapping[SourceKey, str]]
     keys_by_metadata_value: Mapping[str, Mapping[str, Tuple[SourceKey, ...]]]
     source_index: CanonicalSourceIndex
+    source_observed_frame_digest: str | None
 
     def __deepcopy__(self, memo: Dict[int, Any]) -> "PreparedDailySequencePool":
         """Keep pandas attrs operations from copying the immutable pool."""
@@ -789,6 +790,7 @@ def prepare_daily_sequence_pool(
     metadata_cols: Sequence[str] = (),
     feature_cols: Sequence[str] | None = None,
     source_index: CanonicalSourceIndex | None = None,
+    capture_source_observed_frame_digest: bool = False,
 ) -> PreparedDailySequencePool:
     """Prepare all source keys and aligned 30-day feature matrices exactly once."""
     normalized_group_cols = tuple(str(column) for column in group_cols)
@@ -836,6 +838,20 @@ def prepare_daily_sequence_pool(
     key_to_index = {key: index for index, key in enumerate(normalized_keys)}
 
     observed_mask = parsed_dates.isin(required_dates)
+    source_observed_frame_digest = None
+    if capture_source_observed_frame_digest:
+        source_observed_for_digest = working_source.loc[observed_mask].copy()
+        source_observed_for_digest["date"] = parsed_dates.loc[observed_mask].to_numpy()
+        digest_feature_cols = (
+            None if normalized_features == ("sales",) else normalized_features
+        )
+        digest_ignored_columns = ("promo",) if digest_feature_cols is None else ()
+        source_observed_frame_digest = canonical_knn_frame_digest(
+            source_observed_for_digest,
+            group_cols=normalized_group_cols,
+            feature_cols=digest_feature_cols,
+            ignore_columns=digest_ignored_columns,
+        )
     observed = working_source.loc[
         observed_mask, [*normalized_group_cols, *normalized_features]
     ].copy()
@@ -905,6 +921,7 @@ def prepare_daily_sequence_pool(
         metadata_by_col=source_index.metadata_by_col,
         keys_by_metadata_value=source_index.keys_by_metadata_value,
         source_index=source_index,
+        source_observed_frame_digest=source_observed_frame_digest,
     )
 
 

@@ -46,15 +46,19 @@ from paper_reproduction_protocol import (
     resolve_strict_paper_mode,
     validate_paper_protocol_config,
 )
-from src.source_selection.source_selector import SourceSelector
+from src.source_selection.source_selector import SourceSelector, TargetK3SelectionContext
 from src.transfer_methods.source_failure_tolerance import runtime_selection_meta
-from src.protocols.experiment_protocol import ProtocolViolation
+from src.protocols.experiment_protocol import PROTOCOL_VERSION, ProtocolViolation
 from src.protocols.runner_adapter import source_key_mask
+from src.protocols.raw_preprocessing import TargetK3RawSourceContext
+from src.protocols.transformation_reuse import TargetTransformationReuseContext
+from src.protocols.transformation_identity import CELL_IDENTITY_ATTR
 from src.protocols.provenance import (
     assert_actual_cnn_training_validated,
     bind_actual_cnn_source_frame,
 )
 from src.utils.source_fillna import fill_source_numeric_na
+from src.utils.dataframe_attrs import copy_frame_with_lightweight_attrs
 
 
 def _assert_unique_frame_columns(frame: pd.DataFrame, *, context: str) -> None:
@@ -686,6 +690,7 @@ def run_ss_tl_experiment(
     metric_protocol: Optional[Dict[str, Any]] = None,
     expected_metric_identity: Optional[Dict[str, Any]] = None,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
+    transformation_reuse_context: TargetTransformationReuseContext | None = None,
 ) -> Dict[str, Any]:
     """运行 SS-TL，并返回统一结构。"""
     try:
@@ -760,17 +765,22 @@ def run_ss_tl_experiment(
         feature_cols=cols,
     )
 
-    target_min_df = target_df[[c for c in keep_cols if c in target_df.columns]].copy()
-    target_min_df.attrs = target_df.attrs.copy()
+    # Keep the target's complete protocol/model projection.  Non-model KNN
+    # passthrough columns remain untouched and are never added to ``cols``;
+    # retaining them makes the ordinary target RawPartitionIdentity identical
+    # across SS/MSWA/MSSB/MSML without changing the model normalization tuple.
+    target_min_df = copy_frame_with_lightweight_attrs(target_df)
     _assert_unique_frame_columns(target_min_df, context="SS-TL target frame")
 
     src_train, src_val, src_test = temporal_split_by_ratio_or_dates(single_source_df)
     src_train, src_val, src_test, _, _ = normalize_features(
-        src_train, src_val, src_test, feature_columns=cols
+        src_train, src_val, src_test, feature_columns=cols,
+        reuse_context=transformation_reuse_context,
     )
 
     X_source, y_source = build_tabular_sequence(
-        src_train, horizon=horizon, window_size=window_size, feature_columns=cols
+        src_train, horizon=horizon, window_size=window_size, feature_columns=cols,
+        reuse_context=transformation_reuse_context,
     )
     if len(y_source) == 0:
         raise ValueError("SS-TL source windows are empty; adjust window_size/horizon.")
@@ -779,17 +789,21 @@ def run_ss_tl_experiment(
 
     tgt_train, tgt_val, tgt_test = temporal_split_by_ratio_or_dates(target_min_df)
     tgt_train, tgt_val, tgt_test, tgt_scaler, tgt_feature_columns = normalize_features(
-        tgt_train, tgt_val, tgt_test, feature_columns=cols
+        tgt_train, tgt_val, tgt_test, feature_columns=cols,
+        reuse_context=transformation_reuse_context,
     )
 
     X_target_train, y_target_train = build_tabular_sequence(
-        tgt_train, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
+        tgt_train, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns,
+        reuse_context=transformation_reuse_context,
     )
     X_target_val, y_target_val = build_tabular_sequence(
-        tgt_val, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
+        tgt_val, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns,
+        reuse_context=transformation_reuse_context,
     )
     X_target_test, y_target_test = build_tabular_sequence(
-        tgt_test, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
+        tgt_test, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns,
+        reuse_context=transformation_reuse_context,
     )
 
     if len(y_target_train) == 0 or len(y_target_test) == 0:
@@ -970,6 +984,9 @@ def run_mswa_experiment(
     metric_protocol: Optional[Dict[str, Any]] = None,
     expected_metric_identity: Optional[Dict[str, Any]] = None,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
+    k3_selection_context: TargetK3SelectionContext | None = None,
+    k3_raw_source_context: TargetK3RawSourceContext | None = None,
+    transformation_reuse_context: TargetTransformationReuseContext | None = None,
 ) -> Dict[str, Any]:
     """运行 MSWA-TL，并返回统一结构。"""
     try:
@@ -992,6 +1009,21 @@ def run_mswa_experiment(
         target_epochs=target_epochs,
         batch_size=batch_size,
         metric_identity=expected_metric_identity,
+        **(
+            {"k3_selection_context": k3_selection_context}
+            if k3_selection_context is not None
+            else {}
+        ),
+        **(
+            {"k3_raw_source_context": k3_raw_source_context}
+            if k3_raw_source_context is not None
+            else {}
+        ),
+        **(
+            {"transformation_reuse_context": transformation_reuse_context}
+            if transformation_reuse_context is not None
+            else {}
+        ),
     )
     return _extract_method_metrics(
         raw,
@@ -1018,6 +1050,9 @@ def run_mssb_experiment(
     metric_protocol: Optional[Dict[str, Any]] = None,
     expected_metric_identity: Optional[Dict[str, Any]] = None,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
+    k3_selection_context: TargetK3SelectionContext | None = None,
+    k3_raw_source_context: TargetK3RawSourceContext | None = None,
+    transformation_reuse_context: TargetTransformationReuseContext | None = None,
 ) -> Dict[str, Any]:
     """运行 MSSB-TL，并返回统一结构。"""
     try:
@@ -1040,6 +1075,21 @@ def run_mssb_experiment(
         target_epochs=target_epochs,
         batch_size=batch_size,
         metric_identity=expected_metric_identity,
+        **(
+            {"k3_selection_context": k3_selection_context}
+            if k3_selection_context is not None
+            else {}
+        ),
+        **(
+            {"k3_raw_source_context": k3_raw_source_context}
+            if k3_raw_source_context is not None
+            else {}
+        ),
+        **(
+            {"transformation_reuse_context": transformation_reuse_context}
+            if transformation_reuse_context is not None
+            else {}
+        ),
     )
     return _extract_method_metrics(
         raw,
@@ -1066,6 +1116,9 @@ def run_msml_experiment(
     metric_protocol: Optional[Dict[str, Any]] = None,
     expected_metric_identity: Optional[Dict[str, Any]] = None,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
+    k3_selection_context: TargetK3SelectionContext | None = None,
+    k3_raw_source_context: TargetK3RawSourceContext | None = None,
+    transformation_reuse_context: TargetTransformationReuseContext | None = None,
 ) -> Dict[str, Any]:
     """运行 MSML-TL，并返回统一结构。"""
     try:
@@ -1088,6 +1141,21 @@ def run_msml_experiment(
         target_epochs=target_epochs,
         batch_size=batch_size,
         metric_identity=expected_metric_identity,
+        **(
+            {"k3_selection_context": k3_selection_context}
+            if k3_selection_context is not None
+            else {}
+        ),
+        **(
+            {"k3_raw_source_context": k3_raw_source_context}
+            if k3_raw_source_context is not None
+            else {}
+        ),
+        **(
+            {"transformation_reuse_context": transformation_reuse_context}
+            if transformation_reuse_context is not None
+            else {}
+        ),
     )
     return _extract_method_metrics(
         raw,
@@ -1117,6 +1185,9 @@ def run_msml_rfe_experiment(
     metric_protocol: Optional[Dict[str, Any]] = None,
     expected_metric_identity: Optional[Dict[str, Any]] = None,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
+    k3_selection_context: TargetK3SelectionContext | None = None,
+    k3_raw_source_context: TargetK3RawSourceContext | None = None,
+    transformation_reuse_context: TargetTransformationReuseContext | None = None,
 ) -> Dict[str, Any]:
     """运行 MSML-TL-RFE，并返回统一结构。"""
     try:
@@ -1142,6 +1213,21 @@ def run_msml_rfe_experiment(
         batch_size=batch_size,
         random_state=int(random_state),
         metric_identity=expected_metric_identity,
+        **(
+            {"k3_selection_context": k3_selection_context}
+            if k3_selection_context is not None
+            else {}
+        ),
+        **(
+            {"k3_raw_source_context": k3_raw_source_context}
+            if k3_raw_source_context is not None
+            else {}
+        ),
+        **(
+            {"transformation_reuse_context": transformation_reuse_context}
+            if transformation_reuse_context is not None
+            else {}
+        ),
     )
     return _extract_method_metrics(
         raw,
@@ -1223,6 +1309,17 @@ def run_all_experiments(
     source_df = data_bundle["source_df"]
     target_df = data_bundle["target_df"]
 
+    config_seed = int(config.get("seed", config.get("random_state", 42))) if isinstance(config, dict) else 42
+    lifecycle_identity = (
+        str(dataset_name),
+        str(target_df.attrs.get("protocol_scenario", target_df.attrs.get("information_sharing_scenario", ""))),
+        int(horizon),
+        config_seed,
+        tuple(target_df.attrs.get("protocol_target_key", ())),
+    )
+    source_df.attrs[CELL_IDENTITY_ATTR] = lifecycle_identity
+    target_df.attrs[CELL_IDENTITY_ATTR] = lifecycle_identity
+
     target_domains = []
     if {"entity_id", "item_id"}.issubset(set(target_df.columns)) and not target_df.empty:
         pairs = (
@@ -1252,6 +1349,29 @@ def run_all_experiments(
     unknown = sorted(method_set.difference(DEFAULT_METHODS))
     if unknown:
         raise ValueError(f"Unknown methods in enabled_methods: {unknown}")
+
+    target_k3_context: TargetK3SelectionContext | None = None
+    target_k3_raw_context: TargetK3RawSourceContext | None = None
+    transformation_reuse_context: TargetTransformationReuseContext | None = None
+    if (
+        target_df.attrs.get("protocol_version") == PROTOCOL_VERSION
+        and source_df.attrs.get("protocol_version") == PROTOCOL_VERSION
+    ):
+        target_k3_context = TargetK3SelectionContext(
+            lifecycle_identity=(
+                str(dataset_name),
+                str(target_df.attrs.get("protocol_scenario", "")),
+                int(horizon),
+                config_seed,
+                tuple(target_df.attrs.get("protocol_target_key", ())),
+            )
+        )
+        target_k3_raw_context = TargetK3RawSourceContext(
+            lifecycle_identity=target_k3_context.lifecycle_identity
+        )
+        transformation_reuse_context = TargetTransformationReuseContext(
+            lifecycle_identity=target_k3_context.lifecycle_identity
+        )
 
     results: List[Dict[str, Any]] = []
 
@@ -1296,6 +1416,7 @@ def run_all_experiments(
                     target_epochs=target_epochs,
                     batch_size=batch_size,
                     metric_protocol=protocol.get("metric_protocol", {}),
+                    transformation_reuse_context=transformation_reuse_context,
                 )
             elif method == "MSWA-TL":
                 one = run_mswa_experiment(
@@ -1312,6 +1433,13 @@ def run_all_experiments(
                     target_epochs=target_epochs,
                     batch_size=batch_size,
                     metric_protocol=protocol.get("metric_protocol", {}),
+                    k3_selection_context=(
+                        target_k3_context if effective_source_count == 3 else None
+                    ),
+                    k3_raw_source_context=(
+                        target_k3_raw_context if effective_source_count == 3 else None
+                    ),
+                    transformation_reuse_context=transformation_reuse_context,
                 )
             elif method == "MSSB-TL":
                 one = run_mssb_experiment(
@@ -1328,6 +1456,13 @@ def run_all_experiments(
                     target_epochs=target_epochs,
                     batch_size=batch_size,
                     metric_protocol=protocol.get("metric_protocol", {}),
+                    k3_selection_context=(
+                        target_k3_context if effective_source_count == 3 else None
+                    ),
+                    k3_raw_source_context=(
+                        target_k3_raw_context if effective_source_count == 3 else None
+                    ),
+                    transformation_reuse_context=transformation_reuse_context,
                 )
             elif method == "MSML-TL":
                 one = run_msml_experiment(
@@ -1344,6 +1479,13 @@ def run_all_experiments(
                     target_epochs=target_epochs,
                     batch_size=batch_size,
                     metric_protocol=protocol.get("metric_protocol", {}),
+                    k3_selection_context=(
+                        target_k3_context if effective_source_count == 3 else None
+                    ),
+                    k3_raw_source_context=(
+                        target_k3_raw_context if effective_source_count == 3 else None
+                    ),
+                    transformation_reuse_context=transformation_reuse_context,
                 )
             elif method == "MSML-TL-RFE":
                 one = run_msml_rfe_experiment(
@@ -1362,6 +1504,13 @@ def run_all_experiments(
                     target_epochs=target_epochs,
                     batch_size=batch_size,
                     metric_protocol=protocol.get("metric_protocol", {}),
+                    k3_selection_context=(
+                        target_k3_context if effective_source_count == 3 else None
+                    ),
+                    k3_raw_source_context=(
+                        target_k3_raw_context if effective_source_count == 3 else None
+                    ),
+                    transformation_reuse_context=transformation_reuse_context,
                 )
             else:
                 raise ValueError(f"Unsupported method={method}")

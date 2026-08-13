@@ -274,6 +274,34 @@ def _split_tokens(values: Optional[Iterable[str]]) -> List[str]:
     return tokens or list(VALID_DATASETS)
 
 
+def _split_formal_int_tokens(
+    values: Optional[Iterable[object]],
+    *,
+    allowed: Sequence[int],
+    option: str,
+) -> tuple[int, ...]:
+    if not values:
+        return tuple(int(value) for value in allowed)
+    requested: list[int] = []
+    for value in values:
+        for part in str(value).split(","):
+            token = part.strip()
+            if not token:
+                continue
+            try:
+                requested.append(int(token))
+            except ValueError as exc:
+                raise ValueError(f"{option} contains a non-integer value: {token!r}") from exc
+    unknown = [value for value in requested if value not in allowed]
+    if unknown:
+        raise ValueError(
+            f"{option} contains invalid value(s): {unknown}. "
+            f"Valid values: {list(allowed)}"
+        )
+    selected = set(requested)
+    return tuple(int(value) for value in allowed if value in selected)
+
+
 def expand_only_tokens(values: Optional[Iterable[str]]) -> List[str]:
     requested = _split_tokens(values)
     unknown = [token for token in requested if token not in VALID_DATASETS]
@@ -289,6 +317,8 @@ def build_tasks(
     run_dir: Optional[Path] = None,
     info_sharing: Optional[str] = None,
     repository_root: Path = PROJECT_ROOT,
+    horizons: Optional[Iterable[object]] = None,
+    seeds: Optional[Iterable[object]] = None,
 ) -> List[Task]:
     if smoke:
         raise ValueError(
@@ -300,6 +330,16 @@ def build_tasks(
     layout = RunLayout(run_root)
     tasks: List[Task] = []
     modes = (info_sharing,) if info_sharing is not None else VALID_MODES
+    selected_horizons = _split_formal_int_tokens(
+        horizons,
+        allowed=FORMAL_HORIZONS,
+        option="--horizon",
+    )
+    selected_seeds = _split_formal_int_tokens(
+        seeds,
+        allowed=FORMAL_SEEDS,
+        option="--seed",
+    )
     resolved_by_dataset = {
         item.dataset_id: item
         for item in resolve_all_formal_dataset_paths(repository_root=repository_root)
@@ -314,6 +354,8 @@ def build_tasks(
                 output_dir=layout.mode_dir(dataset_id, mode),
             )
             for cell in matrix:
+                if cell.horizon not in selected_horizons or cell.seed not in selected_seeds:
+                    continue
                 command = list(cell.command)
                 command.extend(
                     [
@@ -352,6 +394,16 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--only", action="append", help="d1..d6, comma-separated or repeated")
     parser.add_argument("--info-sharing", choices=VALID_MODES, default=None)
+    parser.add_argument(
+        "--horizon",
+        action="append",
+        help="Formal horizon 1..5; comma-separated or repeated. Default: all.",
+    )
+    parser.add_argument(
+        "--seed",
+        action="append",
+        help="Formal seed 42..46; comma-separated or repeated. Default: all.",
+    )
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--resume", action="store_true", help="Reuse only accepted cells with matching hashes and code identity")
@@ -441,6 +493,16 @@ def _mode_groups(tasks: Sequence[Task]) -> list[tuple[tuple[int, str], list[Task
 def _global_contract(mode_contracts: Sequence[ExpectedResultContract]) -> ExpectedResultContract:
     dataset_ids = tuple(sorted({contract.dataset_ids[0] for contract in mode_contracts}))
     modes = tuple(mode for mode in VALID_MODES if any(mode in contract.modes for contract in mode_contracts))
+    horizons = tuple(
+        horizon
+        for horizon in FORMAL_HORIZONS
+        if any(horizon in contract.horizons for contract in mode_contracts)
+    )
+    seeds = tuple(
+        seed
+        for seed in FORMAL_SEEDS
+        if any(seed in contract.seeds for contract in mode_contracts)
+    )
     targets = {
         key: value
         for contract in mode_contracts
@@ -448,7 +510,7 @@ def _global_contract(mode_contracts: Sequence[ExpectedResultContract]) -> Expect
     }
     full = set(targets) == {
         (dataset_id, mode) for dataset_id in range(1, 7) for mode in VALID_MODES
-    }
+    } and horizons == FORMAL_HORIZONS and seeds == FORMAL_SEEDS
     return ExpectedResultContract(
         scope=AcceptanceScope.GLOBAL_AGGREGATE,
         formal=True,
@@ -457,8 +519,8 @@ def _global_contract(mode_contracts: Sequence[ExpectedResultContract]) -> Expect
         protocol_tracks=("strict_paper",),
         targets_by_dataset_mode=targets,
         methods=FORMAL_METHODS,
-        horizons=FORMAL_HORIZONS,
-        seeds=FORMAL_SEEDS,
+        horizons=horizons,
+        seeds=seeds,
         confirmation_eligible=True,
         aggregate_profile=(
             AggregateProfile.FULL_D1_D6_BASELINE
@@ -496,30 +558,67 @@ def build_run_plan(
     *,
     code_identity: CodeIdentity,
     input_identity: dict[str, dict[str, object]],
+    only: Optional[Iterable[str]] = None,
+    info_sharing: Optional[str] = None,
+    horizons: Optional[Iterable[object]] = None,
+    seeds: Optional[Iterable[object]] = None,
 ) -> dict[str, object]:
     root = Path(run_root).resolve()
-    tasks = build_tasks(None, smoke=False, run_dir=root)
+    tasks = build_tasks(
+        only,
+        smoke=False,
+        run_dir=root,
+        info_sharing=info_sharing,
+        horizons=horizons,
+        seeds=seeds,
+    )
     cells = [_task_plan_entry(task) for task in tasks]
     result_paths = [str(cell["result_path"]) for cell in cells]
-    if len(cells) != 300 or len(set(result_paths)) != 300:
-        raise RuntimeError("formal run plan must contain exactly 300 unique cells")
+    if not cells or len(set(result_paths)) != len(cells):
+        raise RuntimeError("formal run plan must contain at least one unique cell")
+    selected_datasets = expand_only_tokens(only)
+    selected_modes = (info_sharing,) if info_sharing is not None else VALID_MODES
+    selected_horizons = _split_formal_int_tokens(
+        horizons,
+        allowed=FORMAL_HORIZONS,
+        option="--horizon",
+    )
+    selected_seeds = _split_formal_int_tokens(
+        seeds,
+        allowed=FORMAL_SEEDS,
+        option="--seed",
+    )
 
     payload: dict[str, object] = {
-        "run_plan_version": "formal_d1_d6_run_plan_v2",
+        "run_plan_version": "formal_d1_d6_run_plan_v3",
         "code_identity": code_identity.to_dict(),
         "schema_registry_version": RESULT_SCHEMA_REGISTRY_VERSION,
         "schema_registry_digest": result_schema_registry_digest(),
         "input_identity": input_identity,
         "formal_inputs": list(resolve_unified_formal_input_identities(PROJECT_ROOT)),
         "methods": list(FORMAL_METHODS),
-        "horizons": list(FORMAL_HORIZONS),
-        "seeds": list(FORMAL_SEEDS),
+        "horizons": list(selected_horizons),
+        "seeds": list(selected_seeds),
+        "selection": {
+            "datasets": list(selected_datasets),
+            "modes": list(selected_modes),
+            "horizons": list(selected_horizons),
+            "seeds": list(selected_seeds),
+        },
         "cells": cells,
     }
     return {**payload, "run_identity": _canonical_digest(payload)}
 
 
-def prepare_formal_run(run_root: Path, *, resume: bool) -> dict[str, object]:
+def prepare_formal_run(
+    run_root: Path,
+    *,
+    resume: bool,
+    only: Optional[Iterable[str]] = None,
+    info_sharing: Optional[str] = None,
+    horizons: Optional[Iterable[object]] = None,
+    seeds: Optional[Iterable[object]] = None,
+) -> dict[str, object]:
     root = Path(run_root).resolve()
     code_identity = discover_code_identity(PROJECT_ROOT)
     if code_identity.dirty:
@@ -529,6 +628,10 @@ def prepare_formal_run(run_root: Path, *, resume: bool) -> dict[str, object]:
         root,
         code_identity=code_identity,
         input_identity=input_identity,
+        only=only,
+        info_sharing=info_sharing,
+        horizons=horizons,
+        seeds=seeds,
     )
 
     if resume:
@@ -551,6 +654,18 @@ def load_validated_run_plan(
         raise RuntimeError(f"formal run plan is unreadable: {plan_path}") from exc
     if not isinstance(stored, dict):
         raise RuntimeError(f"formal run plan must be a JSON object: {plan_path}")
+    selection = stored.get("selection")
+    if not isinstance(selection, dict):
+        raise RuntimeError("formal run plan has no selection contract")
+    datasets = selection.get("datasets")
+    modes = selection.get("modes")
+    horizons = selection.get("horizons")
+    seeds = selection.get("seeds")
+    if not isinstance(datasets, list) or not isinstance(modes, list):
+        raise RuntimeError("formal run plan selection is malformed")
+    if modes not in [list(VALID_MODES), [VALID_MODES[0]], [VALID_MODES[1]]]:
+        raise RuntimeError("formal run plan mode selection is malformed")
+    info_sharing = modes[0] if len(modes) == 1 else None
 
     code_identity = discover_code_identity(PROJECT_ROOT)
     if code_identity.dirty:
@@ -559,10 +674,88 @@ def load_validated_run_plan(
         root,
         code_identity=code_identity,
         input_identity=discover_formal_input_identity(PROJECT_ROOT),
+        only=[str(value) for value in datasets],
+        info_sharing=info_sharing,
+        horizons=horizons if isinstance(horizons, list) else None,
+        seeds=seeds if isinstance(seeds, list) else None,
     )
     if stored != current:
         raise RuntimeError("current formal plan or identity does not match run_plan.json")
     return current, code_identity
+
+
+def _code_identity_from_run_plan(plan: Mapping[str, object]) -> CodeIdentity:
+    raw = plan.get("code_identity")
+    if not isinstance(raw, dict) or set(raw) != {
+        "git_commit",
+        "dirty",
+        "worktree_digest",
+    }:
+        raise RuntimeError("formal run plan code identity is malformed")
+    git_commit = raw.get("git_commit")
+    dirty = raw.get("dirty")
+    worktree_digest = raw.get("worktree_digest")
+    if (
+        not isinstance(git_commit, str)
+        or not git_commit
+        or dirty is not False
+        or not isinstance(worktree_digest, str)
+        or not worktree_digest
+    ):
+        raise RuntimeError("formal run plan code identity is malformed")
+    return CodeIdentity(git_commit, dirty, worktree_digest)
+
+
+def _experiment_plan_payload(plan: Mapping[str, object]) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in plan.items()
+        if key not in {"code_identity", "run_identity"}
+    }
+
+
+def load_aggregate_compatible_run_plan(
+    run_root: Path,
+) -> tuple[dict[str, object], CodeIdentity, CodeIdentity]:
+    """Load an immutable upstream plan under a distinct aggregate publisher identity."""
+    root = Path(run_root).resolve()
+    plan_path = root / "run_plan.json"
+    try:
+        stored = json.loads(plan_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        raise RuntimeError(f"formal run plan is unreadable: {plan_path}") from exc
+    if not isinstance(stored, dict):
+        raise RuntimeError(f"formal run plan must be a JSON object: {plan_path}")
+
+    stored_run_identity = stored.get("run_identity")
+    stored_payload = {
+        key: value for key, value in stored.items() if key != "run_identity"
+    }
+    if (
+        not isinstance(stored_run_identity, str)
+        or stored_run_identity != _canonical_digest(stored_payload)
+    ):
+        raise RuntimeError("formal run plan identity digest does not match its payload")
+    upstream_identity = _code_identity_from_run_plan(stored)
+
+    datasets, selected_mode, horizons, seeds = _selection_from_plan(stored)
+    publisher_identity = discover_code_identity(PROJECT_ROOT)
+    if publisher_identity.dirty:
+        raise RuntimeError("formal execution requires a clean git worktree")
+    current = build_run_plan(
+        root,
+        code_identity=publisher_identity,
+        input_identity=discover_formal_input_identity(PROJECT_ROOT),
+        only=datasets,
+        info_sharing=selected_mode,
+        horizons=horizons,
+        seeds=seeds,
+    )
+    if _experiment_plan_payload(stored) != _experiment_plan_payload(current):
+        raise RuntimeError(
+            "aggregate-only experiment identity does not match stored run plan"
+        )
+    return stored, upstream_identity, publisher_identity
 
 
 def _require_tasks_match_plan(
@@ -583,11 +776,82 @@ def _require_tasks_match_plan(
         and cell.get("mode") == mode
     ]
     actual = [_task_plan_entry(task) for task in tasks]
-    if len(planned) != 25 or len(actual) != 25 or planned != actual:
+    if not planned or planned != actual:
         raise RuntimeError(
             f"mode worker plan mismatch for d{dataset_id}_{mode}: "
             f"planned={len(planned)} actual={len(actual)}"
         )
+
+
+def _selection_from_plan(
+    plan: Mapping[str, object],
+) -> tuple[list[str], Optional[str], list[int], list[int]]:
+    selection = plan.get("selection")
+    if not isinstance(selection, dict):
+        raise RuntimeError("formal run plan has no selection contract")
+    datasets = selection.get("datasets")
+    modes = selection.get("modes")
+    horizons = selection.get("horizons")
+    seeds = selection.get("seeds")
+    if not all(
+        isinstance(values, list) and values
+        for values in (datasets, modes, horizons, seeds)
+    ):
+        raise RuntimeError("formal run plan selection is malformed")
+    mode_values = [str(value) for value in modes]
+    if mode_values not in [list(VALID_MODES), [VALID_MODES[0]], [VALID_MODES[1]]]:
+        raise RuntimeError("formal run plan mode selection is malformed")
+    return (
+        [str(value) for value in datasets],
+        mode_values[0] if len(mode_values) == 1 else None,
+        [int(value) for value in horizons],
+        [int(value) for value in seeds],
+    )
+
+
+def _tasks_for_plan_mode(
+    plan: Mapping[str, object],
+    *,
+    run_root: Path,
+    dataset: str,
+    mode: str,
+) -> list[Task]:
+    _, _, horizons, seeds = _selection_from_plan(plan)
+    tasks = build_tasks(
+        [dataset],
+        smoke=False,
+        run_dir=run_root,
+        info_sharing=mode,
+        horizons=horizons,
+        seeds=seeds,
+    )
+    _require_tasks_match_plan(
+        tasks,
+        plan,
+        dataset_id=int(dataset[1:]),
+        mode=mode,
+    )
+    return tasks
+
+
+def _selected_mode_contract(
+    *,
+    dataset: str,
+    mode: str,
+    tasks: Sequence[Task],
+) -> ExpectedResultContract:
+    expected = build_mode_expected_contract(dataset=dataset, scenario=mode)
+    horizons = tuple(
+        value
+        for value in FORMAL_HORIZONS
+        if any(task.horizon == value for task in tasks)
+    )
+    seeds = tuple(
+        value
+        for value in FORMAL_SEEDS
+        if any(task.seed == value for task in tasks)
+    )
+    return replace(expected, horizons=horizons, seeds=seeds)
 
 
 def _cell_contract(task: Task, mode_expected: ExpectedResultContract) -> ExpectedResultContract:
@@ -626,19 +890,13 @@ def execute_mode_worker(
         )
 
     plan, code_identity = load_validated_run_plan(run_root)
-    tasks = build_tasks(
-        [dataset],
-        smoke=False,
-        run_dir=run_root,
-        info_sharing=mode,
-    )
-    _require_tasks_match_plan(
-        tasks,
+    tasks = _tasks_for_plan_mode(
         plan,
-        dataset_id=dataset_id,
+        run_root=run_root,
+        dataset=dataset,
         mode=mode,
     )
-    expected = build_mode_expected_contract(dataset=dataset, scenario=mode)
+    expected = _selected_mode_contract(dataset=dataset, mode=mode, tasks=tasks)
     output = layout.mode_result(dataset_id, mode)
     all_cells_reused = bool(resume)
 
@@ -679,8 +937,8 @@ def execute_mode_worker(
         for task in tasks
         if task.expected_result_path is not None
     ]
-    if len(cell_paths) != 25:
-        raise RuntimeError("mode worker did not resolve exactly 25 cell paths")
+    if len(cell_paths) != len(tasks) or not cell_paths:
+        raise RuntimeError("mode worker did not resolve its selected cell paths")
 
     if all_cells_reused:
         try:
@@ -716,27 +974,25 @@ def execute_mode_worker(
 
 def aggregate_prepared_run(run_root: Path) -> Path:
     root = Path(run_root).resolve()
-    plan, code_identity = load_validated_run_plan(root)
+    plan, upstream_identity, publisher_identity = load_aggregate_compatible_run_plan(
+        root
+    )
     raw_cells = plan.get("cells")
-    if not isinstance(raw_cells, list) or len(raw_cells) != 300:
-        raise RuntimeError("global publication requires the full 300-cell formal plan")
+    if not isinstance(raw_cells, list) or not raw_cells:
+        raise RuntimeError("global publication requires a non-empty formal run plan")
+    datasets, selected_mode, _, _ = _selection_from_plan(plan)
+    modes = (selected_mode,) if selected_mode is not None else VALID_MODES
 
     layout = RunLayout(root)
     mode_paths: list[Path] = []
     mode_contracts: list[ExpectedResultContract] = []
-    for dataset_id in range(1, 7):
-        dataset = f"d{dataset_id}"
-        for mode in VALID_MODES:
-            tasks = build_tasks(
-                [dataset],
-                smoke=False,
-                run_dir=root,
-                info_sharing=mode,
-            )
-            _require_tasks_match_plan(
-                tasks,
+    for dataset in datasets:
+        dataset_id = int(dataset[1:])
+        for mode in modes:
+            tasks = _tasks_for_plan_mode(
                 plan,
-                dataset_id=dataset_id,
+                run_root=root,
+                dataset=dataset,
                 mode=mode,
             )
             cell_paths = [
@@ -744,13 +1000,14 @@ def aggregate_prepared_run(run_root: Path) -> Path:
                 for task in tasks
                 if task.expected_result_path is not None
             ]
-            if len(cell_paths) != 25:
+            if len(cell_paths) != len(tasks) or not cell_paths:
                 raise RuntimeError(
-                    f"global publication requires 25 cells for d{dataset_id}_{mode}"
+                    f"global publication has no selected cells for d{dataset_id}_{mode}"
                 )
-            expected = build_mode_expected_contract(
+            expected = _selected_mode_contract(
                 dataset=dataset,
-                scenario=mode,
+                mode=mode,
+                tasks=tasks,
             )
             output = layout.mode_result(dataset_id, mode)
             verify_formal_mode_artifact(
@@ -758,17 +1015,27 @@ def aggregate_prepared_run(run_root: Path) -> Path:
                 acceptance_path=layout.mode_acceptance_report(dataset_id, mode),
                 cell_paths=cell_paths,
                 expected=expected,
-                code_identity=code_identity,
+                code_identity=upstream_identity,
             )
             mode_paths.append(output)
             mode_contracts.append(expected)
 
-    load_validated_run_plan(root)
+    final_plan, final_upstream_identity, final_publisher_identity = (
+        load_aggregate_compatible_run_plan(root)
+    )
+    if (
+        final_plan != plan
+        or final_upstream_identity != upstream_identity
+        or final_publisher_identity != publisher_identity
+    ):
+        raise RuntimeError("aggregate-only identity changed during validation")
     publish_global_aggregate(
         mode_paths,
         stable_path=layout.aggregate_result,
         expected=_global_contract(mode_contracts),
-        code_identity=code_identity,
+        code_identity=publisher_identity,
+        upstream_code_identity=upstream_identity,
+        upstream_run_identity=str(plan["run_identity"]),
     )
     print(f"[ACCEPTED] aggregate={layout.aggregate_result}")
     return layout.aggregate_result
@@ -805,11 +1072,13 @@ def main() -> None:
         run_formal_preflight(PROJECT_ROOT)
 
         if operation == "prepare":
-            if getattr(args, "only", None) or getattr(args, "info_sharing", None):
-                raise SystemExit("prepare does not allow --only or --info-sharing")
             plan = prepare_formal_run(
                 output_path,
                 resume=bool(getattr(args, "resume", False)),
+                only=getattr(args, "only", None),
+                info_sharing=getattr(args, "info_sharing", None),
+                horizons=getattr(args, "horizon", None),
+                seeds=getattr(args, "seed", None),
             )
             print(
                 f"[PREPARED] run_root={output_path} "
@@ -818,6 +1087,10 @@ def main() -> None:
             return
 
         if operation == "mode-worker":
+            if getattr(args, "horizon", None) or getattr(args, "seed", None):
+                raise SystemExit(
+                    "mode-worker cell selection is fixed by the prepared run plan"
+                )
             selected = expand_only_tokens(getattr(args, "only", None))
             mode = getattr(args, "info_sharing", None)
             if len(selected) != 1 or mode not in VALID_MODES:
@@ -836,6 +1109,8 @@ def main() -> None:
             if (
                 getattr(args, "only", None)
                 or getattr(args, "info_sharing", None)
+                or getattr(args, "horizon", None)
+                or getattr(args, "seed", None)
                 or getattr(args, "resume", False)
             ):
                 raise SystemExit(
@@ -868,6 +1143,8 @@ def main() -> None:
             smoke=bool(args.smoke),
             run_dir=run_root,
             info_sharing=args.info_sharing,
+            horizons=getattr(args, "horizon", None),
+            seeds=getattr(args, "seed", None),
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
@@ -881,16 +1158,36 @@ def main() -> None:
             "formal execution requires a clean git worktree; commit or stash code changes first"
         )
     input_identity = discover_formal_input_identity(PROJECT_ROOT)
+    selected_datasets = expand_only_tokens(args.only)
+    selected_modes = (
+        (args.info_sharing,) if args.info_sharing is not None else VALID_MODES
+    )
+    selected_horizons = _split_formal_int_tokens(
+        getattr(args, "horizon", None),
+        allowed=FORMAL_HORIZONS,
+        option="--horizon",
+    )
+    selected_seeds = _split_formal_int_tokens(
+        getattr(args, "seed", None),
+        allowed=FORMAL_SEEDS,
+        option="--seed",
+    )
     run_plan = {
-        "run_plan_version": "formal_d1_d6_run_plan_v2",
+        "run_plan_version": "formal_d1_d6_run_plan_v3",
         "code_identity": code_identity.to_dict(),
         "schema_registry_version": RESULT_SCHEMA_REGISTRY_VERSION,
         "schema_registry_digest": result_schema_registry_digest(),
         "input_identity": input_identity,
         "formal_inputs": list(formal_inputs),
         "methods": list(FORMAL_METHODS),
-        "horizons": list(FORMAL_HORIZONS),
-        "seeds": list(FORMAL_SEEDS),
+        "horizons": list(selected_horizons),
+        "seeds": list(selected_seeds),
+        "selection": {
+            "datasets": list(selected_datasets),
+            "modes": list(selected_modes),
+            "horizons": list(selected_horizons),
+            "seeds": list(selected_seeds),
+        },
         "cells": [
             {
                 "dataset_id": task.dataset_id,
@@ -950,7 +1247,11 @@ def main() -> None:
     mode_paths: list[Path] = []
     mode_contracts: list[ExpectedResultContract] = []
     for (dataset_id, mode), group in _mode_groups(completed_tasks):
-        expected = build_mode_expected_contract(dataset=f"d{dataset_id}", scenario=mode)
+        expected = _selected_mode_contract(
+            dataset=f"d{dataset_id}",
+            mode=mode,
+            tasks=group,
+        )
         output = layout.mode_result(dataset_id, mode)
         publish_mode_matrix(
             [task.expected_result_path for task in group if task.expected_result_path is not None],

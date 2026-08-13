@@ -32,8 +32,10 @@ def _append(event: str, task: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--operation", required=True)
-    parser.add_argument("--only")
+    parser.add_argument("--only", action="append")
     parser.add_argument("--info-sharing")
+    parser.add_argument("--horizon", action="append")
+    parser.add_argument("--seed", action="append")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
@@ -49,7 +51,8 @@ def main() -> int:
     if args.operation != "mode-worker":
         return 2
 
-    task = f"{args.only}_{args.info_sharing}"
+    only = args.only[0] if isinstance(args.only, list) else args.only
+    task = f"{only}_{args.info_sharing}"
 
     def interrupted(signum, frame):
         _append("terminated", task)

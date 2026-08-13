@@ -6,13 +6,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.constants import SCHEMA_FAMILY_D1_D3
+from src.constants import SCHEMA_FAMILY_D1_D3, SCHEMA_FAMILY_D4_D6
 from src.protocols.experiment_protocol import FORMAL_METHODS
 from src.utils.result_acceptance import (
     AcceptanceScope,
     AggregateProfile,
     ExpectedResultContract,
     ResultAcceptanceError,
+    _align_structurally_missing_columns,
     _read_csv,
     _same_candidate_content,
     accept_cell_csv,
@@ -135,6 +136,34 @@ def test_cell_acceptance_requires_exact_formal_coverage(tmp_path: Path) -> None:
     )
     assert built == _contract()
     assert len(require_accepted(outcome)) == 6
+
+
+def test_d4_runtime_audit_columns_are_accepted_as_registered_schema(
+    tmp_path: Path,
+) -> None:
+    frame = _cell_rows(dataset_id=4, target="166/258").assign(
+        schema_family=SCHEMA_FAMILY_D4_D6,
+        source_pool_track="extended",
+        domain_filter_applied_to_source=False,
+        domain_filter_scope="target_only",
+        domain_filter_column="first_category_id",
+        domain_filter_value=15,
+        target_domain_validation_passed=True,
+        target_domain_validation_target_count=5,
+        source_pool_policy="without_information_sharing_same_store",
+    )
+    path = _write(tmp_path / "d4_cell.csv", frame)
+
+    outcome = accept_cell_csv(
+        path,
+        expected=_contract(
+            dataset_ids=(4,),
+            targets={(4, "without"): ("166/258",)},
+        ),
+    )
+
+    assert outcome.report.passed
+    assert outcome.report.reasons == ()
 
 
 @pytest.mark.parametrize(
@@ -417,6 +446,57 @@ def test_global_aggregate_candidate_accepts_and_rejects_float64_content(
 
     assert not rejected.report.passed
     assert rejected.report.reasons == ("candidate_aggregate_mismatch",)
+
+
+def test_global_aggregate_aligns_only_structurally_missing_columns(
+    tmp_path: Path,
+) -> None:
+    targets = FULL_TARGETS[(5, "without")]
+    without = _confirmed_mode_rows(5, "without", targets).assign(
+        feature_cols_final="sales"
+    )
+    with_mode = _confirmed_mode_rows(5, "with", targets)
+    paths = [
+        _write(tmp_path / "d5_without.csv", without),
+        _write(tmp_path / "d5_with.csv", with_mode),
+    ]
+    expected = _contract(
+        scope=AcceptanceScope.GLOBAL_AGGREGATE,
+        dataset_ids=(5,),
+        modes=("without", "with"),
+        targets={(5, mode): targets for mode in ("without", "with")},
+        horizons=(1, 2, 3, 4, 5),
+        seeds=(42, 43, 44, 45, 46),
+        profile=AggregateProfile.RUN_SELECTION_AGGREGATE,
+    )
+
+    accepted = accept_global_aggregate(paths, expected=expected)
+    candidate = _write(tmp_path / "candidate.csv", accepted.accepted_rows)
+    revalidated = accept_global_aggregate(
+        paths,
+        expected=expected,
+        candidate_aggregate_csv=candidate,
+    )
+
+    assert revalidated.report.passed
+    structural_rows = accepted.accepted_rows["scenario"].eq("with")
+    assert accepted.accepted_rows.loc[
+        structural_rows, "feature_cols_final"
+    ].eq("").all()
+
+
+def test_structural_alignment_preserves_nan_in_an_existing_column() -> None:
+    with_existing_nan = pd.DataFrame(
+        {"id": [1], "metric": [1.0], "extra": [np.nan]}
+    )
+    without_column = pd.DataFrame({"id": [2], "metric": [2.0]})
+
+    aligned_existing, aligned_structural = _align_structurally_missing_columns(
+        [with_existing_nan, without_column]
+    )
+
+    assert pd.isna(aligned_existing.loc[0, "extra"])
+    assert aligned_structural.loc[0, "extra"] == ""
 
 
 def test_global_profiles_distinguish_selection_from_full_baseline(tmp_path: Path) -> None:

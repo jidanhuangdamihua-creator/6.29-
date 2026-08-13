@@ -133,6 +133,12 @@ WORKING_FRAME_ATTR_ALLOWLIST = frozenset(
         "solidified_parquet_path",
         "protocol_actual_source_key",
         "protocol_scaler_feature_cols",
+        "protocol_cell_identity",
+        "protocol_raw_preprocessing_identity",
+        "protocol_fill_policy_identity",
+        "protocol_rfe_stage_identity",
+        "protocol_normalization_evidence",
+        "protocol_sequence_evidence",
     }
 )
 

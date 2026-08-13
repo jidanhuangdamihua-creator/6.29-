@@ -167,6 +167,54 @@ def test_dry_run_prints_twelve_unique_mode_workers_without_launch(tmp_path: Path
     assert _events(tmp_path) == []
 
 
+def test_dry_run_selects_one_exact_dataset_mode_cell(tmp_path: Path) -> None:
+    completed = _run_supervisor(
+        tmp_path,
+        DRY_RUN="1",
+        DATASETS="d5",
+        MODES="without",
+        HORIZONS="3",
+        SEEDS="44",
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    lines = [line for line in completed.stdout.splitlines() if line.startswith("[MODE]")]
+    assert len(lines) == 1
+    assert "[MODE] d5_without " in lines[0]
+    assert "cells=1 unique=1" in completed.stdout
+    assert "datasets=d5 modes=without horizons=3 seeds=44" in completed.stdout
+
+
+def test_dry_run_selects_one_horizon_seed_across_all_dataset_modes(tmp_path: Path) -> None:
+    completed = _run_supervisor(
+        tmp_path,
+        DRY_RUN="1",
+        HORIZONS="2",
+        SEEDS="43",
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    lines = [line for line in completed.stdout.splitlines() if line.startswith("[MODE]")]
+    assert len(lines) == 12
+    assert "cells=12 unique=12" in completed.stdout
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [("DATASETS", "d7"), ("MODES", "invalid"), ("HORIZONS", "6"), ("SEEDS", "41")],
+)
+def test_invalid_selection_fails_before_run_root_creation(
+    tmp_path: Path,
+    name: str,
+    value: str,
+) -> None:
+    completed = _run_supervisor(tmp_path, **{name: value})
+
+    assert completed.returncode == 2
+    assert name in completed.stderr
+    assert not (tmp_path / "formal-run").exists()
+
+
 @pytest.mark.parametrize("value", ["0", "13", "x", "1.5", ""])
 def test_invalid_max_jobs_fails_before_run_root_creation(
     tmp_path: Path,

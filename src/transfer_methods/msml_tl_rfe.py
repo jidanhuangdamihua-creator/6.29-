@@ -20,7 +20,7 @@ Module 9: MSML-TL-RFE (Multi-Source Multi-Layer Transfer Learning with Recursive
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -37,7 +37,7 @@ from src.data_processing.data_preprocessing import (
     temporal_split_by_ratio_or_dates,
     to_cnn_tensor,
 )
-from src.source_selection.source_selector import SourceSelector
+from src.source_selection.source_selector import SourceSelector, TargetK3SelectionContext
 from src.transfer_methods.msml_tl import (
     get_transferable_layer_names,
     extract_layer_params,
@@ -61,10 +61,20 @@ from src.transfer_methods.source_failure_tolerance import (
     source_failure_meta,
 )
 from src.protocols.runner_adapter import source_key_mask
+from src.protocols.raw_preprocessing import TargetK3RawSourceContext
+from src.protocols.transformation_identity import (
+    RFE_STAGE_IDENTITY_ATTR,
+    RFEStageIdentity,
+    exact_array_digest,
+    semantic_digest,
+)
 from src.protocols.provenance import (
     assert_actual_cnn_training_validated,
     bind_actual_cnn_source_frame,
 )
+
+if TYPE_CHECKING:
+    from src.protocols.transformation_reuse import TargetTransformationReuseContext
 
 LOGGER_NAME = "experiment"
 
@@ -328,6 +338,7 @@ def train_source_cnn_for_msml_rfe(
     source_epochs: int = 3,
     batch_size: int = 16,
     source_key: Optional[Tuple] = None,
+    transformation_reuse_context: "TargetTransformationReuseContext | None" = None,
 ) -> Dict[str, object]:
     """
     与模块8中的 train_source_cnn_for_msml 类似，但使用 RFE 后的特征。
@@ -361,11 +372,13 @@ def train_source_cnn_for_msml_rfe(
     source_sequence_df = fill_source_numeric_na(source_sequence_df, feature_columns=feature_cols)
     src_train, src_val, src_test = _prepare_source_split(source_sequence_df)
     src_train, src_val, src_test, _, _ = normalize_features(
-        src_train, src_val, src_test, feature_columns=feature_cols
+        src_train, src_val, src_test, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
 
     X_source, y_source = build_tabular_sequence(
-        src_train, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+        src_train, horizon=horizon, window_size=window_size, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
     if src_train.attrs.get("protocol_actual_source_key") is not None:
         assert_actual_cnn_training_validated(
@@ -416,6 +429,7 @@ def fine_tune_fused_target_model_rfe(
     epochs: int = 3,
     batch_size: int = 16,
     learning_rate: float = 0.001,
+    transformation_reuse_context: "TargetTransformationReuseContext | None" = None,
 ) -> Dict[str, object]:
     """
     使用 RFE 后的 target train/val 数据微调 target model。
@@ -447,10 +461,12 @@ def fine_tune_fused_target_model_rfe(
     )
 
     X_train, y_train = build_tabular_sequence(
-        target_train_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+        target_train_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
     X_val, y_val = build_tabular_sequence(
-        target_val_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+        target_val_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
 
     if len(y_train) == 0:
@@ -496,6 +512,7 @@ def evaluate_msml_rfe_model(
     horizon: int = 1,
     window_size: int = 10,
     eps: float = 1e-8,
+    transformation_reuse_context: "TargetTransformationReuseContext | None" = None,
 ) -> Dict[str, object]:
     """
     使用 RFE 后的 target test 数据评估模型。
@@ -521,7 +538,8 @@ def evaluate_msml_rfe_model(
     logger.info("[evaluate_msml_rfe_model] Start.")
 
     X_test, y_test = build_tabular_sequence(
-        target_test_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+        target_test_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
     if len(y_test) == 0:
         raise ValueError("Target test split produced zero windows; adjust window_size/horizon.")
@@ -582,6 +600,9 @@ def run_msml_tl_rfe(
     random_state: int = 42,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
     metric_identity: Optional[Dict[str, object]] = None,
+    k3_selection_context: TargetK3SelectionContext | None = None,
+    k3_raw_source_context: TargetK3RawSourceContext | None = None,
+    transformation_reuse_context: "TargetTransformationReuseContext | None" = None,
 ) -> Dict[str, object]:
     """
     运行 MSML-TL-RFE 完整流程。
@@ -661,15 +682,34 @@ def run_msml_tl_rfe(
     resolved_group_cols = tuple(group_cols)
 
     # --- Step 1: 选源 ---
-    selector = SourceSelector()
-    selection_result = selector.select_top_k_sources(
-        target_df=target_df,
-        source_df=source_df,
-        feature_cols=feature_cols,
-        k=k,
-        group_cols=resolved_group_cols,
-        weight_mode=weight_mode,
-    )
+    if k3_selection_context is None:
+        selector = SourceSelector()
+        selection_result = selector.select_top_k_sources(
+            target_df=target_df,
+            source_df=source_df,
+            feature_cols=feature_cols,
+            k=k,
+            group_cols=resolved_group_cols,
+            weight_mode=weight_mode,
+        )
+    else:
+        evidence = k3_selection_context.selection_for_method(
+            target_df=target_df,
+            source_df=source_df,
+            feature_cols=feature_cols,
+            group_cols=resolved_group_cols,
+            k=k,
+            weight_mode=weight_mode,
+        )
+        selection_result = evidence.method_wrapper(
+            lifecycle_identity=k3_selection_context.lifecycle_identity,
+            target_df=target_df,
+            source_df=source_df,
+            feature_cols=feature_cols,
+            group_cols=resolved_group_cols,
+            k=k,
+            weight_mode=weight_mode,
+        )
     selected_sources = selection_result.get("sources", []) if isinstance(selection_result, dict) else selection_result
     if not selected_sources:
         raise ValueError("No source selected from source pool.")
@@ -693,8 +733,19 @@ def run_msml_tl_rfe(
         if len(source_key) != len(resolved_group_cols):
             raise ValueError(f"Invalid source_key format: {source_key}")
 
-        source_mask = source_key_mask(source_df, resolved_group_cols, source_key)
-        source_sequence_df = source_df[source_mask].copy()
+        if k3_raw_source_context is None:
+            source_mask = source_key_mask(source_df, resolved_group_cols, source_key)
+            source_sequence_df = source_df[source_mask].copy()
+        else:
+            if k3_selection_context is None:
+                raise ValueError("K3 raw source reuse requires the shared K3 selection context")
+            source_sequence_df = k3_raw_source_context.working_source(
+                selection_result=selection_result,
+                source_df=source_df,
+                source_key=source_key,
+                group_cols=resolved_group_cols,
+                model_feature_cols=feature_cols,
+            )
 
         if source_sequence_df.empty:
             raise ValueError(f"Selected source_key not found in source_df: {source_key}")
@@ -768,6 +819,42 @@ def run_msml_tl_rfe(
             source_seq_df, selected_feature_cols, required_cols=source_required_cols
         )
 
+    joint_identity_columns = tuple(dict.fromkeys([*feature_cols, "sales"]))
+    joint_train_identity = exact_array_digest(
+        joint_train_df.loc[:, list(joint_identity_columns)].to_numpy(dtype=np.float64)
+    )
+    estimator_config = (
+        (("n_estimators", 10), ("step", 1))
+        if estimator_name.lower() == "random_forest"
+        else (("fit_intercept", True), ("step", 1))
+    )
+    rfe_stage_identity = RFEStageIdentity(
+        schema_version="rfe-stage-v1",
+        stage="POST_RFE",
+        selected_feature_cols=tuple(selected_feature_cols),
+        rfe_protocol_identity="sklearn.feature_selection.RFE_step1_v1",
+        joint_train_identity=joint_train_identity,
+        estimator_identity=str(estimator_name).lower(),
+        estimator_config=estimator_config,
+        random_state=int(random_state),
+        keep_ratio=float(keep_ratio),
+        selection_evidence_digest=semantic_digest(
+            (
+                tuple(selected_feature_cols),
+                int(rfe_result["num_original_features"]),
+                int(rfe_result["num_selected_features"]),
+                float(rfe_result["keep_ratio"]),
+            )
+        ),
+    )
+    for rfe_frame in (
+        target_train_df_rfe,
+        target_val_df_rfe,
+        target_test_df_rfe,
+        *selected_source_sequences_rfe.values(),
+    ):
+        rfe_frame.attrs[RFE_STAGE_IDENTITY_ATTR] = rfe_stage_identity
+
     logger.info("[run_msml_tl_rfe] Step 6: Applied RFE features to all targets and sources")
 
     # --- Step 7: 对每个 selected source 训练 CNN（使用 RFE 特征）---
@@ -796,6 +883,7 @@ def run_msml_tl_rfe(
                 source_epochs=source_epochs,
                 batch_size=batch_size,
                 source_key=source_key,
+                transformation_reuse_context=transformation_reuse_context,
             )
             weight_diagnostics = summarize_model_weights(train_result["model"])
             if weight_diagnostics["model_weight_nan_count"] or weight_diagnostics["model_weight_inf_count"]:
@@ -879,6 +967,7 @@ def run_msml_tl_rfe(
     # --- Step 10: 归一化 target 数据 ---
     target_train_df_rfe, target_val_df_rfe, target_test_df_rfe, target_scaler, target_feature_columns = normalize_features(
         target_train_df_rfe, target_val_df_rfe, target_test_df_rfe, feature_columns=selected_feature_cols,
+        reuse_context=transformation_reuse_context,
     )
     logger.info("[run_msml_tl_rfe] Step 10: Normalized target features")
 
@@ -893,6 +982,7 @@ def run_msml_tl_rfe(
         learning_rate=learning_rate,
         epochs=target_epochs,
         batch_size=batch_size,
+        transformation_reuse_context=transformation_reuse_context,
     )
     logger.info("[run_msml_tl_rfe] Step 11: Fine-tuned target model")
 
@@ -903,6 +993,7 @@ def run_msml_tl_rfe(
         feature_cols=selected_feature_cols,
         horizon=horizon,
         window_size=window_size,
+        transformation_reuse_context=transformation_reuse_context,
     )
     logger.info(
         "[run_msml_tl_rfe] Step 12: Evaluated model. "
