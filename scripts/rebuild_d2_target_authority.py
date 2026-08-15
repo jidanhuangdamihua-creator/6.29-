@@ -23,7 +23,9 @@ from src.protocols.d2_target_calendarization import (  # noqa: E402
 )
 from src.protocols.formal_deployment_manifest import (  # noqa: E402
     atomic_write_json,
+    canonical_json_bytes,
     sha256_file,
+    sha256_bytes,
 )
 
 
@@ -46,6 +48,21 @@ def _update_json(path: Path, updates: dict[str, Any]) -> None:
         raise RuntimeError(f"authority sidecar is not an object: {path}")
     payload.update(updates)
     atomic_write_json(path, payload)
+
+
+def _schema_digest(frame: pd.DataFrame) -> str:
+    payload = {
+        "column_order": list(frame.columns),
+        "columns": [
+            {
+                "name": str(column),
+                "pandas_dtype": str(frame[column].dtype),
+                "null_count": int(frame[column].isna().sum()),
+            }
+            for column in frame.columns
+        ],
+    }
+    return sha256_bytes(canonical_json_bytes(payload))
 
 
 def rebuild_d2_target_authority(
@@ -73,7 +90,10 @@ def rebuild_d2_target_authority(
     )
     if len(repaired) != 1807:
         raise RuntimeError(f"D2 target producer expected 1807 rows, got {len(repaired)}")
-    if evidence["inserted_count"]:
+    existing_row_changed_cell_count = int(
+        evidence["existing_row_repair"]["changed_cell_count"]
+    )
+    if evidence["inserted_count"] or existing_row_changed_cell_count:
         _write_parquet_atomically(repaired, target_path)
     elif input_sha != str(evidence.get("output_target_sha256") or input_sha):
         raise RuntimeError("D2 idempotence evidence does not bind current target bytes")
@@ -81,19 +101,44 @@ def rebuild_d2_target_authority(
     output_sha = sha256_file(target_path)
     evidence["input_target_sha256"] = input_sha
     evidence["output_target_sha256"] = output_sha
-    evidence["output_semantic_digest"] = target_semantic_digest(pd.read_parquet(target_path))
+    output_target = pd.read_parquet(target_path)
+    evidence["output_semantic_digest"] = target_semantic_digest(output_target)
     evidence["repair_mask_digest"] = evidence["repair_date_digest"]
     evidence["sidecar_path"] = audit_path.relative_to(dataset_root.parent.parent).as_posix()
+    target_null_counts = {
+        column: int(count) for column, count in output_target.isna().sum().items()
+    }
+    target_schema_digest = _schema_digest(output_target)
 
     audit = json.loads(audit_path.read_text(encoding="utf-8"))
     if not isinstance(audit, dict):
         raise RuntimeError("D2 calendarization audit is not an object")
     previous_target_repair = audit.get("target_repair")
+    target_schema = json.loads(target_schema_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    target_artifact = manifest.get("artifacts", {}).get("target", {})
+    sidecars_coherent = (
+        target_schema.get("row_count") == 1807
+        and target_schema.get("parquet_sha256") == output_sha
+        and target_schema.get("null_counts") == target_null_counts
+        and target_schema.get("schema_digest") == target_schema_digest
+        and isinstance(target_artifact, dict)
+        and target_artifact.get("sha256") == output_sha
+        and target_artifact.get("size_bytes") == int(target_path.stat().st_size)
+        and manifest.get("schema_fingerprints", {}).get("target")
+        == target_schema_digest
+    )
+    previous_matches_output = (
+        isinstance(previous_target_repair, dict)
+        and previous_target_repair.get("output_target_sha256") == output_sha
+        and previous_target_repair.get("output_semantic_digest")
+        == evidence["output_semantic_digest"]
+    )
     if (
         evidence["inserted_count"] == 0
-        and isinstance(previous_target_repair, dict)
-        and previous_target_repair.get("output_target_sha256") == output_sha
-        and previous_target_repair.get("output_semantic_digest") == evidence["output_semantic_digest"]
+        and existing_row_changed_cell_count == 0
+        and previous_matches_output
+        and sidecars_coherent
     ):
         return {
             "status": "verified_idempotent",
@@ -101,10 +146,17 @@ def rebuild_d2_target_authority(
             "output_target_sha256": output_sha,
             "rows": len(repaired),
             "inserted_count": 0,
+            "existing_row_changed_cell_count": 0,
             "audit_path": str(audit_path),
             "evidence": previous_target_repair,
         }
-    audit["audit_version"] = "d2_sealed_bytes_audit_v2"
+    if (
+        evidence["inserted_count"] == 0
+        and existing_row_changed_cell_count == 0
+        and previous_matches_output
+    ):
+        evidence = dict(previous_target_repair)
+    audit["audit_version"] = "d2_sealed_bytes_audit_v3"
     audit["target_repair"] = evidence
     audit["target_formal_window"] = {
         "start": "2018-06-01",
@@ -117,9 +169,10 @@ def rebuild_d2_target_authority(
     atomic_write_json(audit_path, audit)
     audit_sha = sha256_file(audit_path)
 
-    target_schema = json.loads(target_schema_path.read_text(encoding="utf-8"))
     target_schema["row_count"] = 1807
     target_schema["parquet_sha256"] = output_sha
+    target_schema["null_counts"] = target_null_counts
+    target_schema["schema_digest"] = target_schema_digest
     atomic_write_json(target_schema_path, target_schema)
 
     provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
@@ -145,18 +198,20 @@ def rebuild_d2_target_authority(
             "source and target row counts match rebuilt formal identity",
             "formal target calendar is exactly 2018-06-01..2018-12-27 (210/210)",
             "five authorized store-closed target rows have sales=0 and promo=0",
+            "authorized 2018-06-02 target identity and calendar fields are finite and date-consistent",
             "forecast consumer excludes future promo",
         ]
     )
+    validation["checks"] = list(dict.fromkeys(validation["checks"]))
     validation["target_calendarization_repair"] = {
         "audit_path": audit_path.name,
         "audit_sha256": audit_sha,
         "repair_date_digest": evidence["repair_date_digest"],
         "inserted_dates": list(D2_TARGET_REPAIR_DATES),
+        "existing_row_repair": evidence["existing_row_repair"],
     }
     atomic_write_json(validation_path, validation)
 
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     target_stat = target_path.stat()
     target_artifact = {
         "path": "target.parquet",
@@ -166,6 +221,7 @@ def rebuild_d2_target_authority(
     }
     manifest["artifacts"]["target"] = target_artifact
     manifest["parent_artifacts"]["target"] = dict(target_artifact)
+    manifest.setdefault("schema_fingerprints", {})["target"] = target_schema_digest
     canonicalization = manifest.setdefault("dataset_canonicalization", {})
     canonicalization.update(
         {
@@ -176,6 +232,7 @@ def rebuild_d2_target_authority(
             "target_repair_reason": evidence["reason"],
             "target_repair_mask_sha256": evidence["repair_date_digest"],
             "target_synthetic_date_count": 5,
+            "target_existing_row_repair": evidence["existing_row_repair"],
         }
     )
     manifest["target_calendarization_evidence"] = {
@@ -185,6 +242,7 @@ def rebuild_d2_target_authority(
         "input_target_sha256": input_sha,
         "output_target_sha256": output_sha,
         "output_semantic_digest": evidence["output_semantic_digest"],
+        "existing_row_repair": evidence["existing_row_repair"],
     }
     manifest["sealed_identity"]["target_normalized_frame_digest"] = evidence[
         "output_semantic_digest"
@@ -201,6 +259,7 @@ def rebuild_d2_target_authority(
         "output_semantic_digest": evidence["output_semantic_digest"],
         "rows": 1807,
         "inserted_count": evidence["inserted_count"],
+        "existing_row_changed_cell_count": existing_row_changed_cell_count,
         "audit_path": str(audit_path),
         "audit_sha256": audit_sha,
         "manifest_path": str(manifest_path),

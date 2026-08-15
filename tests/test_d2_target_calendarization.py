@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+
 import pandas as pd
+import pytest
 
 
 _REPAIR_DATES = (
@@ -83,3 +86,96 @@ def test_d2_target_producer_preserves_original_rows_and_is_idempotent() -> None:
     ]
     assert target_semantic_digest(rerun_original) == target_semantic_digest(original)
     assert first_evidence["policy"] == "closed_day_zero_demand"
+
+
+def test_d2_target_producer_repairs_only_authorized_existing_row() -> None:
+    from src.protocols.d2_target_calendarization import calendarize_d2_target_frame
+
+    original = _target_frame()
+    repair_mask = original["date"].eq(pd.Timestamp("2018-06-02"))
+    original.loc[repair_mask, ["entity_id", "year", "month", "week", "day"]] = None
+
+    repaired, evidence = calendarize_d2_target_frame(original)
+    repaired_row = repaired.loc[repaired["date"].eq(pd.Timestamp("2018-06-02"))].iloc[0]
+
+    assert repaired_row[["entity_id", "year", "month", "week", "day"]].tolist() == [
+        1,
+        2018.0,
+        6.0,
+        22.0,
+        2.0,
+    ]
+    assert evidence["existing_row_repair"]["changed_fields"] == [
+        "entity_id",
+        "year",
+        "month",
+        "week",
+        "day",
+    ]
+    assert evidence["existing_row_repair"]["changed_cell_count"] == 5
+
+    rerun, rerun_evidence = calendarize_d2_target_frame(repaired)
+    assert rerun_evidence["existing_row_repair"]["changed_cell_count"] == 0
+    pd.testing.assert_frame_equal(repaired, rerun)
+
+
+def test_d2_target_producer_rejects_calendar_defect_outside_authorized_row() -> None:
+    from src.protocols.d2_target_calendarization import calendarize_d2_target_frame
+    from src.protocols.experiment_protocol import ProtocolViolation
+
+    original = _target_frame()
+    original.loc[original["date"].eq(pd.Timestamp("2018-06-03")), "week"] = None
+
+    with pytest.raises(ProtocolViolation, match="outside the authorized"):
+        calendarize_d2_target_frame(original)
+
+
+def test_d2_target_rebuilder_recloses_schema_identity_and_is_idempotent(
+    tmp_path,
+) -> None:
+    from scripts.rebuild_d2_target_authority import rebuild_d2_target_authority
+    from src.protocols.d2_target_calendarization import calendarize_d2_target_frame
+
+    dataset_root = tmp_path / "dataset2"
+    dataset_root.mkdir()
+    target, _ = calendarize_d2_target_frame(_target_frame())
+    repair_mask = target["date"].eq(pd.Timestamp("2018-06-02"))
+    target.loc[repair_mask, ["entity_id", "year", "month", "week", "day"]] = None
+    target.to_parquet(dataset_root / "target.parquet", index=False)
+
+    sidecars = {
+        "calendarization_audit.json": {},
+        "manifest.json": {
+            "artifacts": {"target": {}},
+            "parent_artifacts": {"target": {}},
+            "dataset_canonicalization": {},
+            "sealed_identity": {},
+            "schema_fingerprints": {"target": "stale"},
+        },
+        "target_schema.json": {"schema_digest": "stale", "null_counts": {}},
+        "provenance.json": {"formal_input_identity": {"target": {}}},
+        "validation_report.json": {
+            "artifact_identity": {"target": {}},
+            "checks": [],
+        },
+    }
+    for name, payload in sidecars.items():
+        (dataset_root / name).write_text(json.dumps(payload), encoding="utf-8")
+
+    first = rebuild_d2_target_authority(
+        target_path=dataset_root / "target.parquet",
+        audit_path=dataset_root / "calendarization_audit.json",
+    )
+    schema = json.loads((dataset_root / "target_schema.json").read_text(encoding="utf-8"))
+    manifest = json.loads((dataset_root / "manifest.json").read_text(encoding="utf-8"))
+
+    assert first["existing_row_changed_cell_count"] == 5
+    assert schema["schema_digest"] == manifest["schema_fingerprints"]["target"]
+    assert all(count == 0 for count in schema["null_counts"].values())
+
+    second = rebuild_d2_target_authority(
+        target_path=dataset_root / "target.parquet",
+        audit_path=dataset_root / "calendarization_audit.json",
+    )
+    assert second["status"] == "verified_idempotent"
+    assert second["existing_row_changed_cell_count"] == 0

@@ -191,7 +191,7 @@
     },
     {
       "path": "scripts/rebuild_d2_target_authority.py",
-      "sha256": "a3ba4f355cc7ae092c49a7f0e8e6f097cf7241c77292ca91ae1f6d10fe67c4df"
+      "sha256": "76f391d455791a2a6cec0e697858629ff9fec854f5d0278134a8381e0475033d"
     },
     {
       "path": "scripts/regenerate_d1_d2_parquets.py",
@@ -263,7 +263,7 @@
     },
     {
       "path": "scripts/run_unified_d1_d6.py",
-      "sha256": "4d1598a685af1181cf97b576b205c8b98b5735eb05704a5ad866c223fc024f64"
+      "sha256": "48cb18da600fdf1f75a9a80bdea4468da24af012ba6c045fecfab0688a572ee9"
     },
     {
       "path": "scripts/scan_d4_d5_d6_full.py",
@@ -315,7 +315,7 @@
     },
     {
       "path": "scripts/verify_d1_d6_formal_input_resolver.py",
-      "sha256": "cecdc8f86750e80fae414eb8126d167f2ce4d8209f25960d1c4dbc6488c8424a"
+      "sha256": "e3f2aad1dfb48444be2dc6e050e2318fe2e7e346b12824cbe7f614ba8f398db2"
     },
     {
       "path": "scripts/verify_d4_exact_key_closure.py",
@@ -355,7 +355,7 @@
     },
     {
       "path": "src/data_processing/data_preprocessing.py",
-      "sha256": "bbac9f2f52700cc6c3e3eea4601e05cd0b2040d7b2975a9a8fbffc0c1d0ca438"
+      "sha256": "039d30f7922bd269b1d70cfe9af2f827b2b21756071ab2d1ba0cab80d578fc65"
     },
     {
       "path": "src/data_processing/dataset_loader.py",
@@ -435,7 +435,7 @@
     },
     {
       "path": "src/protocols/d2_target_calendarization.py",
-      "sha256": "12c95f8cabe8b43c7ba21864a109af49c3f6e4b7e87fd30a73236e8df72ad6f4"
+      "sha256": "d5365d49eb88ecd603857bc55740246a85ab5d838e1ca87b800a52c07f74b718"
     },
     {
       "path": "src/protocols/experiment_protocol.py",
@@ -443,7 +443,7 @@
     },
     {
       "path": "src/protocols/formal_deployment_manifest.py",
-      "sha256": "f00ae23496f0eac36082e46c10351f4fd653096c664ae888bc340adda4d585e9"
+      "sha256": "1ca5bec0c69f14998be54dcc958db32fe6d8f0c2220f8529983886483e01ff03"
     },
     {
       "path": "src/protocols/formal_input_paths.py",
@@ -686,6 +686,6 @@
       "sha256": "a8a1d6a43c87f01fc8ad010f594b7f51bf353d9788fd8a1d4b824f7325aa053c"
     }
   ],
-  "inventory_sha256": "49c78b120a5a1c4026821b45fe9c2c0af9550a8f90784a2644d01a03a4145922",
+  "inventory_sha256": "1d9762a97d4cb078b9d0252523fd49f46cfdcc087a3f8201e9a6ad65aecf35e2",
   "schema_version": "d1_d6_code_inventory_v1"
 }

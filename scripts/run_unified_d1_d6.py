@@ -67,6 +67,7 @@ UNIFIED_RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
 UNIFIED_RUN_DIR = RUNS_DIR / UNIFIED_RUN_ID
 VALID_DATASETS = tuple(f"d{number}" for number in range(1, 7))
 VALID_MODES = ("without", "with")
+STRICT_CONFIG_DATASETS = tuple(f"Dataset{number}" for number in range(1, 4))
 
 
 def _working_tree_fingerprint(project_root: Path) -> str:
@@ -98,10 +99,59 @@ def _working_tree_fingerprint(project_root: Path) -> str:
     return digest.hexdigest()
 
 
+def validate_formal_sequence_feasibility(
+    project_root: Path = PROJECT_ROOT,
+) -> dict[str, object]:
+    """Reject a formal matrix whose target-train split cannot form every horizon."""
+
+    root = Path(project_root).resolve(strict=True)
+    config_path = root / "configs" / "default_config.json"
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        window_size = int(config["single_experiment"]["window_size"])
+        strict_protocol = config["paper_reproduction"]["strict_dataset_protocol"]
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise DeploymentManifestError(
+            "FORMAL_SEQUENCE_CONFIG_INVALID", str(config_path)
+        ) from exc
+
+    if window_size <= 0 or not FORMAL_HORIZONS:
+        raise DeploymentManifestError("FORMAL_SEQUENCE_CONFIG_INVALID")
+    max_horizon = max(int(value) for value in FORMAL_HORIZONS)
+    required_train_days = window_size + max_horizon
+    datasets: dict[str, dict[str, int]] = {}
+
+    for dataset_name in STRICT_CONFIG_DATASETS:
+        try:
+            split_days = strict_protocol[dataset_name]["target_split_days"]
+            train_days = int(split_days["train_days"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise DeploymentManifestError(
+                "FORMAL_SEQUENCE_CONFIG_INVALID", dataset_name
+            ) from exc
+        if train_days < required_train_days:
+            raise DeploymentManifestError(
+                "FORMAL_SEQUENCE_WINDOW_INFEASIBLE",
+                f"{dataset_name} train_days={train_days} "
+                f"required={required_train_days} window_size={window_size} "
+                f"max_horizon={max_horizon}",
+            )
+        datasets[dataset_name] = {"train_days": train_days}
+
+    return {
+        "status": "passed",
+        "window_size": window_size,
+        "max_horizon": max_horizon,
+        "required_train_days": required_train_days,
+        "datasets": datasets,
+    }
+
+
 def run_formal_preflight(project_root: Path = PROJECT_ROOT) -> dict[str, object]:
     """Execute the complete current-byte manifest and consumer preflight."""
 
     root = Path(project_root).resolve(strict=True)
+    sequence_feasibility = validate_formal_sequence_feasibility(root)
     manifest_report = validate_deployment_manifest(root)
     from tools.operations.gate1x_real_input_readiness import run_readiness
 
@@ -120,7 +170,11 @@ def run_formal_preflight(project_root: Path = PROJECT_ROOT) -> dict[str, object]
         raise DeploymentManifestError(
             str(readiness.get("failure_code") or "FINAL_PREFLIGHT_NOT_READY")
         )
-    return {**manifest_report, "readiness": readiness}
+    return {
+        **manifest_report,
+        "readiness": readiness,
+        "sequence_feasibility": sequence_feasibility,
+    }
 
 
 def build_formal_dry_run_plan(

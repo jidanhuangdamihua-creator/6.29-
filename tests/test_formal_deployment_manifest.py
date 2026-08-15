@@ -1021,12 +1021,11 @@ def test_readiness_proof_digest_is_invariant_to_repository_root_and_normalizes_n
     assert readiness["formal_input"]["source_path"] == "数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet"
     assert readiness["sealed_identity"]["manifest_path"] == "数据集/固化数据/d1_d6_sealed_v1/dataset2/manifest.json"
     assert readiness["sealed_identity"]["artifacts"]["source"]["path"] == "数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet"
-    assert readiness["raw_inputs"][0]["path"] == "数据集/原始数据/input.csv"
+    assert "raw_inputs" not in readiness
     assert readiness["source_selection"]["stream_proof"]["authority_path"] == "数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet"
     assert readiness["selection_authority"]["scenarios"]["with"]["path"] == "configs/solidified/knn/Dataset5/knn_with_info_sharing.json"
     assert readiness["parent_inputs"] == {"source": {}, "target": {}}
     assert readiness["old_sealed_inputs"] == {"source": {}, "target": {}}
-    assert readiness["raw_inputs"][1] == {"exists": False}
 
 
 @pytest.mark.parametrize(

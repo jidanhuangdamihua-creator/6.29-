@@ -27,6 +27,8 @@ D2_TARGET_REPAIR_DATES = (
     "2018-12-26",
 )
 _DATE_FEATURES = ("year", "month", "week", "day")
+D2_TARGET_EXISTING_ROW_REPAIR_DATE = "2018-06-02"
+D2_TARGET_EXISTING_ROW_REPAIR_FIELDS = ("entity_id", *_DATE_FEATURES)
 _STATIC_IDENTITY_NAMES = frozenset({"entity_id", "brand_id", "item_id", "brand", "item"})
 
 
@@ -101,6 +103,76 @@ def _coerce_to_original_dtype(value: object, dtype: object) -> object:
     return value
 
 
+def _repair_existing_target_row(
+    source: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Repair only the one frozen D2 target row with incomplete date identity."""
+
+    result = source.copy()
+    repair_date = pd.Timestamp(D2_TARGET_EXISTING_ROW_REPAIR_DATE)
+    repair_mask = result["date"].eq(repair_date)
+    if int(repair_mask.sum()) != 1:
+        raise ProtocolViolation(
+            "D2 target existing-row repair requires exactly one row at "
+            f"{D2_TARGET_EXISTING_ROW_REPAIR_DATE}"
+        )
+
+    expected_entity_id = _authoritative_value(result.loc[~repair_mask], "entity_id")
+    if pd.isna(expected_entity_id):
+        raise ProtocolViolation("D2 target existing-row repair has no entity_id authority")
+    expected_values: dict[str, pd.Series] = {
+        "entity_id": pd.Series(expected_entity_id, index=result.index),
+        "year": result["date"].dt.year,
+        "month": result["date"].dt.month,
+        "week": result["date"].dt.isocalendar().week,
+        "day": result["date"].dt.day,
+    }
+
+    changed_fields: list[str] = []
+    for field, expected in expected_values.items():
+        if field in _DATE_FEATURES:
+            numeric = pd.to_numeric(result[field], errors="coerce")
+            matches = pd.Series(
+                np.isfinite(numeric.to_numpy(dtype=np.float64)), index=result.index
+            ) & numeric.eq(pd.to_numeric(expected, errors="coerce"))
+        else:
+            matches = pd.Series(
+                (
+                    not pd.isna(value)
+                    and str(value) == str(expected.loc[index])
+                    for index, value in result[field].items()
+                ),
+                index=result.index,
+            )
+        outside_repair = ~matches & ~repair_mask
+        if outside_repair.any():
+            offending_dates = (
+                result.loc[outside_repair, "date"]
+                .dt.strftime("%Y-%m-%d")
+                .drop_duplicates()
+                .tolist()
+            )
+            raise ProtocolViolation(
+                f"D2 target {field} is missing or inconsistent outside the authorized "
+                f"existing-row repair date: {offending_dates!r}"
+            )
+        if not bool(matches.loc[repair_mask].all()):
+            repair_value = _coerce_to_original_dtype(
+                expected.loc[repair_mask].iloc[0], result[field].dtype
+            )
+            result.loc[repair_mask, field] = repair_value
+            changed_fields.append(field)
+
+    return result, {
+        "date": D2_TARGET_EXISTING_ROW_REPAIR_DATE,
+        "fields": list(D2_TARGET_EXISTING_ROW_REPAIR_FIELDS),
+        "changed_fields": changed_fields,
+        "changed_cell_count": len(changed_fields),
+        "policy": "recompute_identity_and_date_fields_on_authorized_existing_row",
+        "reason": "repair_nonfinite_existing_target_row",
+    }
+
+
 def calendarize_d2_target_frame(
     target_frame: pd.DataFrame,
     *,
@@ -133,6 +205,11 @@ def calendarize_d2_target_frame(
         )
     if source.duplicated(["brand_id", "item_id", "date"]).any():
         raise ProtocolViolation("D2 target repair received duplicate entity/date keys")
+    before_digest = target_semantic_digest(source)
+    protected_before_digest = target_semantic_digest(
+        source.loc[source["date"].ne(pd.Timestamp(D2_TARGET_EXISTING_ROW_REPAIR_DATE))]
+    )
+    source, existing_row_repair = _repair_existing_target_row(source)
     existing_dates = set(pd.DatetimeIndex(source["date"]))
     authorized = tuple(pd.Timestamp(value) for value in D2_TARGET_REPAIR_DATES)
     existing_authorized = source.loc[source["date"].isin(authorized)]
@@ -144,7 +221,6 @@ def calendarize_d2_target_frame(
             "D2 target authorized repair dates must have sales=0 and promo=0"
         )
     inserted_dates = tuple(timestamp for timestamp in authorized if timestamp not in existing_dates)
-    before_digest = target_semantic_digest(source)
     rows: list[dict[str, object]] = []
     for timestamp in inserted_dates:
         row: dict[str, object] = {column: pd.NA for column in source.columns}
@@ -175,8 +251,12 @@ def calendarize_d2_target_frame(
         result = source.copy()
     result = result.sort_values(["brand_id", "item_id", "date"], kind="mergesort").reset_index(drop=True)
     result.attrs = target_frame.attrs.copy()
-    if target_semantic_digest(result.loc[result["date"].isin(source["date"])]) != before_digest:
-        raise ProtocolViolation("D2 target repair changed an existing row")
+    protected_result = result.loc[
+        result["date"].isin(source["date"])
+        & result["date"].ne(pd.Timestamp(D2_TARGET_EXISTING_ROW_REPAIR_DATE))
+    ]
+    if target_semantic_digest(protected_result) != protected_before_digest:
+        raise ProtocolViolation("D2 target repair changed a protected existing row")
     evidence: dict[str, Any] = {
         "dataset": "Dataset2",
         "artifact": "target",
@@ -191,6 +271,7 @@ def calendarize_d2_target_frame(
         "promo_fill": 0,
         "inserted_count": len(inserted_dates),
         "original_row_present": len(inserted_dates) == 0,
+        "existing_row_repair": existing_row_repair,
         "repair_date_digest": hashlib.sha256(
             json.dumps(list(D2_TARGET_REPAIR_DATES), separators=(",", ":")).encode("utf-8")
         ).hexdigest(),
@@ -215,6 +296,8 @@ def calendarize_d2_target_frame(
 
 __all__ = [
     "D2_TARGET_CALENDARIZATION_RULE_VERSION",
+    "D2_TARGET_EXISTING_ROW_REPAIR_DATE",
+    "D2_TARGET_EXISTING_ROW_REPAIR_FIELDS",
     "D2_TARGET_REPAIR_DATES",
     "calendarize_d2_target_frame",
     "target_semantic_digest",
