@@ -25,7 +25,6 @@ from src.protocols.gate1_transformation import (  # noqa: E402
     COMBINED_FORMAL_IDENTITY_DIGEST,
     Gate1Failure,
     SchemaRegistry,
-    build_d6_calendar_view,
     canonical_digest,
     dataset_contract,
     load_formal_identity,
@@ -675,18 +674,6 @@ def _calendarize_target_counts(target: pd.DataFrame, spec: Any) -> tuple[dict[st
     return counts, repairs, int(sum(counts.values()))
 
 
-def _d6_target_with_calendar(root: Path, target: pd.DataFrame) -> pd.DataFrame:
-    calendar_path = root / "数据集" / "原始数据" / "Dataset 6m5-forecasting-accuracy/calendar.csv"
-    if not calendar_path.is_file():
-        return target
-    calendar = pd.read_csv(calendar_path)
-    view = build_d6_calendar_view(calendar, store_state="CA")
-    target = target.copy()
-    target["date"] = pd.to_datetime(target["date"], errors="raise").dt.normalize()
-    view["date"] = pd.to_datetime(view["date"], errors="raise").dt.normalize()
-    return target.drop(columns=[column for column in ("weekday", "wday", "wm_yr_wk", "snap") if column in target.columns], errors="ignore").merge(view, on="date", how="left", validate="many_to_one")
-
-
 def _verify_d4_consumer_authority(
     root: Path,
     *,
@@ -965,8 +952,6 @@ def _dataset_report(root: Path, parent_root: Path, old_root: Path, dataset_id: i
         source_path = input_paths["source"]
         target_path = input_paths["target"]
         target = _target_frame(root, dataset_id)
-        if dataset_id == 6:
-            target = _d6_target_with_calendar(root, target)
         counts, repairs, calendarized_rows = _calendarize_target_counts(target, spec)
         formal_calendar = evaluate_formal_target_calendar(target, dataset_id=spec.dataset)
         report["formal_target_calendar"] = formal_calendar
