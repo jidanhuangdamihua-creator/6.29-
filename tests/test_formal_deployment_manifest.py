@@ -1021,12 +1021,42 @@ def test_readiness_proof_digest_is_invariant_to_repository_root_and_normalizes_n
     assert readiness["formal_input"]["source_path"] == "数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet"
     assert readiness["sealed_identity"]["manifest_path"] == "数据集/固化数据/d1_d6_sealed_v1/dataset2/manifest.json"
     assert readiness["sealed_identity"]["artifacts"]["source"]["path"] == "数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet"
-    assert readiness["raw_inputs"][0]["path"] == "数据集/原始数据/input.csv"
     assert readiness["source_selection"]["stream_proof"]["authority_path"] == "数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet"
     assert readiness["selection_authority"]["scenarios"]["with"]["path"] == "configs/solidified/knn/Dataset5/knn_with_info_sharing.json"
     assert readiness["parent_inputs"] == {"source": {}, "target": {}}
     assert readiness["old_sealed_inputs"] == {"source": {}, "target": {}}
-    assert readiness["raw_inputs"][1] == {"exists": False}
+    assert "raw_inputs" not in readiness
+
+
+@pytest.mark.parametrize("dataset_id", range(1, 7))
+def test_readiness_proof_digest_ignores_raw_input_deployment_diagnostics(
+    tmp_path: Path, dataset_id: int
+) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    absent = _readiness_proof_fixture(root)
+    absent["dataset"] = f"D{dataset_id}"
+    absent["raw_inputs"] = [
+        {"path": str(root / "数据集" / "原始数据" / "Dataset 5Favorita" / "train.csv"), "exists": False},
+        {"path": str(root / "数据集" / "原始数据" / "Dataset 5Favorita" / "test.csv"), "exists": False},
+    ]
+    present = deepcopy(absent)
+    present["raw_inputs"] = [
+        {
+            "path": str(root / "raw-link" / "Dataset5Favorita" / "train.csv"),
+            "exists": True,
+            "size_bytes": 126163026,
+        },
+        {
+            "path": str(root / "raw-link" / "Dataset5Favorita" / "test.csv"),
+            "exists": True,
+            "size_bytes": 126163026,
+        },
+    ]
+
+    assert deployment.readiness_proof_digest(absent, repository_root=root) == deployment.readiness_proof_digest(
+        present, repository_root=root
+    )
 
 
 @pytest.mark.parametrize(

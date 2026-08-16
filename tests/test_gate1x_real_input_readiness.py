@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pandas as pd
+
 import tools.operations.gate1x_real_input_readiness as readiness
 from src.protocols import formal_deployment_manifest as deployment
 
@@ -128,3 +130,101 @@ def test_runtime_readiness_uses_shared_digest_and_fails_closed_on_identity_chang
     )
     assert rejected["status"] == "failed"
     assert rejected["failure_code"] == "READINESS_PROOF_MISMATCH"
+
+
+def test_d6_readiness_uses_sealed_target_without_raw_calendar_remerge(monkeypatch, tmp_path: Path) -> None:
+    calendar_path = tmp_path / "数据集" / "原始数据" / "Dataset 6m5-forecasting-accuracy" / "calendar.csv"
+    calendar_path.parent.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "date": ["2015-01-01"],
+            "weekday": ["Thursday"],
+            "wday": [5],
+            "wm_yr_wk": [1],
+            "event_name_1": ["raw-event"],
+            "event_type_1": ["Holiday"],
+            "event_name_2": [""],
+            "event_type_2": [""],
+            "snap_CA": [1],
+        }
+    ).to_csv(calendar_path, index=False)
+
+    spec = readiness.dataset_contract("D6")
+    target = pd.DataFrame(
+        {
+            **{
+                field: [value]
+                for field, value in zip(spec.key_fields, spec.target_keys[0])
+            },
+            "date": [pd.Timestamp("2015-01-01")],
+            "sales": [0.0],
+            "wm_yr_wk": [1],
+            "weekday": ["sealed-weekday"],
+            "wday": [5],
+            "event_name_1": ["sealed-event"],
+            "event_type_1": ["Sealed"],
+            "event_name_2": [""],
+            "event_type_2": [""],
+            "snap": [0],
+        }
+    )
+    seen_columns: list[str] = []
+
+    def capture_target(frame: pd.DataFrame, _spec: object) -> tuple[dict[str, int], list[dict[str, object]], int]:
+        seen_columns.extend(frame.columns)
+        return {}, [], spec.expected_blind_rows
+
+    monkeypatch.setattr(
+        readiness,
+        "_base_report",
+        lambda *args, **kwargs: {
+            "dataset": "D6",
+            "status": "failed",
+            "failure_code": None,
+            "worker_safe_fields": [],
+            "proof_inputs_available": {},
+            "after_slicing_rows": {},
+            "pre_or_equal_origin_forecast_rows": 0,
+            "cardinality": {},
+            "evaluator_truth_fields": [],
+            "audit_fields": [],
+            "schema_fields": {},
+            "field_exclusions": {},
+            "source_entities": [],
+            "post_origin_history_rows": 0,
+        },
+    )
+    monkeypatch.setattr(readiness, "_target_frame", lambda root, dataset: target.copy())
+    monkeypatch.setattr(
+        readiness,
+        "formal_input_paths",
+        lambda root, dataset: {
+            "source": tmp_path / "sealed" / "source.parquet",
+            "target": tmp_path / "sealed" / "target.parquet",
+        },
+    )
+    monkeypatch.setattr(readiness, "_calendarize_target_counts", capture_target)
+    monkeypatch.setattr(
+        readiness,
+        "evaluate_formal_target_calendar",
+        lambda frame, dataset_id: {
+            "actual": 1,
+            "expected": 1,
+            "ready": True,
+            "missing_exact_keys": [],
+            "extra_dates": [],
+            "unexpected_keys": [],
+        },
+    )
+    monkeypatch.setattr(readiness, "_source_frame", lambda root, dataset: None)
+    monkeypatch.setattr(
+        readiness,
+        "stream_source_history_candidates",
+        lambda *args, **kwargs: {"complete_candidate_keys": [], "post_origin_history_rows": 0},
+    )
+    monkeypatch.setattr(readiness, "_verify_runtime_knn_authority", lambda **kwargs: {})
+
+    readiness._dataset_report(tmp_path, tmp_path, tmp_path, 6, {})
+
+    assert seen_columns == list(target.columns)
+    assert not any(column.endswith(("_x", "_y")) for column in seen_columns)

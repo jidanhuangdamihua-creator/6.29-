@@ -205,6 +205,7 @@ _READINESS_PATH_FIELDS = frozenset(
 _READINESS_FORMAL_PATH_ROOTS = frozenset(
     {"formal_identity", "formal_input", "sealed_identity", "selection_authority", "source_selection"}
 )
+_READINESS_DEPLOYMENT_DIAGNOSTIC_ROOTS = frozenset({"raw_inputs"})
 _READINESS_PATH_OMITTED = object()
 
 
@@ -258,6 +259,8 @@ def canonical_readiness_proof_payload(
             result: dict[str, object] = {}
             for key, item in value.items():
                 name = str(key)
+                if not path and name in _READINESS_DEPLOYMENT_DIAGNOSTIC_ROOTS:
+                    continue
                 child_path = path + (name,)
                 if name in _READINESS_PATH_FIELDS:
                     item = _canonical_readiness_path(
