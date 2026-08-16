@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run BL1-BL4 on the shared five-horizon rolling-origin sample manifest."""
+"""Run BL1-BL5 on the shared five-horizon rolling-origin sample manifest."""
 
 from __future__ import annotations
 
@@ -26,9 +26,10 @@ from baseline_data_loader import load_baseline_data
 from bl1_historical_mean import predict_bl1
 from bl2_moving_average import predict_bl2
 from bl3_lightgbm import predict_bl3
-from bl4_lstm import predict_bl4
+from bl4_lstm import fit_bl4, predict_bl4
+from bl5_seasonal_naive import predict_bl5
 from src.evaluation.metrics import compute_original_scale_metrics
-from src.protocols.experiment_protocol import FORMAL_HORIZONS, FORMAL_SEEDS
+from src.protocols.experiment_protocol import FORMAL_HORIZONS, FORMAL_SEEDS, ProtocolViolation
 from src.protocols.reproducibility import set_protocol_seed
 from src.protocols.rolling_origin import validate_feature_availability
 from src.utils.result_validation import promote_complete_baseline_groups
@@ -36,7 +37,13 @@ from src.utils.result_validation import promote_complete_baseline_groups
 
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "baselines"
 DEFAULT_SEEDS = FORMAL_SEEDS
-METHODS = ("BL1_HistoricalMean", "BL2_MovingAverage", "BL3_LightGBM", "BL4_LSTM")
+METHODS = (
+    "BL1_HistoricalMean",
+    "BL2_MovingAverage",
+    "BL3_LightGBM",
+    "BL4_LSTM",
+    "BL5_SeasonalNaive",
+)
 STRICT_FORECAST_FEATURE_ALLOWLIST = {
     **{f"lag_{lag}": "known_at_origin" for lag in range(1, 8)},
     "day_of_week": "known_in_advance",
@@ -45,53 +52,126 @@ STRICT_FORECAST_FEATURE_ALLOWLIST = {
     "year": "known_in_advance",
 }
 
-def _predict_bl3_rolling(record, seed: int) -> float:
-    history = [float(value) for value in record.input_sales]
-    history_dates = [pd.Timestamp(value) for value in record.input_dates]
-    if len(history) < 8:
-        raise ValueError("BL3 requires at least eight legal historical sales values")
+def _bl3_direct_training_frame(data: dict, horizon: int) -> pd.DataFrame:
+    """Build one caller-owned initial-train direct-H frame for BL3."""
 
+    history = np.asarray(data["train_sales"], dtype=float)
+    history_dates = pd.DatetimeIndex(pd.to_datetime(data["train_dates"], errors="raise"))
+    resolved_horizon = int(horizon)
     feature_rows = []
-    for index in range(7, len(history)):
-        current_date = history_dates[index]
-        row = {f"lag_{lag}": history[index - lag] for lag in range(1, 8)}
+    for origin_index in range(6, len(history) - resolved_horizon):
+        label_index = origin_index + resolved_horizon
+        label_date = history_dates[label_index]
+        row = {
+            f"lag_{lag}": float(history[origin_index - lag + 1])
+            for lag in range(1, 8)
+        }
         row.update(
             {
-                "day_of_week": current_date.dayofweek,
-                "day_of_month": current_date.day,
-                "month": current_date.month,
-                "year": current_date.year,
-                "sales": history[index],
+                "day_of_week": label_date.dayofweek,
+                "day_of_month": label_date.day,
+                "month": label_date.month,
+                "year": label_date.year,
+                "sales": float(history[label_index]),
             }
         )
         feature_rows.append(row)
     train_features = pd.DataFrame(feature_rows)
+    if train_features.empty:
+        raise ValueError(
+            f"BL3 initial train cannot form direct-H samples for horizon={resolved_horizon}"
+        )
     model_columns = tuple(column for column in train_features.columns if column != "sales")
     validate_feature_availability(
         model_columns,
         allowlist=STRICT_FORECAST_FEATURE_ALLOWLIST,
     )
+    return train_features
 
-    for step in range(1, int(record.horizon) + 1):
-        forecast_date = pd.Timestamp(record.forecast_origin) + pd.Timedelta(days=step)
-        test_row = {f"lag_{lag}": history[-lag] for lag in range(1, 8)}
+
+def _predict_bl3_direct(
+    data: dict,
+    samples: tuple,
+    *,
+    horizon: int,
+    seed: int,
+) -> np.ndarray:
+    """Fit BL3 once on initial train and predict every matured origin directly."""
+
+    train_features = _bl3_direct_training_frame(data, horizon)
+    test_rows = []
+    for record in samples:
+        _validate_matured_record(record, lookback=int(data["lookback"]))
+        history = np.asarray(record.input_sales, dtype=float)
+        label_date = pd.Timestamp(record.label_date)
+        test_row = {f"lag_{lag}": float(history[-lag]) for lag in range(1, 8)}
         test_row.update(
             {
-                "day_of_week": forecast_date.dayofweek,
-                "day_of_month": forecast_date.day,
-                "month": forecast_date.month,
-                "year": forecast_date.year,
+                "day_of_week": label_date.dayofweek,
+                "day_of_month": label_date.day,
+                "month": label_date.month,
+                "year": label_date.year,
             }
         )
-        prediction = float(
-            predict_bl3(
-                train_features,
-                pd.DataFrame([test_row]),
-                random_state=int(seed),
-            )[0]
+        test_rows.append(test_row)
+    return np.asarray(
+        predict_bl3(
+            train_features,
+            pd.DataFrame(test_rows),
+            random_state=int(seed),
+        ),
+        dtype=float,
+    )
+
+
+def _validate_matured_record(record, *, lookback: int) -> None:
+    """Prove that one direct-H input contains no truth after its forecast origin."""
+
+    dates = pd.DatetimeIndex(pd.to_datetime(record.input_dates, errors="raise")).normalize()
+    origin = pd.Timestamp(record.forecast_origin).normalize()
+    label = pd.Timestamp(record.label_date).normalize()
+    resolved_horizon = int(record.horizon)
+    if len(dates) != int(lookback) or len(record.input_sales) != int(lookback):
+        raise ProtocolViolation(
+            f"rolling-origin input must contain exactly {int(lookback)} target observations"
         )
-        history.append(prediction)
-    return history[-1]
+    if dates.has_duplicates or not dates.is_monotonic_increasing:
+        raise ProtocolViolation("rolling-origin target input dates must be unique and ordered")
+    if dates.max() > origin:
+        raise ProtocolViolation(
+            f"future target truth is visible at origin={origin.date().isoformat()}"
+        )
+    if dates.max() != origin:
+        raise ProtocolViolation("rolling-origin input must end at the forecast origin")
+    expected_label = origin + pd.Timedelta(days=resolved_horizon)
+    if label != expected_label:
+        raise ProtocolViolation(
+            f"direct-H label date mismatch: expected={expected_label.date()} actual={label.date()}"
+        )
+
+
+def _predict_bl4_direct(
+    data: dict,
+    samples: tuple,
+    *,
+    horizon: int,
+    seed: int,
+) -> np.ndarray:
+    """Fit BL4 once on initial 15/15 roles and predict matured origins directly."""
+
+    lookback = int(data["lookback"])
+    fitted = fit_bl4(
+        data["train_sales"],
+        data["val_sales"],
+        horizon=int(horizon),
+        lookback=lookback,
+        seed=int(seed),
+    )
+    predictions = []
+    for record in samples:
+        _validate_matured_record(record, lookback=lookback)
+        predictions.append(predict_bl4(fitted, record.input_sales))
+    return np.asarray(predictions, dtype=float)
 
 
 def _default_protocol_predictor(method: str, record, seed: int) -> float:
@@ -101,37 +181,71 @@ def _default_protocol_predictor(method: str, record, seed: int) -> float:
     if method == "BL2_MovingAverage":
         return float(predict_bl2(observed, 1)[0])
     if method == "BL3_LightGBM":
-        return _predict_bl3_rolling(record, seed)
+        raise RuntimeError("BL3 formal prediction requires one initial fit per horizon/seed")
     if method == "BL4_LSTM":
-        if observed.size != 10:
-            raise ValueError(f"BL4 requires exactly 10 manifest observations, got {observed.size}")
-        prediction = predict_bl4(
-            observed[:8],
-            observed[8:],
-            int(record.horizon),
-            seed=int(seed),
-        )
-        return float(prediction[-1])
+        raise RuntimeError("BL4 formal prediction requires one initial fit per horizon/seed")
+    if method == "BL5_SeasonalNaive":
+        return predict_bl5(record)
     raise ValueError(f"unsupported baseline method: {method!r}")
 
 
-def evaluate_entity_protocol(data: dict, *, predictor=_default_protocol_predictor) -> pd.DataFrame:
+def evaluate_entity_protocol(
+    data: dict,
+    *,
+    predictor=_default_protocol_predictor,
+    methods: tuple[str, ...] = METHODS,
+) -> pd.DataFrame:
     """Evaluate every method/seed/horizon on one immutable sample manifest."""
     manifest = data["sample_manifest"]
     rows = []
-    for method in METHODS:
+    unknown_methods = tuple(method for method in methods if method not in METHODS)
+    if unknown_methods:
+        raise ValueError(f"unsupported baseline methods: {unknown_methods!r}")
+    use_formal_default = predictor is _default_protocol_predictor
+    for method in methods:
         for horizon in FORMAL_HORIZONS:
             samples = manifest.for_horizon(horizon)
             if not samples:
                 raise AssertionError(f"manifest contains no samples for horizon={horizon}")
+            for sample in samples:
+                _validate_matured_record(sample, lookback=int(data["lookback"]))
             truth = np.asarray([sample.label for sample in samples], dtype=float)
-            for seed in FORMAL_SEEDS:
-                set_protocol_seed(seed, include_frameworks=False)
-                predictions = np.asarray(
-                    [predictor(method, sample, seed) for sample in samples],
+            deterministic_predictions = None
+            deterministic_metrics = None
+            if method == "BL5_SeasonalNaive":
+                deterministic_predictions = np.asarray(
+                    [predictor(method, sample, FORMAL_SEEDS[0]) for sample in samples],
                     dtype=float,
                 )
-                metrics = compute_original_scale_metrics(truth, predictions)
+                deterministic_metrics = compute_original_scale_metrics(
+                    truth,
+                    deterministic_predictions,
+                )
+            for seed in FORMAL_SEEDS:
+                if deterministic_predictions is None:
+                    set_protocol_seed(seed, include_frameworks=False)
+                    if use_formal_default and method == "BL3_LightGBM":
+                        predictions = _predict_bl3_direct(
+                            data,
+                            samples,
+                            horizon=horizon,
+                            seed=seed,
+                        )
+                    elif use_formal_default and method == "BL4_LSTM":
+                        predictions = _predict_bl4_direct(
+                            data,
+                            samples,
+                            horizon=horizon,
+                            seed=seed,
+                        )
+                    else:
+                        predictions = np.asarray(
+                            [predictor(method, sample, seed) for sample in samples],
+                            dtype=float,
+                        )
+                    metrics = compute_original_scale_metrics(truth, predictions)
+                else:
+                    metrics = deterministic_metrics
                 rows.append(
                     {
                         "dataset_id": str(data["dataset_id"]).upper(),
@@ -161,7 +275,7 @@ def evaluate_entity_protocol(data: dict, *, predictor=_default_protocol_predicto
 
 
 def run_dataset(dataset_id: str, seeds: tuple[int, ...] = DEFAULT_SEEDS) -> Path:
-    """Run strict rolling-origin BL1-BL4 and write protocol-auditable rows."""
+    """Run strict rolling-origin BL1-BL5 and write protocol-auditable rows."""
     normalized_id = str(dataset_id).strip().lower()
     if normalized_id not in {f"d{number}" for number in range(1, 7)}:
         raise ValueError(f"dataset_id must be d1 through d6, got {dataset_id!r}")
@@ -205,7 +319,7 @@ def _parse_seeds(raw: str) -> tuple[int, ...]:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run target-only BL1-BL3 baselines once and BL4 across multiple seeds "
+            "Run target-only BL1-BL3/BL5 baselines once and BL4 across multiple seeds "
             "for D1-D6."
         )
     )
@@ -219,7 +333,7 @@ def _parse_args() -> argparse.Namespace:
         type=_parse_seeds,
         default=DEFAULT_SEEDS,
         help=(
-            "Comma-separated list of seeds for BL4_LSTM, e.g. '42,43,44,45,46'. "
+            "Comma-separated result seeds, e.g. '42,43,44,45,46'. "
             f"Default: {','.join(str(s) for s in DEFAULT_SEEDS)}"
         ),
     )

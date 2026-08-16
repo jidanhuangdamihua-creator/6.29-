@@ -27,6 +27,7 @@ from baseline_metrics import compute_metrics
 from bl1_historical_mean import predict_bl1
 from bl2_moving_average import predict_bl2
 from bl3_lightgbm import predict_bl3
+from bl4_lstm import fit_bl4, predict_bl4
 
 
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "baselines"
@@ -48,6 +49,26 @@ def _result_row(dataset_id: str, entity_key: str, method: str, metrics: dict) ->
         "rmse": float(metrics["rmse"]),
         "mae": float(metrics["mae"]),
     }
+
+
+def _predict_bl4_h1_rolling(data: dict, *, seed: int) -> np.ndarray:
+    """Predict legacy per-day output with one initial direct-H1 fit and matured truth."""
+
+    lookback = int(data["lookback"])
+    fitted = fit_bl4(
+        data["train_sales"],
+        data["val_sales"],
+        horizon=1,
+        lookback=lookback,
+        seed=int(seed),
+    )
+    complete = np.concatenate((data["observed_sales"], data["test_sales"]))
+    observed_count = len(data["observed_sales"])
+    predictions = [
+        predict_bl4(fitted, complete[index - lookback : index])
+        for index in range(observed_count, len(complete))
+    ]
+    return np.asarray(predictions, dtype=float)
 
 
 def run_dataset(dataset_id: str) -> Path:
@@ -81,14 +102,7 @@ def run_dataset(dataset_id: str) -> Path:
                 ),
             ),
         ]
-        from bl4_lstm import predict_bl4
-
-        lstm_seed_42 = predict_bl4(
-            data["train_sales"],
-            data["val_sales"],
-            test_len,
-            seed=42,
-        )
+        lstm_seed_42 = _predict_bl4_h1_rolling(data, seed=42)
         predictions.append(("BL4_LSTM", lstm_seed_42))
 
         for method, prediction in predictions:
@@ -101,12 +115,7 @@ def run_dataset(dataset_id: str) -> Path:
                 )
             )
 
-        lstm_seed_43 = predict_bl4(
-            data["train_sales"],
-            data["val_sales"],
-            test_len,
-            seed=43,
-        )
+        lstm_seed_43 = _predict_bl4_h1_rolling(data, seed=43)
         seed_42_smape = compute_metrics(truth, lstm_seed_42)["smape"]
         seed_43_smape = compute_metrics(truth, lstm_seed_43)["smape"]
         difference = abs(float(seed_42_smape) - float(seed_43_smape))
