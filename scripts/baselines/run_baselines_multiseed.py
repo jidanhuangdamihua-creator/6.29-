@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run BL1-BL4 on the shared five-horizon rolling-origin sample manifest."""
+"""Run BL1-BL5 on the shared five-horizon rolling-origin sample manifest."""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ from bl1_historical_mean import predict_bl1
 from bl2_moving_average import predict_bl2
 from bl3_lightgbm import predict_bl3
 from bl4_lstm import predict_bl4
+from bl5_seasonal_naive import predict_bl5
 from src.evaluation.metrics import compute_original_scale_metrics
 from src.protocols.experiment_protocol import FORMAL_HORIZONS, FORMAL_SEEDS
 from src.protocols.reproducibility import set_protocol_seed
@@ -36,7 +37,13 @@ from src.utils.result_validation import promote_complete_baseline_groups
 
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "baselines"
 DEFAULT_SEEDS = FORMAL_SEEDS
-METHODS = ("BL1_HistoricalMean", "BL2_MovingAverage", "BL3_LightGBM", "BL4_LSTM")
+METHODS = (
+    "BL1_HistoricalMean",
+    "BL2_MovingAverage",
+    "BL3_LightGBM",
+    "BL4_LSTM",
+    "BL5_SeasonalNaive",
+)
 STRICT_FORECAST_FEATURE_ALLOWLIST = {
     **{f"lag_{lag}": "known_at_origin" for lag in range(1, 8)},
     "day_of_week": "known_in_advance",
@@ -44,6 +51,7 @@ STRICT_FORECAST_FEATURE_ALLOWLIST = {
     "month": "known_in_advance",
     "year": "known_in_advance",
 }
+
 
 def _predict_bl3_rolling(record, seed: int) -> float:
     history = [float(value) for value in record.input_sales]
@@ -112,25 +120,59 @@ def _default_protocol_predictor(method: str, record, seed: int) -> float:
             seed=int(seed),
         )
         return float(prediction[-1])
+    if method == "BL5_SeasonalNaive":
+        return float(
+            predict_bl5(
+                record.input_dates,
+                record.input_sales,
+                forecast_origin=record.forecast_origin,
+                horizon=record.horizon,
+                dataset_id=record.dataset_id,
+                target_identity=record.target_key,
+            )
+        )
     raise ValueError(f"unsupported baseline method: {method!r}")
 
 
-def evaluate_entity_protocol(data: dict, *, predictor=_default_protocol_predictor) -> pd.DataFrame:
-    """Evaluate every method/seed/horizon on one immutable sample manifest."""
+def evaluate_entity_protocol(
+    data: dict,
+    *,
+    predictor=_default_protocol_predictor,
+    methods=METHODS,
+) -> pd.DataFrame:
+    """Evaluate selected methods/seeds/horizons on one immutable sample manifest."""
+    selected_methods = tuple(str(method) for method in methods)
+    unsupported = tuple(method for method in selected_methods if method not in METHODS)
+    if unsupported:
+        raise ValueError(f"unsupported baseline methods: {unsupported}")
+    if not selected_methods:
+        raise ValueError("methods must contain at least one baseline method")
+
     manifest = data["sample_manifest"]
     rows = []
-    for method in METHODS:
+    for method in selected_methods:
         for horizon in FORMAL_HORIZONS:
             samples = manifest.for_horizon(horizon)
             if not samples:
                 raise AssertionError(f"manifest contains no samples for horizon={horizon}")
             truth = np.asarray([sample.label for sample in samples], dtype=float)
-            for seed in FORMAL_SEEDS:
-                set_protocol_seed(seed, include_frameworks=False)
-                predictions = np.asarray(
-                    [predictor(method, sample, seed) for sample in samples],
+
+            deterministic_predictions = None
+            if predictor is _default_protocol_predictor and method == "BL5_SeasonalNaive":
+                deterministic_predictions = np.asarray(
+                    [predictor(method, sample, FORMAL_SEEDS[0]) for sample in samples],
                     dtype=float,
                 )
+
+            for seed in FORMAL_SEEDS:
+                set_protocol_seed(seed, include_frameworks=False)
+                if deterministic_predictions is None:
+                    predictions = np.asarray(
+                        [predictor(method, sample, seed) for sample in samples],
+                        dtype=float,
+                    )
+                else:
+                    predictions = deterministic_predictions.copy()
                 metrics = compute_original_scale_metrics(truth, predictions)
                 rows.append(
                     {
@@ -161,7 +203,7 @@ def evaluate_entity_protocol(data: dict, *, predictor=_default_protocol_predicto
 
 
 def run_dataset(dataset_id: str, seeds: tuple[int, ...] = DEFAULT_SEEDS) -> Path:
-    """Run strict rolling-origin BL1-BL4 and write protocol-auditable rows."""
+    """Run strict rolling-origin BL1-BL5 and write protocol-auditable rows."""
     normalized_id = str(dataset_id).strip().lower()
     if normalized_id not in {f"d{number}" for number in range(1, 7)}:
         raise ValueError(f"dataset_id must be d1 through d6, got {dataset_id!r}")
@@ -205,8 +247,8 @@ def _parse_seeds(raw: str) -> tuple[int, ...]:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run target-only BL1-BL3 baselines once and BL4 across multiple seeds "
-            "for D1-D6."
+            "Run target-only BL1-BL5 baselines across the formal five-seed, "
+            "five-horizon protocol for D1-D6."
         )
     )
     parser.add_argument(
@@ -219,7 +261,8 @@ def _parse_args() -> argparse.Namespace:
         type=_parse_seeds,
         default=DEFAULT_SEEDS,
         help=(
-            "Comma-separated list of seeds for BL4_LSTM, e.g. '42,43,44,45,46'. "
+            "Formal seed identities, e.g. '42,43,44,45,46'. "
+            "BL5 is deterministic and reuses one prediction vector across them. "
             f"Default: {','.join(str(s) for s in DEFAULT_SEEDS)}"
         ),
     )

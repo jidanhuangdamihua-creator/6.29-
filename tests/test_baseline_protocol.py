@@ -57,7 +57,7 @@ class BaselineProtocolTest(unittest.TestCase):
             return float(record.input_sales[-1])
 
         rows = evaluate_entity_protocol(data, predictor=predictor)
-        self.assertEqual(len(rows), 4 * 5 * 5)
+        self.assertEqual(len(rows), 5 * 5 * 5)
         self.assertEqual(set(rows["seed"]), set(range(42, 47)))
         self.assertEqual(set(rows["horizon"]), set(range(1, 6)))
         self.assertEqual(set(rows["primary_metric_space"]), {"original_sales"})
