@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -47,7 +47,10 @@ from src.protocols.candidate_pool import (
     prepare_daily_sequence_pool,
 )
 from src.protocols.experiment_protocol import (
+    ProtocolViolation,
     get_experiment_protocol,
+    normalize_scenario,
+    normalize_source_key,
     resolve_result_protocol_tracks,
     serialize_canonical_target_key,
 )
@@ -161,6 +164,49 @@ SOURCE_DOMAIN_DIAGNOSTIC_COLUMNS = (
 
 def _scenario_name(config: Dict[str, Any]) -> str:
     return f"{config.get('info_sharing', 'without')}_information_sharing"
+
+
+CellLifecycleIdentity = Tuple[str, str, int, int, Tuple[str, ...]]
+
+
+def _bind_protocol_cell_identity(
+    frame: pd.DataFrame,
+    lifecycle_identity: CellLifecycleIdentity,
+) -> None:
+    dataset_id, scenario, horizon, seed, target_key = lifecycle_identity
+    frame.attrs.update(
+        {
+            "protocol_dataset_id": dataset_id,
+            "protocol_scenario": scenario,
+            "information_sharing_scenario": scenario,
+            "protocol_cell_identity": lifecycle_identity,
+            "model_horizon": horizon,
+            "protocol_seed": seed,
+            "protocol_target_key": target_key,
+        }
+    )
+
+
+def _require_bound_protocol_cell_identity(
+    frame: pd.DataFrame,
+    expected: CellLifecycleIdentity,
+) -> None:
+    try:
+        derived = (
+            get_experiment_protocol(frame.attrs["protocol_dataset_id"]).dataset_id,
+            normalize_scenario(frame.attrs["protocol_scenario"]),
+            int(frame.attrs["model_horizon"]),
+            int(frame.attrs["protocol_seed"]),
+            normalize_source_key(frame.attrs["protocol_target_key"]),
+        )
+        explicit = tuple(frame.attrs["protocol_cell_identity"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ProtocolViolation("protocol cell identity wiring is incomplete") from exc
+    if explicit != expected or derived != expected:
+        raise ProtocolViolation(
+            "protocol cell identity wiring mismatch: "
+            f"explicit={explicit!r}, derived={derived!r}, expected={expected!r}"
+        )
 
 
 def _source_count_for_method(method: str, config: Dict[str, Any]) -> int:
@@ -741,6 +787,17 @@ def run_single_entity_experiment(
         retain_source_frame=prepared_pool is not None,
         enforce_formal_target=True,
     )
+    cell_lifecycle_identity: CellLifecycleIdentity = (
+        get_experiment_protocol(dataset_id).dataset_id,
+        normalize_scenario(scenario),
+        int(config["horizon"]),
+        int(config.get("random_state", config.get("seed", 42))),
+        normalize_source_key(target_entity_df.attrs["protocol_target_key"]),
+    )
+    _bind_protocol_cell_identity(source_df, cell_lifecycle_identity)
+    _bind_protocol_cell_identity(target_entity_df, cell_lifecycle_identity)
+    _require_bound_protocol_cell_identity(source_df, cell_lifecycle_identity)
+    _require_bound_protocol_cell_identity(target_entity_df, cell_lifecycle_identity)
     canonical_entity_key = serialize_canonical_target_key(
         dataset_id,
         target_entity_df.attrs["protocol_target_key"],
@@ -819,6 +876,8 @@ def run_single_entity_experiment(
         source_selection_group_cols=source_selection_group_cols,
         required_passthrough_cols=get_experiment_protocol(dataset_id).knn_feature_columns,
     )
+    _require_bound_protocol_cell_identity(source_model_df, cell_lifecycle_identity)
+    _require_bound_protocol_cell_identity(target_model_df, cell_lifecycle_identity)
     config["target_split_config"] = dict(target_model_df.attrs.get("split_config", {}) or {})
     validate_feature_frame_finite(
         target_model_df,
@@ -829,16 +888,10 @@ def run_single_entity_experiment(
         entity_id=str(entity_key),
         stage="post_build_model_dataframe",
     )
-    source_model_df.attrs["information_sharing_scenario"] = scenario
-    target_model_df.attrs["information_sharing_scenario"] = scenario
+    source_model_df.attrs["information_sharing_scenario"] = cell_lifecycle_identity[1]
+    target_model_df.attrs["information_sharing_scenario"] = cell_lifecycle_identity[1]
     target_k3_context = TargetK3SelectionContext(
-        lifecycle_identity=(
-            f"D{dataset_id}",
-            scenario,
-            int(config["horizon"]),
-            int(config.get("random_state", config.get("seed", 42))),
-            tuple(target_model_df.attrs["protocol_target_key"]),
-        )
+        lifecycle_identity=cell_lifecycle_identity
     )
     target_k3_raw_context = TargetK3RawSourceContext(
         lifecycle_identity=target_k3_context.lifecycle_identity

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 import numpy as np
 import pandas as pd
 import pytest
 
 import src.protocols.runner_adapter as runner_adapter
 from scripts import run_d4_experiment, run_d5_experiment, run_d6_experiment
+from src.data_processing.data_preprocessing import normalize_features
 from src.protocols.candidate_pool import prepare_daily_sequence_pool
 from src.protocols.experiment_protocol import ProtocolViolation, get_experiment_protocol
 from src.protocols.runner_adapter import configure_protocol_frames
@@ -61,6 +64,100 @@ def _d5_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
     target.loc[:, "onpromotion"] = 0.0
     target.loc[:, "oil_price"] = 0.0
     return source, target
+
+
+@pytest.mark.parametrize("scenario", ["without", "with"])
+def test_d5_entity_production_wiring_binds_canonical_transformation_owner(
+    monkeypatch: pytest.MonkeyPatch,
+    scenario: str,
+) -> None:
+    source, target = _d5_frames()
+    expected = ("D5", scenario, 1, 42, ("48", "1159415"))
+
+    class IdentityVerified(RuntimeError):
+        pass
+
+    def verify_ss(**kwargs):
+        source_df = kwargs["source_df"]
+        target_df = kwargs["target_df"]
+        context = kwargs["transformation_reuse_context"]
+        for frame in (source_df, target_df):
+            assert frame.attrs["protocol_dataset_id"] == "D5"
+            assert frame.attrs["protocol_scenario"] == scenario
+            assert tuple(frame.attrs["protocol_cell_identity"]) == expected
+            assert frame.attrs["model_horizon"] == 1
+            assert frame.attrs["protocol_seed"] == 42
+            assert tuple(frame.attrs["protocol_target_key"]) == ("48", "1159415")
+        assert context.lifecycle_identity == expected
+
+        first_group = source_df.loc[
+            source_df["store_nbr"].astype(str).eq("48")
+            & source_df["item_nbr"].astype(str).eq("S1")
+        ].copy()
+        first_group.attrs = deepcopy(source_df.attrs)
+        first_group.attrs.update(
+            {
+                "split_role": "source",
+                "split_mode": "ratio",
+                "split_config": {
+                    "train_ratio": 0.6,
+                    "val_ratio": 0.2,
+                    "test_ratio": 0.2,
+                },
+            }
+        )
+        partitions = []
+        for role, bounds in (
+            ("train", (0, 21)),
+            ("validation", (21, 28)),
+            ("test", (28, 35)),
+        ):
+            partition = first_group.iloc[slice(*bounds)].copy()
+            partition.attrs = deepcopy(first_group.attrs)
+            partition.attrs["temporal_partition"] = role
+            partitions.append(partition)
+        normalize_features(
+            *partitions,
+            feature_columns=("sales",),
+            reuse_context=context,
+        )
+        raise IdentityVerified
+
+    monkeypatch.setattr(entity_experiment, "_method_runner", lambda method: verify_ss)
+    with pytest.raises(IdentityVerified):
+        entity_experiment.run_single_entity_experiment(
+            entity_key="48_1159415",
+            source_df=source,
+            target_entity_df=target,
+            feature_cols=[
+                "sales",
+                "year",
+                "month",
+                "week",
+                "day",
+                "class",
+                "perishable",
+                "cluster",
+                "transactions",
+                "oil_price",
+                "is_holiday",
+            ],
+            config={
+                "dataset_id": 5,
+                "dataset_name": "Dataset5",
+                "info_sharing": scenario,
+                "group_cols": ("store_nbr", "item_nbr"),
+                "source_count": 1,
+                "horizon": 1,
+                "seed": 42,
+                "window_size": 3,
+                "learning_rate": 0.001,
+                "source_epochs": 1,
+                "target_epochs": 1,
+                "batch_size": 1,
+            },
+            enabled_methods=["SS-TL"],
+        )
 
 
 def test_entity_runner_forwards_the_same_prepared_pool_to_protocol_frames(monkeypatch):

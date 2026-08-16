@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import replace
 from types import MappingProxyType
 
@@ -10,12 +11,14 @@ import pytest
 import src.protocols.candidate_pool as candidate_pool
 import src.protocols.runner_adapter as runner_adapter
 from scripts import run_d4_experiment, run_d6_experiment
+from src.data_processing.data_preprocessing import normalize_features
 from src.protocols.candidate_pool import prepare_daily_sequence_pool
 from src.protocols.experiment_protocol import ProtocolViolation, get_experiment_protocol
 from src.protocols.rolling_origin import build_sample_manifest
 from src.protocols.runner_adapter import configure_protocol_frames
 from src.source_selection.source_selector import SourceSelector, TargetK3SelectionContext
 from src.protocols.transformation_identity import MODEL_FEATURE_CONTRACTS
+from src.utils import entity_experiment
 from src.utils.dataframe_attrs import get_protocol_frame_context
 
 
@@ -133,6 +136,121 @@ def _cell_frames(dataset_id: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     target.attrs["knn_observed_start"] = pd.Timestamp("2020-01-01")
     target.attrs["target_observed_start"] = pd.Timestamp("2020-01-01")
     return source, target
+
+
+@pytest.mark.parametrize("dataset_id", [4, 6])
+@pytest.mark.parametrize("scenario", ["without", "with"])
+def test_d4_d6_entity_production_wiring_binds_canonical_transformation_owner(
+    monkeypatch: pytest.MonkeyPatch,
+    dataset_id: int,
+    scenario: str,
+) -> None:
+    source, targets = _cell_frames(dataset_id)
+    case = _dataset_case(dataset_id)
+    entity_key = case["target_keys"][0]
+    target = targets.loc[targets["entity_id"].eq(entity_key)].copy()
+    expected_target_key = tuple(
+        get_experiment_protocol(dataset_id).formal_target_keys[0]
+    )
+    expected = (f"D{dataset_id}", scenario, 1, 42, expected_target_key)
+
+    class IdentityVerified(RuntimeError):
+        pass
+
+    def verify_ss(**kwargs):
+        source_df = kwargs["source_df"]
+        target_df = kwargs["target_df"]
+        context = kwargs["transformation_reuse_context"]
+        for frame in (source_df, target_df):
+            assert frame.attrs["protocol_dataset_id"] == f"D{dataset_id}"
+            assert frame.attrs["protocol_scenario"] == scenario
+            assert tuple(frame.attrs["protocol_cell_identity"]) == expected
+            assert frame.attrs["model_horizon"] == 1
+            assert frame.attrs["protocol_seed"] == 42
+            assert tuple(frame.attrs["protocol_target_key"]) == expected_target_key
+        assert context.lifecycle_identity == expected
+
+        first_group = source_df.loc[
+            source_df[case["group_cols"][0]].astype(str).eq(
+                str(source_df[case["group_cols"][0]].iloc[0])
+            )
+            & source_df[case["group_cols"][1]].astype(str).eq(
+                str(source_df[case["group_cols"][1]].iloc[0])
+            )
+        ].copy()
+        first_group.attrs = deepcopy(source_df.attrs)
+        first_group.attrs.update(
+            {
+                "split_role": "source",
+                "split_mode": "ratio",
+                "split_config": {
+                    "train_ratio": 0.6,
+                    "val_ratio": 0.2,
+                    "test_ratio": 0.2,
+                },
+            }
+        )
+        partitions = []
+        for role, bounds in (
+            ("train", (0, 18)),
+            ("validation", (18, 24)),
+            ("test", (24, 30)),
+        ):
+            partition = first_group.iloc[slice(*bounds)].copy()
+            partition.attrs = deepcopy(first_group.attrs)
+            partition.attrs["temporal_partition"] = role
+            partitions.append(partition)
+        normalize_features(
+            *partitions,
+            feature_columns=("sales",),
+            reuse_context=context,
+        )
+        raise IdentityVerified
+
+    monkeypatch.setattr(entity_experiment, "_method_runner", lambda method: verify_ss)
+    with pytest.raises(IdentityVerified):
+        entity_experiment.run_single_entity_experiment(
+            entity_key=str(entity_key),
+            source_df=source,
+            target_entity_df=target,
+            feature_cols=MODEL_FEATURE_CONTRACTS[f"D{dataset_id}"],
+            config={
+                "dataset_id": dataset_id,
+                "dataset_name": f"Dataset{dataset_id}",
+                "info_sharing": scenario,
+                "group_cols": case["group_cols"],
+                "source_count": 1,
+                "horizon": 1,
+                "seed": 42,
+                "window_size": 3,
+                "learning_rate": 0.001,
+                "source_epochs": 1,
+                "target_epochs": 1,
+                "batch_size": 1,
+            },
+            enabled_methods=["SS-TL"],
+        )
+
+
+@pytest.mark.parametrize(
+    ("attr_name", "bad_value"),
+    [
+        ("model_horizon", 2),
+        ("protocol_seed", 43),
+        ("protocol_target_key", ("166", "432")),
+    ],
+)
+def test_d4_d6_entity_identity_wiring_rejects_wrong_owner_fields(
+    attr_name: str,
+    bad_value: object,
+) -> None:
+    expected = ("D4", "with", 1, 42, ("166", "258"))
+    frame = pd.DataFrame({"sales": [1.0]})
+    entity_experiment._bind_protocol_cell_identity(frame, expected)
+    frame.attrs[attr_name] = bad_value
+
+    with pytest.raises(ProtocolViolation, match="protocol cell identity wiring mismatch"):
+        entity_experiment._require_bound_protocol_cell_identity(frame, expected)
 
 
 def _patch_cell_runner(
