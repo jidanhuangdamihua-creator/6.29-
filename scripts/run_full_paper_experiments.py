@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import os
 import platform
@@ -66,8 +66,11 @@ from src.protocols.transformation_reuse import TargetTransformationReuseContext
 from src.protocols.transformation_identity import validate_runtime_feature_contract
 from src.protocols.reproducibility import set_protocol_seed
 from src.protocols.experiment_protocol import (
+    ProtocolViolation,
     formal_target_entity_keys,
     get_experiment_protocol,
+    normalize_scenario,
+    normalize_source_key,
     serialize_canonical_target_key,
 )
 from src.protocols.formal_target_scope import scope_target_to_formal_window
@@ -127,6 +130,11 @@ class CellSourcePreparation:
     k3_selection_context: TargetK3SelectionContext
     k3_raw_source_context: TargetK3RawSourceContext
     transformation_reuse_context: TargetTransformationReuseContext
+    configured_source_owner: Dict[str, pd.DataFrame] = field(
+        default_factory=dict,
+        compare=False,
+        repr=False,
+    )
 
 
 FORMAL_DATASET_PATHS = {
@@ -1180,12 +1188,100 @@ def _cell_source_identity(
     cfg: Dict[str, Any],
 ) -> Tuple[str, str, int, int]:
     exp_cfg = cfg["single_experiment"]
+    protocol = get_experiment_protocol(dataset_name)
     return (
-        str(dataset_name),
-        str(information_sharing_scenario),
+        protocol.dataset_id,
+        normalize_scenario(information_sharing_scenario),
         int(exp_cfg["horizon"]),
         int(exp_cfg.get("seed", 42)),
     )
+
+
+def _cell_lifecycle_identity(
+    dataset_name: str,
+    information_sharing_scenario: str,
+    cfg: Dict[str, Any],
+) -> Tuple[str, str, int, int, Tuple[str, ...]]:
+    protocol = get_experiment_protocol(dataset_name)
+    return (
+        *_cell_source_identity(dataset_name, information_sharing_scenario, cfg),
+        normalize_source_key(protocol.formal_target_keys[0]),
+    )
+
+
+def _require_cell_context_identity(
+    cell_source: CellSourcePreparation,
+    expected: Tuple[str, str, int, int, Tuple[str, ...]],
+) -> None:
+    for context_name, context in (
+        ("K3 selection", cell_source.k3_selection_context),
+        ("K3 raw", cell_source.k3_raw_source_context),
+        ("transformation reuse", cell_source.transformation_reuse_context),
+    ):
+        if tuple(context.lifecycle_identity) != expected:
+            raise ProtocolViolation(
+                f"{context_name} cell context identity mismatch: "
+                f"{tuple(context.lifecycle_identity)!r} != {expected!r}"
+            )
+
+
+def _bind_protocol_cell_identity(
+    frame: pd.DataFrame,
+    lifecycle_identity: Tuple[str, str, int, int, Tuple[str, ...]],
+) -> None:
+    dataset_id, scenario, horizon, seed, target_key = lifecycle_identity
+    frame.attrs.update(
+        {
+            "protocol_dataset_id": dataset_id,
+            "protocol_scenario": scenario,
+            "information_sharing_scenario": scenario,
+            "protocol_cell_identity": lifecycle_identity,
+            "model_horizon": horizon,
+            "protocol_seed": seed,
+            "protocol_target_key": target_key,
+        }
+    )
+
+
+def _require_bound_protocol_cell_identity(
+    frame: pd.DataFrame,
+    expected: Tuple[str, str, int, int, Tuple[str, ...]],
+) -> None:
+    try:
+        derived = (
+            get_experiment_protocol(frame.attrs["protocol_dataset_id"]).dataset_id,
+            normalize_scenario(frame.attrs["protocol_scenario"]),
+            int(frame.attrs["model_horizon"]),
+            int(frame.attrs["protocol_seed"]),
+            normalize_source_key(frame.attrs["protocol_target_key"]),
+        )
+        explicit = tuple(frame.attrs["protocol_cell_identity"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ProtocolViolation("protocol cell identity wiring is incomplete") from exc
+    if explicit != expected or derived != expected:
+        raise ProtocolViolation(
+            "protocol cell identity wiring mismatch: "
+            f"explicit={explicit!r}, derived={derived!r}, expected={expected!r}"
+        )
+
+
+def _cell_owned_configured_source(
+    cell_source: CellSourcePreparation,
+    configured_source: pd.DataFrame,
+    expected: Tuple[str, str, int, int, Tuple[str, ...]],
+) -> pd.DataFrame:
+    owner = cell_source.configured_source_owner.get("source")
+    if owner is None:
+        cell_source.configured_source_owner["source"] = configured_source
+        return configured_source
+    _require_bound_protocol_cell_identity(owner, expected)
+    if (
+        tuple(owner.columns) != tuple(configured_source.columns)
+        or tuple(map(str, owner.dtypes)) != tuple(map(str, configured_source.dtypes))
+        or not owner.equals(configured_source)
+    ):
+        raise ProtocolViolation("cell configured source identity mismatch")
+    return owner
 
 
 def _prepare_cell_source_dependencies(
@@ -1245,12 +1341,10 @@ def _prepare_cell_source_dependencies(
             else STRICT_KNN_OBSERVED_START[dataset_name]
         ),
     )
-    k3_lifecycle_identity = (
+    k3_lifecycle_identity = _cell_lifecycle_identity(
         dataset_name,
         information_sharing_scenario,
-        int(cfg["single_experiment"]["horizon"]),
-        int(cfg["single_experiment"].get("seed", 42)),
-        tuple(get_experiment_protocol(dataset_name).formal_target_keys[0]),
+        cfg,
     )
     return CellSourcePreparation(
         cell_identity=_cell_source_identity(
@@ -1327,6 +1421,12 @@ def run_experiment(
             "cell source preparation identity mismatch: "
             f"{cell_source.cell_identity!r} != {expected_cell_identity!r}"
         )
+    expected_lifecycle_identity = _cell_lifecycle_identity(
+        dataset_name,
+        information_sharing_scenario,
+        cfg,
+    )
+    _require_cell_context_identity(cell_source, expected_lifecycle_identity)
     source_df = cell_source.source_frame.copy()
     source_df.attrs = deepcopy(cell_source.source_frame.attrs)
     modeling_feature_cols = list(cell_source.modeling_feature_cols)
@@ -1339,6 +1439,8 @@ def run_experiment(
         target_df,
         dataset_id=dataset_name,
     )
+    _bind_protocol_cell_identity(source_df, expected_lifecycle_identity)
+    _bind_protocol_cell_identity(target_df, expected_lifecycle_identity)
     protocol_group_cols = {
         "Dataset1": ("store_id", "item_id"),
         "Dataset2": ("brand_id", "item_id"),
@@ -1359,8 +1461,15 @@ def run_experiment(
         retain_source_frame=True,
         enforce_formal_target=True,
     )
+    _require_bound_protocol_cell_identity(source_df, expected_lifecycle_identity)
+    _require_bound_protocol_cell_identity(target_df, expected_lifecycle_identity)
+    source_df = _cell_owned_configured_source(
+        cell_source,
+        source_df,
+        expected_lifecycle_identity,
+    )
+    source_df.attrs["method"] = method_name
     target_df.attrs["model_window_size"] = int(exp_cfg["window_size"])
-    target_df.attrs["model_horizon"] = int(exp_cfg["horizon"])
     protocol_manifest = build_sample_manifest(
         target_df,
         dataset_id=target_df.attrs["protocol_dataset_id"],

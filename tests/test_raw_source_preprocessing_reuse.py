@@ -119,6 +119,33 @@ def _consume_all_methods(context: TargetK3RawSourceContext, source: pd.DataFrame
     return result
 
 
+@pytest.mark.parametrize(
+    ("scenario_alias", "canonical_scenario"),
+    [
+        ("with_information_sharing", "with"),
+        ("without_information_sharing", "without"),
+    ],
+)
+def test_raw_lifecycle_normalizes_dataset_and_scenario_on_both_sides(
+    scenario_alias: str,
+    canonical_scenario: str,
+) -> None:
+    source = _source_frame(dataset="D3", scenario=canonical_scenario)
+    context = TargetK3RawSourceContext(
+        _lifecycle(dataset="Dataset3", scenario=scenario_alias)
+    )
+    context._validate_lifecycle_frame(source)
+
+
+def test_raw_lifecycle_still_rejects_distinct_canonical_scenarios() -> None:
+    source = _source_frame(dataset="D3", scenario="without")
+    context = TargetK3RawSourceContext(
+        _lifecycle(dataset="Dataset3", scenario="with_information_sharing")
+    )
+    with pytest.raises(ProtocolViolation, match="canonical raw scenario identity mismatch"):
+        context._validate_lifecycle_frame(source)
+
+
 def test_k3_materialization_count_is_three_and_each_consumer_gets_a_copy(monkeypatch) -> None:
     import src.protocols.raw_preprocessing as raw_preprocessing
 

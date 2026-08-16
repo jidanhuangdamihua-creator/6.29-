@@ -63,6 +63,7 @@ WORKING_FRAME_ATTR_ALLOWLIST = frozenset(
         "method",
         "model_window_size",
         "model_horizon",
+        "protocol_seed",
         "information_sharing_scenario",
         "selection_authority",
         "protocol_version",

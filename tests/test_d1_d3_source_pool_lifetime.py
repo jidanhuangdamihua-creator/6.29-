@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 
 import numpy as np
 import pandas as pd
@@ -8,6 +9,7 @@ import pytest
 
 import src.protocols.runner_adapter as runner_adapter
 from scripts import run_full_paper_experiments as full_runner
+from src.data_processing.data_preprocessing import normalize_features
 from src.protocols.experiment_protocol import (
     FORMAL_HORIZONS,
     FORMAL_SEEDS,
@@ -16,11 +18,13 @@ from src.protocols.experiment_protocol import (
 )
 from src.protocols.knn_frames import get_configured_knn_frame
 from src.protocols.rolling_origin import build_sample_manifest
+from src.protocols.transformation_reuse import TargetTransformationReuseContext
 from src.source_selection.source_selector import SourceSelector, TargetK3SelectionContext
 from src.utils.dataframe_attrs import get_protocol_frame_context
 
 
 METHODS = ("No-TL", "SS-TL", "MSWA-TL", "MSSB-TL", "MSML-TL", "MSML-TL-RFE")
+CANONICAL_D3_TARGET = ("10",)
 
 
 def _calendar_fields(timestamp: pd.Timestamp) -> dict[str, int]:
@@ -79,6 +83,16 @@ def _cell_frames(dataset_id: str) -> tuple[pd.DataFrame, pd.DataFrame, tuple[str
                 row[group_cols[1]] = key[1]
             if dataset_id == "D2":
                 row["promo"] = float((timestamp.day + key_index) % 2)
+            elif dataset_id == "D3":
+                row.update(
+                    {
+                        "entity_id": str(key[0]),
+                        "customers": float(100 + key_index),
+                        "open": 1,
+                        "promo": int(timestamp.day % 2),
+                        "school_holiday": 0,
+                    }
+                )
             source_rows.append(row)
 
     target_rows = []
@@ -94,6 +108,16 @@ def _cell_frames(dataset_id: str) -> tuple[pd.DataFrame, pd.DataFrame, tuple[str
             row[group_cols[1]] = target_key[1]
         if dataset_id == "D2":
             row["promo"] = float(offset % 2)
+        elif dataset_id == "D3":
+            row.update(
+                {
+                    "entity_id": "10",
+                    "customers": float(200 + offset),
+                    "open": 1,
+                    "promo": int(offset % 2),
+                    "school_holiday": 0,
+                }
+            )
         target_rows.append(row)
 
     source = pd.DataFrame(source_rows)
@@ -572,6 +596,216 @@ def test_six_method_dispatch_reuses_only_explicit_cell_source_dependencies(
     assert len({id(source_carrier) for source_carrier, _, _ in forwarded}) == 6
     assert len({id(target_carrier) for _, target_carrier, _ in forwarded}) == 6
     assert preparation_counts["filter"] == 1
+
+
+def _d3_production_cfg() -> dict[str, object]:
+    return {
+        "dataset_paths": {},
+        "single_experiment": {
+            "horizon": 1,
+            "seed": 42,
+            "window_size": 10,
+            "learning_rate": 0.001,
+            "source_epochs": 1,
+            "target_epochs": 1,
+            "batch_size": 8,
+            "weight_mode": "inverse_distance",
+            "keep_ratio": 0.5,
+        },
+    }
+
+
+def _d3_cell(scenario: str) -> tuple[dict[str, pd.DataFrame], full_runner.CellSourcePreparation]:
+    source, target, _, _ = _cell_frames("D3")
+    base = {"source_df": source, "target_df": target}
+    cell = full_runner._prepare_cell_source_dependencies(
+        dataset_name="Dataset3",
+        information_sharing_scenario=scenario,
+        cfg=_d3_production_cfg(),
+        protocol={"strict_paper_mode": True},
+        strict_paper_mode=True,
+        base_data=base,
+    )
+    return base, cell
+
+
+def _assert_canonical_d3_cell_attrs(frame: pd.DataFrame, scenario: str) -> None:
+    expected = ("D3", scenario, 1, 42, CANONICAL_D3_TARGET)
+    assert frame.attrs["protocol_dataset_id"] == "D3"
+    assert frame.attrs["protocol_scenario"] == scenario
+    assert tuple(frame.attrs["protocol_cell_identity"]) == expected
+    assert frame.attrs["model_horizon"] == 1
+    assert frame.attrs["protocol_seed"] == 42
+    assert tuple(frame.attrs["protocol_target_key"]) == CANONICAL_D3_TARGET
+
+
+@pytest.mark.parametrize(
+    ("scenario_alias", "canonical_scenario"),
+    [
+        ("with_information_sharing", "with"),
+        ("without_information_sharing", "without"),
+    ],
+)
+def test_d3_ss_production_wiring_canonicalizes_cell_before_transformation_reuse(
+    monkeypatch: pytest.MonkeyPatch,
+    scenario_alias: str,
+    canonical_scenario: str,
+) -> None:
+    base, cell = _d3_cell(scenario_alias)
+    expected = ("D3", canonical_scenario, 1, 42, CANONICAL_D3_TARGET)
+
+    class IdentityVerified(RuntimeError):
+        pass
+
+    def verify_ss(**kwargs):
+        source_df = kwargs["source_df"]
+        target_df = kwargs["target_df"]
+        context = kwargs["transformation_reuse_context"]
+        _assert_canonical_d3_cell_attrs(source_df, canonical_scenario)
+        _assert_canonical_d3_cell_attrs(target_df, canonical_scenario)
+        assert context.lifecycle_identity == expected
+
+        one_source = source_df.loc[source_df["store_id"].eq(1)].iloc[:18].copy()
+        one_source.attrs = deepcopy(source_df.attrs)
+        one_source.attrs.update(
+            {
+                "split_role": "source",
+                "split_mode": "ratio",
+                "split_config": {
+                    "train_ratio": 10 / 18,
+                    "val_ratio": 4 / 18,
+                    "test_ratio": 4 / 18,
+                },
+            }
+        )
+        partitions = []
+        for role, bounds in (
+            ("train", (0, 10)),
+            ("validation", (10, 14)),
+            ("test", (14, 18)),
+        ):
+            part = one_source.iloc[slice(*bounds)].copy()
+            part.attrs = deepcopy(one_source.attrs)
+            part.attrs["temporal_partition"] = role
+            partitions.append(part)
+        normalize_features(
+            *partitions,
+            feature_columns=("sales", "year"),
+            reuse_context=context,
+        )
+        raise IdentityVerified
+
+    monkeypatch.setattr(full_runner, "_load_experiment_runners", lambda: None)
+    monkeypatch.setattr(full_runner, "run_ss_tl_experiment", verify_ss, raising=False)
+    with pytest.raises(IdentityVerified):
+        full_runner.run_experiment(
+            dataset_name="Dataset3",
+            method_name="SS-TL",
+            source_count=1,
+            information_sharing_scenario=scenario_alias,
+            cfg=_d3_production_cfg(),
+            protocol={"strict_paper_mode": True},
+            strict_paper_mode=True,
+            base_data=base,
+            cell_source_preparation=cell,
+        )
+
+
+@pytest.mark.parametrize(
+    ("scenario_alias", "canonical_scenario"),
+    [
+        ("with_information_sharing", "with"),
+        ("without_information_sharing", "without"),
+    ],
+)
+def test_d3_four_multisource_production_paths_compare_canonical_raw_scenario(
+    monkeypatch: pytest.MonkeyPatch,
+    scenario_alias: str,
+    canonical_scenario: str,
+) -> None:
+    base, cell = _d3_cell(scenario_alias)
+
+    class IdentityVerified(RuntimeError):
+        pass
+
+    def verify_raw(**kwargs):
+        source_df = kwargs["source_df"]
+        target_df = kwargs["target_df"]
+        raw_context = kwargs["k3_raw_source_context"]
+        _assert_canonical_d3_cell_attrs(source_df, canonical_scenario)
+        _assert_canonical_d3_cell_attrs(target_df, canonical_scenario)
+        selection = {
+            "sources": [
+                {"source_key": (str(store),), "distance": float(store), "weight": 1 / 3}
+                for store in (1, 2, 3)
+            ],
+            "meta": {
+                "requested_k": 3,
+                "effective_k": 3,
+                "candidate_pool_digest": "production-path-candidates",
+                "selection_result_digest": "production-path-selection",
+            },
+        }
+        raw_context.working_source(
+            selection_result=selection,
+            source_df=source_df,
+            source_key=("1",),
+            group_cols=("store_id",),
+            model_feature_cols=kwargs["feature_cols"],
+        )
+        raise IdentityVerified
+
+    monkeypatch.setattr(full_runner, "_load_experiment_runners", lambda: None)
+    for runner_name in (
+        "run_mswa_experiment",
+        "run_mssb_experiment",
+        "run_msml_experiment",
+        "run_msml_rfe_experiment",
+    ):
+        monkeypatch.setattr(full_runner, runner_name, verify_raw, raising=False)
+
+    for method in METHODS[2:]:
+        with pytest.raises(IdentityVerified):
+            full_runner.run_experiment(
+                dataset_name="Dataset3",
+                method_name=method,
+                source_count=3,
+                information_sharing_scenario=scenario_alias,
+                cfg=_d3_production_cfg(),
+                protocol={"strict_paper_mode": True},
+                strict_paper_mode=True,
+                base_data=base,
+                cell_source_preparation=cell,
+            )
+
+
+@pytest.mark.parametrize("identity_index,bad_value", [(2, 2), (3, 43), (4, ("11",))])
+def test_d3_production_wiring_rejects_wrong_transformation_owner_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    identity_index: int,
+    bad_value: object,
+) -> None:
+    base, cell = _d3_cell("with_information_sharing")
+    lifecycle = list(cell.transformation_reuse_context.lifecycle_identity)
+    lifecycle[identity_index] = bad_value
+    bad_cell = replace(
+        cell,
+        transformation_reuse_context=TargetTransformationReuseContext(tuple(lifecycle)),
+    )
+    monkeypatch.setattr(full_runner, "_load_experiment_runners", lambda: None)
+
+    with pytest.raises(ProtocolViolation, match="cell context identity mismatch"):
+        full_runner.run_experiment(
+            dataset_name="Dataset3",
+            method_name="SS-TL",
+            source_count=1,
+            information_sharing_scenario="with_information_sharing",
+            cfg=_d3_production_cfg(),
+            protocol={"strict_paper_mode": True},
+            strict_paper_mode=True,
+            base_data=base,
+            cell_source_preparation=bad_cell,
+        )
 
 
 def test_formal_lifecycle_cardinalities_are_unchanged() -> None:

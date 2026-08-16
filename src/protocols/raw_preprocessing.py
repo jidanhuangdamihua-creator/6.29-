@@ -15,7 +15,11 @@ from typing import Dict, Mapping, Sequence, Tuple
 
 import pandas as pd
 
-from src.protocols.experiment_protocol import ProtocolViolation, normalize_source_key
+from src.protocols.experiment_protocol import (
+    ProtocolViolation,
+    normalize_scenario,
+    normalize_source_key,
+)
 from src.protocols.runner_adapter import source_key_mask
 from src.utils.dataframe_attrs import (
     copy_frame_with_lightweight_attrs,
@@ -212,7 +216,7 @@ class TargetK3RawSourceContext:
             "protocol_scenario",
             source_df.attrs.get("information_sharing_scenario", lifecycle_scenario),
         )
-        if str(frame_scenario) != str(lifecycle_scenario):
+        if normalize_scenario(frame_scenario) != normalize_scenario(lifecycle_scenario):
             raise ProtocolViolation("canonical raw scenario identity mismatch")
         frame_target = source_df.attrs.get("protocol_target_key")
         if frame_target is not None and normalize_source_key(frame_target) != normalize_source_key(lifecycle_target):
