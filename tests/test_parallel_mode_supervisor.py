@@ -266,14 +266,14 @@ def test_scheduler_ignores_transient_setsid_shim(tmp_path: Path) -> None:
 
 
 @PROCESS_GROUP_TEST
-def test_scheduler_enforces_global_and_d5_caps_and_overlaps(tmp_path: Path) -> None:
+def test_scheduler_allows_d5_modes_to_overlap_within_global_cap(tmp_path: Path) -> None:
     completed = _run_supervisor(tmp_path, MAX_JOBS="4", FAKE_SLEEP="0.5")
 
     assert completed.returncode == 0, completed.stderr
     events = _events(tmp_path)
     peak, d5_peak = _peaks(events)
     assert 2 <= peak <= 4
-    assert d5_peak == 1
+    assert d5_peak == 2
     assert [event["event"] for event in events].count("finish") == 12
     assert events[-1]["event"] == "aggregate"
     pid_files = list((tmp_path / "formal-run" / "supervisor").glob("*/pids.tsv"))
@@ -288,7 +288,7 @@ def test_first_worker_failure_terminates_peers_and_skips_global(tmp_path: Path) 
         tmp_path,
         MAX_JOBS="4",
         FAKE_SLEEP="0.35",
-        FAKE_FAIL_MODE="d1_without",
+        FAKE_FAIL_MODE="d5_without",
     )
 
     assert completed.returncode == 7, completed.stderr

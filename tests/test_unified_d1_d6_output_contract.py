@@ -247,7 +247,7 @@ class UnifiedD1D6OutputContractTest(unittest.TestCase):
 
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertIn("MAX_JOBS=6", completed.stdout)
-        self.assertIn("D5_MAX_JOBS=1", completed.stdout)
+        self.assertNotIn("D5_MAX_JOBS", completed.stdout)
         self.assertIn("[FORMAL PLAN] cells=300 unique=300", completed.stdout)
         self.assertEqual(12, completed.stdout.count("[MODE]"))
 

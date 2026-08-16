@@ -9,7 +9,6 @@ readonly RESUME="${RESUME-0}"
 readonly DRY_RUN="${DRY_RUN-0}"
 readonly PROBE="${PROBE-0}"
 readonly PUBLISH_GLOBAL="${PUBLISH_GLOBAL-1}"
-readonly D5_MAX_JOBS=1
 readonly DATASETS="${DATASETS-d1,d2,d3,d4,d5,d6}"
 readonly MODES="${MODES-without,with}"
 readonly HORIZONS="${HORIZONS-1,2,3,4,5}"
@@ -154,8 +153,8 @@ print_mode_command() {
 
 if [[ "${DRY_RUN}" == "1" ]]; then
     printf '[DRY-RUN] run_root=%s\n' "${FORMAL_RUN_ROOT}"
-    printf '[CAPS] MAX_JOBS=%s D5_MAX_JOBS=%s publish_global=%s\n' \
-        "${MAX_JOBS}" "${D5_MAX_JOBS}" "${PUBLISH_GLOBAL}"
+    printf '[CAPS] MAX_JOBS=%s publish_global=%s\n' \
+        "${MAX_JOBS}" "${PUBLISH_GLOBAL}"
     printf '[SELECTION] datasets=%s modes=%s horizons=%s seeds=%s\n' \
         "${SELECTED_DATASETS[*]}" "${SELECTED_MODES[*]}" \
         "${SELECTED_HORIZONS[*]}" "${SELECTED_SEEDS[*]}"
@@ -335,16 +334,6 @@ resolve_worker_pgid() {
     printf '%s\n' "${pgid}"
 }
 
-d5_is_running() {
-    local index
-    for index in "${!TASKS[@]}"; do
-        if [[ "${TASKS[${index}]}" == d5_* && "${STATUSES[${index}]}" == "running" ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
 launch_task() {
     local index="$1"
     local task="${TASKS[${index}]}"
@@ -513,15 +502,12 @@ reap_finished() {
     return 0
 }
 
-log_message "[START] run_root=${FORMAL_RUN_ROOT} MAX_JOBS=${MAX_JOBS} D5_MAX_JOBS=${D5_MAX_JOBS} cells=${CELL_COUNT}"
+log_message "[START] run_root=${FORMAL_RUN_ROOT} MAX_JOBS=${MAX_JOBS} cells=${CELL_COUNT}"
 while ((COMPLETED_COUNT < TASK_COUNT)); do
     while ((RUNNING_COUNT < MAX_JOBS)); do
         candidate=-1
         for index in "${!TASKS[@]}"; do
             [[ "${STATUSES[${index}]}" == "queued" ]] || continue
-            if [[ "${TASKS[${index}]}" == d5_* ]] && d5_is_running; then
-                continue
-            fi
             candidate="${index}"
             break
         done
