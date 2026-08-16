@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.protocols.experiment_protocol import PROTOCOL_VERSION, ProtocolViolation
+from src.protocols.d2_source_calendarization import canonical_d2_entity_id
 
 
 DEFAULT_D1_INPUT = ROOT / "数据集" / "原始数据" / "Dataset 1" / "train.csv"
@@ -51,7 +52,10 @@ def _finalize_daily_frame(
     key_cols = [domain_col, "item_id", "date"]
     if result.duplicated(key_cols).any():
         raise ProtocolViolation(f"raw regeneration input contains duplicate {key_cols}")
-    result["entity_id"] = result[domain_col].astype(str)
+    if domain_col == "brand_id":
+        result["entity_id"] = result[domain_col].map(canonical_d2_entity_id)
+    else:
+        result["entity_id"] = result[domain_col].astype(str)
     result["year"] = result["date"].dt.year.astype(int)
     result["month"] = result["date"].dt.month.astype(int)
     result["week"] = result["date"].dt.isocalendar().week.astype(int)

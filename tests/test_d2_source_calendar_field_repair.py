@@ -6,6 +6,7 @@ import pytest
 
 from src.protocols.d2_source_calendarization import (
     D2_SOURCE_MISSING_DATES,
+    repair_d2_source_entity_identity,
     repair_d2_source_calendar_fields,
     slice_d2_source_frame,
     verify_d2_source_frame,
@@ -20,7 +21,7 @@ def _source_frame() -> pd.DataFrame:
             "date": dates,
             "brand_id": 1,
             "item_id": 4,
-            "entity_id": "B1",
+            "entity_id": "1",
             "sales": np.arange(len(dates), dtype=float),
             "promo": np.ones(len(dates), dtype=float),
             "year": dates.year,
@@ -70,5 +71,53 @@ def test_sealed_source_verifier_rejects_unrepaired_approved_date_fields() -> Non
     with pytest.raises(ProtocolViolation, match="requires producer repair"):
         verify_d2_source_frame(
             slice_d2_source_frame(frame),
+            candidate_keys=(("1", "4"),),
+        )
+
+
+def test_repairs_missing_entity_id_only_on_approved_source_dates() -> None:
+    frame = _source_frame()
+    frame.loc[frame["date"].eq(pd.Timestamp("2018-06-02")), "entity_id"] = pd.NA
+
+    repaired, evidence = repair_d2_source_entity_identity(frame)
+
+    assert repaired["entity_id"].isna().sum() == 0
+    assert repaired.loc[
+        repaired["date"].eq(pd.Timestamp("2018-06-02")), "entity_id"
+    ].item() == "1"
+    assert evidence["repaired_row_count"] == 1
+    assert evidence["changed_cell_count"] == 1
+    assert evidence["repair_dates"] == ["2018-06-02"]
+
+
+def test_entity_repair_rejects_missing_identity_outside_approved_dates() -> None:
+    frame = _source_frame()
+    frame.loc[frame["date"].eq(pd.Timestamp("2018-06-03")), "entity_id"] = pd.NA
+
+    with pytest.raises(ProtocolViolation, match="outside approved repair dates"):
+        repair_d2_source_entity_identity(frame)
+
+
+def test_sealed_source_verifier_rejects_missing_or_inconsistent_entity_id() -> None:
+    frame = _source_frame()
+    frame.loc[frame["date"].isin(pd.to_datetime(D2_SOURCE_MISSING_DATES)), "sales"] = 0.0
+
+    missing = frame.copy()
+    missing.attrs = dict(frame.attrs)
+    missing.loc[missing["date"].eq(pd.Timestamp("2018-06-02")), "entity_id"] = pd.NA
+    with pytest.raises(ProtocolViolation, match="entity_id contains missing values"):
+        verify_d2_source_frame(
+            slice_d2_source_frame(missing),
+            candidate_keys=(("1", "4"),),
+        )
+
+    inconsistent = frame.copy()
+    inconsistent.attrs = dict(frame.attrs)
+    inconsistent.loc[
+        inconsistent["date"].eq(pd.Timestamp("2018-06-02")), "entity_id"
+    ] = "2"
+    with pytest.raises(ProtocolViolation, match="canonical brand identity"):
+        verify_d2_source_frame(
+            slice_d2_source_frame(inconsistent),
             candidate_keys=(("1", "4"),),
         )

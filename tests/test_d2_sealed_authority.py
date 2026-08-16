@@ -18,7 +18,7 @@ def test_d2_sealed_manifest_binds_the_declared_current_bytes() -> None:
     manifest_path = paths["source"].parent / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     expected = {
-        "source": (48654, "04c316a7519e37c6f6712b5c34d25edb38e82833568102a22bd3961081d07409"),
+        "source": (48654, "63134a5900eb020c4b81489a881e2c78c9c21f18ce8ca9de16f0ca9e5af369a6"),
         "target": (1807, "d2bb78a71cccc0012f0f4f5175d80615565078b0cf7328d6741ab11063ec93c3"),
     }
     for role, (rows, digest) in expected.items():

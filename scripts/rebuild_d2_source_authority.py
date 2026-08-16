@@ -19,6 +19,7 @@ from src.protocols.d2_source_calendarization import (  # noqa: E402
     D2_FROZEN_SOURCE_CANDIDATE_KEYS,
     D2_SOURCE_CALENDARIZATION_RULE_VERSION,
     repair_d2_source_calendar_fields,
+    repair_d2_source_entity_identity,
     slice_d2_source_frame,
     verify_d2_source_frame,
 )
@@ -112,13 +113,17 @@ def rebuild_d2_source_authority(
     input_sha = sha256_file(source_path)
     source = pd.read_parquet(source_path)
     source.attrs["split_role"] = "source"
-    repaired, repair_evidence = repair_d2_source_calendar_fields(source)
+    identity_repaired, identity_repair_evidence = repair_d2_source_entity_identity(source)
+    for column in source.columns:
+        if column != "entity_id" and not source[column].equals(identity_repaired[column]):
+            raise RuntimeError(f"D2 source entity-identity repair changed protected column: {column}")
+    repaired, repair_evidence = repair_d2_source_calendar_fields(identity_repaired)
     if len(repaired) != len(source):
-        raise RuntimeError("D2 source calendar-field repair changed row count")
+        raise RuntimeError("D2 source repair changed row count")
     for column in ("date", "brand_id", "item_id", "entity_id", "sales", "promo"):
-        if not source[column].equals(repaired[column]):
+        if not identity_repaired[column].equals(repaired[column]):
             raise RuntimeError(f"D2 source calendar-field repair changed protected column: {column}")
-    if repair_evidence["changed_cell_count"]:
+    if identity_repair_evidence["changed_cell_count"] or repair_evidence["changed_cell_count"]:
         _write_parquet_atomically(repaired, source_path)
 
     output_source = pd.read_parquet(source_path)
@@ -132,6 +137,7 @@ def rebuild_d2_source_authority(
 
     evidence: dict[str, object] = {
         **repair_evidence,
+        "entity_identity_repair": identity_repair_evidence,
         "artifact": "source",
         "dataset": "Dataset2",
         "input_source_sha256": input_sha,
@@ -162,6 +168,7 @@ def rebuild_d2_source_authority(
     )
     if (
         int(repair_evidence["changed_cell_count"]) == 0
+        and int(identity_repair_evidence["changed_cell_count"]) == 0
         and isinstance(previous, dict)
         and previous.get("output_source_sha256") == output_sha
         and previous.get("source_authority_digest") == evidence["source_authority_digest"]
@@ -173,6 +180,7 @@ def rebuild_d2_source_authority(
             "output_source_sha256": output_sha,
             "rows": len(output_source),
             "changed_cell_count": 0,
+            "entity_identity_changed_cell_count": 0,
             "source_authority_digest": evidence["source_authority_digest"],
             "consumer_frame_fingerprint": evidence["consumer_frame_fingerprint"],
         }
@@ -199,6 +207,7 @@ def rebuild_d2_source_authority(
         },
     }
     audit["source_calendar_field_repair"] = evidence
+    audit["source_entity_identity_repair"] = identity_repair_evidence
     atomic_write_json(audit_path, audit)
 
     source_schema = _read_object(sidecars["source_schema"])
@@ -207,6 +216,7 @@ def rebuild_d2_source_authority(
     source_schema["schema_digest"] = schema_digest
     source_schema["null_counts"] = null_counts
     source_schema["calendar_field_repair"] = evidence
+    source_schema["entity_identity_repair"] = identity_repair_evidence
     atomic_write_json(sidecars["source_schema"], source_schema)
 
     provenance = _read_object(sidecars["provenance"])
@@ -216,6 +226,7 @@ def rebuild_d2_source_authority(
     provenance["source_authority_digest"] = identity["source_authority_digest"]
     provenance["consumer_frame_fingerprint"] = identity["consumer_frame_fingerprint"]
     provenance["source_calendar_field_repair"] = evidence
+    provenance["source_entity_identity_repair"] = identity_repair_evidence
     atomic_write_json(sidecars["provenance"], provenance)
 
     validation = _read_object(sidecars["validation"])
@@ -230,10 +241,12 @@ def rebuild_d2_source_authority(
             "approved D2 source dates have date-consistent finite year/month/week/day fields",
             "D2 source calendar fields are finite for all formal source rows",
             "D2 source sales and promo are unchanged by calendar-field repair",
+            "D2 source entity_id is complete and equals canonical brand_id identity",
         ]
     )
     validation["checks"] = list(dict.fromkeys(checks))
     validation["source_calendar_field_repair"] = evidence
+    validation["source_entity_identity_repair"] = identity_repair_evidence
     atomic_write_json(sidecars["validation"], validation)
 
     source_sales = _read_object(sidecars["source_sales"])
@@ -242,6 +255,13 @@ def rebuild_d2_source_authority(
         "status": "date_fields_only",
         "repair_dates": list(repair_evidence["approved_dates"]),
         "changed_cell_count": int(repair_evidence["changed_cell_count"]),
+        "sales_unchanged": True,
+        "promo_unchanged": True,
+    }
+    source_sales["entity_identity_repair"] = {
+        "status": "canonical_brand_identity",
+        "repair_dates": list(identity_repair_evidence["repair_dates"]),
+        "changed_cell_count": int(identity_repair_evidence["changed_cell_count"]),
         "sales_unchanged": True,
         "promo_unchanged": True,
     }
@@ -265,6 +285,11 @@ def rebuild_d2_source_authority(
             "source_calendar_field_repair_policy": evidence["policy"],
             "source_calendar_field_repair_reason": evidence["reason"],
             "source_calendar_field_changed_cell_count": int(repair_evidence["changed_cell_count"]),
+            "source_entity_identity_repair_performed": True,
+            "source_entity_identity_repair_dates": list(identity_repair_evidence["repair_dates"]),
+            "source_entity_identity_changed_cell_count": int(
+                identity_repair_evidence["changed_cell_count"]
+            ),
         }
     )
     manifest.setdefault("sealed_identity", {}).update(
@@ -274,9 +299,11 @@ def rebuild_d2_source_authority(
         }
     )
     manifest["source_calendar_field_repair"] = evidence
+    manifest["source_entity_identity_repair"] = identity_repair_evidence
     manifest["content_validation_notes"] = (
-        "D2 source calendar fields are repaired only at the sealed producer for "
-        "approved dates; runtime verification is fail-closed and performs no repair."
+        "D2 source entity identity and calendar fields are repaired only at the sealed "
+        "producer for approved dates; runtime verification is fail-closed and performs "
+        "no repair."
     )
     atomic_write_json(sidecars["manifest"], manifest)
 
@@ -286,7 +313,12 @@ def rebuild_d2_source_authority(
         "input_source_sha256": input_sha,
         "output_source_sha256": output_sha,
         "rows": len(output_source),
-        "changed_cell_count": int(repair_evidence["changed_cell_count"]),
+        "changed_cell_count": int(repair_evidence["changed_cell_count"])
+        + int(identity_repair_evidence["changed_cell_count"]),
+        "entity_identity_changed_cell_count": int(
+            identity_repair_evidence["changed_cell_count"]
+        ),
+        "entity_identity_repair_dates": identity_repair_evidence["repair_dates"],
         "repair_dates": repair_evidence["repair_dates"],
         "source_authority_digest": identity["source_authority_digest"],
         "consumer_frame_fingerprint": identity["consumer_frame_fingerprint"],

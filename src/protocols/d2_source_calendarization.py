@@ -130,6 +130,106 @@ def _normalize_frame_keys(source_df: pd.DataFrame) -> pd.Series:
     )
 
 
+def canonical_d2_entity_id(brand_id: object) -> str:
+    """Return the canonical D2 domain identity produced from ``brand_id``."""
+
+    try:
+        missing = pd.isna(brand_id)
+    except (TypeError, ValueError):
+        missing = False
+    if isinstance(missing, (bool, np.bool_)) and bool(missing):
+        raise ProtocolViolation("D2 brand_id may not be missing")
+    return normalize_source_key((brand_id,))[0]
+
+
+def _expected_d2_entity_ids(source_df: pd.DataFrame) -> pd.Series:
+    if "brand_id" not in source_df.columns:
+        raise ProtocolViolation("D2 entity identity requires brand_id")
+    return source_df["brand_id"].map(canonical_d2_entity_id)
+
+
+def verify_d2_source_entity_identity(source_frame: pd.DataFrame) -> None:
+    """Require every D2 ``entity_id`` to equal canonical ``brand_id`` identity."""
+
+    if "entity_id" not in source_frame.columns:
+        raise ProtocolViolation("D2 sealed source missing columns: ['entity_id']")
+    if source_frame["entity_id"].isna().any():
+        raise ProtocolViolation("D2 sealed source entity_id contains missing values")
+    expected = _expected_d2_entity_ids(source_frame)
+    actual = source_frame["entity_id"].map(lambda value: normalize_source_key((value,))[0])
+    mismatch = actual.ne(expected)
+    if mismatch.any():
+        offending = source_frame.loc[
+            mismatch, ["brand_id", "item_id", "entity_id"]
+        ].drop_duplicates()
+        raise ProtocolViolation(
+            "D2 sealed source entity_id does not match canonical brand identity: "
+            f"{offending.to_dict(orient='records')!r}"
+        )
+
+
+def repair_d2_source_entity_identity(
+    source_frame: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Repair only missing D2 entity identities on approved sealed dates."""
+
+    _assert_source_role(source_frame)
+    required = (*D2_SOURCE_GROUP_COLS, "date", "entity_id")
+    missing_columns = [column for column in required if column not in source_frame.columns]
+    if missing_columns:
+        raise ProtocolViolation(
+            f"D2 source entity-identity repair missing columns: {missing_columns}"
+        )
+
+    result = source_frame.copy()
+    result.attrs = source_frame.attrs.copy()
+    result["date"] = pd.to_datetime(result["date"], errors="coerce").dt.normalize()
+    if result["date"].isna().any():
+        raise ProtocolViolation("D2 source entity-identity repair received invalid dates")
+
+    expected = _expected_d2_entity_ids(result)
+    missing = result["entity_id"].isna()
+    actual = result["entity_id"].map(
+        lambda value: None if pd.isna(value) else normalize_source_key((value,))[0]
+    )
+    inconsistent = ~missing & actual.ne(expected)
+    if inconsistent.any():
+        offending = result.loc[
+            inconsistent, [*D2_SOURCE_GROUP_COLS, "date", "entity_id"]
+        ]
+        raise ProtocolViolation(
+            "D2 source entity_id does not match canonical brand identity: "
+            f"{offending.to_dict(orient='records')!r}"
+        )
+
+    outside_approved = missing & ~result["date"].isin(_ALLOWED_MISSING_DATES)
+    if outside_approved.any():
+        offending = result.loc[
+            outside_approved, [*D2_SOURCE_GROUP_COLS, "date"]
+        ]
+        raise ProtocolViolation(
+            "D2 source entity_id is missing outside approved repair dates: "
+            f"{offending.to_dict(orient='records')!r}"
+        )
+
+    result.loc[missing, "entity_id"] = expected.loc[missing]
+    verify_d2_source_entity_identity(result)
+    repair_dates = sorted(
+        result.loc[missing, "date"].dt.strftime("%Y-%m-%d").unique().tolist()
+    )
+    evidence = {
+        "rule_version": D2_SOURCE_CALENDARIZATION_RULE_VERSION,
+        "repair_dates": repair_dates,
+        "approved_dates": list(D2_SOURCE_MISSING_DATES),
+        "repaired_row_count": int(missing.sum()),
+        "changed_cell_count": int(missing.sum()),
+        "identity_column": "entity_id",
+        "canonical_constructor": "canonical_d2_entity_id_from_brand_id",
+        "row_count": int(len(result)),
+    }
+    return result, evidence
+
+
 def _calendar_value(column: str, timestamp: pd.Timestamp) -> object:
     if column == "year":
         return int(timestamp.year)
@@ -215,6 +315,7 @@ def calendarize_d2_source_frame(
     if numeric_sales.isna().any() or not np.isfinite(numeric_sales.to_numpy(dtype=np.float64)).all():
         raise ProtocolViolation("D2 source sales contain non-finite values")
     source["sales"] = numeric_sales.astype(float)
+    verify_d2_source_entity_identity(source)
 
     actual_keys = set(source_keys.tolist())
     missing_entities = sorted(set(candidates).difference(actual_keys))
@@ -241,6 +342,8 @@ def calendarize_d2_source_frame(
             for column in source.columns:
                 if column in D2_SOURCE_GROUP_COLS or _is_static_field(column):
                     row[column] = representative[column]
+            if "entity_id" in source.columns:
+                row["entity_id"] = canonical_d2_entity_id(row["brand_id"])
             row["date"] = timestamp
             row["sales"] = 0.0
             for column in source.columns:
@@ -422,7 +525,7 @@ def verify_d2_source_frame(
     _assert_source_role(source_slice)
     if source_slice.attrs.get("d2_source_slicing_complete") is not True:
         raise ProtocolViolation("D2 source verification requires completed source slicing")
-    required = (*D2_SOURCE_GROUP_COLS, "date", "sales")
+    required = (*D2_SOURCE_GROUP_COLS, "date", "entity_id", "sales")
     missing_columns = [column for column in required if column not in source_slice.columns]
     if missing_columns:
         raise ProtocolViolation(f"D2 sealed source missing columns: {missing_columns}")
@@ -441,6 +544,7 @@ def verify_d2_source_frame(
     if numeric_sales.isna().any() or not np.isfinite(numeric_sales.to_numpy(dtype=np.float64)).all():
         raise ProtocolViolation("D2 sealed source sales contain non-finite values")
     source["sales"] = numeric_sales.astype(float)
+    verify_d2_source_entity_identity(source)
 
     _, calendar_field_evidence = repair_d2_source_calendar_fields(source)
     if int(calendar_field_evidence["changed_cell_count"]) != 0:

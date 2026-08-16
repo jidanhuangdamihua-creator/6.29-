@@ -541,7 +541,7 @@ def _verify_d2_sealed_identity(root: Path, source_path: Path, target_path: Path)
         raise Gate1Failure("D2_SEALED_IDENTITY", f"missing D2 manifest: {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     expected = {
-        "source": (source_path, 48654, "04c316a7519e37c6f6712b5c34d25edb38e82833568102a22bd3961081d07409"),
+        "source": (source_path, 48654, "63134a5900eb020c4b81489a881e2c78c9c21f18ce8ca9de16f0ca9e5af369a6"),
         "target": (target_path, 1807, "__BOUND_FROM_MANIFEST_AFTER_REBUILD__"),
     }
     target_manifest_artifact = manifest.get("artifacts", {}).get("target", {})

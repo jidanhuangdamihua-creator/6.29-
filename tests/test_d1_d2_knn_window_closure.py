@@ -47,7 +47,7 @@ def _strict_frames(dataset_id: str) -> tuple[pd.DataFrame, pd.DataFrame]:
                 "sales": 0.0 if frozen_zero else float(key_index + 1),
             }
             if dataset_id == "D2":
-                row.update({"promo": 0.0, "year": timestamp.year, "month": timestamp.month, "week": int(timestamp.isocalendar().week), "day": timestamp.day})
+                row.update({"entity_id": key[0], "promo": 0.0, "year": timestamp.year, "month": timestamp.month, "week": int(timestamp.isocalendar().week), "day": timestamp.day})
             source_rows.append(row)
 
     target_dates = pd.date_range(observed_start, origin + pd.Timedelta(days=4), freq="D")
@@ -60,7 +60,7 @@ def _strict_frames(dataset_id: str) -> tuple[pd.DataFrame, pd.DataFrame]:
             "sales": 0.0 if timestamp <= origin else 999999.0,
         }
         if dataset_id == "D2":
-            row.update({"promo": 0.0, "year": timestamp.year, "month": timestamp.month, "week": int(timestamp.isocalendar().week), "day": timestamp.day})
+            row.update({"entity_id": "1", "promo": 0.0, "year": timestamp.year, "month": timestamp.month, "week": int(timestamp.isocalendar().week), "day": timestamp.day})
         target_rows.append(row)
 
     source = pd.DataFrame(source_rows)

@@ -96,8 +96,8 @@
     "source_pool_rows_before_filter": 48654,
     "source_pool_rows_after_filter": 48654,
     "excluded_source_row_count": 0,
-    "source_pool_entities_before_filter": 4,
-    "source_pool_entities_after_filter": 4,
+    "source_pool_entities_before_filter": 3,
+    "source_pool_entities_after_filter": 3,
     "excluded_source_entity_count": 0,
     "source_domain_filter_error": ""
   },
@@ -143,19 +143,6 @@
         "sales",
         "promo"
       ],
-      "knn_feature_columns": [
-        "sales",
-        "promo"
-      ],
-      "historical_feature_columns": [
-        "sales",
-        "promo"
-      ],
-      "forecast_excluded_columns": [
-        "promo"
-      ],
-      "feature_scope": "historical_observed",
-      "max_allowed_date_relation": "date<=origin",
       "requested_feature_cols": [
         "sales",
         "promo"
@@ -164,8 +151,6 @@
       "knn_representation": "daily_sales_flattened_30d",
       "scaling": "global_minmax_legal_observed_values",
       "scaler_fit_scope": "target_and_candidate_legal_observed_values",
-      "knn_observed_start": "2018-06-01",
-      "knn_observed_end": "2018-06-30",
       "origin": "2018-06-30",
       "protocol_observed_start": "2018-06-01",
       "protocol_observed_days": 30,
@@ -177,7 +162,7 @@
       "target_test_excluded": true,
       "source_future_excluded": true,
       "source_alignment_mode": "exact_knn_observed_dates",
-      "candidate_pool_digest": "b5bad690b1c76c76b9e43217dd3dee56c22f6e5891209786c931b186cf99c36b",
+      "candidate_pool_digest": "e67b4e1040f388142a40b79a1f140aa91bc77c8aa93d29afe8d285145cce8a72",
       "candidate_pool_digest_input": {
         "protocol_version": "d1_d6_protocol_v1",
         "dataset_id": "D2",
@@ -307,13 +292,13 @@
           "promo"
         ],
         "calendarization_rule_version": "d2_source_calendarization_v1",
-        "source_authority_digest": "2a8c59723453302576864b7ae03249a9bb0217e705f14a95091856d2e252d012",
-        "consumer_frame_fingerprint": "80eae6b26ca46f001b6c8975bb84b9da631cc1b4a63393ec16fffabaa90a43e1",
+        "source_authority_digest": "3e74d8a4fc4374be0cdf7e6b5e18efd94ada796f993a4453e51ae4b0e8d277ab",
+        "consumer_frame_fingerprint": "5b000199efcf9361e64a62764cdaf9d6697f40f2b391533ba40d5eb4b2798d93",
         "source_frame_digest": "6007a23b37fac4c0c0dc875da2f6f6243c3bd57e69f4b8dd7d56112274bb8078",
         "target_frame_digest": "2949980f589d8b2f74ba11119e48b8df54b6a34c0a43673aaff379f8a1f2919d"
       },
-      "selection_result_digest": "84f1025f9ab9d3ecf68acc085e353655c9c0f5f7ef9bbb1dae294daf23991cdd",
-      "selection_digest": "84f1025f9ab9d3ecf68acc085e353655c9c0f5f7ef9bbb1dae294daf23991cdd",
+      "selection_result_digest": "65a72198a12d061b43fe1bfdf91c5b1ce40ea4982b2304fb14b575e959dd89b0",
+      "selection_digest": "65a72198a12d061b43fe1bfdf91c5b1ce40ea4982b2304fb14b575e959dd89b0",
       "source_frame_min_date": "2018-06-01",
       "source_frame_max_date": "2018-06-30",
       "target_frame_min_date": "2018-06-01",
@@ -321,7 +306,9 @@
       "source_frame_digest": "6007a23b37fac4c0c0dc875da2f6f6243c3bd57e69f4b8dd7d56112274bb8078",
       "target_frame_digest": "2949980f589d8b2f74ba11119e48b8df54b6a34c0a43673aaff379f8a1f2919d",
       "source_pool_fingerprint": "cc2402599287f467c85cf7f2a9fa415e07cb3dc7172a16f71482a62d417493cb",
-      "consumer_fingerprint": "cb4e8306eda532633672ed45ec1604c5d60b188ab1128b8c7fde3bccd7604d31",
+      "consumer_fingerprint": "24a2c9134053e0d63a1ead9a7b565c2b89e8fdb4810567a14435272132fd0f19",
+      "consumer_frame_digest": "4641ed824ba918f94cb1ab63d6fa47aa9930e3659edd4dee5e5a59de1899fab9",
+      "consumer_frame_rows": 5406,
       "selected_sources_runtime": [
         {
           "source_rank": 1,
@@ -611,10 +598,70 @@
         20,
         20
       ],
+      "runtime_knn_proof": {
+        "protocol_declared_knn_features": [
+          "sales",
+          "promo"
+        ],
+        "configured_source_knn_features": [
+          "sales",
+          "promo"
+        ],
+        "configured_target_knn_features": [
+          "sales",
+          "promo"
+        ],
+        "pool_feature_matrices": [
+          "sales",
+          "promo"
+        ],
+        "target_exact_vector_feature_cols": [
+          "sales",
+          "promo"
+        ],
+        "target_exact_vector_shape": [
+          60
+        ],
+        "source_matrix_shapes": {
+          "sales": [
+            27,
+            30
+          ],
+          "promo": [
+            27,
+            30
+          ]
+        },
+        "distance_count": 27,
+        "distance_shape": [
+          27
+        ],
+        "distance_feature_columns": [
+          "sales",
+          "promo"
+        ],
+        "nan_count": 0,
+        "inf_count": 0
+      },
+      "knn_feature_columns": [
+        "sales",
+        "promo"
+      ],
+      "historical_feature_columns": [
+        "sales",
+        "promo"
+      ],
+      "forecast_excluded_columns": [
+        "promo"
+      ],
+      "feature_scope": "historical_observed",
+      "max_allowed_date_relation": "date<=origin",
+      "knn_observed_start": "2018-06-01",
+      "knn_observed_end": "2018-06-30",
       "d2_source_calendarization_rule_version": "d2_source_calendarization_v1",
-      "d2_source_authority_digest": "2a8c59723453302576864b7ae03249a9bb0217e705f14a95091856d2e252d012",
-      "d2_consumer_frame_fingerprint": "80eae6b26ca46f001b6c8975bb84b9da631cc1b4a63393ec16fffabaa90a43e1",
-      "d2_sealed_identity": "d7b5923bfb360b2127e7bf4bd897a434d524db7967f0c246233e073d16b7f870"
+      "d2_source_authority_digest": "3e74d8a4fc4374be0cdf7e6b5e18efd94ada796f993a4453e51ae4b0e8d277ab",
+      "d2_consumer_frame_fingerprint": "5b000199efcf9361e64a62764cdaf9d6697f40f2b391533ba40d5eb4b2798d93",
+      "d2_sealed_identity": "08105642b77385f26d0ae5b900a829ef2d39967006fd8526e32c4c062f918750"
     }
   },
   "knn_frame_authority": "configured_observed_frame",

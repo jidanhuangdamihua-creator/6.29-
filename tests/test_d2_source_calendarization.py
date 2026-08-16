@@ -27,7 +27,7 @@ def _source_frame(*, missing_dates: tuple[str, ...] = D2_SOURCE_MISSING_DATES) -
                 "date": date,
                 "brand_id": 1,
                 "item_id": 1,
-                "entity_id": "B1",
+                "entity_id": "1",
                 "sales": float(date.day),
                 "promo": int(date.day % 2 == 0),
                 "year": 2018,
@@ -59,7 +59,7 @@ def test_calendarizer_fills_only_the_four_frozen_dates_and_rebuilds_calendar_fie
     assert synthetic["sales"].tolist() == [0.0, 0.0, 0.0, 0.0]
     assert synthetic["brand_id"].tolist() == [1, 1, 1, 1]
     assert synthetic["item_id"].tolist() == [1, 1, 1, 1]
-    assert synthetic["entity_id"].tolist() == ["B1"] * 4
+    assert synthetic["entity_id"].tolist() == ["1"] * 4
     assert synthetic["year"].tolist() == [2018] * 4
     assert synthetic["month"].tolist() == [4, 4, 5, 6]
     assert synthetic["week"].tolist() == [13, 17, 18, 22]
@@ -134,7 +134,7 @@ def test_slice_d2_source_frame_keeps_only_the_frozen_interval() -> None:
                         "date": pd.Timestamp("2017-12-31"),
                         "brand_id": 1,
                         "item_id": 1,
-                        "entity_id": "B1",
+                        "entity_id": "1",
                         "sales": 99.0,
                     }
                 ]

@@ -24,7 +24,7 @@ from src.protocols.experiment_protocol import ProtocolViolation, normalize_sourc
 
 
 CANONICAL_SERIALIZATION_VERSION = "p1.2-c2-canonical-v1"
-RAW_PARTITION_SCHEMA_VERSION = "raw-partition-v1"
+RAW_PARTITION_SCHEMA_VERSION = "raw-partition-v2-consumed-columns"
 NORMALIZATION_SCHEMA_VERSION = "normalization-v1"
 SEQUENCE_SCHEMA_VERSION = "sequence-v1"
 CANONICAL_SORT_IDENTITY = "group_then_utc_date_mergesort_v1"
@@ -496,6 +496,28 @@ def resolve_group_cols(frame: pd.DataFrame) -> Tuple[str, ...]:
     raise ProtocolViolation("cannot resolve runtime group columns for transformation identity")
 
 
+def transformation_consumed_identity_columns(
+    frame: pd.DataFrame,
+    *,
+    group_cols: Sequence[str],
+    date_col: str,
+    feature_cols: Sequence[str],
+) -> Tuple[str, ...]:
+    """Bind raw identity to row/entity/date identity and consumed features only."""
+
+    requested = [*map(str, group_cols), str(date_col)]
+    if "entity_id" in frame.columns:
+        requested.append("entity_id")
+    requested.extend(map(str, feature_cols))
+    scoped = tuple(dict.fromkeys(requested))
+    missing = [column for column in scoped if column not in frame.columns]
+    if missing:
+        raise ProtocolViolation(
+            f"transformation-consumed identity columns are missing: {missing!r}"
+        )
+    return scoped
+
+
 def transformation_identity_requested(frame: pd.DataFrame) -> bool:
     """Return whether a frame belongs to the formal identity-aware lifecycle.
 
@@ -599,8 +621,13 @@ def build_raw_partition_identity(
     source_key_raw = frame.attrs.get("protocol_actual_source_key", ())
     source_key = normalize_source_key(source_key_raw) if source_key_raw else ()
     source_role = "source" if source_key else str(frame.attrs.get("split_role", "target"))
-    raw_columns = tuple(str(column) for column in frame.columns)
-    raw_dtypes = tuple(str(dtype) for dtype in frame.dtypes)
+    raw_columns = transformation_consumed_identity_columns(
+        frame,
+        group_cols=groups,
+        date_col=date_col,
+        feature_cols=features,
+    )
+    raw_dtypes = tuple(str(frame[column].dtype) for column in raw_columns)
     authority = str(
         frame.attrs.get(
             "source_history_frame_digest",

@@ -189,13 +189,13 @@ def test_raw_partition_identity_rejects_duplicate_missing_and_invalid_dates() ->
         build_raw_partition_identity(invalid, feature_cols=FEATURES)
 
 
-def test_column_feature_dtype_fill_split_and_cell_contracts_are_identity_fields() -> None:
+def test_consumed_column_feature_dtype_fill_split_and_cell_contracts_are_identity_fields() -> None:
     train, _, _ = _partitions()
     base = build_raw_partition_identity(train, feature_cols=FEATURES)
 
     reordered = train.loc[:, ["entity_id", "item_id", "date", "year", "sales", "constant"]].copy()
     reordered.attrs = dict(train.attrs)
-    assert build_raw_partition_identity(reordered, feature_cols=FEATURES) != base
+    assert build_raw_partition_identity(reordered, feature_cols=FEATURES) == base
     assert build_raw_partition_identity(train, feature_cols=("sales", "constant", "year")) != base
 
     float32 = train.copy()
@@ -224,6 +224,27 @@ def test_column_feature_dtype_fill_split_and_cell_contracts_are_identity_fields(
     other_cell.attrs = dict(train.attrs)
     other_cell.attrs[CELL_IDENTITY_ATTR] = ("D1", "without_information_sharing", 5, 46, ("1", "10"))
     assert build_raw_partition_identity(other_cell, feature_cols=FEATURES) != base
+
+
+def test_raw_partition_identity_excludes_unconsumed_passthrough_values() -> None:
+    train, _, _ = _partitions()
+    train["promo"] = pd.Series([pd.NA] * len(train), index=train.index, dtype="Float64")
+
+    masked = build_raw_partition_identity(train, feature_cols=FEATURES)
+    changed = train.copy()
+    changed.attrs = dict(train.attrs)
+    changed["promo"] = np.arange(len(changed), dtype=float)
+
+    assert "promo" not in masked.columns
+    assert build_raw_partition_identity(changed, feature_cols=FEATURES) == masked
+
+
+def test_raw_partition_identity_still_rejects_nan_in_consumed_sales() -> None:
+    train, _, _ = _partitions()
+    train.loc[train.index[0], "sales"] = np.nan
+
+    with pytest.raises(ProtocolViolation, match="missing values|NaN or infinity"):
+        build_raw_partition_identity(train, feature_cols=FEATURES)
 
 
 def test_source_fill_policy_sidecar_records_real_fill_and_coercion() -> None:
