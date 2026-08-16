@@ -487,7 +487,7 @@ class FullPaperRunnerSolidifiedParquetTest(unittest.TestCase):
         cfg = _load_config()
         expected = {
             "Dataset1": {"train_days": 15, "val_days": 15, "test_days": 180},
-            "Dataset2": {"train_days": 14, "val_days": 15, "test_days": 179},
+            "Dataset2": {"train_days": 15, "val_days": 15, "test_days": 180},
             "Dataset3": {"train_days": 15, "val_days": 15, "test_days": 180},
         }
 
