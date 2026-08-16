@@ -1,0 +1,11 @@
+{
+  "aggregate_profile": "run_selection_aggregate",
+  "counts": {
+    "dataset_mode_groups": 12,
+    "mode_files": 12,
+    "rows": 216
+  },
+  "passed": true,
+  "reasons": [],
+  "scope": "global_aggregate"
+}

@@ -1,0 +1,97 @@
+{
+  "acceptance": {
+    "aggregate_profile": "run_selection_aggregate",
+    "counts": {
+      "dataset_mode_groups": 12,
+      "mode_files": 12,
+      "rows": 216
+    },
+    "passed": true,
+    "reasons": [],
+    "scope": "global_aggregate"
+  },
+  "accepted_at": "2026-08-16T13:10:10.201296+00:00",
+  "artifact_type": "formal_global_aggregate",
+  "bytes": 39133282,
+  "code_identity": {
+    "dirty": false,
+    "git_commit": "630ae4ef33a271187ed7225437d0609d8a13e941",
+    "worktree_digest": "c633eb3877393d2886e1980f05e1f29c9c5bf0e5f1525d7d1d7e7752afe380e5"
+  },
+  "input_mode_artifacts": [
+    {
+      "artifact_type": "formal_mode_matrix",
+      "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_without/results/dataset1_without_results.csv",
+      "sha256": "49d6c26a59ce7fb7909ab947a782edad63578b935a72987ecac3baabc9800366"
+    },
+    {
+      "artifact_type": "formal_mode_matrix",
+      "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/results/dataset1_with_results.csv",
+      "sha256": "a10140892649d5021f1e5528fb38761a17203bf0858f6ec1ad901788820137cd"
+    },
+    {
+      "artifact_type": "formal_mode_matrix",
+      "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d2_without/results/dataset2_without_results.csv",
+      "sha256": "aea13aeb1218e4f4bce14d62708c0bce7f5ec1b8769d5d590e17b891748d5097"
+    },
+    {
+      "artifact_type": "formal_mode_matrix",
+      "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d2_with/results/dataset2_with_results.csv",
+      "sha256": "9fdd4fe757eff20f4f02c1422e1057d607699100e5debd2e687d115cf1e1be39"
+    },
+    {
+      "artifact_type": "formal_mode_matrix",
+      "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d3_without/results/dataset3_without_results.csv",
+      "sha256": "7d546b107665a79ac23271845cd0683675f8fa91a72e1d7bfc8a9f84ae1e8cdf"
+    },
+    {
+      "artifact_type": "formal_mode_matrix",
+      "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d3_with/results/dataset3_with_results.csv",
+      "sha256": "8629087b1a0d6859616a379ec9437a5446519c07562bc161fa94b6f277398251"
+    },
+    {
+      "artifact_type": "formal_mode_matrix",
+      "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d4_without/results/dataset4_without_results.csv",
+      "sha256": "8f7e30ceb963defa95cc61048af1f6b41a31572cd78101a556e571f7d5eb163b"
+    },
+    {
+      "artifact_type": "formal_mode_matrix",
+      "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d4_with/results/dataset4_with_results.csv",
+      "sha256": "5b99b280113ef37dfd63a2364d77b58fdcf65e492d462ca2d3beed82ccae9357"
+    },
+    {
+      "artifact_type": "formal_mode_matrix",
+      "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d5_without/results/dataset5_without_results.csv",
+      "sha256": "70ddedeefe613732b34f598494c3147841641d1dafda87ef94a7e35c2ccd5932"
+    },
+    {
+      "artifact_type": "formal_mode_matrix",
+      "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d5_with/results/dataset5_with_results.csv",
+      "sha256": "595259c50827eb63fc32013409b768c18ab71db4a1183e59d329ccde7319106e"
+    },
+    {
+      "artifact_type": "formal_mode_matrix",
+      "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d6_without/results/dataset6_without_results.csv",
+      "sha256": "2c56ddf1c0328a9d046b9fdf8b2a101661c8421c286191d4c46d91f3a8462a56"
+    },
+    {
+      "artifact_type": "formal_mode_matrix",
+      "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d6_with/results/dataset6_with_results.csv",
+      "sha256": "6765d08e632b73546f01d1cc2f272b58a215beec6b061bf21791fe00456e489b"
+    }
+  ],
+  "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/results/d1_d6_results.csv",
+  "publisher_code_identity": {
+    "dirty": false,
+    "git_commit": "630ae4ef33a271187ed7225437d0609d8a13e941",
+    "worktree_digest": "c633eb3877393d2886e1980f05e1f29c9c5bf0e5f1525d7d1d7e7752afe380e5"
+  },
+  "rows": 216,
+  "sha256": "4c0ea68e72354cc7363c1b5bb82c2816573856faad16e97981e279b625098175",
+  "upstream_producer_code_identity": {
+    "dirty": false,
+    "git_commit": "630ae4ef33a271187ed7225437d0609d8a13e941",
+    "worktree_digest": "c633eb3877393d2886e1980f05e1f29c9c5bf0e5f1525d7d1d7e7752afe380e5"
+  },
+  "upstream_run_identity": "4e88557cb38e6daf9efde93d993390189e828c5a772454f031661eeb2fa7a4ce"
+}

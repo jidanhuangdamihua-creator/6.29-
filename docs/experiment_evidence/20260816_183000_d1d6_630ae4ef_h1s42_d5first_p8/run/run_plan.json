@@ -1,0 +1,603 @@
+{
+  "cells": [
+    {
+      "command": [
+        "/home/jidanhuangdamihua/project/.venv/bin/python",
+        "scripts/run_full_paper_experiments.py",
+        "--only-dataset",
+        "dataset1",
+        "--strict-paper-mode",
+        "--info-sharing",
+        "without",
+        "--horizon",
+        "1",
+        "--seed",
+        "42",
+        "--output-dir",
+        "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_without/cells/h1_s42",
+        "--formal-source-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset1/source.parquet",
+        "--formal-target-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset1/target.parquet"
+      ],
+      "dataset_id": 1,
+      "horizon": 1,
+      "mode": "without",
+      "result_path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_without/cells/h1_s42/results/dataset1_without_results.csv",
+      "seed": 42
+    },
+    {
+      "command": [
+        "/home/jidanhuangdamihua/project/.venv/bin/python",
+        "scripts/run_full_paper_experiments.py",
+        "--only-dataset",
+        "dataset1",
+        "--strict-paper-mode",
+        "--info-sharing",
+        "with",
+        "--horizon",
+        "1",
+        "--seed",
+        "42",
+        "--output-dir",
+        "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42",
+        "--formal-source-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset1/source.parquet",
+        "--formal-target-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset1/target.parquet"
+      ],
+      "dataset_id": 1,
+      "horizon": 1,
+      "mode": "with",
+      "result_path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42/results/dataset1_with_results.csv",
+      "seed": 42
+    },
+    {
+      "command": [
+        "/home/jidanhuangdamihua/project/.venv/bin/python",
+        "scripts/run_full_paper_experiments.py",
+        "--only-dataset",
+        "dataset2",
+        "--strict-paper-mode",
+        "--info-sharing",
+        "without",
+        "--horizon",
+        "1",
+        "--seed",
+        "42",
+        "--output-dir",
+        "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d2_without/cells/h1_s42",
+        "--formal-source-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet",
+        "--formal-target-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset2/target.parquet"
+      ],
+      "dataset_id": 2,
+      "horizon": 1,
+      "mode": "without",
+      "result_path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d2_without/cells/h1_s42/results/dataset2_without_results.csv",
+      "seed": 42
+    },
+    {
+      "command": [
+        "/home/jidanhuangdamihua/project/.venv/bin/python",
+        "scripts/run_full_paper_experiments.py",
+        "--only-dataset",
+        "dataset2",
+        "--strict-paper-mode",
+        "--info-sharing",
+        "with",
+        "--horizon",
+        "1",
+        "--seed",
+        "42",
+        "--output-dir",
+        "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d2_with/cells/h1_s42",
+        "--formal-source-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet",
+        "--formal-target-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset2/target.parquet"
+      ],
+      "dataset_id": 2,
+      "horizon": 1,
+      "mode": "with",
+      "result_path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d2_with/cells/h1_s42/results/dataset2_with_results.csv",
+      "seed": 42
+    },
+    {
+      "command": [
+        "/home/jidanhuangdamihua/project/.venv/bin/python",
+        "scripts/run_full_paper_experiments.py",
+        "--only-dataset",
+        "dataset3",
+        "--strict-paper-mode",
+        "--info-sharing",
+        "without",
+        "--horizon",
+        "1",
+        "--seed",
+        "42",
+        "--output-dir",
+        "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d3_without/cells/h1_s42",
+        "--formal-source-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset3/source.parquet",
+        "--formal-target-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset3/target.parquet"
+      ],
+      "dataset_id": 3,
+      "horizon": 1,
+      "mode": "without",
+      "result_path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d3_without/cells/h1_s42/results/dataset3_without_results.csv",
+      "seed": 42
+    },
+    {
+      "command": [
+        "/home/jidanhuangdamihua/project/.venv/bin/python",
+        "scripts/run_full_paper_experiments.py",
+        "--only-dataset",
+        "dataset3",
+        "--strict-paper-mode",
+        "--info-sharing",
+        "with",
+        "--horizon",
+        "1",
+        "--seed",
+        "42",
+        "--output-dir",
+        "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d3_with/cells/h1_s42",
+        "--formal-source-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset3/source.parquet",
+        "--formal-target-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset3/target.parquet"
+      ],
+      "dataset_id": 3,
+      "horizon": 1,
+      "mode": "with",
+      "result_path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d3_with/cells/h1_s42/results/dataset3_with_results.csv",
+      "seed": 42
+    },
+    {
+      "command": [
+        "/home/jidanhuangdamihua/project/.venv/bin/python",
+        "scripts/run_d4_experiment.py",
+        "--info-sharing",
+        "without",
+        "--horizon",
+        "1",
+        "--seed",
+        "42",
+        "--output-dir",
+        "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d4_without/cells/h1_s42",
+        "--formal-source-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset4/source.parquet",
+        "--formal-target-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset4/target.parquet"
+      ],
+      "dataset_id": 4,
+      "horizon": 1,
+      "mode": "without",
+      "result_path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d4_without/cells/h1_s42/results/dataset4_without_results.csv",
+      "seed": 42
+    },
+    {
+      "command": [
+        "/home/jidanhuangdamihua/project/.venv/bin/python",
+        "scripts/run_d4_experiment.py",
+        "--info-sharing",
+        "with",
+        "--horizon",
+        "1",
+        "--seed",
+        "42",
+        "--output-dir",
+        "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d4_with/cells/h1_s42",
+        "--formal-source-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset4/source.parquet",
+        "--formal-target-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset4/target.parquet"
+      ],
+      "dataset_id": 4,
+      "horizon": 1,
+      "mode": "with",
+      "result_path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d4_with/cells/h1_s42/results/dataset4_with_results.csv",
+      "seed": 42
+    },
+    {
+      "command": [
+        "/home/jidanhuangdamihua/project/.venv/bin/python",
+        "scripts/run_d5_experiment.py",
+        "--info-sharing",
+        "without",
+        "--horizon",
+        "1",
+        "--seed",
+        "42",
+        "--output-dir",
+        "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d5_without/cells/h1_s42",
+        "--formal-source-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset5/source.parquet",
+        "--formal-target-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset5/target.parquet"
+      ],
+      "dataset_id": 5,
+      "horizon": 1,
+      "mode": "without",
+      "result_path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d5_without/cells/h1_s42/results/dataset5_without_results.csv",
+      "seed": 42
+    },
+    {
+      "command": [
+        "/home/jidanhuangdamihua/project/.venv/bin/python",
+        "scripts/run_d5_experiment.py",
+        "--info-sharing",
+        "with",
+        "--horizon",
+        "1",
+        "--seed",
+        "42",
+        "--output-dir",
+        "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d5_with/cells/h1_s42",
+        "--formal-source-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset5/source.parquet",
+        "--formal-target-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset5/target.parquet"
+      ],
+      "dataset_id": 5,
+      "horizon": 1,
+      "mode": "with",
+      "result_path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d5_with/cells/h1_s42/results/dataset5_with_results.csv",
+      "seed": 42
+    },
+    {
+      "command": [
+        "/home/jidanhuangdamihua/project/.venv/bin/python",
+        "scripts/run_d6_experiment.py",
+        "--info-sharing",
+        "without",
+        "--horizon",
+        "1",
+        "--seed",
+        "42",
+        "--output-dir",
+        "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d6_without/cells/h1_s42",
+        "--formal-source-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset6/source.parquet",
+        "--formal-target-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset6/target.parquet"
+      ],
+      "dataset_id": 6,
+      "horizon": 1,
+      "mode": "without",
+      "result_path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d6_without/cells/h1_s42/results/dataset6_without_results.csv",
+      "seed": 42
+    },
+    {
+      "command": [
+        "/home/jidanhuangdamihua/project/.venv/bin/python",
+        "scripts/run_d6_experiment.py",
+        "--info-sharing",
+        "with",
+        "--horizon",
+        "1",
+        "--seed",
+        "42",
+        "--output-dir",
+        "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d6_with/cells/h1_s42",
+        "--formal-source-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset6/source.parquet",
+        "--formal-target-path",
+        "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset6/target.parquet"
+      ],
+      "dataset_id": 6,
+      "horizon": 1,
+      "mode": "with",
+      "result_path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d6_with/cells/h1_s42/results/dataset6_with_results.csv",
+      "seed": 42
+    }
+  ],
+  "code_identity": {
+    "dirty": false,
+    "git_commit": "630ae4ef33a271187ed7225437d0609d8a13e941",
+    "worktree_digest": "c633eb3877393d2886e1980f05e1f29c9c5bf0e5f1525d7d1d7e7752afe380e5"
+  },
+  "formal_inputs": [
+    {
+      "dataset": "D1",
+      "source_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset1/source.parquet",
+      "source_sha256": "18acf992b569f3e01999db2c94a3e85ca5e8fa0c7e760b111dd43825acd3fd08",
+      "source_size": 929130,
+      "target_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset1/target.parquet",
+      "target_sha256": "057e8dcef179adb4d81625476905bb6f5f4f41a2157e506155a16cf27aec39ec",
+      "target_size": 56098
+    },
+    {
+      "dataset": "D2",
+      "source_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet",
+      "source_sha256": "63134a5900eb020c4b81489a881e2c78c9c21f18ce8ca9de16f0ca9e5af369a6",
+      "source_size": 126090,
+      "target_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset2/target.parquet",
+      "target_sha256": "d2bb78a71cccc0012f0f4f5175d80615565078b0cf7328d6741ab11063ec93c3",
+      "target_size": 25053
+    },
+    {
+      "dataset": "D3",
+      "source_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset3/source.parquet",
+      "source_sha256": "95d49f88390e415c172d482ffc2f1e9897af11bee88373db2cd87a224f0a79c3",
+      "source_size": 137393,
+      "target_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset3/target.parquet",
+      "target_sha256": "9bd91ae611888315e4dffaff4680dae94bdf6c6b6740dda2aa0ed7be1a0496ce",
+      "target_size": 23827
+    },
+    {
+      "dataset": "D4",
+      "source_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset4/source.parquet",
+      "source_sha256": "17a1fa5bd1dddfd46bda2a6922ff7821aee2a7e79deca58a94ff7bf20821f7ef",
+      "source_size": 117546804,
+      "target_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset4/target.parquet",
+      "target_sha256": "f0b83798ea265c6b79f09487903404c7c75acfcac2657f53e989ef59588e5946",
+      "target_size": 83217
+    },
+    {
+      "dataset": "D5",
+      "source_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset5/source.parquet",
+      "source_sha256": "368d896b0a7d2849ba2984e1bb3f4f07d36cf9175087ee755d6cd2a6c1c790b3",
+      "source_size": 282097362,
+      "target_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset5/target.parquet",
+      "target_sha256": "e01cdb828b0669b6aab9cb7e92f60c2a6a283ad8cdb3f5ec9bbd6ad61d11f263",
+      "target_size": 71791
+    },
+    {
+      "dataset": "D6",
+      "source_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset6/source.parquet",
+      "source_sha256": "12297d9b00a8e40fd9f13966e41aa558fe15e00079f8d0b23477bf4e7c288458",
+      "source_size": 18392840,
+      "target_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset6/target.parquet",
+      "target_sha256": "233540a998e980a5ecf1fe82d4e871637673fe5cf49d8717f9f64bee2aab04b1",
+      "target_size": 53532
+    }
+  ],
+  "horizons": [
+    1
+  ],
+  "input_identity": {
+    "configs/dataset_paths.json": {
+      "bytes": 113,
+      "sha256": "378e691cf8d7742af850c113c062e26c6f3afad8f1e571fd1c695a8fc094db78"
+    },
+    "configs/default_config.json": {
+      "bytes": 7657,
+      "sha256": "685c3cfb1853c23e073fa24862ba879dbd59f9c9b9bec3cb235f0ca25f205505"
+    },
+    "configs/matrix_config.json": {
+      "bytes": 394,
+      "sha256": "b6f30a028f75fab67a9421d60bd2fde95e0c29772559ebf8ed5cc0f6eb0b2a60"
+    },
+    "configs/solidified/knn/Dataset1/knn_with_info_sharing.json": {
+      "bytes": 12166,
+      "sha256": "03828cc63de28a329fdb32a7bc0f15bd201b962471197c1abe14575c1013666c"
+    },
+    "configs/solidified/knn/Dataset1/knn_without_info_sharing.json": {
+      "bytes": 9349,
+      "sha256": "cb27e059711375ab4726a9ec1bb3ad1e3da32955e2cd49088183cc1547e68367"
+    },
+    "configs/solidified/knn/Dataset2/knn_with_info_sharing.json": {
+      "bytes": 14040,
+      "sha256": "35bbbadc70db98781aa29829b567b5dc4887a83bfc5258214d429119380f652e"
+    },
+    "configs/solidified/knn/Dataset2/knn_without_info_sharing.json": {
+      "bytes": 11227,
+      "sha256": "a2197ee8ceccd0382276bc27213934db2622305cef4485522129e45e77d43e1b"
+    },
+    "configs/solidified/knn/Dataset3/knn_with_info_sharing.json": {
+      "bytes": 2146,
+      "sha256": "57b5cc49d7af3797399dd38a0dfa681bc821b7316e4031ea695441bbf216414a"
+    },
+    "configs/solidified/knn/Dataset3/knn_without_info_sharing.json": {
+      "bytes": 2143,
+      "sha256": "5727e607c8601d7a89ab8d0330f83135768cf10f7e0b999bd95a7cf9b354e16b"
+    },
+    "configs/solidified/knn/Dataset4/knn_with_info_sharing.json": {
+      "bytes": 5331626,
+      "sha256": "5f9b1b32e4930ff2307c2cd76472f802eaf79a85f27b6259472956772559c5e6"
+    },
+    "configs/solidified/knn/Dataset4/knn_without_info_sharing.json": {
+      "bytes": 61789,
+      "sha256": "859dbc251c3b3ae253290fd15c3ee00142e9c713eb73fe5f597c2a4db0ed8fbe"
+    },
+    "configs/solidified/knn/Dataset5/knn_with_info_sharing.json": {
+      "bytes": 44151718,
+      "sha256": "ebb51c397b4c0030fc094470caf11b14557a2a7017ceed3a564de78d155565dc"
+    },
+    "configs/solidified/knn/Dataset5/knn_without_info_sharing.json": {
+      "bytes": 977804,
+      "sha256": "4d71e2a38a3963d3613fa785980942d666af87a8fc244eb7fdfc26081702e533"
+    },
+    "configs/solidified/knn/Dataset6/knn_with_info_sharing.json": {
+      "bytes": 2953955,
+      "sha256": "644d0274e1be12fb369eb4339d20333e2506023ba6974793a9184b1acad8bc94"
+    },
+    "configs/solidified/knn/Dataset6/knn_without_info_sharing.json": {
+      "bytes": 2954009,
+      "sha256": "acffae486d4742f107236ce58db7156a98fba6978fc469b9ae7b3e53d0bb901a"
+    },
+    "raw_inputs/Dataset5Favorita/holidays_events.csv": {
+      "bytes": 22309,
+      "sha256": "81a183d6c4d691b57f84a0fde6bbf734a5b3c36a74b97378bf33a592648e2999"
+    },
+    "raw_inputs/Dataset5Favorita/items.csv": {
+      "bytes": 101841,
+      "sha256": "1efd8295f52c8531ec5bf6c3de37228a56bad2f2c653e79c4869baaf637edcc6"
+    },
+    "raw_inputs/Dataset5Favorita/oil.csv": {
+      "bytes": 20580,
+      "sha256": "944b23b857580f9d804399346fd3ed69bffcb7facfd98c55fdb408b8d057cca7"
+    },
+    "raw_inputs/Dataset5Favorita/stores.csv": {
+      "bytes": 1387,
+      "sha256": "af503b2bce11d7906d249f81cc0598f10e2addcc9f6c59aa2d95c9f2652c296b"
+    },
+    "raw_inputs/Dataset5Favorita/train.csv": {
+      "bytes": 4997452288,
+      "sha256": "ccf4236a6b58b0db937b8c5006a0ad8fffef6acd06bed1c10cd5cd4d68d93248"
+    },
+    "raw_inputs/Dataset5Favorita/transactions.csv": {
+      "bytes": 1552637,
+      "sha256": "e116384a6981af74932832436aa2f6a43121f77ca81accc44e3a5160158ca03c"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset1/manifest.json": {
+      "bytes": 3050,
+      "sha256": "f0d7a2f2b72e7707a9983e3adee1886d57a5cf849666b65ba8c0cc75fee31e9d"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset1/source.parquet": {
+      "bytes": 929130,
+      "sha256": "18acf992b569f3e01999db2c94a3e85ca5e8fa0c7e760b111dd43825acd3fd08"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset1/source_schema.json": {
+      "bytes": 766,
+      "sha256": "44c4839f444ce6a1fb4d6f1db94a0bec48f29338c65c5325043a8e107fd2126c"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset1/target.parquet": {
+      "bytes": 56098,
+      "sha256": "057e8dcef179adb4d81625476905bb6f5f4f41a2157e506155a16cf27aec39ec"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset1/target_schema.json": {
+      "bytes": 765,
+      "sha256": "ceb4415cd7090f692d4058f1373da751573a6775edeb46ce1a28b1f314fc15a3"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset2/manifest.json": {
+      "bytes": 8563,
+      "sha256": "d284f5ec8eca79033c98f3a46ced3a4077d56ae20bf2099183872e692d8609ae"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset2/source.parquet": {
+      "bytes": 126090,
+      "sha256": "63134a5900eb020c4b81489a881e2c78c9c21f18ce8ca9de16f0ca9e5af369a6"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset2/source_schema.json": {
+      "bytes": 3599,
+      "sha256": "7f6fdacffeef0ac864eafdf115e626c9085e99bf97586a2dc9f0b905d8be3bb3"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset2/target.parquet": {
+      "bytes": 25053,
+      "sha256": "d2bb78a71cccc0012f0f4f5175d80615565078b0cf7328d6741ab11063ec93c3"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset2/target_schema.json": {
+      "bytes": 1232,
+      "sha256": "d3e55c7af31604c50df5abf5d9e17a477903bd7c6a085084135ec40c7d0d7acf"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset3/manifest.json": {
+      "bytes": 3295,
+      "sha256": "7c221852f9616d82d533710bf9d765cb683ab4189c4ad8acf767709884dbab1d"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset3/source.parquet": {
+      "bytes": 137393,
+      "sha256": "95d49f88390e415c172d482ffc2f1e9897af11bee88373db2cd87a224f0a79c3"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset3/source_schema.json": {
+      "bytes": 1178,
+      "sha256": "d19ce6b7b14577a722754af5c2bca97914586f08747100c535bbc780a8336d95"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset3/target.parquet": {
+      "bytes": 23827,
+      "sha256": "9bd91ae611888315e4dffaff4680dae94bdf6c6b6740dda2aa0ed7be1a0496ce"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset3/target_schema.json": {
+      "bytes": 1178,
+      "sha256": "d19ce6b7b14577a722754af5c2bca97914586f08747100c535bbc780a8336d95"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset4/manifest.json": {
+      "bytes": 3304,
+      "sha256": "7696a02a8b4aa747f840faa3fcb0bb9e3fe8062a801248247d74b308674cc814"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset4/source.parquet": {
+      "bytes": 117546804,
+      "sha256": "17a1fa5bd1dddfd46bda2a6922ff7821aee2a7e79deca58a94ff7bf20821f7ef"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset4/source_schema.json": {
+      "bytes": 2876,
+      "sha256": "4759b9a9ae18a17a7388b009c9cb20e695ee4030f2e10a0bcfc751c5878fc325"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset4/target.parquet": {
+      "bytes": 83217,
+      "sha256": "f0b83798ea265c6b79f09487903404c7c75acfcac2657f53e989ef59588e5946"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset4/target_schema.json": {
+      "bytes": 2876,
+      "sha256": "4759b9a9ae18a17a7388b009c9cb20e695ee4030f2e10a0bcfc751c5878fc325"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset5/manifest.json": {
+      "bytes": 4117,
+      "sha256": "345a56d608d13b65040a77a1e08420636e0f3dd4496b2ec6d204270d709287a0"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset5/source.parquet": {
+      "bytes": 282097362,
+      "sha256": "368d896b0a7d2849ba2984e1bb3f4f07d36cf9175087ee755d6cd2a6c1c790b3"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset5/source_schema.json": {
+      "bytes": 1773,
+      "sha256": "7a268fefaf5c15c6d56079496316c2756edd5a0290e10a1c21696ada425542f0"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset5/target.parquet": {
+      "bytes": 71791,
+      "sha256": "e01cdb828b0669b6aab9cb7e92f60c2a6a283ad8cdb3f5ec9bbd6ad61d11f263"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset5/target_schema.json": {
+      "bytes": 1773,
+      "sha256": "7a268fefaf5c15c6d56079496316c2756edd5a0290e10a1c21696ada425542f0"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset6/manifest.json": {
+      "bytes": 3301,
+      "sha256": "ddce0ead262ab36d3cbf830e58b0d40c1595010179186c5ad6ab61dbe92ce45e"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset6/source.parquet": {
+      "bytes": 18392840,
+      "sha256": "12297d9b00a8e40fd9f13966e41aa558fe15e00079f8d0b23477bf4e7c288458"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset6/source_schema.json": {
+      "bytes": 1968,
+      "sha256": "859904ab9ffe0dfd22fdc61dde63aa4a9a5a4b198759b9242fd95068724dcf9c"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset6/target.parquet": {
+      "bytes": 53532,
+      "sha256": "233540a998e980a5ecf1fe82d4e871637673fe5cf49d8717f9f64bee2aab04b1"
+    },
+    "数据集/固化数据/d1_d6_sealed_v1/dataset6/target_schema.json": {
+      "bytes": 1968,
+      "sha256": "859904ab9ffe0dfd22fdc61dde63aa4a9a5a4b198759b9242fd95068724dcf9c"
+    }
+  },
+  "methods": [
+    "No-TL",
+    "SS-TL",
+    "MSWA-TL",
+    "MSSB-TL",
+    "MSML-TL",
+    "MSML-TL-RFE"
+  ],
+  "run_identity": "4e88557cb38e6daf9efde93d993390189e828c5a772454f031661eeb2fa7a4ce",
+  "run_plan_version": "formal_d1_d6_run_plan_v3",
+  "schema_registry_digest": "e97c0e4f28d15ef488c3031d221881a21291a9473b210947435d4bec9016bd61",
+  "schema_registry_version": "result_schema_registry_v1",
+  "seeds": [
+    42
+  ],
+  "selection": {
+    "datasets": [
+      "d1",
+      "d2",
+      "d3",
+      "d4",
+      "d5",
+      "d6"
+    ],
+    "horizons": [
+      1
+    ],
+    "modes": [
+      "without",
+      "with"
+    ],
+    "seeds": [
+      42
+    ]
+  }
+}

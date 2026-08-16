@@ -1,0 +1,22 @@
+{
+  "acceptance": {
+    "aggregate_profile": null,
+    "counts": {
+      "rows": 30
+    },
+    "passed": true,
+    "reasons": [],
+    "scope": "cell"
+  },
+  "accepted_at": "2026-08-16T12:44:05.917232+00:00",
+  "artifact_type": "formal_cell",
+  "bytes": 3234141,
+  "code_identity": {
+    "dirty": false,
+    "git_commit": "630ae4ef33a271187ed7225437d0609d8a13e941",
+    "worktree_digest": "c633eb3877393d2886e1980f05e1f29c9c5bf0e5f1525d7d1d7e7752afe380e5"
+  },
+  "path": "/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d4_with/cells/h1_s42/results/dataset4_with_results.csv",
+  "rows": 30,
+  "sha256": "4f5312951af8fd07bc4738875fa7e378012af3b09db975f1a688c20cace61d10"
+}

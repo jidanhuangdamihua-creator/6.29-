@@ -1,0 +1,55 @@
+[D6-without-h1-s42] /home/jidanhuangdamihua/project/.venv/bin/python scripts/run_d6_experiment.py --info-sharing without --horizon 1 --seed 42 --output-dir /home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d6_without/cells/h1_s42 --formal-source-path '/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset6/source.parquet' --formal-target-path '/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset6/target.parquet'
+2026-08-16 12:28:10.883459: I external/local_tsl/tsl/cuda/cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+2026-08-16 12:28:11.006463: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2026-08-16 12:28:11.006517: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2026-08-16 12:28:11.009481: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2026-08-16 12:28:11.026175: I external/local_tsl/tsl/cuda/cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+2026-08-16 12:28:11.026471: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2026-08-16 12:28:13.091240: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
+[2026-08-16 12:29:39] INFO     - [temporal_split_by_ratio_or_dates] Start. role=target mode=days
+[2026-08-16 12:29:39] INFO     - [temporal_split_by_ratio_or_dates] Finished. train=15 val=15 test=180
+[2026-08-16 12:29:39] INFO     - [normalize_features] Start.
+[2026-08-16 12:29:41] INFO     - [normalize_features] Finished. features=['sales', 'year', 'month', 'week', 'day', 'wm_yr_wk', 'weekday', 'is_event_1', 'is_event_2', 'snap', 'sell_price']
+[2026-08-16 12:29:41] INFO     - [build_tabular_sequence] Start. horizon=1 window_size=10
+[2026-08-16 12:29:41] INFO     - [build_tabular_sequence] Finished. X_shape=(5, 10, 11) y_shape=(5,)
+[2026-08-16 12:29:41] INFO     - [build_tabular_sequence] Start. horizon=1 window_size=10
+[2026-08-16 12:29:41] INFO     - [build_tabular_sequence] Finished. X_shape=(5, 10, 11) y_shape=(5,)
+[2026-08-16 12:29:41] INFO     - [build_tabular_sequence] Start. horizon=1 window_size=10
+[2026-08-16 12:29:41] INFO     - [build_tabular_sequence] Finished. X_shape=(170, 10, 11) y_shape=(170,)
+[2026-08-16 12:29:41] INFO     - [to_cnn_tensor] Tensor ready. shape=(5, 10, 11)
+[2026-08-16 12:29:41] INFO     - [to_cnn_tensor] Tensor ready. shape=(5, 10, 11)
+[2026-08-16 12:29:41] INFO     - [to_cnn_tensor] Tensor ready. shape=(170, 10, 11)
+Results saved to /home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d6_without/cells/h1_s42/results/dataset6_without_results.csv
+   target_entity_key       method       smape        rmse
+0   CA_1/FOODS_3_586        No-TL  126.473818  181.077237
+1   CA_1/FOODS_3_586        SS-TL  122.874711  118.642265
+2   CA_1/FOODS_3_586      MSWA-TL  125.315045  182.763454
+3   CA_1/FOODS_3_586      MSSB-TL  111.330555  130.194090
+4   CA_1/FOODS_3_586      MSML-TL   58.238998   21.469268
+5   CA_1/FOODS_3_586  MSML-TL-RFE  175.790421   36.667184
+6   CA_1/FOODS_3_080        No-TL   94.663673   38.378114
+7   CA_1/FOODS_3_080        SS-TL   97.634638   39.920214
+8   CA_1/FOODS_3_080      MSWA-TL  118.256531   47.422096
+9   CA_1/FOODS_3_080      MSSB-TL  146.124678  134.067649
+10  CA_1/FOODS_3_080      MSML-TL   45.565207    9.513707
+11  CA_1/FOODS_3_080  MSML-TL-RFE   57.756747   13.638174
+12  CA_1/FOODS_3_555        No-TL  121.338853   71.715233
+13  CA_1/FOODS_3_555        SS-TL  134.466061  157.230611
+14  CA_1/FOODS_3_555      MSWA-TL  105.747474   68.060668
+15  CA_1/FOODS_3_555      MSSB-TL  101.292224   51.056322
+16  CA_1/FOODS_3_555      MSML-TL   35.255523    7.300630
+17  CA_1/FOODS_3_555  MSML-TL-RFE   44.620603    9.563842
+18  CA_1/FOODS_3_377        No-TL  143.822982   81.063650
+19  CA_1/FOODS_3_377        SS-TL  136.859812   53.632742
+20  CA_1/FOODS_3_377      MSWA-TL  149.217112   89.129507
+21  CA_1/FOODS_3_377      MSSB-TL  159.872314  166.501167
+22  CA_1/FOODS_3_377      MSML-TL   51.505430    5.327358
+23  CA_1/FOODS_3_377  MSML-TL-RFE  167.562678    8.306574
+24  CA_1/FOODS_3_668        No-TL   94.328967   15.388569
+25  CA_1/FOODS_3_668        SS-TL  130.332571   40.496418
+26  CA_1/FOODS_3_668      MSWA-TL   95.095871   14.538288
+27  CA_1/FOODS_3_668      MSSB-TL  135.139600   46.251379
+28  CA_1/FOODS_3_668      MSML-TL   43.227411    3.803752
+29  CA_1/FOODS_3_668  MSML-TL-RFE   43.374018    3.909119
+[ACCEPTED] mode=d6_without result=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d6_without/results/dataset6_without_results.csv

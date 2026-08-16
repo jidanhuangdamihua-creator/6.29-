@@ -1,0 +1,55 @@
+[D4-with-h1-s42] /home/jidanhuangdamihua/project/.venv/bin/python scripts/run_d4_experiment.py --info-sharing with --horizon 1 --seed 42 --output-dir /home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d4_with/cells/h1_s42 --formal-source-path '/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset4/source.parquet' --formal-target-path '/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset4/target.parquet'
+2026-08-16 12:28:07.772684: I external/local_tsl/tsl/cuda/cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+2026-08-16 12:28:07.848630: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2026-08-16 12:28:07.848688: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2026-08-16 12:28:07.850359: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2026-08-16 12:28:07.859333: I external/local_tsl/tsl/cuda/cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+2026-08-16 12:28:07.859588: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2026-08-16 12:28:09.090900: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
+[2026-08-16 12:29:42] INFO     - [temporal_split_by_ratio_or_dates] Start. role=target mode=days
+[2026-08-16 12:29:42] INFO     - [temporal_split_by_ratio_or_dates] Finished. train=15 val=15 test=180
+[2026-08-16 12:29:42] INFO     - [normalize_features] Start.
+[2026-08-16 12:29:45] INFO     - [normalize_features] Finished. features=['sales', 'stock_hour6_22_cnt', 'activity_flag', 'discount', 'holiday_flag', 'precpt', 'avg_temperature', 'avg_humidity', 'avg_wind_level', 'year', 'month', 'week', 'day']
+[2026-08-16 12:29:45] INFO     - [build_tabular_sequence] Start. horizon=1 window_size=10
+[2026-08-16 12:29:45] INFO     - [build_tabular_sequence] Finished. X_shape=(5, 10, 13) y_shape=(5,)
+[2026-08-16 12:29:45] INFO     - [build_tabular_sequence] Start. horizon=1 window_size=10
+[2026-08-16 12:29:45] INFO     - [build_tabular_sequence] Finished. X_shape=(5, 10, 13) y_shape=(5,)
+[2026-08-16 12:29:45] INFO     - [build_tabular_sequence] Start. horizon=1 window_size=10
+[2026-08-16 12:29:46] INFO     - [build_tabular_sequence] Finished. X_shape=(170, 10, 13) y_shape=(170,)
+[2026-08-16 12:29:46] INFO     - [to_cnn_tensor] Tensor ready. shape=(5, 10, 13)
+[2026-08-16 12:29:46] INFO     - [to_cnn_tensor] Tensor ready. shape=(5, 10, 13)
+[2026-08-16 12:29:46] INFO     - [to_cnn_tensor] Tensor ready. shape=(170, 10, 13)
+Results saved to /home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d4_with/cells/h1_s42/results/dataset4_with_results.csv
+   target_entity_key       method       smape      rmse
+0            166/258        No-TL   72.425045  1.590815
+1            166/258        SS-TL   48.034941  0.960965
+2            166/258      MSWA-TL   73.870148  1.516033
+3            166/258      MSSB-TL   27.721785  0.460098
+4            166/258      MSML-TL  124.845819  1.119871
+5            166/258  MSML-TL-RFE  172.336706  1.312372
+6            166/432        No-TL   68.879816  1.832540
+7            166/432        SS-TL   34.902867  0.803128
+8            166/432      MSWA-TL   56.202544  1.373699
+9            166/432      MSSB-TL   77.284317  2.124855
+10           166/432      MSML-TL   52.728874  0.972452
+11           166/432  MSML-TL-RFE   52.575130  0.965427
+12           166/433        No-TL   52.142481  0.841948
+13           166/433        SS-TL  113.714997  2.407899
+14           166/433      MSWA-TL  118.293969  2.539026
+15           166/433      MSSB-TL   97.984339  1.825731
+16           166/433      MSML-TL   36.168326  0.397893
+17           166/433  MSML-TL-RFE   42.616675  0.465463
+18           166/313        No-TL   54.106011  0.711480
+19           166/313        SS-TL   72.430608  1.037808
+20           166/313      MSWA-TL  114.154839  2.580868
+21           166/313      MSSB-TL   66.723226  1.098071
+22           166/313      MSML-TL   44.233497  0.508795
+23           166/313  MSML-TL-RFE  123.656909  0.843666
+24           166/311        No-TL   70.791511  1.254125
+25           166/311        SS-TL   60.235685  0.974735
+26           166/311      MSWA-TL   53.554821  0.939476
+27           166/311      MSSB-TL   37.037771  0.538221
+28           166/311      MSML-TL   26.491400  0.413567
+29           166/311  MSML-TL-RFE   26.841555  0.426149
+[ACCEPTED] mode=d4_with result=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d4_with/results/dataset4_with_results.csv

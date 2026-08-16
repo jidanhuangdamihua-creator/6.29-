@@ -1,0 +1,42 @@
+{
+  "use_parquet": true,
+  "dataset_id": 4,
+  "dataset_name": "Dataset4",
+  "knn_json_dir": "/home/jidanhuangdamihua/project/configs/solidified/knn/Dataset4",
+  "info_sharing": "without",
+  "source_history_days": 180,
+  "entity_col": "entity_id",
+  "enabled_methods": [
+    "No-TL",
+    "SS-TL",
+    "MSWA-TL",
+    "MSSB-TL",
+    "MSML-TL",
+    "MSML-TL-RFE"
+  ],
+  "output_filename": "dataset4_without_results.csv",
+  "horizon": 1,
+  "window_size": 10,
+  "learning_rate": 0.0001,
+  "source_epochs": 50,
+  "target_epochs": 50,
+  "batch_size": 16,
+  "random_state": 42,
+  "source_count": 3,
+  "smoke": false,
+  "smoke_target_limit": 1,
+  "smoke_source_limit": 3,
+  "formal_source_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset4/source.parquet",
+  "formal_target_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset4/target.parquet",
+  "repair_source_numeric_na": false,
+  "metric_protocol": {
+    "current_metric_space": "normalized_minmax_space",
+    "current_rmse_definition": "RMSE on MinMax-scaled targets after split-wise normalization fit on train only.",
+    "current_accuracy_definition": "1 / (RMSE + 1e-8)",
+    "paper_metric_space": "original_sales_space",
+    "paper_accuracy_definition": "1 / (RMSE + 1e-8)",
+    "strict_paper_metrics": false,
+    "alignment_status": "PARTIAL",
+    "notes": "Default engineering results are computed in normalized minmax space. Strict paper metric mode re-computes metrics in original sales space by inverse-transforming predictions/targets with train-fitted MinMax scaler."
+  }
+}

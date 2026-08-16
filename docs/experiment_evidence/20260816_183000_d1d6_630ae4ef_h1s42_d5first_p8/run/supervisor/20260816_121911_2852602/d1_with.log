@@ -1,0 +1,80 @@
+[D1-with-h1-s42] /home/jidanhuangdamihua/project/.venv/bin/python scripts/run_full_paper_experiments.py --only-dataset dataset1 --strict-paper-mode --info-sharing with --horizon 1 --seed 42 --output-dir /home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42 --formal-source-path '/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset1/source.parquet' --formal-target-path '/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset1/target.parquet'
+2026-08-16 12:47:18.156313: I external/local_tsl/tsl/cuda/cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+2026-08-16 12:47:18.219535: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2026-08-16 12:47:18.219599: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2026-08-16 12:47:18.221493: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2026-08-16 12:47:18.232320: I external/local_tsl/tsl/cuda/cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+2026-08-16 12:47:18.232614: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2026-08-16 12:47:19.485318: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
+[paper_protocol_validation] status=WARN strict_paper_mode=True strict_paper_split=True failures=0 warnings=1
+[paper_protocol_todo] TODO: split_protocol.paper_reference is not confirmed from the original paper yet.
+Run ID: h1_s42
+Run directory: outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42
+Results directory: outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42/results
+[1/5] 检查系统架构...
+Python: /home/jidanhuangdamihua/project/.venv/bin/python
+Python 版本: 3.9.25
+系统架构: x86_64
+[2/5] 准备共享虚拟环境（固定路径，避免项目搬家后重复下载）...
+环境由启动器统一管理，当前直接执行实验脚本。
+[3/5] 校验 Python 架构...
+解释器架构: x86_64
+[4/5] 安装依赖（仅首次）...
+依赖检查由当前解释器环境负责。
+[5/5] 启动实验脚本...
+================================================================================
+                    统一实验评估流水线
+               Multi-Source Transfer Learning Benchmark
+================================================================================
+
+======================================================================
+评估 Dataset1
+======================================================================
+目标域: (210, 9)
+源域数量: 27
+总体进度: [1/6]  当前数据集: Dataset1  当前方法: No-TL  ETA: 0:00:00
+[1/6] 运行 No-TL (k=1, scenario=with_information_sharing) ...
+  No-TL  sMAPE: 98.507053  Original-scale sMAPE: 98.507053  RMSE: 189.528274  Accuracy: 0.005276
+总体进度: [2/6]  当前数据集: Dataset1  当前方法: SS-TL  ETA: 0:00:34
+[2/6] 运行 SS-TL (k=1, scenario=with_information_sharing) ...
+  SS-TL  sMAPE: 31.974863  Original-scale sMAPE: 31.974863  RMSE: 31.784285  Accuracy: 0.031462
+总体进度: [3/6]  当前数据集: Dataset1  当前方法: MSWA-TL  ETA: 0:01:34
+[3/6] 运行 MSWA-TL (k=3, scenario=with_information_sharing) ...
+  MSWA-TL  sMAPE: 32.053981  Original-scale sMAPE: 32.053981  RMSE: 32.083606  Accuracy: 0.031169
+总体进度: [4/6]  当前数据集: Dataset1  当前方法: MSSB-TL  ETA: 0:02:56
+[4/6] 运行 MSSB-TL (k=3, scenario=with_information_sharing) ...
+  MSSB-TL  sMAPE: 33.976428  Original-scale sMAPE: 33.976428  RMSE: 35.885550  Accuracy: 0.027866
+总体进度: [5/6]  当前数据集: Dataset1  当前方法: MSML-TL  ETA: 0:02:11
+[5/6] 运行 MSML-TL (k=3, scenario=with_information_sharing) ...
+  MSML-TL  sMAPE: 26.591413  Original-scale sMAPE: 26.591413  RMSE: 24.498940  Accuracy: 0.040818
+总体进度: [6/6]  当前数据集: Dataset1  当前方法: MSML-TL-RFE  ETA: 0:01:21
+[6/6] 运行 MSML-TL-RFE (k=3, scenario=with_information_sharing) ...
+  MSML-TL-RFE  sMAPE: 42.482931  Original-scale sMAPE: 42.482931  RMSE: 33.251906  Accuracy: 0.030073
+
+sMAPE 对比表
+method      MSML-TL  MSML-TL-RFE    MSSB-TL    MSWA-TL      No-TL      SS-TL
+dataset                                                                     
+Dataset1  26.591413    42.482931  33.976428  32.053981  98.507053  31.974863
+
+相对 No-TL 提升百分比（按 sMAPE，越高越好）
+Dataset1: MSML-TL=73.01%, MSML-TL-RFE=56.87%, MSSB-TL=65.51%, MSWA-TL=67.46%, SS-TL=67.54%
+
+各数据集最佳方法
+ dataset  method     smape  original_scale_smape     rmse  accuracy prediction_shape
+Dataset1 MSML-TL 26.591413             26.591413 24.49894  0.040818         (170, 1)
+
+结果文件
+Saved Dataset1 results: outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42/results/dataset1_with_results.csv
+Saved full results: outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42/results/full_results.csv
+Saved ranking: outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42/results/ranking.csv
+Saved summary: outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42/results/summary.csv
+论文结果 CSV: outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42/results/paper_results.csv
+扩展结果 CSV: outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42/results/extended_results.csv
+表格: /home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42/results_reports/paper_results_formatted.csv
+sMAPE 图: /home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42/results_reports/paper_smape_bar.png
+Accuracy 图: /home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42/results_reports/paper_accuracy_bar.png
+Source identification 报告: outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/cells/h1_s42/paper_alignment/source_identification_report.csv
+
+✅ 实验完成
+[ACCEPTED] mode=d1_with result=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/d1_with/results/dataset1_with_results.csv

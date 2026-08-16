@@ -1,0 +1,157 @@
+{
+  "use_parquet": true,
+  "dataset_id": 5,
+  "dataset_name": "Dataset5",
+  "raw_dir": "数据集/原始数据/Dataset 5Favorita",
+  "knn_json_dir": "/home/jidanhuangdamihua/project/configs/solidified/knn/Dataset5",
+  "info_sharing": "without",
+  "source_history_days": 180,
+  "entity_col": "entity_id",
+  "enabled_methods": [
+    "No-TL",
+    "SS-TL",
+    "MSWA-TL",
+    "MSSB-TL",
+    "MSML-TL",
+    "MSML-TL-RFE"
+  ],
+  "output_filename": "dataset5_without_results.csv",
+  "horizon": 1,
+  "window_size": 10,
+  "learning_rate": 0.0001,
+  "source_epochs": 50,
+  "target_epochs": 50,
+  "batch_size": 16,
+  "random_state": 42,
+  "source_count": 3,
+  "smoke": false,
+  "smoke_target_limit": 1,
+  "smoke_source_limit": 3,
+  "formal_source_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset5/source.parquet",
+  "formal_target_path": "/home/jidanhuangdamihua/project/数据集/固化数据/d1_d6_sealed_v1/dataset5/target.parquet",
+  "repair_source_numeric_na": false,
+  "metric_protocol": {
+    "current_metric_space": "normalized_minmax_space",
+    "current_rmse_definition": "RMSE on MinMax-scaled targets after split-wise normalization fit on train only.",
+    "current_accuracy_definition": "1 / (RMSE + 1e-8)",
+    "paper_metric_space": "original_sales_space",
+    "paper_accuracy_definition": "1 / (RMSE + 1e-8)",
+    "strict_paper_metrics": false,
+    "alignment_status": "PARTIAL",
+    "notes": "Default engineering results are computed in normalized minmax space. Strict paper metric mode re-computes metrics in original sales space by inverse-transforming predictions/targets with train-fitted MinMax scaler."
+  },
+  "group_cols": [
+    "store_nbr",
+    "item_nbr"
+  ],
+  "d5_calendar_reconstruction": {
+    "synthetic_entity_date_keys": [],
+    "synthetic_row_count": 0,
+    "field_stats": [
+      {
+        "field": "sales",
+        "authority": "natural_day_zero_demand",
+        "lookup_keys": [],
+        "restored_count": 0,
+        "zero_fill_count": 0,
+        "missing_lookup_count": 0
+      },
+      {
+        "field": "onpromotion",
+        "authority": "missing_promotion_contract",
+        "lookup_keys": [],
+        "restored_count": 0,
+        "zero_fill_count": 0,
+        "missing_lookup_count": 0
+      },
+      {
+        "field": "oil_price",
+        "authority": "oil_by_date",
+        "lookup_keys": [
+          "date"
+        ],
+        "restored_count": 0,
+        "zero_fill_count": 0,
+        "missing_lookup_count": 0
+      },
+      {
+        "field": "transactions",
+        "authority": "transactions_by_store_date",
+        "lookup_keys": [
+          "store_nbr",
+          "date"
+        ],
+        "restored_count": 0,
+        "zero_fill_count": 0,
+        "missing_lookup_count": 0
+      },
+      {
+        "field": "item_static",
+        "authority": "items_by_item",
+        "lookup_keys": [
+          "item_nbr"
+        ],
+        "restored_count": 0,
+        "zero_fill_count": 0,
+        "missing_lookup_count": 0
+      },
+      {
+        "field": "store_static",
+        "authority": "stores_by_store",
+        "lookup_keys": [
+          "store_nbr"
+        ],
+        "restored_count": 0,
+        "zero_fill_count": 0,
+        "missing_lookup_count": 0
+      },
+      {
+        "field": "date_fields",
+        "authority": "expected_dates",
+        "lookup_keys": [
+          "date"
+        ],
+        "restored_count": 0,
+        "zero_fill_count": 0,
+        "missing_lookup_count": 0
+      }
+    ],
+    "original_row_count": 1055,
+    "original_rows_unchanged": true,
+    "missing_lookups": [],
+    "authority_files": {
+      "holidays": {
+        "path": "/home/jidanhuangdamihua/project/数据集/原始数据/Dataset 5Favorita/holidays_events.csv",
+        "sha256": "81a183d6c4d691b57f84a0fde6bbf734a5b3c36a74b97378bf33a592648e2999",
+        "size_bytes": 22309,
+        "used": true
+      },
+      "items": {
+        "path": "/home/jidanhuangdamihua/project/数据集/原始数据/Dataset 5Favorita/items.csv",
+        "sha256": "1efd8295f52c8531ec5bf6c3de37228a56bad2f2c653e79c4869baaf637edcc6",
+        "size_bytes": 101841,
+        "used": true
+      },
+      "oil": {
+        "path": "/home/jidanhuangdamihua/project/数据集/原始数据/Dataset 5Favorita/oil.csv",
+        "sha256": "944b23b857580f9d804399346fd3ed69bffcb7facfd98c55fdb408b8d057cca7",
+        "size_bytes": 20580,
+        "used": true
+      },
+      "stores": {
+        "path": "/home/jidanhuangdamihua/project/数据集/原始数据/Dataset 5Favorita/stores.csv",
+        "sha256": "af503b2bce11d7906d249f81cc0598f10e2addcc9f6c59aa2d95c9f2652c296b",
+        "size_bytes": 1387,
+        "used": true
+      },
+      "transactions": {
+        "path": "/home/jidanhuangdamihua/project/数据集/原始数据/Dataset 5Favorita/transactions.csv",
+        "sha256": "e116384a6981af74932832436aa2f6a43121f77ca81accc44e3a5160158ca03c",
+        "size_bytes": 1552637,
+        "used": true
+      }
+    }
+  },
+  "d5_source_history_validation_path": "precomputed_static_file",
+  "d5_precomputed_source_history_active": true
+}

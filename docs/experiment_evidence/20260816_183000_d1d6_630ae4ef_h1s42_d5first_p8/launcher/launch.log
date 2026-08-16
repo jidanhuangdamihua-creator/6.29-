@@ -1,0 +1,28 @@
+[PREPARED] run_root=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8 run_identity=4e88557cb38e6daf9efde93d993390189e828c5a772454f031661eeb2fa7a4ce cells=12
+[START] run_root=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8 MAX_JOBS=8 cells=12
+[LAUNCHED] d5_without pid=2852815 pgid=2852815 log=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/supervisor/20260816_121911_2852602/d5_without.log
+[LAUNCHED] d5_with pid=2852832 pgid=2852832 log=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/supervisor/20260816_121911_2852602/d5_with.log
+[LAUNCHED] d6_without pid=2852864 pgid=2852864 log=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/supervisor/20260816_121911_2852602/d6_without.log
+[LAUNCHED] d6_with pid=2852896 pgid=2852896 log=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/supervisor/20260816_121911_2852602/d6_with.log
+[LAUNCHED] d4_without pid=2852929 pgid=2852929 log=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/supervisor/20260816_121911_2852602/d4_without.log
+[LAUNCHED] d4_with pid=2852962 pgid=2852962 log=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/supervisor/20260816_121911_2852602/d4_with.log
+[LAUNCHED] d3_without pid=2852995 pgid=2852995 log=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/supervisor/20260816_121911_2852602/d3_without.log
+[LAUNCHED] d3_with pid=2853028 pgid=2853028 log=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/supervisor/20260816_121911_2852602/d3_with.log
+[SUCCEEDED] d3_with elapsed=603s
+[LAUNCHED] d2_without pid=2949014 pgid=2949014 log=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/supervisor/20260816_121911_2852602/d2_without.log
+[SUCCEEDED] d3_without elapsed=603s
+[LAUNCHED] d2_with pid=2949053 pgid=2949053 log=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/supervisor/20260816_121911_2852602/d2_with.log
+[SUCCEEDED] d6_without elapsed=1135s
+[LAUNCHED] d1_without pid=3148580 pgid=3148580 log=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/supervisor/20260816_121911_2852602/d1_without.log
+[SUCCEEDED] d4_without elapsed=1146s
+[LAUNCHED] d1_with pid=3152786 pgid=3152786 log=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/supervisor/20260816_121911_2852602/d1_with.log
+[SUCCEEDED] d4_with elapsed=1272s
+[SUCCEEDED] d6_with elapsed=1276s
+[SUCCEEDED] d2_without elapsed=805s
+[SUCCEEDED] d2_with elapsed=809s
+[SUCCEEDED] d5_without elapsed=1422s
+[SUCCEEDED] d1_without elapsed=895s
+[SUCCEEDED] d1_with elapsed=896s
+[SUCCEEDED] d5_with elapsed=2478s
+[ACCEPTED] aggregate=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8/results/d1_d6_results.csv
+[COMPLETE] modes=12 run_root=/home/jidanhuangdamihua/project/outputs/runs/20260816_183000_d1d6_630ae4ef_h1s42_d5first_p8
