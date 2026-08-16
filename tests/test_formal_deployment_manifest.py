@@ -505,6 +505,8 @@ def test_formal_proof_digest_uses_content_identity_projection() -> None:
 
 def test_formal_proof_authority_projection_is_raw_input_and_mtime_insensitive() -> None:
     proof = _raw_formal_proof(1)
+    for role in ("source", "target"):
+        proof[role].setdefault("mtime_ns", 100)  # type: ignore[index]
     changed_mtime = deepcopy(proof)
     changed_mtime["source"]["mtime_ns"] += 1  # type: ignore[index]
     changed_mtime["target"]["mtime_ns"] += 1  # type: ignore[index]
@@ -536,6 +538,8 @@ def test_formal_proof_authority_projection_is_raw_input_and_mtime_insensitive() 
 def test_verify_formal_proof_uses_semantic_authority_digest_for_raw_and_legacy_identity() -> None:
     manifest = _manifest_payload()
     proof = _raw_formal_proof(1)
+    for role in ("source", "target"):
+        proof[role].setdefault("mtime_ns", 100)  # type: ignore[index]
     authority_digest = deployment.formal_proof_authority_digest(proof)
 
     raw_with_mtime = deepcopy(proof)
@@ -730,7 +734,12 @@ def test_validate_manifest_accepts_current_parquet_mtime_difference(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     snapshot = deployment.frozen_artifact_snapshot(ROOT)
+    manifest = deepcopy(deployment.load_deployment_manifest(SEALED_ROOT))
+    manifest["datasets"]["D1"]["source"]["mtime_ns"] = (  # type: ignore[index]
+        snapshot["datasets"]["D1"]["source"]["mtime_ns"]  # type: ignore[index]
+    )
     snapshot["datasets"]["D1"]["source"]["mtime_ns"] += 1  # type: ignore[index]
+    monkeypatch.setattr(deployment, "load_deployment_manifest", lambda _root: manifest)
     monkeypatch.setattr(
         deployment, "frozen_artifact_snapshot", lambda _root: snapshot
     )
@@ -751,22 +760,28 @@ def test_validate_manifest_accepts_formal_proof_parquet_mtime_difference(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     original_json = deployment._json
+    snapshot = deployment.frozen_artifact_snapshot(ROOT)
+    manifest = deepcopy(deployment.load_deployment_manifest(SEALED_ROOT))
+    for role in ("source", "target"):
+        manifest["datasets"]["D1"][role]["mtime_ns"] = (  # type: ignore[index]
+            snapshot["datasets"]["D1"][role]["mtime_ns"]  # type: ignore[index]
+        )
 
     def load_modified_proof(path: Path, code: str) -> dict[str, object]:
         loaded = original_json(path, code)
         if path.name != "formal-proof.json" or path.parent.name != "dataset1":
             return loaded
         proof = deepcopy(loaded)
-        proof["source"]["mtime_ns"] += 1  # type: ignore[index]
-        payload = {
-            key: value for key, value in proof.items() if key != "proof_identity_sha256"
-        }
-        proof["proof_identity_sha256"] = deployment.sha256_bytes(
-            deployment.canonical_json_bytes(payload)
+        proof["source"]["mtime_ns"] = (  # type: ignore[index]
+            manifest["datasets"]["D1"]["source"]["mtime_ns"] + 1  # type: ignore[index,operator]
+        )
+        proof["proof_identity_sha256"] = deployment.formal_proof_authority_digest(
+            proof
         )
         return proof
 
     monkeypatch.setattr(deployment, "_json", load_modified_proof)
+    monkeypatch.setattr(deployment, "load_deployment_manifest", lambda _root: manifest)
     monkeypatch.setattr(deployment, "verify_code_inventory", lambda *_args: None)
 
     report = deployment.validate_deployment_manifest(ROOT)
@@ -787,7 +802,7 @@ def test_validate_manifest_accepts_legacy_manifest_without_mtime(
 ) -> None:
     manifest = deepcopy(deployment.load_deployment_manifest(SEALED_ROOT))
     for role in ("source", "target"):
-        manifest["datasets"]["D1"][role].pop("mtime_ns")  # type: ignore[index]
+        manifest["datasets"]["D1"][role].pop("mtime_ns", None)  # type: ignore[index]
     monkeypatch.setattr(deployment, "load_deployment_manifest", lambda _root: manifest)
     monkeypatch.setattr(deployment, "verify_code_inventory", lambda *_args: None)
 

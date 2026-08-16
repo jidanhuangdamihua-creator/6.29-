@@ -77,7 +77,7 @@ def test_acceptance_rejects_output_outside_tmp() -> None:
             expected_branch="codex/zuihou",
             expected_head="3c4e06b17d660d344ed9a0a75d9489874e19d900",
             sealed_root=SEALED_ROOT,
-            output_dir=ROOT / "forbidden-acceptance-output",
+            output_dir=Path("/forbidden-acceptance-output"),
             run_full_tests=True,
         )
     assert captured.value.code == "OUTPUT_DIR_NOT_TMP"

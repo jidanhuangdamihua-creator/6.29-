@@ -10,6 +10,7 @@ import pandas as pd
 
 from .candidate_pool import CanonicalSourceIndex, SelectionResult
 from .experiment_protocol import ProtocolViolation, SourceKey, normalize_source_key
+from .transformation_identity import SequenceEvidence, exact_array_digest
 from src.utils.dataframe_attrs import (
     context_with,
     get_protocol_frame_context,
@@ -149,6 +150,59 @@ def assert_actual_cnn_training_validated(
         raise ProtocolViolation(
             f"actual CNN training provenance was not validated for {normalized_key!r}"
         )
+
+
+def bind_reused_actual_cnn_arrays(
+    frame: pd.DataFrame,
+    *,
+    input_tensor: np.ndarray,
+    labels: np.ndarray,
+    evidence: SequenceEvidence,
+) -> None:
+    """Bind a canonical sequence hit to the current consumer provenance.
+
+    The first heavy build performs the full raw-row reconstruction above.  A
+    later hit is safe to bind without rebuilding windows because the exact
+    SequenceIdentity and immutable X/y digests have already passed the
+    target-local reuse gate.
+    """
+
+    context = get_protocol_frame_context(frame)
+    source_key = (
+        context.actual_source_key if context is not None else frame.attrs.get("protocol_actual_source_key")
+    )
+    if source_key is None:
+        return
+    normalized_key = normalize_source_key(source_key)
+    audit = (
+        {key: dict(value) for key, value in (context.actual_cnn_audit or {}).items()}
+        if context is not None
+        else {}
+    )
+    entry = audit.get(normalized_key)
+    if not isinstance(entry, dict) or not entry.get("bound"):
+        raise ProtocolViolation("actual CNN provenance audit binding is missing")
+    if tuple(entry.get("feature_cols", ())) != evidence.identity.actual_feature_cols:
+        raise ProtocolViolation("actual CNN provenance feature identity mismatch")
+    if (
+        exact_array_digest(np.asarray(input_tensor)) != evidence.x_exact_digest
+        or exact_array_digest(np.asarray(labels)) != evidence.y_exact_digest
+    ):
+        raise ProtocolViolation("reused actual CNN arrays differ from sequence evidence")
+    entry.update(
+        {
+            "actual_tensor_validated": True,
+            "window_size": evidence.identity.window_size,
+            "horizon": evidence.identity.horizon,
+            "sample_count": evidence.sample_count,
+            "sequence_evidence_digest": evidence.exact_digest,
+        }
+    )
+    audit[normalized_key] = entry
+    set_protocol_frame_context(
+        frame,
+        context_with(context, actual_cnn_audit=audit),
+    )
 
 
 @dataclass(frozen=True)

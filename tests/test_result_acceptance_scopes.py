@@ -13,6 +13,7 @@ from src.utils.result_acceptance import (
     AggregateProfile,
     ExpectedResultContract,
     ResultAcceptanceError,
+    _align_structurally_missing_columns,
     _read_csv,
     _same_candidate_content,
     accept_cell_csv,
@@ -445,6 +446,57 @@ def test_global_aggregate_candidate_accepts_and_rejects_float64_content(
 
     assert not rejected.report.passed
     assert rejected.report.reasons == ("candidate_aggregate_mismatch",)
+
+
+def test_global_aggregate_aligns_only_structurally_missing_columns(
+    tmp_path: Path,
+) -> None:
+    targets = FULL_TARGETS[(5, "without")]
+    without = _confirmed_mode_rows(5, "without", targets).assign(
+        feature_cols_final="sales"
+    )
+    with_mode = _confirmed_mode_rows(5, "with", targets)
+    paths = [
+        _write(tmp_path / "d5_without.csv", without),
+        _write(tmp_path / "d5_with.csv", with_mode),
+    ]
+    expected = _contract(
+        scope=AcceptanceScope.GLOBAL_AGGREGATE,
+        dataset_ids=(5,),
+        modes=("without", "with"),
+        targets={(5, mode): targets for mode in ("without", "with")},
+        horizons=(1, 2, 3, 4, 5),
+        seeds=(42, 43, 44, 45, 46),
+        profile=AggregateProfile.RUN_SELECTION_AGGREGATE,
+    )
+
+    accepted = accept_global_aggregate(paths, expected=expected)
+    candidate = _write(tmp_path / "candidate.csv", accepted.accepted_rows)
+    revalidated = accept_global_aggregate(
+        paths,
+        expected=expected,
+        candidate_aggregate_csv=candidate,
+    )
+
+    assert revalidated.report.passed
+    structural_rows = accepted.accepted_rows["scenario"].eq("with")
+    assert accepted.accepted_rows.loc[
+        structural_rows, "feature_cols_final"
+    ].eq("").all()
+
+
+def test_structural_alignment_preserves_nan_in_an_existing_column() -> None:
+    with_existing_nan = pd.DataFrame(
+        {"id": [1], "metric": [1.0], "extra": [np.nan]}
+    )
+    without_column = pd.DataFrame({"id": [2], "metric": [2.0]})
+
+    aligned_existing, aligned_structural = _align_structurally_missing_columns(
+        [with_existing_nan, without_column]
+    )
+
+    assert pd.isna(aligned_existing.loc[0, "extra"])
+    assert aligned_structural.loc[0, "extra"] == ""
 
 
 def test_global_profiles_distinguish_selection_from_full_baseline(tmp_path: Path) -> None:

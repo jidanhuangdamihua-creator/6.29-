@@ -373,6 +373,7 @@ def _publish_accepted_rows(
     code_identity: CodeIdentity,
     artifact_type: str,
     candidate_validator,
+    manifest_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
     destination = Path(stable_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -412,6 +413,14 @@ def _publish_accepted_rows(
             "acceptance": final_outcome.report.to_dict(),
             "code_identity": code_identity.to_dict(),
         }
+        if manifest_metadata:
+            overlap = set(manifest).intersection(manifest_metadata)
+            if overlap:
+                raise ValueError(
+                    "aggregate manifest metadata overlaps reserved fields: "
+                    + ",".join(sorted(overlap))
+                )
+            manifest.update(dict(manifest_metadata))
         _atomic_json(manifest_path, manifest)
         return manifest
     finally:
@@ -452,13 +461,24 @@ def publish_global_aggregate(
     stable_path: Path,
     expected: ExpectedResultContract,
     code_identity: CodeIdentity,
+    upstream_code_identity: CodeIdentity | None = None,
+    upstream_run_identity: str | None = None,
 ) -> dict[str, object]:
     paths = tuple(Path(path) for path in mode_paths)
+    producer_identity = upstream_code_identity or code_identity
+    input_mode_artifacts: list[dict[str, object]] = []
     for path in paths:
-        _require_matching_artifact_manifest(
+        manifest = _require_matching_artifact_manifest(
             path,
             artifact_type="formal_mode_matrix",
-            code_identity=code_identity,
+            code_identity=producer_identity,
+        )
+        input_mode_artifacts.append(
+            {
+                "path": str(path),
+                "artifact_type": manifest["artifact_type"],
+                "sha256": manifest["sha256"],
+            }
         )
     outcome = accept_global_aggregate(paths, expected=expected)
     return _publish_accepted_rows(
@@ -471,6 +491,12 @@ def publish_global_aggregate(
             expected=expected,
             candidate_aggregate_csv=temporary,
         ),
+        manifest_metadata={
+            "publisher_code_identity": code_identity.to_dict(),
+            "upstream_producer_code_identity": producer_identity.to_dict(),
+            "upstream_run_identity": upstream_run_identity,
+            "input_mode_artifacts": input_mode_artifacts,
+        },
     )
 
 

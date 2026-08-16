@@ -15,6 +15,8 @@ All failures are captured per experiment row and do not interrupt the full run.
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
+from dataclasses import dataclass
 import json
 import os
 import platform
@@ -48,12 +50,20 @@ from src.utils.result_schema import (
     align_result_records,
     normalize_information_sharing_contract as _normalize_information_sharing_contract,
 )
-from src.protocols.runner_adapter import configure_protocol_frames
+from src.protocols.candidate_pool import PreparedDailySequencePool
+from src.protocols.runner_adapter import (
+    configure_protocol_frames,
+    prepare_protocol_source_pool,
+)
 from src.protocols.formal_input_paths import (
     require_explicit_formal_paths,
     resolve_formal_dataset_paths,
 )
 from src.protocols.rolling_origin import build_sample_manifest
+from src.source_selection.source_selector import TargetK3SelectionContext
+from src.protocols.raw_preprocessing import TargetK3RawSourceContext
+from src.protocols.transformation_reuse import TargetTransformationReuseContext
+from src.protocols.transformation_identity import validate_runtime_feature_contract
 from src.protocols.reproducibility import set_protocol_seed
 from src.protocols.experiment_protocol import (
     formal_target_entity_keys,
@@ -104,6 +114,21 @@ INFO_SHARING_SCENARIOS = [
 STRICT_KNN_OBSERVED_START = {
     "Dataset3": "2015-01-03",
 }
+
+
+@dataclass(frozen=True)
+class CellSourcePreparation:
+    """Cell-owned readonly source dependencies shared by six method contexts."""
+
+    cell_identity: Tuple[str, str, int, int]
+    source_frame: pd.DataFrame
+    modeling_feature_cols: Tuple[str, ...]
+    prepared_pool: PreparedDailySequencePool
+    k3_selection_context: TargetK3SelectionContext
+    k3_raw_source_context: TargetK3RawSourceContext
+    transformation_reuse_context: TargetTransformationReuseContext
+
+
 FORMAL_DATASET_PATHS = {
     f"Dataset{dataset_id}": str(
         resolve_formal_dataset_paths(dataset_id, repository_root=ROOT).source_path
@@ -931,6 +956,25 @@ def _project_modeling_frames(
     required_passthrough_cols: Sequence[str] = (),
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Project shared frames while preserving protocol-only downstream columns."""
+    keep_cols = _modeling_projection_columns(
+        source_df,
+        target_df,
+        modeling_feature_cols=modeling_feature_cols,
+        required_passthrough_cols=required_passthrough_cols,
+    )
+    return (
+        _project_modeling_frame(source_df, keep_cols),
+        _project_modeling_frame(target_df, keep_cols),
+    )
+
+
+def _modeling_projection_columns(
+    source_df: pd.DataFrame,
+    target_df: pd.DataFrame,
+    *,
+    modeling_feature_cols: Sequence[str],
+    required_passthrough_cols: Sequence[str] = (),
+) -> Tuple[str, ...]:
     identity_cols = [
         "date",
         "entity_id",
@@ -952,11 +996,16 @@ def _project_modeling_frames(
             ]
         )
     )
-    projected_source = source_df[keep_cols].copy()
-    projected_target = target_df[keep_cols].copy()
-    projected_source.attrs = source_df.attrs.copy()
-    projected_target.attrs = target_df.attrs.copy()
-    return projected_source, projected_target
+    return tuple(keep_cols)
+
+
+def _project_modeling_frame(
+    frame: pd.DataFrame,
+    keep_cols: Sequence[str],
+) -> pd.DataFrame:
+    projected = frame.loc[:, list(keep_cols)].copy()
+    projected.attrs = deepcopy(frame.attrs)
+    return projected
 
 
 def _resolve_dataset_feature_cols(
@@ -1125,6 +1174,105 @@ def _apply_information_sharing_filter(
     return filtered
 
 
+def _cell_source_identity(
+    dataset_name: str,
+    information_sharing_scenario: str,
+    cfg: Dict[str, Any],
+) -> Tuple[str, str, int, int]:
+    exp_cfg = cfg["single_experiment"]
+    return (
+        str(dataset_name),
+        str(information_sharing_scenario),
+        int(exp_cfg["horizon"]),
+        int(exp_cfg.get("seed", 42)),
+    )
+
+
+def _prepare_cell_source_dependencies(
+    *,
+    dataset_name: str,
+    information_sharing_scenario: str,
+    cfg: Dict[str, Any],
+    protocol: Dict[str, Any],
+    strict_paper_mode: bool,
+    base_data: Dict[str, pd.DataFrame],
+) -> CellSourcePreparation:
+    """Own one source preparation for exactly one dataset/mode/horizon/seed cell."""
+
+    source_df = base_data["source_df"]
+    target_df = base_data["target_df"]
+    modeling_feature_cols = _resolve_dataset_feature_cols(
+        dataset_name=dataset_name,
+        source_df=source_df,
+        target_df=target_df,
+        cfg=cfg,
+    )
+    filtered_source = _apply_information_sharing_filter(
+        dataset_name=dataset_name,
+        source_df=source_df,
+        target_df=target_df,
+        use_information_sharing=_scenario_to_bool(information_sharing_scenario),
+        strict_paper_mode=strict_paper_mode,
+        protocol=protocol,
+        cfg=cfg,
+    )
+    protocol_knn_feature_cols = get_experiment_protocol(dataset_name).knn_feature_columns
+    validate_runtime_feature_contract(
+        dataset_name,
+        model_feature_cols=modeling_feature_cols,
+        knn_feature_cols=protocol_knn_feature_cols,
+    )
+    keep_cols = _modeling_projection_columns(
+        filtered_source,
+        target_df,
+        modeling_feature_cols=modeling_feature_cols,
+        required_passthrough_cols=protocol_knn_feature_cols,
+    )
+    projected_source = _project_modeling_frame(filtered_source, keep_cols)
+    protocol_group_cols = {
+        "Dataset1": ("store_id", "item_id"),
+        "Dataset2": ("brand_id", "item_id"),
+        "Dataset3": ("store_id",),
+    }[dataset_name]
+    prepared_source, prepared_pool = prepare_protocol_source_pool(
+        projected_source,
+        dataset_id=dataset_name,
+        scenario=information_sharing_scenario,
+        group_cols=protocol_group_cols,
+        observed_start=(
+            None
+            if dataset_name in {"Dataset1", "Dataset2"}
+            else STRICT_KNN_OBSERVED_START[dataset_name]
+        ),
+    )
+    k3_lifecycle_identity = (
+        dataset_name,
+        information_sharing_scenario,
+        int(cfg["single_experiment"]["horizon"]),
+        int(cfg["single_experiment"].get("seed", 42)),
+        tuple(get_experiment_protocol(dataset_name).formal_target_keys[0]),
+    )
+    return CellSourcePreparation(
+        cell_identity=_cell_source_identity(
+            dataset_name,
+            information_sharing_scenario,
+            cfg,
+        ),
+        source_frame=prepared_source,
+        modeling_feature_cols=tuple(modeling_feature_cols),
+        prepared_pool=prepared_pool,
+        k3_selection_context=TargetK3SelectionContext(
+            lifecycle_identity=k3_lifecycle_identity
+        ),
+        k3_raw_source_context=TargetK3RawSourceContext(
+            lifecycle_identity=k3_lifecycle_identity
+        ),
+        transformation_reuse_context=TargetTransformationReuseContext(
+            lifecycle_identity=k3_lifecycle_identity
+        ),
+    )
+
+
 def run_experiment(
     dataset_name: str,
     method_name: str,
@@ -1135,6 +1283,7 @@ def run_experiment(
     strict_paper_mode: bool,
     verbose_mode: str = "summary",
     base_data: Dict[str, pd.DataFrame] | None = None,
+    cell_source_preparation: CellSourcePreparation | None = None,
 ) -> Dict[str, Any]:
     """Run one experiment with explicit method/scenario/sensitivity settings."""
     _load_experiment_runners()
@@ -1153,42 +1302,39 @@ def run_experiment(
                 strict_paper_mode or cfg.get("paper_reproduction", {}).get("strict_paper_split", False)
             ),
         )
-    source_df = base["source_df"]
     target_df = base["target_df"].copy()
     target_metadata = _dataset3_target_metadata(target_df) if dataset_name == "Dataset3" else {}
 
-    modeling_feature_cols = _resolve_dataset_feature_cols(
-        dataset_name=dataset_name,
-        source_df=source_df,
-        target_df=target_df,
-        cfg=cfg,
-    )
-
-    use_information_sharing = _scenario_to_bool(information_sharing_scenario)
     requested_source_count = int(source_count)
     if strict_paper_mode and method_name in MULTI_SOURCE_TL_METHODS and _enforce_strict_multi_source_topk(protocol):
         source_count = _strict_multi_source_topk(protocol)
 
-    source_df = _apply_information_sharing_filter(
+    cell_source = cell_source_preparation or _prepare_cell_source_dependencies(
         dataset_name=dataset_name,
-        source_df=source_df,
-        target_df=target_df,
-        use_information_sharing=use_information_sharing,
-        strict_paper_mode=strict_paper_mode,
-        protocol=protocol,
+        information_sharing_scenario=information_sharing_scenario,
         cfg=cfg,
+        protocol=protocol,
+        strict_paper_mode=strict_paper_mode,
+        base_data=base,
     )
+    expected_cell_identity = _cell_source_identity(
+        dataset_name,
+        information_sharing_scenario,
+        cfg,
+    )
+    if cell_source.cell_identity != expected_cell_identity:
+        raise ValueError(
+            "cell source preparation identity mismatch: "
+            f"{cell_source.cell_identity!r} != {expected_cell_identity!r}"
+        )
+    source_df = cell_source.source_frame.copy()
+    source_df.attrs = deepcopy(cell_source.source_frame.attrs)
+    modeling_feature_cols = list(cell_source.modeling_feature_cols)
     target_df.attrs["information_sharing_scenario"] = source_df.attrs.get("information_sharing_scenario", "")
     target_df.attrs["signature_static_feature_cols"] = list(source_df.attrs.get("signature_static_feature_cols", []))
     source_df.attrs["method"] = method_name
     target_df.attrs["method"] = method_name
-    protocol_knn_feature_cols = get_experiment_protocol(dataset_name).knn_feature_columns
-    source_df, target_df = _project_modeling_frames(
-        source_df,
-        target_df,
-        modeling_feature_cols=modeling_feature_cols,
-        required_passthrough_cols=protocol_knn_feature_cols,
-    )
+    target_df = _project_modeling_frame(target_df, tuple(source_df.columns))
     target_df = scope_target_to_formal_window(
         target_df,
         dataset_id=dataset_name,
@@ -1209,6 +1355,8 @@ def run_experiment(
             if dataset_name in {"Dataset1", "Dataset2"}
             else STRICT_KNN_OBSERVED_START[dataset_name]
         ),
+        prepared_pool=cell_source.prepared_pool,
+        retain_source_frame=True,
         enforce_formal_target=True,
     )
     target_df.attrs["model_window_size"] = int(exp_cfg["window_size"])
@@ -1250,6 +1398,7 @@ def run_experiment(
         "metric_protocol": strict_metric_protocol,
         "group_cols": protocol_group_cols,
         "expected_metric_identity": expected_metric_identity,
+        "transformation_reuse_context": cell_source.transformation_reuse_context,
     }
 
     number_of_sources = int(source_count) if method_name in MULTI_SOURCE_TL_METHODS else (1 if method_name == "SS-TL" else 0)
@@ -1280,18 +1429,36 @@ def run_experiment(
             **common_kwargs,
             number_of_sources=number_of_sources,
             weight_mode=str(exp_cfg["weight_mode"]),
+            k3_selection_context=(
+                cell_source.k3_selection_context if number_of_sources == 3 else None
+            ),
+            k3_raw_source_context=(
+                cell_source.k3_raw_source_context if number_of_sources == 3 else None
+            ),
         )
     elif method_name == "MSSB-TL":
         raw = run_mssb_experiment(
             **common_kwargs,
             number_of_sources=number_of_sources,
             weight_mode=str(exp_cfg["weight_mode"]),
+            k3_selection_context=(
+                cell_source.k3_selection_context if number_of_sources == 3 else None
+            ),
+            k3_raw_source_context=(
+                cell_source.k3_raw_source_context if number_of_sources == 3 else None
+            ),
         )
     elif method_name == "MSML-TL":
         raw = run_msml_experiment(
             **common_kwargs,
             number_of_sources=number_of_sources,
             weight_mode=str(exp_cfg["weight_mode"]),
+            k3_selection_context=(
+                cell_source.k3_selection_context if number_of_sources == 3 else None
+            ),
+            k3_raw_source_context=(
+                cell_source.k3_raw_source_context if number_of_sources == 3 else None
+            ),
         )
     elif method_name == "MSML-TL-RFE":
         raw = run_msml_rfe_experiment(
@@ -1301,6 +1468,12 @@ def run_experiment(
             estimator_name=str(exp_cfg.get("estimator_name", "random_forest")),
             keep_ratio=float(exp_cfg["keep_ratio"]),
             random_state=int(exp_cfg.get("seed", 42)),
+            k3_selection_context=(
+                cell_source.k3_selection_context if number_of_sources == 3 else None
+            ),
+            k3_raw_source_context=(
+                cell_source.k3_raw_source_context if number_of_sources == 3 else None
+            ),
         )
     else:
         raise ValueError(f"Unsupported method: {method_name}")
@@ -2169,6 +2342,31 @@ def main() -> None:
             )
             print_dataset_header(dataset_name, target_shape, source_unique)
 
+        cell_source_preparations = {
+            scenario: _prepare_cell_source_dependencies(
+                dataset_name=dataset_name,
+                information_sharing_scenario=scenario,
+                cfg=cfg,
+                protocol=protocol,
+                strict_paper_mode=strict_paper_mode,
+                base_data=base_cache[dataset_name],
+            )
+            for scenario in dict.fromkeys(item[2] for item in dataset_run_plan)
+        }
+        prepared_pool_ids = {
+            id(preparation.prepared_pool)
+            for preparation in cell_source_preparations.values()
+        }
+        prepared_index_ids = {
+            id(preparation.prepared_pool.source_index)
+            for preparation in cell_source_preparations.values()
+        }
+        if (
+            len(prepared_pool_ids) != len(cell_source_preparations)
+            or len(prepared_index_ids) != len(cell_source_preparations)
+        ):
+            raise RuntimeError("source dependencies must not be reused across cells")
+
         for method_name, source_count, info_scenario, configured_track in dataset_run_plan:
             run_index += 1
             if verbose_mode == "summary":
@@ -2203,6 +2401,7 @@ def main() -> None:
                     strict_paper_mode=strict_paper_mode,
                     verbose_mode=verbose_mode,
                     base_data=base_cache[dataset_name],
+                    cell_source_preparation=cell_source_preparations[info_scenario],
                 )
                 if record["experiment_track"] == "paper":
                     paper_records.append(record)

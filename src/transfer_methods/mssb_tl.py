@@ -12,7 +12,7 @@ This module implements model switching across multiple source-specific SS-TL mod
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -33,7 +33,7 @@ from src.transfer_methods.single_source_tl import (
     fine_tune_target_model,
     train_source_model,
 )
-from src.source_selection.source_selector import SourceSelector
+from src.source_selection.source_selector import SourceSelector, TargetK3SelectionContext
 from src.evaluation.metrics import smape
 from src.utils.finite_diagnostics import validate_finite_array
 from src.utils.source_fillna import fill_source_numeric_na
@@ -47,10 +47,14 @@ from src.transfer_methods.source_failure_tolerance import (
     source_failure_meta,
 )
 from src.protocols.runner_adapter import source_key_mask
+from src.protocols.raw_preprocessing import TargetK3RawSourceContext
 from src.protocols.provenance import (
     assert_actual_cnn_training_validated,
     bind_actual_cnn_source_frame,
 )
+
+if TYPE_CHECKING:
+    from src.protocols.transformation_reuse import TargetTransformationReuseContext
 
 
 LOGGER_NAME = "experiment"
@@ -145,6 +149,7 @@ def run_single_source_tl_for_mssb(
     source_epochs: int = 3,
     target_epochs: int = 3,
     batch_size: int = 16,
+    transformation_reuse_context: "TargetTransformationReuseContext | None" = None,
 ) -> Dict[str, object]:
     """
     Run one SS-TL pipeline for MSSB using one source sequence and shared target split.
@@ -183,14 +188,17 @@ def run_single_source_tl_for_mssb(
     src_train_df, src_val_df, src_test_df = _prepare_single_source_split(source_sequence_df)
 
     src_train_df, src_val_df, src_test_df, _, _ = normalize_features(
-        src_train_df, src_val_df, src_test_df, feature_columns=feature_cols
+        src_train_df, src_val_df, src_test_df, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
     tgt_train_df, tgt_val_df, tgt_test_df, tgt_scaler, tgt_feature_columns = normalize_features(
-        target_train_df, target_val_df, target_test_df, feature_columns=feature_cols
+        target_train_df, target_val_df, target_test_df, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
 
     x_source, y_source = build_tabular_sequence(
-        src_train_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+        src_train_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
     if src_train_df.attrs.get("protocol_actual_source_key") is not None:
         assert_actual_cnn_training_validated(
@@ -198,13 +206,16 @@ def run_single_source_tl_for_mssb(
             source_key=src_train_df.attrs["protocol_actual_source_key"],
         )
     x_tgt_train, y_tgt_train = build_tabular_sequence(
-        tgt_train_df, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
+        tgt_train_df, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns,
+        reuse_context=transformation_reuse_context,
     )
     x_tgt_val, y_tgt_val = build_tabular_sequence(
-        tgt_val_df, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
+        tgt_val_df, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns,
+        reuse_context=transformation_reuse_context,
     )
     x_tgt_test, y_tgt_test = build_tabular_sequence(
-        tgt_test_df, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns
+        tgt_test_df, horizon=horizon, window_size=window_size, feature_columns=tgt_feature_columns,
+        reuse_context=transformation_reuse_context,
     )
 
     if len(y_source) == 0:
@@ -335,6 +346,9 @@ def run_mssb_tl(
     batch_size: int = 16,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
     metric_identity: Optional[Dict[str, object]] = None,
+    k3_selection_context: TargetK3SelectionContext | None = None,
+    k3_raw_source_context: TargetK3RawSourceContext | None = None,
+    transformation_reuse_context: "TargetTransformationReuseContext | None" = None,
 ) -> Dict[str, object]:
     """
     Run MSSB-TL: top-k source selection + per-source SS-TL + val-based model switching.
@@ -377,15 +391,34 @@ def run_mssb_tl(
     _validate_feature_cols(target_df, feature_cols, where="target_df")
     resolved_group_cols = tuple(group_cols)
 
-    selector = SourceSelector()
-    selection_result = selector.select_top_k_sources(
-        target_df=target_df,
-        source_df=source_df,
-        feature_cols=feature_cols,
-        k=k,
-        group_cols=resolved_group_cols,
-        weight_mode=weight_mode,
-    )
+    if k3_selection_context is None:
+        selector = SourceSelector()
+        selection_result = selector.select_top_k_sources(
+            target_df=target_df,
+            source_df=source_df,
+            feature_cols=feature_cols,
+            k=k,
+            group_cols=resolved_group_cols,
+            weight_mode=weight_mode,
+        )
+    else:
+        evidence = k3_selection_context.selection_for_method(
+            target_df=target_df,
+            source_df=source_df,
+            feature_cols=feature_cols,
+            group_cols=resolved_group_cols,
+            k=k,
+            weight_mode=weight_mode,
+        )
+        selection_result = evidence.method_wrapper(
+            lifecycle_identity=k3_selection_context.lifecycle_identity,
+            target_df=target_df,
+            source_df=source_df,
+            feature_cols=feature_cols,
+            group_cols=resolved_group_cols,
+            k=k,
+            weight_mode=weight_mode,
+        )
 
     selected_sources = selection_result.get("sources", []) if isinstance(selection_result, dict) else selection_result
     if not selected_sources:
@@ -402,8 +435,19 @@ def run_mssb_tl(
         if len(source_key) != len(resolved_group_cols):
             raise ValueError(f"Invalid source_key format: {source_key}")
 
-        source_mask = source_key_mask(source_df, resolved_group_cols, source_key)
-        source_sequence_df = source_df[source_mask].copy()
+        if k3_raw_source_context is None:
+            source_mask = source_key_mask(source_df, resolved_group_cols, source_key)
+            source_sequence_df = source_df[source_mask].copy()
+        else:
+            if k3_selection_context is None:
+                raise ValueError("K3 raw source reuse requires the shared K3 selection context")
+            source_sequence_df = k3_raw_source_context.working_source(
+                selection_result=selection_result,
+                source_df=source_df,
+                source_key=source_key,
+                group_cols=resolved_group_cols,
+                model_feature_cols=feature_cols,
+            )
 
         if source_sequence_df.empty:
             raise ValueError(f"Selected source_key not found in source_df: {source_key}")
@@ -427,6 +471,7 @@ def run_mssb_tl(
                 source_epochs=source_epochs,
                 target_epochs=target_epochs,
                 batch_size=batch_size,
+                transformation_reuse_context=transformation_reuse_context,
             )
         except SOURCE_LEVEL_EXCEPTIONS as exc:
             enforce_formal_source_success(source_df, source_key, exc)

@@ -17,7 +17,7 @@ MSML-TL 融合的是"层参数"本身。
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -34,7 +34,7 @@ from src.data_processing.data_preprocessing import (
     temporal_split_by_ratio_or_dates,
     to_cnn_tensor,
 )
-from src.source_selection.source_selector import SourceSelector
+from src.source_selection.source_selector import SourceSelector, TargetK3SelectionContext
 from src.utils.runtime_control import keras_verbose
 from src.evaluation.metrics import smape
 from src.utils.finite_diagnostics import NonFiniteArrayError, summarize_model_weights, validate_finite_array
@@ -50,10 +50,14 @@ from src.transfer_methods.source_failure_tolerance import (
     source_failure_meta,
 )
 from src.protocols.runner_adapter import source_key_mask
+from src.protocols.raw_preprocessing import TargetK3RawSourceContext
 from src.protocols.provenance import (
     assert_actual_cnn_training_validated,
     bind_actual_cnn_source_frame,
 )
+
+if TYPE_CHECKING:
+    from src.protocols.transformation_reuse import TargetTransformationReuseContext
 
 
 LOGGER_NAME = "experiment"
@@ -108,6 +112,7 @@ def train_source_cnn_for_msml(
     source_epochs: int = 3,
     batch_size: int = 16,
     source_key: Optional[Tuple] = None,
+    transformation_reuse_context: "TargetTransformationReuseContext | None" = None,
 ) -> Dict[str, object]:
     """
     在单个 source 序列上训练 CNN 模型。
@@ -141,11 +146,13 @@ def train_source_cnn_for_msml(
     source_sequence_df = fill_source_numeric_na(source_sequence_df, feature_columns=feature_cols)
     src_train, src_val, src_test = _prepare_source_split(source_sequence_df)
     src_train, src_val, src_test, _, _ = normalize_features(
-        src_train, src_val, src_test, feature_columns=feature_cols
+        src_train, src_val, src_test, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
 
     X_source, y_source = build_tabular_sequence(
-        src_train, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+        src_train, horizon=horizon, window_size=window_size, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
     if src_train.attrs.get("protocol_actual_source_key") is not None:
         assert_actual_cnn_training_validated(
@@ -445,6 +452,7 @@ def fine_tune_fused_target_model(
     learning_rate: float = 0.001,
     epochs: int = 3,
     batch_size: int = 16,
+    transformation_reuse_context: "TargetTransformationReuseContext | None" = None,
 ) -> Dict[str, object]:
     """
     在 target 数据上微调融合后的 target model。
@@ -476,10 +484,12 @@ def fine_tune_fused_target_model(
     )
 
     X_train, y_train = build_tabular_sequence(
-        target_train_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+        target_train_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
     X_val, y_val = build_tabular_sequence(
-        target_val_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+        target_val_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
 
     if len(y_train) == 0:
@@ -525,6 +535,7 @@ def evaluate_msml_model(
     horizon: int = 1,
     window_size: int = 10,
     eps: float = 1e-8,
+    transformation_reuse_context: "TargetTransformationReuseContext | None" = None,
 ) -> Dict[str, object]:
     """
     在 target test 上评估 MSML-TL 模型。
@@ -550,7 +561,8 @@ def evaluate_msml_model(
     logger.info("[evaluate_msml_model] Start.")
 
     X_test, y_test = build_tabular_sequence(
-        target_test_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols
+        target_test_df, horizon=horizon, window_size=window_size, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
     if len(y_test) == 0:
         raise ValueError("Target test split produced zero windows; adjust window_size/horizon.")
@@ -608,6 +620,9 @@ def run_msml_tl(
     batch_size: int = 16,
     group_cols: Sequence[str] = ("entity_id", "item_id"),
     metric_identity: Optional[Dict[str, object]] = None,
+    k3_selection_context: TargetK3SelectionContext | None = None,
+    k3_raw_source_context: TargetK3RawSourceContext | None = None,
+    transformation_reuse_context: "TargetTransformationReuseContext | None" = None,
 ) -> Dict[str, object]:
     """
     运行 MSML-TL 完整流程。
@@ -660,15 +675,34 @@ def run_msml_tl(
     resolved_group_cols = tuple(group_cols)
 
     # --- Step 1: 选源 ---
-    selector = SourceSelector()
-    selection_result = selector.select_top_k_sources(
-        target_df=target_df,
-        source_df=source_df,
-        feature_cols=feature_cols,
-        k=k,
-        group_cols=resolved_group_cols,
-        weight_mode=weight_mode,
-    )
+    if k3_selection_context is None:
+        selector = SourceSelector()
+        selection_result = selector.select_top_k_sources(
+            target_df=target_df,
+            source_df=source_df,
+            feature_cols=feature_cols,
+            k=k,
+            group_cols=resolved_group_cols,
+            weight_mode=weight_mode,
+        )
+    else:
+        evidence = k3_selection_context.selection_for_method(
+            target_df=target_df,
+            source_df=source_df,
+            feature_cols=feature_cols,
+            group_cols=resolved_group_cols,
+            k=k,
+            weight_mode=weight_mode,
+        )
+        selection_result = evidence.method_wrapper(
+            lifecycle_identity=k3_selection_context.lifecycle_identity,
+            target_df=target_df,
+            source_df=source_df,
+            feature_cols=feature_cols,
+            group_cols=resolved_group_cols,
+            k=k,
+            weight_mode=weight_mode,
+        )
     selected_sources = selection_result.get("sources", []) if isinstance(selection_result, dict) else selection_result
     if not selected_sources:
         raise ValueError("No source selected from source pool.")
@@ -685,8 +719,19 @@ def run_msml_tl(
         if len(source_key) != len(resolved_group_cols):
             raise ValueError(f"Invalid source_key format: {source_key}")
 
-        source_mask = source_key_mask(source_df, resolved_group_cols, source_key)
-        source_sequence_df = source_df[source_mask].copy()
+        if k3_raw_source_context is None:
+            source_mask = source_key_mask(source_df, resolved_group_cols, source_key)
+            source_sequence_df = source_df[source_mask].copy()
+        else:
+            if k3_selection_context is None:
+                raise ValueError("K3 raw source reuse requires the shared K3 selection context")
+            source_sequence_df = k3_raw_source_context.working_source(
+                selection_result=selection_result,
+                source_df=source_df,
+                source_key=source_key,
+                group_cols=resolved_group_cols,
+                model_feature_cols=feature_cols,
+            )
 
         if source_sequence_df.empty:
             raise ValueError(f"Selected source_key not found in source_df: {source_key}")
@@ -707,6 +752,7 @@ def run_msml_tl(
                 source_epochs=source_epochs,
                 batch_size=batch_size,
                 source_key=source_key,
+                transformation_reuse_context=transformation_reuse_context,
             )
             weight_diagnostics = summarize_model_weights(train_result["model"])
             if weight_diagnostics["model_weight_nan_count"] or weight_diagnostics["model_weight_inf_count"]:
@@ -772,6 +818,7 @@ def run_msml_tl(
     target_train_df, target_val_df, target_test_df = temporal_split_by_ratio_or_dates(target_df)
     target_train_df, target_val_df, target_test_df, target_scaler, target_feature_columns = normalize_features(
         target_train_df, target_val_df, target_test_df, feature_columns=feature_cols,
+        reuse_context=transformation_reuse_context,
     )
 
     ft_result = fine_tune_fused_target_model(
@@ -784,6 +831,7 @@ def run_msml_tl(
         learning_rate=learning_rate,
         epochs=target_epochs,
         batch_size=batch_size,
+        transformation_reuse_context=transformation_reuse_context,
     )
 
     # --- Step 6: 评估 ---
@@ -793,6 +841,7 @@ def run_msml_tl(
         feature_cols=feature_cols,
         horizon=horizon,
         window_size=window_size,
+        transformation_reuse_context=transformation_reuse_context,
     )
 
     logger.info(

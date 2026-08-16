@@ -65,6 +65,7 @@ def test_multi_source_wrappers_translate_number_of_sources_to_k(
     is_rfe: bool,
 ) -> None:
     received: Dict[str, Any] = {}
+    reuse_owner = object()
 
     if is_rfe:
 
@@ -85,8 +86,14 @@ def test_multi_source_wrappers_translate_number_of_sources_to_k(
             batch_size: int,
             random_state: int = 42,
             metric_identity: dict[str, Any] | None = None,
+            transformation_reuse_context: object | None = None,
         ) -> Dict[str, Any]:
-            received.update(k=k, group_cols=group_cols, metric_identity=metric_identity)
+            received.update(
+                k=k,
+                group_cols=group_cols,
+                metric_identity=metric_identity,
+                transformation_reuse_context=transformation_reuse_context,
+            )
             return _result()
 
     else:
@@ -105,8 +112,14 @@ def test_multi_source_wrappers_translate_number_of_sources_to_k(
             target_epochs: int,
             batch_size: int,
             metric_identity: dict[str, Any] | None = None,
+            transformation_reuse_context: object | None = None,
         ) -> Dict[str, Any]:
-            received.update(k=k, group_cols=group_cols, metric_identity=metric_identity)
+            received.update(
+                k=k,
+                group_cols=group_cols,
+                metric_identity=metric_identity,
+                transformation_reuse_context=transformation_reuse_context,
+            )
             return _result()
 
     module = __import__(module_path, fromlist=[function_name])
@@ -121,6 +134,7 @@ def test_multi_source_wrappers_translate_number_of_sources_to_k(
         "include_sales_in_knn": False,
         "metric_protocol": {"strict_paper_metrics": False},
         "group_cols": ("entity_id", "item_id"),
+        "transformation_reuse_context": reuse_owner,
     }
     if is_rfe:
         kwargs.update(estimator_name="random_forest", keep_ratio=0.5)
@@ -130,6 +144,7 @@ def test_multi_source_wrappers_translate_number_of_sources_to_k(
     assert received["k"] == 7
     assert received["group_cols"] == ("entity_id", "item_id")
     assert received["metric_identity"] is None
+    assert received["transformation_reuse_context"] is reuse_owner
     assert result["rmse"] == 1.0
     assert np.isnan(result["smape"])
 
@@ -156,5 +171,11 @@ def test_single_source_wrappers_accept_expected_metric_identity() -> None:
         experiment_runner.run_no_tl_experiment
     ).parameters
     assert "expected_metric_identity" in inspect.signature(
+        experiment_runner.run_ss_tl_experiment
+    ).parameters
+    assert "transformation_reuse_context" not in inspect.signature(
+        experiment_runner.run_no_tl_experiment
+    ).parameters
+    assert "transformation_reuse_context" in inspect.signature(
         experiment_runner.run_ss_tl_experiment
     ).parameters

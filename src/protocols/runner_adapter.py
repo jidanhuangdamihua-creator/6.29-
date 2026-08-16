@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Sequence, Tuple
 
 import pandas as pd
@@ -243,6 +244,128 @@ def _extended_candidates_from_identities(
     return tuple(candidates)
 
 
+def _verify_d2_source_for_candidates(
+    source_df: pd.DataFrame,
+    *,
+    candidates: Sequence[Sequence[object]],
+    source_index: CanonicalSourceIndex,
+    group_cols: Sequence[str],
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Verify one D2 source carrier and preserve the legacy evidence contract."""
+
+    source = copy_frame_with_lightweight_attrs(source_df)
+    source_dates = pd.to_datetime(source["date"], errors="coerce").dt.normalize()
+    if source_dates.isna().any():
+        raise ProtocolViolation("source frame contains invalid dates")
+    source.attrs.setdefault("split_role", "source")
+    sealed_source = source.copy()
+    verified_source, report = verify_d2_source_frame(
+        slice_d2_source_frame(sealed_source),
+        candidate_keys=candidates,
+    )
+    candidate_mask = pd.Series(False, index=source.index)
+    for candidate_key in candidates:
+        indexed = source_index.mask_for_normalized_key(source, candidate_key)
+        if indexed is None:
+            indexed = source_key_mask(source, group_cols, candidate_key)
+        candidate_mask |= indexed
+    source = select_rows_with_lightweight_attrs(source, candidate_mask)
+    source.attrs = {**sealed_source.attrs, **verified_source.attrs}
+    source.attrs.update(
+        {
+            "d2_source_verification_frame_fingerprint": report.consumer_frame_fingerprint,
+            "d2_source_verified_candidate_row_count": int(len(verified_source)),
+        }
+    )
+    metadata = {
+        "d2_source_calendarization_rule_version": report.rule_version,
+        "d2_source_authority_digest": report.source_authority_digest,
+        "d2_consumer_frame_fingerprint": report.consumer_frame_fingerprint,
+        "d2_synthetic_source_row_count": report.synthetic_row_count,
+        "d2_source_calendarization_report": report.to_dict(),
+    }
+    return source, metadata
+
+
+def _d2_verification_candidate_keys(
+    scenario: str,
+    available: Sequence[Sequence[object]],
+) -> tuple[tuple[str, str], ...]:
+    """Resolve the one cell-level D2 verification scope without building a context scope."""
+
+    brands = range(1, 4) if scenario == "with" else range(1, 2)
+    expected = tuple(
+        (str(brand), str(item))
+        for brand in brands
+        for item in range(1, 10)
+    )
+    available_set = {normalize_source_key(key) for key in available}
+    missing = tuple(key for key in expected if key not in available_set)
+    if missing:
+        raise ProtocolViolation(
+            f"D2/{scenario} missing required candidate keys: {missing!r}"
+        )
+    return expected
+
+
+def prepare_protocol_source_pool(
+    source_df: pd.DataFrame,
+    *,
+    dataset_id: object,
+    scenario: object,
+    group_cols: Sequence[str],
+    observed_start: object,
+    grouping_col: str | None = None,
+) -> tuple[pd.DataFrame, PreparedDailySequencePool]:
+    """Prepare the immutable source index/pool once for one D1-D3 cell."""
+
+    protocol = get_experiment_protocol(dataset_id)
+    if protocol.dataset_id not in {"D1", "D2", "D3"}:
+        raise ProtocolViolation("cell source preparation is restricted to D1-D3")
+    normalized_scenario = normalize_scenario(scenario)
+    normalized_group_cols = tuple(str(column) for column in group_cols)
+    if len(normalized_group_cols) != len(protocol.source_pool_rule.key_fields):
+        raise ProtocolViolation(
+            f"{protocol.dataset_id} requires {len(protocol.source_pool_rule.key_fields)} "
+            f"group columns, got {normalized_group_cols!r}"
+        )
+    if "date" not in source_df.columns:
+        raise ProtocolViolation("protocol source frame requires a date column")
+    window = protocol.observation_window(observed_start)
+    metadata_cols = (
+        (grouping_col,)
+        if grouping_col is not None and grouping_col in source_df.columns
+        else ()
+    )
+    source_index = build_canonical_source_index(
+        source_df,
+        group_cols=normalized_group_cols,
+        metadata_cols=metadata_cols,
+    )
+    prepared_pool = prepare_daily_sequence_pool(
+        source_df,
+        group_cols=normalized_group_cols,
+        observed_start=window.knn_observed_start,
+        observed_end=window.knn_observed_end,
+        metadata_cols=metadata_cols,
+        feature_cols=protocol.knn_feature_columns,
+        source_index=source_index,
+    )
+    prepared_source = copy_frame_with_lightweight_attrs(source_df)
+    if protocol.dataset_id == "D2":
+        candidates = _d2_verification_candidate_keys(
+            normalized_scenario,
+            prepared_pool.source_keys,
+        )
+        prepared_source, _ = _verify_d2_source_for_candidates(
+            source_df,
+            candidates=candidates,
+            source_index=source_index,
+            group_cols=normalized_group_cols,
+        )
+    return prepared_source, prepared_pool
+
+
 def configure_protocol_frames(
     source_df: pd.DataFrame,
     target_df: pd.DataFrame,
@@ -418,33 +541,12 @@ def configure_protocol_frames(
         if source_dates.isna().any():
             raise ProtocolViolation("source frame contains invalid dates")
         if protocol.dataset_id == "D2":
-            source.attrs.setdefault("split_role", "source")
-            sealed_source = source.copy()
-            verified_source, report = verify_d2_source_frame(
-                slice_d2_source_frame(sealed_source),
-                candidate_keys=candidates,
+            source, d2_calendarization_metadata = _verify_d2_source_for_candidates(
+                source_df,
+                candidates=candidates,
+                source_index=source_index,
+                group_cols=normalized_group_cols,
             )
-            candidate_mask = pd.Series(False, index=source.index)
-            for candidate_key in candidates:
-                indexed = source_index.mask_for_normalized_key(source, candidate_key)
-                if indexed is None:
-                    indexed = source_key_mask(source, normalized_group_cols, candidate_key)
-                candidate_mask |= indexed
-            source = select_rows_with_lightweight_attrs(source, candidate_mask)
-            source.attrs = {**sealed_source.attrs, **verified_source.attrs}
-            source.attrs.update(
-                {
-                    "d2_source_verification_frame_fingerprint": report.consumer_frame_fingerprint,
-                    "d2_source_verified_candidate_row_count": int(len(verified_source)),
-                }
-            )
-            d2_calendarization_metadata = {
-                "d2_source_calendarization_rule_version": report.rule_version,
-                "d2_source_authority_digest": report.source_authority_digest,
-                "d2_consumer_frame_fingerprint": report.consumer_frame_fingerprint,
-                "d2_synthetic_source_row_count": report.synthetic_row_count,
-                "d2_source_calendarization_report": report.to_dict(),
-            }
         else:
             source = select_rows_with_lightweight_attrs(source, source_dates <= cutoff)
             if source.empty:
@@ -497,14 +599,17 @@ def configure_protocol_frames(
     if not (target_dates > cutoff).any():
         raise ProtocolViolation("target frame has no test dates after knn_observed_end")
 
+    retain_legacy_source_observed_domain = (
+        prepared_pool is not None
+        and retain_source_frame
+        and protocol.dataset_id in {"D1", "D2", "D3"}
+    )
     source_knn_input = (
         source
-        if prepared_pool is None
-        else runtime_pool.selected_frame(
-            candidates, feature_cols=knn_feature_columns
-        )
+        if prepared_pool is None or retain_legacy_source_observed_domain
+        else runtime_pool.selected_frame(candidates, feature_cols=knn_feature_columns)
     )
-    if prepared_date_eligibility is None:
+    if prepared_date_eligibility is None or retain_legacy_source_observed_domain:
         source_knn_frame = build_observed_knn_frame(
             source_knn_input,
             window=window,
@@ -588,7 +693,7 @@ def configure_protocol_frames(
         elif prepared_pool is not None:
             metadata["source_history_eligible_key_count"] = len(prepared_pool.source_keys)
     metadata.update(d2_calendarization_metadata)
-    protocol_report = metadata.pop("d2_source_calendarization_report", None)
+    protocol_report = deepcopy(metadata.pop("d2_source_calendarization_report", None))
     source_knn_frame.attrs.update(metadata)
     target_knn_frame.attrs.update(metadata)
     shared_digest_identity = (
@@ -622,14 +727,22 @@ def configure_protocol_frames(
         target_knn_frame,
         context_identity=((*shared_digest_identity, ("role", "target"))),
     )
+    source_frame_digest = canonical_knn_frame_digest(
+        source_knn_frame,
+        group_cols=normalized_group_cols,
+        feature_cols=digest_feature_columns,
+        ignore_columns=digest_ignored_columns,
+    )
+    if (
+        prepared_pool is not None
+        and protocol.dataset_id in {"D4", "D6"}
+        and knn_feature_columns == ("sales",)
+        and runtime_pool.source_observed_frame_digest is not None
+    ):
+        source_frame_digest = runtime_pool.source_observed_frame_digest
     metadata.update(
         {
-            "source_frame_digest": canonical_knn_frame_digest(
-                source_knn_frame,
-                group_cols=normalized_group_cols,
-                feature_cols=digest_feature_columns,
-                ignore_columns=digest_ignored_columns,
-            ),
+            "source_frame_digest": source_frame_digest,
             "target_frame_digest": canonical_knn_frame_digest(
                 target_knn_frame,
                 group_cols=normalized_group_cols,

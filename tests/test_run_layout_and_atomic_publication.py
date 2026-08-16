@@ -299,6 +299,16 @@ def test_mode_and_selection_aggregate_are_also_acceptance_gated(tmp_path: Path) 
     assert invalid_mode.is_file()
     assert layout.mode_manifest(1, "without").is_file()
 
+    publisher_identity = CodeIdentity("publisher", False, "3" * 64)
+    with pytest.raises(ResultAcceptanceError, match="code identity"):
+        verify_formal_mode_artifact(
+            invalid_mode,
+            acceptance_path=layout.mode_acceptance_report(1, "without"),
+            cell_paths=cell_paths,
+            expected=mode_expected,
+            code_identity=publisher_identity,
+        )
+
     aggregate_expected = ExpectedResultContract(
         **{
             **mode_expected.__dict__,
@@ -310,10 +320,28 @@ def test_mode_and_selection_aggregate_are_also_acceptance_gated(tmp_path: Path) 
         [invalid_mode],
         stable_path=layout.aggregate_result,
         expected=aggregate_expected,
-        code_identity=identity,
+        code_identity=publisher_identity,
+        upstream_code_identity=identity,
+        upstream_run_identity="f" * 64,
     )
     assert layout.aggregate_result.is_file()
     assert layout.aggregate_manifest.is_file()
+    aggregate_manifest = json.loads(
+        layout.aggregate_manifest.read_text(encoding="utf-8")
+    )
+    assert aggregate_manifest["code_identity"] == publisher_identity.to_dict()
+    assert aggregate_manifest["publisher_code_identity"] == publisher_identity.to_dict()
+    assert aggregate_manifest["upstream_producer_code_identity"] == identity.to_dict()
+    assert aggregate_manifest["upstream_run_identity"] == "f" * 64
+    assert aggregate_manifest["input_mode_artifacts"] == [
+        {
+            "path": str(invalid_mode),
+            "artifact_type": "formal_mode_matrix",
+            "sha256": json.loads(
+                layout.mode_manifest(1, "without").read_text(encoding="utf-8")
+            )["sha256"],
+        }
+    ]
 
 
 def test_verify_mode_rejects_manifest_hash_mismatch(tmp_path: Path) -> None:

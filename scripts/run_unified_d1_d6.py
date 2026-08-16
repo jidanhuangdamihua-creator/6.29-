@@ -738,6 +738,80 @@ def load_validated_run_plan(
     return current, code_identity
 
 
+def _code_identity_from_run_plan(plan: Mapping[str, object]) -> CodeIdentity:
+    raw = plan.get("code_identity")
+    if not isinstance(raw, dict) or set(raw) != {
+        "git_commit",
+        "dirty",
+        "worktree_digest",
+    }:
+        raise RuntimeError("formal run plan code identity is malformed")
+    git_commit = raw.get("git_commit")
+    dirty = raw.get("dirty")
+    worktree_digest = raw.get("worktree_digest")
+    if (
+        not isinstance(git_commit, str)
+        or not git_commit
+        or dirty is not False
+        or not isinstance(worktree_digest, str)
+        or not worktree_digest
+    ):
+        raise RuntimeError("formal run plan code identity is malformed")
+    return CodeIdentity(git_commit, dirty, worktree_digest)
+
+
+def _experiment_plan_payload(plan: Mapping[str, object]) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in plan.items()
+        if key not in {"code_identity", "run_identity"}
+    }
+
+
+def load_aggregate_compatible_run_plan(
+    run_root: Path,
+) -> tuple[dict[str, object], CodeIdentity, CodeIdentity]:
+    """Load an immutable upstream plan under a distinct aggregate publisher identity."""
+    root = Path(run_root).resolve()
+    plan_path = root / "run_plan.json"
+    try:
+        stored = json.loads(plan_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        raise RuntimeError(f"formal run plan is unreadable: {plan_path}") from exc
+    if not isinstance(stored, dict):
+        raise RuntimeError(f"formal run plan must be a JSON object: {plan_path}")
+
+    stored_run_identity = stored.get("run_identity")
+    stored_payload = {
+        key: value for key, value in stored.items() if key != "run_identity"
+    }
+    if (
+        not isinstance(stored_run_identity, str)
+        or stored_run_identity != _canonical_digest(stored_payload)
+    ):
+        raise RuntimeError("formal run plan identity digest does not match its payload")
+    upstream_identity = _code_identity_from_run_plan(stored)
+
+    datasets, selected_mode, horizons, seeds = _selection_from_plan(stored)
+    publisher_identity = discover_code_identity(PROJECT_ROOT)
+    if publisher_identity.dirty:
+        raise RuntimeError("formal execution requires a clean git worktree")
+    current = build_run_plan(
+        root,
+        code_identity=publisher_identity,
+        input_identity=discover_formal_input_identity(PROJECT_ROOT),
+        only=datasets,
+        info_sharing=selected_mode,
+        horizons=horizons,
+        seeds=seeds,
+    )
+    if _experiment_plan_payload(stored) != _experiment_plan_payload(current):
+        raise RuntimeError(
+            "aggregate-only experiment identity does not match stored run plan"
+        )
+    return stored, upstream_identity, publisher_identity
+
+
 def _require_tasks_match_plan(
     tasks: Sequence[Task],
     plan: Mapping[str, object],
@@ -954,7 +1028,9 @@ def execute_mode_worker(
 
 def aggregate_prepared_run(run_root: Path) -> Path:
     root = Path(run_root).resolve()
-    plan, code_identity = load_validated_run_plan(root)
+    plan, upstream_identity, publisher_identity = load_aggregate_compatible_run_plan(
+        root
+    )
     raw_cells = plan.get("cells")
     if not isinstance(raw_cells, list) or not raw_cells:
         raise RuntimeError("global publication requires a non-empty formal run plan")
@@ -993,17 +1069,27 @@ def aggregate_prepared_run(run_root: Path) -> Path:
                 acceptance_path=layout.mode_acceptance_report(dataset_id, mode),
                 cell_paths=cell_paths,
                 expected=expected,
-                code_identity=code_identity,
+                code_identity=upstream_identity,
             )
             mode_paths.append(output)
             mode_contracts.append(expected)
 
-    load_validated_run_plan(root)
+    final_plan, final_upstream_identity, final_publisher_identity = (
+        load_aggregate_compatible_run_plan(root)
+    )
+    if (
+        final_plan != plan
+        or final_upstream_identity != upstream_identity
+        or final_publisher_identity != publisher_identity
+    ):
+        raise RuntimeError("aggregate-only identity changed during validation")
     publish_global_aggregate(
         mode_paths,
         stable_path=layout.aggregate_result,
         expected=_global_contract(mode_contracts),
-        code_identity=code_identity,
+        code_identity=publisher_identity,
+        upstream_code_identity=upstream_identity,
+        upstream_run_identity=str(plan["run_identity"]),
     )
     print(f"[ACCEPTED] aggregate={layout.aggregate_result}")
     return layout.aggregate_result
