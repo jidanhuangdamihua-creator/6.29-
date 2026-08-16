@@ -1,7 +1,7 @@
 {
-  "consumer_fingerprint": "fd0fa3c44faff9110d70f738a50c584f0de747e43eab728c1f8fa1a841da29dd",
+  "consumer_fingerprint": "f4ec53418d6519db580b1b80298eafb7a95e5301e4a72016167c1e53ba8a10d7",
   "consumer_fingerprint_input": {
-    "code_inventory_digest": "3002050076ed9b144993f9d1f3577856d064c7a369f2f8691c4beec4c8166673",
+    "code_inventory_digest": "eaf6fdf0bb0bb1557a3f62773368cf05b75360785786f8349e135226921ed8a3",
     "dataset_id": "D1",
     "readiness_proof_digest": "8a18e765bb7e58d7261c46c95386bc1cd16aa56d3e385c93a2d1a335145b1f09",
     "source_schema_digest": "f1961aa4d31543aa1afd9b8e7030b0af3da8f44c63426419bf6daf7af858a45f",
@@ -142,7 +142,7 @@
     "consumer_duplicate_exact_keys": 0,
     "status": "passed"
   },
-  "proof_identity_sha256": "f163d15c3313575112deded433c892f55bcf5485898d41f9adacbe7425d50054",
+  "proof_identity_sha256": "c69716be7ee5fbdcca998a7ea295bdc8933148e133b7354fdf5422a36196d559",
   "readiness_proof_digest": "8a18e765bb7e58d7261c46c95386bc1cd16aa56d3e385c93a2d1a335145b1f09",
   "readiness_result": {
     "failure_code": null,
