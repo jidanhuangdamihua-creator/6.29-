@@ -111,6 +111,46 @@ def _inverse_minmax(values: np.ndarray, sales_min: float, sales_max: float) -> n
     return values * (sales_max - sales_min) + sales_min
 
 
+def inverse_transform_sales(
+    values: np.ndarray,
+    *,
+    sales_scaler: object,
+    feature_columns: object,
+    apply_sales_value_policy: bool = True,
+) -> np.ndarray:
+    """Invert MinMax-normalized sales using the fitted target scaler's sales column.
+
+    This is the canonical sales inverse-transform contract:
+    - read sales-column min/max from a (possibly multi-feature) fitted scaler
+    - apply the affine inverse `x * (max - min) + min`
+    - optionally apply `SALES_VALUE_POLICY=clip_negative_to_zero_v1`
+
+    It does not call `scaler.inverse_transform` on a reshaped single column, and it
+    never fits or refits the scaler.
+    """
+    params = _extract_sales_inverse_params(
+        sales_scaler=sales_scaler,
+        feature_columns=feature_columns,
+    )
+    if params is None:
+        raise ValueError(
+            "sales inverse-transform requires a fitted scaler exposing data_min_/data_max_ "
+            "and feature_columns that include 'sales'"
+        )
+    sales_min, sales_max = params
+    arr = np.asarray(values, dtype=np.float64).reshape(-1)
+    if arr.size == 0:
+        raise ValueError("sales inverse-transform requires a non-empty array")
+    if not np.isfinite(arr).all():
+        raise ValueError("sales inverse-transform requires finite values")
+    out = _inverse_minmax(arr, sales_min, sales_max)
+    if not apply_sales_value_policy:
+        return out
+    if SALES_VALUE_POLICY != "clip_negative_to_zero_v1":
+        raise ValueError(f"unsupported sales_value_policy={SALES_VALUE_POLICY}")
+    return np.maximum(out, 0.0)
+
+
 def validate_metric_space(metric_space: str) -> str:
     normalized = str(metric_space).strip()
     if normalized not in SUPPORTED_METRIC_SPACES:
