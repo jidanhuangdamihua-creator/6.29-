@@ -11,6 +11,7 @@ import hashlib
 import json
 import subprocess
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -676,7 +677,13 @@ def run_ae_formal_body(
         if snapshot.get("planned_matrix_digest") not in {None, matrix_hash} and snapshot.get("planned_matrix_digest") != matrix_hash:
             raise AEContractError("resume planned matrix digest mismatch")
 
-    out = Path(output_root) if output_root is not None else root / PREFLIGHT_RELPATH / "formal_mock"
+    if output_root is not None:
+        out = Path(output_root)
+    elif mock_execution_authorized:
+        out = root / PREFLIGHT_RELPATH / "formal_mock"
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out = root / planned_formal_run_root(timestamp)
     if mock_execution_authorized:
         if "outputs" in out.parts and "runs" in out.parts:
             raise AEContractError("mock formal artifacts must not enter outputs/runs")

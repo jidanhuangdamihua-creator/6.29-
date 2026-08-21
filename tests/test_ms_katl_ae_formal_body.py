@@ -26,8 +26,11 @@ from src.transfer_methods.ms_katl_ae_ablation import (
     run_ae_formal_matrix,
 )
 from src.transfer_methods.ms_katl_ae_execution import (
+    AE_RUN_LABEL,
+    PREFLIGHT_RELPATH,
     enumerate_real_arm_plans,
     enumerate_real_canonical_cell_plans,
+    planned_formal_run_root,
     resolve_all_formal_stage_a_input_plans,
 )
 from src.transfer_methods.ms_katl_ae_formal import (
@@ -37,6 +40,7 @@ from src.transfer_methods.ms_katl_ae_formal import (
     AE_STAGE_B_AUTHORITY,
     MOCK_METRIC,
     MOCK_STATUS,
+    AEFormalAuthorities,
     FormalCallLedger,
     assert_no_old_v3_result_injection,
     make_mock_authorities,
@@ -319,3 +323,110 @@ def test_real_stage_a_kwargs_resolution_is_54_of_54():
         assert Path(plan["stage_a_kwargs"]["target_df"]["path"]).is_file()
         assert plan["shared_target_bundle_inputs"]["target_identity"]
         assert len(plan["shared_target_bundle_inputs"]["knn_diagnostic_sources"]) == 3
+
+
+def _training_kill_authorities() -> AEFormalAuthorities:
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("TRAINING_MUST_NOT_START_IN_RUN_ROOT_TEST")
+
+    return AEFormalAuthorities(
+        prepare_context=_boom,
+        prepare_stage_a=_boom,
+        make_common_head=_boom,
+        train_stage_b=_boom,
+        predict=_boom,
+        metric=_boom,
+        publish=_boom,
+        reset_rng=lambda _seed: None,
+    )
+
+
+def test_fresh_real_formal_run_root_uses_planned_formal_run_root(cells, tmp_path, monkeypatch):
+    import src.transfer_methods.ms_katl_ae_formal as formal
+
+    fixed_ts = "20260821_215000"
+
+    class _FixedDateTime:
+        @staticmethod
+        def now():
+            class _Stamp:
+                def strftime(self, fmt):
+                    assert fmt == "%Y%m%d_%H%M%S"
+                    return fixed_ts
+
+            return _Stamp()
+
+    monkeypatch.setattr(formal, "datetime", _FixedDateTime)
+    monkeypatch.setattr(formal, "load_ae_manifest", lambda *_args, **_kwargs: {})
+
+    expected = tmp_path / planned_formal_run_root(fixed_ts)
+    with pytest.raises(RuntimeError, match="TRAINING_MUST_NOT_START_IN_RUN_ROOT_TEST"):
+        run_ae_formal_body(
+            mock_execution_authorized=False,
+            execute=True,
+            environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"},
+            authorities=_training_kill_authorities(),
+            resume_root=None,
+            output_root=None,
+            project_root=tmp_path,
+            cells=cells,
+        )
+
+    assert expected.is_dir()
+    assert AE_RUN_LABEL in expected.name
+    assert "formal_mock" not in expected.as_posix()
+    assert expected == tmp_path / "outputs" / "runs" / f"{fixed_ts}_{AE_RUN_LABEL}"
+    assert expected.name.endswith(AE_RUN_LABEL)
+
+
+def test_mock_formal_root_stays_under_preflight(cells, tmp_path, monkeypatch):
+    import src.transfer_methods.ms_katl_ae_formal as formal
+
+    monkeypatch.setattr(formal, "load_ae_manifest", lambda *_args, **_kwargs: {})
+    expected = tmp_path / PREFLIGHT_RELPATH / "formal_mock"
+    with pytest.raises(RuntimeError, match="TRAINING_MUST_NOT_START_IN_RUN_ROOT_TEST"):
+        run_ae_formal_body(
+            mock_execution_authorized=True,
+            authorities=_training_kill_authorities(),
+            resume_root=None,
+            output_root=None,
+            project_root=tmp_path,
+            cells=cells,
+        )
+
+    assert expected.is_dir()
+    assert "runs" not in expected.parts
+    assert expected.as_posix().endswith("formal_mock")
+    assert "outputs/runs" not in expected.as_posix()
+
+
+def test_resume_root_reused_without_new_timestamp(cells, tmp_path, monkeypatch):
+    import src.transfer_methods.ms_katl_ae_formal as formal
+
+    monkeypatch.setattr(formal, "load_ae_manifest", lambda *_args, **_kwargs: {})
+    resume = tmp_path / "outputs" / "runs" / f"20260101_120000_{AE_RUN_LABEL}"
+    _write_resume_snapshot(resume, cells)
+
+    class _FixedDateTime:
+        @staticmethod
+        def now():
+            raise AssertionError("fresh timestamp must not be allocated on resume")
+
+    monkeypatch.setattr(formal, "datetime", _FixedDateTime)
+
+    with pytest.raises(RuntimeError, match="TRAINING_MUST_NOT_START_IN_RUN_ROOT_TEST"):
+        run_ae_formal_body(
+            mock_execution_authorized=False,
+            execute=True,
+            environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"},
+            authorities=_training_kill_authorities(),
+            resume_root=resume,
+            output_root=None,
+            project_root=tmp_path,
+            cells=cells,
+        )
+
+    runs_dir = tmp_path / "outputs" / "runs"
+    assert list(runs_dir.iterdir()) == [resume]
+    assert resume.is_dir()
+    assert AE_RUN_LABEL in resume.name
