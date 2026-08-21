@@ -61,7 +61,13 @@ def cells():
 def _run_formal(tmp_path, cells, **kwargs):
     ledger = kwargs.pop("ledger", FormalCallLedger())
     fail_arm = kwargs.pop("fail_arm", None)
-    authorities = make_mock_authorities(ledger=ledger, fail_arm=fail_arm, publish_root=tmp_path)
+    live_contexts = kwargs.pop("live_contexts", None)
+    authorities = make_mock_authorities(
+        ledger=ledger,
+        fail_arm=fail_arm,
+        publish_root=tmp_path,
+        live_contexts=live_contexts,
+    )
     result = run_ae_formal_body(
         mock_execution_authorized=True,
         authorities=authorities,
@@ -89,9 +95,11 @@ def _write_resume_snapshot(root, cells, digest=None, **overrides):
 
 
 def test_formal_body_54_stage_a_calls(cells, tmp_path):
-    result, _ = _run_formal(tmp_path, cells)
+    result, ledger = _run_formal(tmp_path, cells)
     assert result["CANONICAL_CELLS"] == 54
+    assert result["CONTEXT_PREP_CALLS"] == 54
     assert result["STAGE_A_CALLS"] == 54
+    assert ledger.counts()["CONTEXT_PREP_CALLS"] == 54
 
 
 def test_formal_body_270_stage_b_calls(cells, tmp_path):
@@ -227,6 +235,10 @@ def test_formal_preflight_never_trains(monkeypatch):
     assert result["ACTUAL_EXECUTION_REQUESTED"] == "NO"
     assert result["D_OLD_RESULT_REUSE"] == "NO"
     assert result["REAL_DATA_FORMAL_PRECHECK"] == "PASS"
+    assert result["LIVE_CONTEXT_CONSTRUCTION"] == "54/54 PASS"
+    assert result["REAL_STAGE_A_KWARGS_OBJECTS"] == "54/54 PASS"
+    assert result["STAGE_A_SIGNATURE_COMPATIBILITY"] == "54/54 PASS"
+    assert result["REAL_SHARED_TARGET_BUNDLES"] == "54/54 PASS"
     assert result["REAL_STAGE_A_KWARGS_RESOLUTION"] == "54/54 PASS"
     assert "FORMAL_EXECUTION_BLOCKED_BECAUSE_ENABLE_FALSE" not in result["text"]
     assert "outputs/runs/<timestamp>_MS_KATL_AE_CORE_ABLATION" in result["text"]

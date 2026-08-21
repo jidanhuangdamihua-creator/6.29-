@@ -124,6 +124,7 @@ class FormalArmRuntime:
 
 @dataclass
 class FormalCallLedger:
+    context_prep: List[str] = field(default_factory=list)
     stage_a: List[str] = field(default_factory=list)
     stage_b: List[Tuple[str, str]] = field(default_factory=list)
     predict: List[Tuple[str, str]] = field(default_factory=list)
@@ -134,6 +135,7 @@ class FormalCallLedger:
     def counts(self) -> Dict[str, int]:
         arms = {arm: sum(1 for _, item in self.stage_b if item == arm) for arm in AE_ARMS}
         return {
+            "CONTEXT_PREP_CALLS": len(self.context_prep),
             "STAGE_A_CALLS": len(self.stage_a),
             "STAGE_B_CALLS": len(self.stage_b),
             "PREDICT_CALLS": len(self.predict),
@@ -222,13 +224,27 @@ def _require_enabled_real_path() -> None:
         raise AETrainingBlocked("FORMAL_EXECUTION_BLOCKED")
 
 
-def default_v3_prepare_context(cell: RealCanonicalCellPlan) -> Dict[str, Any]:
+def default_v3_prepare_context(
+    cell: RealCanonicalCellPlan,
+    *,
+    project_root: Optional[Path] = None,
+) -> Dict[str, Any]:
     _require_enabled_real_path()
-    raise AEContractError(f"V3 cell frames for {cell.stage_a_key} were not supplied")
+    from src.transfer_methods.ms_katl_ae_live_context import build_live_ae_cell_context
+
+    live = build_live_ae_cell_context(cell, project_root=project_root)
+    if live.stage_a_key != cell.stage_a_key or live.target_bundle_key != cell.stage_a_key:
+        raise AEContractError(
+            f"live context key mismatch: stage_a={live.stage_a_key} bundle={live.target_bundle_key}"
+        )
+    return live.as_formal_context()
 
 
 def default_v3_prepare_stage_a(cell: RealCanonicalCellPlan, context: Mapping[str, Any]) -> FormalStageAView:
     _require_enabled_real_path()
+    live = context.get("live")
+    if live is not None and str(getattr(live, "stage_a_key", "")) != cell.stage_a_key:
+        raise AEContractError("Stage A cell does not match live context")
     kwargs = dict(context.get("stage_a_kwargs") or {})
     if not kwargs:
         raise AEContractError("missing stage_a_kwargs for prepare_ms_katl_stage_a")
@@ -431,11 +447,30 @@ def make_mock_authorities(
     ledger: FormalCallLedger,
     fail_arm: Optional[str] = None,
     publish_root: Optional[Path] = None,
+    live_contexts: Optional[Mapping[str, Any]] = None,
 ) -> AEFormalAuthorities:
     def prepare_context(cell: RealCanonicalCellPlan) -> Dict[str, Any]:
-        return {"cell": cell.stage_a_key, "status": MOCK_STATUS}
+        if cell.stage_a_key in ledger.context_prep:
+            raise AEContractError(f"context prepared twice for {cell.stage_a_key}")
+        ledger.context_prep.append(cell.stage_a_key)
+        if live_contexts is None:
+            return {"cell": cell.stage_a_key, "status": MOCK_STATUS}
+        live = live_contexts.get(cell.stage_a_key)
+        if live is None:
+            raise AEContractError(f"missing real live context for {cell.stage_a_key}")
+        if getattr(live, "source_df", None) is None or getattr(live, "target_df", None) is None:
+            raise AEContractError("fake context forbidden in real-context mock acceptance")
+        if str(getattr(live, "status", "")) != "CONTEXT_READY":
+            raise AEContractError(f"live context not CONTEXT_READY: {cell.stage_a_key}")
+        return live.as_formal_context()
 
     def prepare_stage_a(cell: RealCanonicalCellPlan, context: Mapping[str, Any]) -> FormalStageAView:
+        live = context.get("live") if isinstance(context, Mapping) else None
+        if live_contexts is not None:
+            if live is None:
+                raise AEContractError("real-context mock body forbids missing live context")
+            if getattr(live, "source_df", None) is None:
+                raise AEContractError("synthetic dataframe forbidden")
         _ = context
         if cell.stage_a_key in ledger.stage_a:
             raise AEContractError(f"Stage A prepared twice for {cell.stage_a_key}")
@@ -662,6 +697,13 @@ def run_ae_formal_body(
         if completed.get(cell.stage_a_key) == "PAIR_COMPLETE":
             continue
         context = authorities.prepare_context(cell)
+        if cell.stage_a_key not in active_ledger.context_prep:
+            active_ledger.context_prep.append(cell.stage_a_key)
+        live = context.get("live") if isinstance(context, Mapping) else None
+        if live is not None and str(getattr(live, "stage_a_key", "")) != cell.stage_a_key:
+            raise AEContractError("live context/stage-A cell mismatch")
+        if live is not None and str(getattr(live, "target_bundle_key", "")) != cell.stage_a_key:
+            raise AEContractError("live context/target-bundle cell mismatch")
         stage_a = authorities.prepare_stage_a(cell, context)
         head_digest = authorities.make_common_head(cell, stage_a)
         runtimes: Dict[str, FormalArmRuntime] = {}
@@ -725,6 +767,7 @@ def run_ae_formal_body(
     return {
         "status": MOCK_STATUS if mock_execution_authorized else "FORMAL",
         "CANONICAL_CELLS": len(cell_plans),
+        "CONTEXT_PREP_CALLS": counts["CONTEXT_PREP_CALLS"],
         "STAGE_A_CALLS": counts["STAGE_A_CALLS"],
         "STAGE_B_CALLS": counts["STAGE_B_CALLS"],
         "PREDICT_CALLS": counts["PREDICT_CALLS"],
@@ -764,8 +807,11 @@ def git_provenance(project_root: Optional[Path] = None) -> Dict[str, str]:
         "src/transfer_methods/ms_katl_ae_ablation.py",
         "src/transfer_methods/ms_katl_ae_execution.py",
         "src/transfer_methods/ms_katl_ae_formal.py",
+        "src/transfer_methods/ms_katl_ae_live_context.py",
+        "src/transfer_methods/ms_katl_v3_frame_assembly.py",
         "scripts/run_ms_katl_ae_ablation.py",
         "tests/test_ms_katl_ae_ablation_contract.py",
+        "tests/test_ms_katl_ae_formal_body.py",
         "configs/ms_katl_ae_ablation_manifest.json",
     )
     dirty = []
@@ -801,6 +847,19 @@ def run_ae_formal_preflight(
     preflight = run_ae_preflight(project_root=root, include_construction_contracts=True)
     pairwise = preflight["pairwise"]
     kwargs_report = resolve_all_formal_stage_a_input_plans(cells, project_root=root)
+    from src.transfer_methods.ms_katl_ae_live_context import (
+        construct_all_live_ae_contexts,
+        representative_trace,
+    )
+
+    live_report = construct_all_live_ae_contexts(cells, project_root=root)
+    traces = {}
+    d4_trace = {}
+    for ctx in live_report["contexts"]:
+        if int(ctx.horizon) == 1 and int(ctx.seed) == 42:
+            traces[ctx.dataset] = representative_trace(ctx)
+        if ctx.dataset == "D4" and int(ctx.horizon) == 1 and int(ctx.seed) == 42:
+            d4_trace = representative_trace(ctx)
     training_guard = "PASS"
     try:
         assert_formal_training_permitted(execute=True, environ={})
@@ -850,18 +909,37 @@ def run_ae_formal_preflight(
         "REAL_DATA_FORMAL_PRECHECK": kwargs_report["REAL_DATA_FORMAL_PRECHECK"],
         "REAL_STAGE_A_KWARGS_RESOLUTION": kwargs_report["REAL_STAGE_A_KWARGS_RESOLUTION"],
         "REAL_STAGE_A_KWARGS_FAILURES": kwargs_report["failures"],
+        "LIVE_CONTEXT_CONSTRUCTION": live_report["LIVE_CONTEXT_CONSTRUCTION"],
+        "REAL_STAGE_A_KWARGS_OBJECTS": live_report["REAL_STAGE_A_KWARGS_OBJECTS"],
+        "STAGE_A_SIGNATURE_COMPATIBILITY": live_report["STAGE_A_SIGNATURE_COMPATIBILITY"],
+        "REAL_SHARED_TARGET_BUNDLES": live_report["REAL_SHARED_TARGET_BUNDLES"],
+        "D1_LIVE_CONTEXT": live_report["dataset_status"]["D1"],
+        "D2_LIVE_CONTEXT": live_report["dataset_status"]["D2"],
+        "D3_LIVE_CONTEXT": live_report["dataset_status"]["D3"],
+        "D4_LIVE_CONTEXT": live_report["dataset_status"]["D4"],
+        "D5_LIVE_CONTEXT": live_report["dataset_status"]["D5"],
+        "D6_LIVE_CONTEXT": live_report["dataset_status"]["D6"],
+        "LIVE_CONTEXT_MATRIX": live_report["matrix"],
+        "D4_REPRESENTATIVE_TRACE": d4_trace,
+        "DATASET_REPRESENTATIVE_TRACES": traces,
+        "LIVE_CONTEXT_FAILURES": live_report["failures"],
+        "FORMAL_STAGE_A_WILL_RECOMPUTE": "YES",
         "TRAINING_STARTED": "NO",
     }
     artifact = {
         key: value
         for key, value in payload.items()
-        if key != "REAL_STAGE_A_KWARGS_FAILURES" or value
+        if key not in {"LIVE_CONTEXT_FAILURES", "REAL_STAGE_A_KWARGS_FAILURES"} or value
     }
     if write_artifacts:
         out = root / PREFLIGHT_RELPATH
         out.mkdir(parents=True, exist_ok=True)
         (out / "formal_preflight_report.json").write_text(
             json.dumps(artifact, indent=2, default=str) + "\n", encoding="utf-8"
+        )
+        (out / "live_context_matrix.json").write_text(
+            json.dumps({"rows": live_report["matrix"], "status": "CONTEXT_READY"}, indent=2) + "\n",
+            encoding="utf-8",
         )
     ok = (
         training_guard == "PASS"
@@ -876,6 +954,7 @@ def run_ae_formal_preflight(
         and payload["C_D_SINGLE_FACTOR"] == "PASS"
         and payload["D_EQUALS_FROZEN_V3"] == "PASS"
         and kwargs_report["REAL_DATA_FORMAL_PRECHECK"] == "PASS"
+        and live_report["ok"]
         and AE_FORMAL_EXECUTION_ENABLED
     )
     lines = [
@@ -902,11 +981,38 @@ def run_ae_formal_preflight(
         f"D_OLD_RESULT_REUSE={old_reuse}",
         f"FORMAL_GIT_FREEZE_REQUIRED={payload['FORMAL_GIT_FREEZE_REQUIRED']}",
         f"REAL_DATA_FORMAL_PRECHECK={payload['REAL_DATA_FORMAL_PRECHECK']}",
-        f"REAL_STAGE_A_KWARGS_RESOLUTION={payload['REAL_STAGE_A_KWARGS_RESOLUTION']}",
+        f"LIVE_CONTEXT_CONSTRUCTION={payload['LIVE_CONTEXT_CONSTRUCTION']}",
+        f"REAL_STAGE_A_KWARGS_OBJECTS={payload['REAL_STAGE_A_KWARGS_OBJECTS']}",
+        f"STAGE_A_SIGNATURE_COMPATIBILITY={payload['STAGE_A_SIGNATURE_COMPATIBILITY']}",
+        f"REAL_SHARED_TARGET_BUNDLES={payload['REAL_SHARED_TARGET_BUNDLES']}",
+        f"D1_LIVE_CONTEXT={payload['D1_LIVE_CONTEXT']}",
+        f"D2_LIVE_CONTEXT={payload['D2_LIVE_CONTEXT']}",
+        f"D3_LIVE_CONTEXT={payload['D3_LIVE_CONTEXT']}",
+        f"D4_LIVE_CONTEXT={payload['D4_LIVE_CONTEXT']}",
+        f"D5_LIVE_CONTEXT={payload['D5_LIVE_CONTEXT']}",
+        f"D6_LIVE_CONTEXT={payload['D6_LIVE_CONTEXT']}",
+        f"FORMAL_STAGE_A_WILL_RECOMPUTE={payload['FORMAL_STAGE_A_WILL_RECOMPUTE']}",
         f"planned_formal_run_root={payload['planned_formal_run_root_pattern']}",
         "TRAINING_STARTED=NO",
         f"FORMAL_PREFLIGHT={'PASS' if ok else 'FAIL'}",
     ]
+    if d4_trace:
+        lines.extend(
+            [
+                "",
+                "D4_REPRESENTATIVE_TRACE",
+                f"sealed_source_path={d4_trace.get('sealed_source_path')}",
+                f"sealed_target_path={d4_trace.get('sealed_target_path')}",
+                f"source_df_shape={d4_trace.get('source_df_shape')}",
+                f"target_df_shape={d4_trace.get('target_df_shape')}",
+                f"target_identity={d4_trace.get('target_identity')}",
+                f"group_cols={d4_trace.get('group_cols')}",
+                f"selected_lr={d4_trace.get('selected_lr')}",
+                f"stage_a_key={d4_trace.get('stage_a_key')}",
+                f"target_bundle_key={d4_trace.get('target_bundle_key')}",
+                "STOP_BEFORE=prepare_ms_katl_stage_a",
+            ]
+        )
     payload["text"] = "\n".join(lines) + "\n"
     payload["FORMAL_PREFLIGHT"] = "PASS" if ok else "FAIL"
     return payload
