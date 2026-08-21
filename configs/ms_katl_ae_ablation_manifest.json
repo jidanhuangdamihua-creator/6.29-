@@ -1,0 +1,122 @@
+{
+  "protocol_version": "ae_core_mechanism_v1",
+  "label": "MS_KATL_AE_ABLATION",
+  "parent_method": "FUSED_TARGET_ONLY_V3",
+  "parent_v3_architecture_digest": "ac07f0863906ec9a3b4ed23ea56189ecae70e2b80ac2485cf85f5c7ee270b760",
+  "arms": {
+    "A": {
+      "name": "TARGET_NATIVE_INIT",
+      "init_mode": "native",
+      "target_backbone_trainable": true,
+      "revin_enabled": false,
+      "transfer_branch_enabled": false,
+      "gate_mode": "zero",
+      "use_adversarial": false
+    },
+    "B": {
+      "name": "CONTROLLED_FROZEN_FUSED",
+      "init_mode": "fused",
+      "target_backbone_trainable": false,
+      "revin_enabled": false,
+      "transfer_branch_enabled": false,
+      "gate_mode": "zero",
+      "use_adversarial": false
+    },
+    "C": {
+      "name": "FUSED_TRAINABLE",
+      "init_mode": "fused",
+      "target_backbone_trainable": true,
+      "revin_enabled": false,
+      "transfer_branch_enabled": false,
+      "gate_mode": "zero",
+      "use_adversarial": false
+    },
+    "D": {
+      "name": "CURRENT_V3",
+      "init_mode": "fused",
+      "target_backbone_trainable": true,
+      "revin_enabled": true,
+      "transfer_branch_enabled": false,
+      "gate_mode": "zero",
+      "use_adversarial": false
+    },
+    "E": {
+      "name": "BEST_SOURCE_TRAINABLE",
+      "init_mode": "best_source",
+      "target_backbone_trainable": true,
+      "revin_enabled": false,
+      "transfer_branch_enabled": false,
+      "gate_mode": "zero",
+      "use_adversarial": false
+    }
+  },
+  "targets": [
+    {"dataset": "D1", "target_identity": "1/10"},
+    {"dataset": "D2", "target_identity": "1/10"},
+    {"dataset": "D3", "target_identity": "10"},
+    {"dataset": "D4", "target_identity": "166/311"},
+    {"dataset": "D5", "target_identity": "48/1159414"},
+    {"dataset": "D6", "target_identity": "CA_1/FOODS_3_080"}
+  ],
+  "horizons": [1, 3, 5],
+  "seeds": [42, 43, 44],
+  "scenario": "without",
+  "v3_lr_map": {
+    "D1": {"target_identity": "1/10", "learning_rate": "3e-5"},
+    "D2": {"target_identity": "1/10", "learning_rate": "3e-5"},
+    "D3": {"target_identity": "10", "learning_rate": "3e-5"},
+    "D4": {"target_identity": "166/311", "learning_rate": "3e-5"},
+    "D5": {"target_identity": "48/1159414", "learning_rate": "3e-4"},
+    "D6": {"target_identity": "CA_1/FOODS_3_080", "learning_rate": "3e-5"}
+  },
+  "training_recipe": {
+    "loss_name": "huber",
+    "huber_delta": 1.0,
+    "lr_schedule": "cosine",
+    "use_ema": true,
+    "ema_momentum": 0.99
+  },
+  "optimizer": {
+    "optimizer": "Adam",
+    "clipnorm": null,
+    "epochs": 50,
+    "batch_size": 16,
+    "stage_b_early_stopping": false,
+    "stage_a_learning_rate": 0.0001
+  },
+  "primary_contrasts": ["C_vs_B", "C_vs_A", "C_vs_E", "D_vs_C"],
+  "primary_metric": "rmse_original",
+  "metric_contract": {
+    "primary_metric": "rmse_original",
+    "primary_metric_space": "original_sales_space",
+    "secondary_metrics": ["smape_original", "mae_original"],
+    "sales_value_policy": "clip_negative_to_zero_v1",
+    "scaler_inverse": "affine_minmax_sales_column",
+    "revin_inverse_before_scaler": "D_only",
+    "clipping": "clip_negative_to_zero_v1"
+  },
+  "analysis_contract": {
+    "primary_metric": "rmse_original",
+    "analysis_unit": "mean_over_seeds_per_target_horizon",
+    "condition_count": 18,
+    "planned_contrasts": ["C_vs_B", "C_vs_A", "C_vs_E", "D_vs_C"],
+    "multiple_comparison": "Holm",
+    "alpha": 0.05,
+    "seed_cells_not_iid": true,
+    "forbid_post_hoc_contrast_changes": true
+  },
+  "expected_canonical_cells": 54,
+  "expected_runs": 270,
+  "legacy_mechanism_arms_forbidden": [
+    "full_current",
+    "fused_target_only",
+    "raw_target_only",
+    "raw_plus_transfer",
+    "fused_gate_one",
+    "fused_frozen_backbone"
+  ],
+  "formal_training_unlock_env": "AE_FORMAL_TRAINING_UNLOCK",
+  "execution_body_enabled": false,
+  "formal_execution_implemented": true,
+  "formal_execution_enabled": false
+}
