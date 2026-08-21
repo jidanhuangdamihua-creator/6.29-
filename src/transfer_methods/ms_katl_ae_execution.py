@@ -709,6 +709,68 @@ def d4_representative_trace(cells: Sequence[RealCanonicalCellPlan], built: Mappi
     }
 
 
+PLANNED_MATRIX_FIELDNAMES = (
+    "dataset",
+    "target",
+    "scenario",
+    "horizon",
+    "seed",
+    "arm",
+    "arm_name",
+    "selected_lr",
+    "stage_a_key",
+    "init_mode",
+    "backbone_trainable",
+    "revin_enabled",
+    "transfer_branch_enabled",
+    "gate_mode",
+    "use_adversarial",
+    "status",
+)
+
+
+def write_planned_matrix_csv(path: Path, arm_plans: Sequence[RealArmPlan]) -> Path:
+    """Write the frozen formal planned-matrix CSV (54 cells × 5 arms = 270 rows)."""
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if len(arm_plans) != EXPECTED_RUNS:
+        raise AEContractError(f"planned matrix rows={len(arm_plans)} != {EXPECTED_RUNS}")
+    with destination.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(PLANNED_MATRIX_FIELDNAMES))
+        writer.writeheader()
+        for item in arm_plans:
+            if item.status != "PLANNED":
+                raise AEContractError("formal planned matrix status must be PLANNED")
+            writer.writerow(
+                {
+                    "dataset": item.cell.dataset,
+                    "target": item.cell.target,
+                    "scenario": item.cell.scenario,
+                    "horizon": item.cell.horizon,
+                    "seed": item.cell.seed,
+                    "arm": item.arm,
+                    "arm_name": item.arm_name,
+                    "selected_lr": item.cell.selected_lr_label,
+                    "stage_a_key": item.cell.stage_a_key,
+                    "init_mode": item.init_mode,
+                    "backbone_trainable": item.backbone_trainable,
+                    "revin_enabled": item.revin_enabled,
+                    "transfer_branch_enabled": item.transfer_branch_enabled,
+                    "gate_mode": item.gate_mode,
+                    "use_adversarial": item.use_adversarial,
+                    "status": "PLANNED",
+                }
+            )
+    return destination
+
+
+def formal_manifest_snapshot_payload(planned_matrix_digest: str) -> Dict[str, Any]:
+    """Resume-critical identity snapshot bound before any formal training."""
+    payload = dict(ae_protocol_manifest_payload())
+    payload["planned_matrix_digest"] = str(planned_matrix_digest)
+    return payload
+
+
 def validate_resume_root(run_root: Path, project_root: Optional[Path] = None) -> Dict[str, str]:
     root = Path(run_root)
     manifest_path = root / "manifest_snapshot.json"
@@ -723,6 +785,7 @@ def validate_resume_root(run_root: Path, project_root: Optional[Path] = None) ->
         raise AEContractError("resume parent V3 digest mismatch")
     if snapshot.get("expected_runs") != EXPECTED_RUNS:
         raise AEContractError("resume planned matrix size mismatch")
+    _ = project_root
     return {"RESUME_CONTRACT": "PASS"}
 
 
@@ -775,52 +838,7 @@ def write_dry_run_artifacts(
                     "source_ids_status": cell.source_ids_status,
                 }
             )
-    with matrix_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[
-                "dataset",
-                "target",
-                "scenario",
-                "horizon",
-                "seed",
-                "arm",
-                "arm_name",
-                "selected_lr",
-                "stage_a_key",
-                "init_mode",
-                "backbone_trainable",
-                "revin_enabled",
-                "transfer_branch_enabled",
-                "gate_mode",
-                "use_adversarial",
-                "status",
-            ],
-        )
-        writer.writeheader()
-        for item in arm_plans:
-            if item.status != "PLANNED":
-                raise AEContractError("dry-run matrix status must be PLANNED")
-            writer.writerow(
-                {
-                    "dataset": item.cell.dataset,
-                    "target": item.cell.target,
-                    "scenario": item.cell.scenario,
-                    "horizon": item.cell.horizon,
-                    "seed": item.cell.seed,
-                    "arm": item.arm,
-                    "arm_name": item.arm_name,
-                    "selected_lr": item.cell.selected_lr_label,
-                    "stage_a_key": item.cell.stage_a_key,
-                    "init_mode": item.init_mode,
-                    "backbone_trainable": item.backbone_trainable,
-                    "revin_enabled": item.revin_enabled,
-                    "transfer_branch_enabled": item.transfer_branch_enabled,
-                    "gate_mode": item.gate_mode,
-                    "use_adversarial": item.use_adversarial,
-                    "status": "PLANNED",
-                }
-            )
+    write_planned_matrix_csv(matrix_path, arm_plans)
     (out / "preflight_report.json").write_text(
         json.dumps(dict(report.get("preflight", {})), indent=2, default=str) + "\n",
         encoding="utf-8",

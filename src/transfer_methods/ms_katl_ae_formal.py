@@ -7,13 +7,16 @@ Tests may inject mock authorities with mock_execution_authorized=True.
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
+import os
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from uuid import uuid4
 
 from src.transfer_methods.ms_katl_ae_ablation import (
     AE_ARMS,
@@ -44,9 +47,11 @@ from src.transfer_methods.ms_katl_ae_execution import (
     assert_ae_output_root,
     enumerate_real_arm_plans,
     enumerate_real_canonical_cell_plans,
+    formal_manifest_snapshot_payload,
     planned_formal_run_root,
     resolve_all_formal_stage_a_input_plans,
     validate_resume_root,
+    write_planned_matrix_csv,
 )
 from src.transfer_methods.ms_katl_fto_three_track_robustness import (
     EXPECTED_V3_ARCHITECTURE_DIGEST,
@@ -75,6 +80,21 @@ MOCK_METRIC = "MOCK_METRIC"
 def _json_digest(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
+
+def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    """Atomic JSON publish: temp write + fsync + os.replace (run_artifacts convention)."""
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f"{destination.name}.tmp.{os.getpid()}.{uuid4().hex}")
+    try:
+        with temporary.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 @dataclass
 class FormalStageAView:
@@ -200,6 +220,101 @@ def planned_matrix_digest(arm_plans: Sequence[RealArmPlan]) -> str:
         for item in arm_plans
     ]
     return _json_digest({"runs": payload, "n": len(payload)})
+
+
+_MANIFEST_IDENTITY_KEYS = (
+    "protocol_version",
+    "parent_v3_architecture_digest",
+    "expected_runs",
+    "planned_matrix_digest",
+)
+
+
+def bootstrap_fresh_formal_run_metadata(
+    run_root: Path,
+    arm_plans: Sequence[RealArmPlan],
+    planned_matrix_digest_value: str,
+) -> None:
+    """Initialize immutable formal run metadata before any Stage-A / Stage-B training.
+
+    Fresh only: create once. Existing identity mismatch fails closed; matching
+    identity is left untouched (never rewritten).
+    """
+    root = assert_ae_output_root(Path(run_root))
+    if AE_RUN_LABEL not in root.name:
+        raise AEContractError("formal run root must include MS_KATL_AE_CORE_ABLATION")
+    if "results" in root.parts and "preflight" not in root.parts and "audits" not in root.parts:
+        raise AEContractError("refusing formal bootstrap under results/")
+    if "preflight" in root.parts and "formal_mock" in root.as_posix():
+        raise AEContractError("refusing formal bootstrap under preflight mock root")
+
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "cell_bundles").mkdir(parents=True, exist_ok=True)
+    (root / "plans").mkdir(parents=True, exist_ok=True)
+
+    snapshot = formal_manifest_snapshot_payload(planned_matrix_digest_value)
+    if snapshot.get("protocol_version") != PROTOCOL_VERSION:
+        raise AEContractError("bootstrap protocol_version drifted")
+    if snapshot.get("expected_runs") != EXPECTED_RUNS:
+        raise AEContractError("bootstrap expected_runs drifted")
+    if snapshot.get("planned_matrix_digest") != planned_matrix_digest_value:
+        raise AEContractError("bootstrap planned_matrix_digest drifted")
+
+    manifest_path = root / "manifest_snapshot.json"
+    if manifest_path.is_file():
+        existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for key in _MANIFEST_IDENTITY_KEYS:
+            if existing.get(key) != snapshot.get(key):
+                raise AEContractError(f"fresh run manifest identity mismatch: {key}")
+    else:
+        atomic_write_json(manifest_path, snapshot)
+
+    plan_path = root / "plans" / "planned_matrix.csv"
+    if plan_path.is_file():
+        with plan_path.open("r", encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        if len(rows) != EXPECTED_RUNS:
+            raise AEContractError(
+                f"existing planned matrix rows={len(rows)} != {EXPECTED_RUNS}"
+            )
+    else:
+        write_planned_matrix_csv(plan_path, arm_plans)
+
+
+def serialize_formal_arm_runtime(runtime: FormalArmRuntime) -> Dict[str, Any]:
+    """JSON-safe FormalArmRuntime provenance (no TF/numpy payloads)."""
+    return {
+        "arm": runtime.arm,
+        "status": runtime.status,
+        "error": runtime.error,
+        "metric_kind": runtime.metric_kind,
+        "rmse_original": runtime.rmse_original,
+        "smape_original": runtime.smape_original,
+        "mae_original": runtime.mae_original,
+        "init_mode": runtime.init_mode,
+        "source_init_consumed": runtime.source_init_consumed,
+        "stage_a_shared_for_pairing": runtime.stage_a_shared_for_pairing,
+        "head_target_init_digest": runtime.head_target_init_digest,
+        "target_initial_conv_digest": runtime.target_initial_conv_digest,
+        "fused_init_digest": runtime.fused_init_digest,
+        "best_source_identity": list(runtime.best_source_identity),
+        "best_source_snapshot_digest": runtime.best_source_snapshot_digest,
+        "source_identities": [list(item) for item in runtime.source_identities],
+        "source_distances": list(runtime.source_distances),
+        "source_weights": list(runtime.source_weights),
+        "selected_lr": runtime.selected_lr,
+        "recipe_digest": runtime.recipe_digest,
+        "target_split_digest": runtime.target_split_digest,
+        "parent_method": runtime.parent_method,
+        "parent_v3_architecture_digest": runtime.parent_v3_architecture_digest,
+        "prediction_path_parameter_count": runtime.prediction_path_parameter_count,
+        "trainable_prediction_path_parameter_count": runtime.trainable_prediction_path_parameter_count,
+        "frozen_prediction_path_parameter_count": runtime.frozen_prediction_path_parameter_count,
+    }
+
+
+def cell_bundle_path(run_root: Path, stage_a_key: str) -> Path:
+    return Path(run_root) / "cell_bundles" / f"{stage_a_key.replace('/', '-')}.json"
 
 
 def stage_a_view_from_v3(artifacts: Any, cell: RealCanonicalCellPlan, fused_target_digest: str = "") -> FormalStageAView:
@@ -364,10 +479,43 @@ def default_v3_metric(cell: RealCanonicalCellPlan, runtime: FormalArmRuntime, co
     return runtime
 
 
-def default_v3_publish(*_args: Any, **_kwargs: Any) -> None:
+def default_v3_publish(
+    cell: RealCanonicalCellPlan,
+    runtimes: Mapping[str, FormalArmRuntime],
+    pair_status: str,
+    output_root: Path,
+) -> None:
     _require_enabled_real_path()
-    raise AEContractError("real publisher requires ENABLED formal run root")
+    root = assert_ae_output_root(Path(output_root))
+    if AE_RUN_LABEL not in root.name:
+        raise AEContractError("real publisher requires MS_KATL_AE_CORE_ABLATION formal run root")
+    if "results" in root.parts and "preflight" not in root.parts and "audits" not in root.parts:
+        raise AEContractError("real publisher refuses results/ roots")
+    if "preflight" in root.parts:
+        raise AEContractError("real publisher refuses preflight mock roots")
+    if set(runtimes) != set(AE_ARMS):
+        raise AEContractError("real publisher requires full A–E runtime bundle")
 
+    bundle_dir = root / "cell_bundles"
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "status": "FORMAL",
+        "pair_status": pair_status,
+        "stage_a_key": cell.stage_a_key,
+        "dataset": cell.dataset,
+        "target": cell.target,
+        "horizon": int(cell.horizon),
+        "seed": int(cell.seed),
+        "scenario": cell.scenario,
+        "selected_lr": float(cell.selected_lr),
+        "arms": {arm: serialize_formal_arm_runtime(runtimes[arm]) for arm in AE_ARMS},
+    }
+    if pair_status == "PAIR_COMPLETE":
+        for arm in AE_ARMS:
+            arm_payload = payload["arms"][arm]
+            if arm_payload.get("status") == MOCK_STATUS or arm_payload.get("metric_kind") == MOCK_METRIC:
+                raise AEContractError("real publisher forbids MOCK markers on PAIR_COMPLETE")
+    atomic_write_json(cell_bundle_path(root, cell.stage_a_key), payload)
 
 def default_formal_authorities() -> AEFormalAuthorities:
     return AEFormalAuthorities(
@@ -694,6 +842,12 @@ def run_ae_formal_body(
         if AE_RUN_LABEL not in out.name:
             raise AEContractError("formal run root must include MS_KATL_AE_CORE_ABLATION")
     out.mkdir(parents=True, exist_ok=True)
+
+    if not mock_execution_authorized:
+        if resume_root is None:
+            # FROZEN BEFORE TRAINING: immutable run metadata must exist before any cell work.
+            bootstrap_fresh_formal_run_metadata(out, arm_plans, matrix_hash)
+        # Resume path: validate_resume_root already ran; never rewrite manifest/matrix.
 
     completed = load_pair_statuses(out) if resume_root is not None else {}
     active_ledger = ledger if ledger is not None else FormalCallLedger()

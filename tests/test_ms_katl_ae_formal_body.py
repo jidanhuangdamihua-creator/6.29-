@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import hashlib
 import importlib.util
 import json
 import sys
@@ -18,10 +20,14 @@ import tf_compat  # noqa: F401
 from src.transfer_methods.ms_katl_ae_ablation import (
     AE_ARMS,
     AE_FORMAL_EXECUTION_ENABLED,
+    EXPECTED_RUNS,
     FORMAL_TRAINING_UNLOCK_ENV,
+    PARENT_METHOD,
     PROTOCOL_VERSION,
     AEContractError,
     AETrainingBlocked,
+    ae_arm_spec,
+    ae_training_recipe,
     assert_formal_training_permitted,
     run_ae_formal_matrix,
 )
@@ -41,20 +47,100 @@ from src.transfer_methods.ms_katl_ae_formal import (
     MOCK_METRIC,
     MOCK_STATUS,
     AEFormalAuthorities,
+    FormalArmRuntime,
     FormalCallLedger,
     assert_no_old_v3_result_injection,
+    build_mock_stage_a,
+    cell_bundle_path,
+    default_v3_publish,
+    load_pair_statuses,
     make_mock_authorities,
     planned_matrix_digest,
     run_ae_formal_body,
     run_ae_formal_preflight,
 )
 from src.transfer_methods.ms_katl_fto_three_track_robustness import EXPECTED_V3_ARCHITECTURE_DIGEST
+from src.transfer_methods.ms_katl_fto_v3_screening import v3_architecture_digest
 from src.transfer_methods.ms_katl_lite import (
     prepare_ms_katl_stage_a,
     predict_ms_katl_decomposed,
     train_ms_katl_head,
 )
 from src.transfer_methods.ms_katl_primary_target_lr_screening import compute_screening_metrics
+
+
+def _json_digest(payload):
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
+def _real_ok_runtime(cell, arm, stage_a, head_digest, *, fail=False):
+    spec = ae_arm_spec(arm)
+    if fail:
+        return FormalArmRuntime(
+            arm=arm,
+            spec=spec,
+            init_mode=spec.init_mode,
+            source_init_consumed=spec.init_mode != "native",
+            stage_a_shared_for_pairing=True,
+            head_target_init_digest=head_digest,
+            target_initial_conv_digest="",
+            fused_init_digest=stage_a.fused_target_digest,
+            best_source_identity=stage_a.best_source_identity,
+            best_source_snapshot_digest=stage_a.best_source_conv_digest,
+            source_identities=list(stage_a.source_identities),
+            source_distances=list(stage_a.source_distances),
+            source_weights=list(stage_a.source_weights),
+            selected_lr=float(cell.selected_lr),
+            recipe_digest=_json_digest(ae_training_recipe()),
+            target_split_digest=stage_a.target_split_digest,
+            parent_method=PARENT_METHOD,
+            parent_v3_architecture_digest=v3_architecture_digest(),
+            prediction_path_parameter_count=0,
+            trainable_prediction_path_parameter_count=0,
+            frozen_prediction_path_parameter_count=0,
+            status="FAILED",
+            error="RuntimeError: injected arm failure",
+            metric_kind=None,
+        )
+    if spec.init_mode == "native":
+        conv = _json_digest({"mode": "native", "seed": cell.seed, "key": cell.stage_a_key})
+    elif spec.init_mode == "fused":
+        conv = stage_a.fused_target_digest
+    else:
+        conv = stage_a.best_source_conv_digest
+    pred = 100 + (2 if spec.revin_enabled else 0)
+    trainable = 40 if spec.target_backbone_trainable else 10
+    if spec.revin_enabled:
+        trainable += 2
+    return FormalArmRuntime(
+        arm=arm,
+        spec=spec,
+        init_mode=spec.init_mode,
+        source_init_consumed=spec.init_mode != "native",
+        stage_a_shared_for_pairing=True,
+        head_target_init_digest=head_digest,
+        target_initial_conv_digest=conv,
+        fused_init_digest=stage_a.fused_target_digest,
+        best_source_identity=stage_a.best_source_identity,
+        best_source_snapshot_digest=stage_a.best_source_conv_digest,
+        source_identities=list(stage_a.source_identities),
+        source_distances=list(stage_a.source_distances),
+        source_weights=list(stage_a.source_weights),
+        selected_lr=float(cell.selected_lr),
+        recipe_digest=_json_digest(ae_training_recipe()),
+        target_split_digest=stage_a.target_split_digest,
+        parent_method=PARENT_METHOD,
+        parent_v3_architecture_digest=v3_architecture_digest(),
+        prediction_path_parameter_count=pred,
+        trainable_prediction_path_parameter_count=trainable,
+        frozen_prediction_path_parameter_count=pred - trainable,
+        status="OK",
+        error="",
+        rmse_original=1.25 + (0.01 * (ord(arm) - 65)),
+        smape_original=0.11 + (0.001 * (ord(arm) - 65)),
+        mae_original=0.9 + (0.01 * (ord(arm) - 65)),
+        metric_kind="rmse_original",
+    )
 
 
 @pytest.fixture(scope="module")
@@ -430,3 +516,219 @@ def test_resume_root_reused_without_new_timestamp(cells, tmp_path, monkeypatch):
     assert list(runs_dir.iterdir()) == [resume]
     assert resume.is_dir()
     assert AE_RUN_LABEL in resume.name
+
+
+def test_fresh_bootstrap_before_training(cells, tmp_path, monkeypatch):
+    import src.transfer_methods.ms_katl_ae_formal as formal
+
+    fixed_ts = "20260821_221500"
+
+    class _FixedDateTime:
+        @staticmethod
+        def now():
+            class _Stamp:
+                def strftime(self, fmt):
+                    assert fmt == "%Y%m%d_%H%M%S"
+                    return fixed_ts
+
+            return _Stamp()
+
+    monkeypatch.setattr(formal, "datetime", _FixedDateTime)
+    monkeypatch.setattr(formal, "load_ae_manifest", lambda *_args, **_kwargs: {})
+
+    expected = tmp_path / planned_formal_run_root(fixed_ts)
+    matrix_hash = planned_matrix_digest(enumerate_real_arm_plans(cells))
+    with pytest.raises(RuntimeError, match="TRAINING_MUST_NOT_START_IN_RUN_ROOT_TEST"):
+        run_ae_formal_body(
+            mock_execution_authorized=False,
+            execute=True,
+            environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"},
+            authorities=_training_kill_authorities(),
+            resume_root=None,
+            output_root=None,
+            project_root=tmp_path,
+            cells=cells,
+        )
+
+    assert expected.is_dir()
+    assert (expected / "manifest_snapshot.json").is_file()
+    assert (expected / "plans" / "planned_matrix.csv").is_file()
+    assert (expected / "cell_bundles").is_dir()
+    snapshot = json.loads((expected / "manifest_snapshot.json").read_text(encoding="utf-8"))
+    assert snapshot["protocol_version"] == PROTOCOL_VERSION
+    assert snapshot["parent_v3_architecture_digest"] == EXPECTED_V3_ARCHITECTURE_DIGEST
+    assert snapshot["expected_runs"] == EXPECTED_RUNS
+    assert snapshot["planned_matrix_digest"] == matrix_hash
+    with (expected / "plans" / "planned_matrix.csv").open(encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 270
+    assert snapshot["planned_matrix_digest"] == matrix_hash
+
+
+def test_real_publisher_success_persists_formal_bundle(cells, tmp_path):
+    cell = cells[0]
+    stage_a = build_mock_stage_a(cell)
+    head = _json_digest({"head": cell.stage_a_key})
+    runtimes = {arm: _real_ok_runtime(cell, arm, stage_a, head) for arm in AE_ARMS}
+    root = tmp_path / "outputs" / "runs" / f"20260821_221600_{AE_RUN_LABEL}"
+    root.mkdir(parents=True)
+    default_v3_publish(cell, runtimes, "PAIR_COMPLETE", root)
+    path = cell_bundle_path(root, cell.stage_a_key)
+    assert path.is_file()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["status"] == "FORMAL"
+    assert payload["pair_status"] == "PAIR_COMPLETE"
+    assert payload["stage_a_key"] == cell.stage_a_key
+    assert payload["dataset"] == cell.dataset
+    assert payload["selected_lr"] == float(cell.selected_lr)
+    for arm in AE_ARMS:
+        arm_payload = payload["arms"][arm]
+        assert arm_payload["status"] == "OK"
+        assert isinstance(arm_payload["rmse_original"], float)
+        assert arm_payload["metric_kind"] == "rmse_original"
+        assert arm_payload["status"] != MOCK_STATUS
+        assert arm_payload["metric_kind"] != MOCK_METRIC
+    text = path.read_text(encoding="utf-8")
+    assert MOCK_STATUS not in text
+    assert MOCK_METRIC not in text
+    assert load_pair_statuses(root)[cell.stage_a_key] == "PAIR_COMPLETE"
+
+
+def test_real_publisher_incomplete_persists_error(cells, tmp_path):
+    cell = cells[1]
+    stage_a = build_mock_stage_a(cell)
+    head = _json_digest({"head": cell.stage_a_key})
+    runtimes = {
+        arm: _real_ok_runtime(cell, arm, stage_a, head, fail=(arm == "C")) for arm in AE_ARMS
+    }
+    root = tmp_path / "outputs" / "runs" / f"20260821_221700_{AE_RUN_LABEL}"
+    root.mkdir(parents=True)
+    default_v3_publish(cell, runtimes, "PAIR_INCOMPLETE", root)
+    payload = json.loads(cell_bundle_path(root, cell.stage_a_key).read_text(encoding="utf-8"))
+    assert payload["pair_status"] == "PAIR_INCOMPLETE"
+    assert payload["arms"]["C"]["status"] == "FAILED"
+    assert "injected arm failure" in payload["arms"]["C"]["error"]
+    assert load_pair_statuses(root)[cell.stage_a_key] == "PAIR_INCOMPLETE"
+
+
+def test_resume_skips_complete_recomputes_incomplete(cells, tmp_path):
+    first, _ = _run_formal(tmp_path, cells)
+    digest = first["planned_matrix_digest"]
+    _write_resume_snapshot(tmp_path, cells, digest=digest)
+
+    cell_ok = cells[0]
+    cell_bad = cells[1]
+    bad_path = next(
+        path
+        for path in (tmp_path / "cell_bundles").glob("*.json")
+        if json.loads(path.read_text(encoding="utf-8"))["stage_a_key"] == cell_bad.stage_a_key
+    )
+    bad_payload = json.loads(bad_path.read_text(encoding="utf-8"))
+    bad_payload["pair_status"] = "PAIR_INCOMPLETE"
+    bad_payload["arms"]["E"]["status"] = "FAILED"
+    bad_payload["arms"]["E"]["error"] = "RuntimeError: forced incomplete for resume test"
+    bad_path.write_text(json.dumps(bad_payload, indent=2) + "\n", encoding="utf-8")
+
+    statuses = load_pair_statuses(tmp_path)
+    assert statuses[cell_ok.stage_a_key] == "PAIR_COMPLETE"
+    assert statuses[cell_bad.stage_a_key] == "PAIR_INCOMPLETE"
+
+    ledger = FormalCallLedger()
+    result, _ = _run_formal(tmp_path, cells, ledger=ledger, resume_root=tmp_path)
+    assert cell_ok.stage_a_key not in ledger.stage_a
+    assert cell_bad.stage_a_key in ledger.stage_a
+    assert ledger.stage_a == [cell_bad.stage_a_key]
+    bad_arms = [arm for key, arm in ledger.stage_b if key == cell_bad.stage_a_key]
+    assert bad_arms == list(AE_ARMS)
+    assert result["bundles"][cell_ok.stage_a_key] == "PAIR_COMPLETE"
+    assert result["bundles"][cell_bad.stage_a_key] == "PAIR_COMPLETE"
+
+
+def test_resume_manifest_mismatch_fail_closed(cells, tmp_path):
+    digest = planned_matrix_digest(enumerate_real_arm_plans(cells))
+    _write_resume_snapshot(tmp_path, cells, digest=digest, protocol_version="wrong_protocol")
+    with pytest.raises(AEContractError, match="resume protocol_version mismatch"):
+        _run_formal(tmp_path, cells, resume_root=tmp_path)
+
+    bad_parent = tmp_path / "bad_parent"
+    _write_resume_snapshot(bad_parent, cells, digest=digest, parent_v3_architecture_digest="not-the-v3-digest")
+    with pytest.raises(AEContractError, match="resume parent V3 digest mismatch"):
+        _run_formal(bad_parent, cells, resume_root=bad_parent)
+
+    bad_matrix = tmp_path / "bad_matrix"
+    _write_resume_snapshot(bad_matrix, cells, digest="0" * 64)
+    with pytest.raises(AEContractError, match="resume planned matrix digest mismatch"):
+        _run_formal(bad_matrix, cells, resume_root=bad_matrix)
+
+
+def test_atomic_bundle_write_leaves_no_partial_canonical(cells, tmp_path, monkeypatch):
+    import src.transfer_methods.ms_katl_ae_formal as formal
+
+    cell = cells[2]
+    stage_a = build_mock_stage_a(cell)
+    head = _json_digest({"head": cell.stage_a_key})
+    runtimes = {arm: _real_ok_runtime(cell, arm, stage_a, head) for arm in AE_ARMS}
+    root = tmp_path / "outputs" / "runs" / f"20260821_221800_{AE_RUN_LABEL}"
+    root.mkdir(parents=True)
+    destination = cell_bundle_path(root, cell.stage_a_key)
+
+    def _crash_before_replace(path, payload):
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(f".{path.name}.crash.tmp")
+        temporary.write_text("{incomplete", encoding="utf-8")
+        raise RuntimeError("simulated crash before atomic replace")
+
+    monkeypatch.setattr(formal, "atomic_write_json", _crash_before_replace)
+    with pytest.raises(RuntimeError, match="simulated crash before atomic replace"):
+        default_v3_publish(cell, runtimes, "PAIR_COMPLETE", root)
+    assert not destination.exists()
+    assert load_pair_statuses(root) == {}
+
+
+def test_mock_publisher_unchanged_and_outside_runs(cells, tmp_path):
+    result, _ = _run_formal(tmp_path, cells)
+    sample = json.loads(next((tmp_path / "cell_bundles").glob("*.json")).read_text(encoding="utf-8"))
+    assert sample["status"] == MOCK_STATUS
+    assert all(sample["arms"][arm]["metric_kind"] == MOCK_METRIC for arm in AE_ARMS)
+    assert "runs" not in tmp_path.parts
+    assert result["status"] == MOCK_STATUS
+
+
+def test_fresh_formal_root_semantics_unchanged(cells, tmp_path, monkeypatch):
+    import src.transfer_methods.ms_katl_ae_formal as formal
+
+    fixed_ts = "20260821_221900"
+
+    class _FixedDateTime:
+        @staticmethod
+        def now():
+            class _Stamp:
+                def strftime(self, fmt):
+                    return fixed_ts
+
+            return _Stamp()
+
+    monkeypatch.setattr(formal, "datetime", _FixedDateTime)
+    monkeypatch.setattr(formal, "load_ae_manifest", lambda *_args, **_kwargs: {})
+    expected = tmp_path / "outputs" / "runs" / f"{fixed_ts}_{AE_RUN_LABEL}"
+    with pytest.raises(RuntimeError, match="TRAINING_MUST_NOT_START_IN_RUN_ROOT_TEST"):
+        run_ae_formal_body(
+            mock_execution_authorized=False,
+            execute=True,
+            environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"},
+            authorities=_training_kill_authorities(),
+            resume_root=None,
+            output_root=None,
+            project_root=tmp_path,
+            cells=cells,
+        )
+    assert expected == tmp_path / planned_formal_run_root(fixed_ts)
+    assert expected.name.endswith("MS_KATL_AE_CORE_ABLATION")
+
+
+def test_failed_historical_root_untouched():
+    failed = PROJECT_ROOT / "outputs" / "runs" / "20260821_220124_MS_KATL_AE_CORE_ABLATION"
+    assert failed.name == "20260821_220124_MS_KATL_AE_CORE_ABLATION"
+    if failed.exists():
+        assert list(failed.iterdir()) == []
