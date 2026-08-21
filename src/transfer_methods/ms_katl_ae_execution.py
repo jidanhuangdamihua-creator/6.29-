@@ -27,10 +27,14 @@ from src.transfer_methods.ms_katl_ae_ablation import (
     PROTOCOL_VERSION,
     SCENARIO,
     SEEDS,
+    STAGE_A_LEARNING_RATE,
+    STAGE_B_BATCH_SIZE,
+    STAGE_B_EPOCHS,
     AEContractError,
     AERunIdentity,
     AESyntheticStageA,
     AETrainingBlocked,
+    assert_formal_training_permitted,
     ae_arm_spec,
     ae_optimizer_contract,
     ae_protocol_manifest_payload,
@@ -324,6 +328,129 @@ def enumerate_real_canonical_cell_plans(project_root: Optional[Path] = None) -> 
     if len(set(keys)) != EXPECTED_CANONICAL_CELLS:
         raise AEContractError("duplicate Stage-A keys in real cell plans")
     return plans
+
+
+STAGE_A_KWARG_KEYS: Tuple[str, ...] = (
+    "source_df",
+    "target_df",
+    "feature_cols",
+    "k",
+    "horizon",
+    "window_size",
+    "weight_mode",
+    "learning_rate",
+    "source_epochs",
+    "batch_size",
+    "tau_k",
+    "group_cols",
+)
+SHARED_BUNDLE_INPUT_KEYS: Tuple[str, ...] = (
+    "target_identity",
+    "entity_key",
+    "target_split_identity",
+    "knn_diagnostic_sources",
+    "source_pool_authority",
+    "source_selection_contract",
+)
+
+
+def plan_formal_stage_a_kwargs(
+    cell: RealCanonicalCellPlan,
+    *,
+    project_root: Optional[Path] = None,
+    knn_cache: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Resolve Stage-A kwargs / shared-bundle inputs without calling source training."""
+    from src.protocols.formal_input_paths import FormalInputPathError, resolve_formal_dataset_paths
+
+    root = project_root_from(project_root)
+    knn_dir = root / "configs" / "solidified" / "knn" / f"Dataset{dataset_number(cell.dataset)}"
+    if not knn_dir.is_dir():
+        raise AEContractError(f"KNN authority missing for {cell.stage_a_key}: {knn_dir}")
+    cache = knn_cache if knn_cache is not None else {}
+    if cell.dataset not in cache:
+        cache[cell.dataset] = load_knn_results(knn_dir, SCREENING_MODE)
+    payload = cache[cell.dataset]
+    group_cols = payload.get("group_cols")
+    if not isinstance(group_cols, list) or not group_cols:
+        raise AEContractError(f"KNN group_cols missing for {cell.stage_a_key}")
+    if not cell.knn_diagnostic_sources or len(cell.knn_diagnostic_sources) < REQUESTED_K:
+        raise AEContractError(f"KNN diagnostic sources unresolved for {cell.stage_a_key}")
+    if not cell.target_identity or not cell.entity_key:
+        raise AEContractError(f"target identity unresolved for {cell.stage_a_key}")
+    try:
+        paths = resolve_formal_dataset_paths(dataset_number(cell.dataset), repository_root=root)
+    except FormalInputPathError as exc:
+        raise AEContractError(f"FORMAL_DATA_UNRESOLVABLE {cell.stage_a_key}: {exc}") from exc
+    for label, path in (
+        ("source_parquet", paths.source_path),
+        ("target_parquet", paths.target_path),
+        ("dataset_manifest", paths.dataset_manifest_path),
+        ("source_schema", paths.source_schema_path),
+        ("target_schema", paths.target_schema_path),
+    ):
+        if not Path(path).is_file():
+            raise AEContractError(f"{label} missing for {cell.stage_a_key}: {path}")
+    kwargs_plan = {
+        "source_df": {"authority": "SEALED_SOURCE_PARQUET", "path": str(paths.source_path)},
+        "target_df": {"authority": "SEALED_TARGET_PARQUET", "path": str(paths.target_path)},
+        "feature_cols": {"authority": "FROZEN_V3_MODEL_FEATURE_COLS", "status": "BOUND_AT_FRAME_LOAD"},
+        "k": REQUESTED_K,
+        "horizon": int(cell.horizon),
+        "window_size": 10,
+        "weight_mode": "inverse_distance",
+        "learning_rate": float(STAGE_A_LEARNING_RATE),
+        "source_epochs": int(STAGE_B_EPOCHS),
+        "batch_size": int(STAGE_B_BATCH_SIZE),
+        "tau_k": 1.0,
+        "group_cols": tuple(group_cols),
+    }
+    missing_kwargs = [key for key in STAGE_A_KWARG_KEYS if key not in kwargs_plan]
+    if missing_kwargs:
+        raise AEContractError(f"stage_a_kwargs incomplete for {cell.stage_a_key}: {missing_kwargs}")
+    bundle_inputs = {
+        "target_identity": cell.target_identity,
+        "entity_key": cell.entity_key,
+        "target_split_identity": cell.target_split_identity,
+        "knn_diagnostic_sources": tuple(cell.knn_diagnostic_sources),
+        "source_pool_authority": cell.source_pool_authority,
+        "source_selection_contract": cell.source_selection_contract,
+    }
+    missing_bundle = [key for key in SHARED_BUNDLE_INPUT_KEYS if not bundle_inputs.get(key)]
+    if missing_bundle:
+        raise AEContractError(f"shared_target_bundle inputs missing for {cell.stage_a_key}: {missing_bundle}")
+    return {
+        "stage_a_key": cell.stage_a_key,
+        "stage_a_kwargs": kwargs_plan,
+        "shared_target_bundle_inputs": bundle_inputs,
+        "sealed_dataset_root": str(paths.dataset_root),
+    }
+
+
+def resolve_all_formal_stage_a_input_plans(
+    cells: Sequence[RealCanonicalCellPlan],
+    *,
+    project_root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    knn_cache: Dict[str, Dict[str, Any]] = {}
+    plans: List[Dict[str, Any]] = []
+    failures: List[Dict[str, str]] = []
+    for cell in cells:
+        try:
+            plans.append(plan_formal_stage_a_kwargs(cell, project_root=project_root, knn_cache=knn_cache))
+        except AEContractError as exc:
+            failures.append({"stage_a_key": cell.stage_a_key, "reason": str(exc)})
+    total = len(cells)
+    resolved = len(plans)
+    ok = not failures and resolved == EXPECTED_CANONICAL_CELLS and total == EXPECTED_CANONICAL_CELLS
+    return {
+        "REAL_DATA_FORMAL_PRECHECK": "PASS" if ok else "FAIL",
+        "REAL_STAGE_A_KWARGS_RESOLUTION": f"{resolved}/{total} PASS" if ok else "FAIL",
+        "resolved_count": resolved,
+        "cell_count": total,
+        "failures": failures,
+        "plans": plans if ok else [],
+    }
 
 
 def planned_arm_for(cell: RealCanonicalCellPlan, arm: str) -> RealArmPlan:
@@ -741,13 +868,15 @@ def format_dry_run(report: Mapping[str, Any]) -> str:
         f"ARM_BUILD_ORDER_INVARIANCE={report['ARM_BUILD_ORDER_INVARIANCE']}",
         "",
         f"D_PARENT_IDENTITY={report['D_PARENT_IDENTITY']}",
+        f"D_EQUALS_FROZEN_V3={report['D_PARENT_IDENTITY']}",
         "",
         f"TRAINING_GUARD={report['TRAINING_GUARD']}",
         "TRAINING_STARTED=NO",
         "",
-        "FORMAL_EXECUTION_BLOCKED=YES",
-        f"FORMAL_EXECUTION_ENABLED={str(AE_FORMAL_EXECUTION_ENABLED).upper()}",
-        f"AE_FORMAL_EXECUTION_IMPLEMENTED={str(AE_FORMAL_EXECUTION_IMPLEMENTED).upper()}",
+        f"FORMAL_EXECUTION_CAPABILITY={'ENABLED' if AE_FORMAL_EXECUTION_ENABLED else 'DISABLED'}",
+        "ACTUAL_EXECUTION_REQUESTED=NO",
+        f"FORMAL_EXECUTION_ENABLED={'YES' if AE_FORMAL_EXECUTION_ENABLED else 'NO'}",
+        f"AE_FORMAL_EXECUTION_IMPLEMENTED={'YES' if AE_FORMAL_EXECUTION_IMPLEMENTED else 'NO'}",
     ]
     return "\n".join(lines) + "\n"
 
@@ -775,7 +904,12 @@ def run_ae_dry_run(
     unique_stage_a = len({cell.stage_a_key for cell in cells})
     training_guard = "PASS"
     try:
-        assert_phase_allowed(AEExecutionMode.FORMAL, AEExecutionPhase.STAGE_A_TRAIN)
+        assert_phase_allowed(AEExecutionMode.DRY_RUN, AEExecutionPhase.STAGE_A_TRAIN)
+        training_guard = "FAIL"
+    except AETrainingBlocked:
+        pass
+    try:
+        assert_formal_training_permitted(execute=False)
         training_guard = "FAIL"
     except AETrainingBlocked:
         pass

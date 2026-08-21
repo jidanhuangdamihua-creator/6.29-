@@ -349,10 +349,14 @@ def test_training_guard_blocks_without_unlock():
         run_ae_formal_matrix(execute=False)
     with pytest.raises(AETrainingBlocked, match="FORMAL_TRAINING_BLOCKED"):
         run_ae_formal_matrix(execute=True, environ={})
-    with pytest.raises(AETrainingBlocked, match="FORMAL_EXECUTION_BLOCKED"):
-        assert_formal_training_permitted(execute=True, environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"})
-    assert AE_EXECUTION_BODY_ENABLED is False
-    assert AE_FORMAL_EXECUTION_ENABLED is False
+    with pytest.raises(AETrainingBlocked, match="FORMAL_TRAINING_BLOCKED"):
+        assert_formal_training_permitted(execute=True, environ={})
+    with pytest.raises(AETrainingBlocked, match="FORMAL_TRAINING_BLOCKED"):
+        assert_formal_training_permitted(
+            execute=False, environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"}
+        )
+    assert AE_EXECUTION_BODY_ENABLED is True
+    assert AE_FORMAL_EXECUTION_ENABLED is True
     assert AE_FORMAL_EXECUTION_IMPLEMENTED is True
 
 
@@ -397,9 +401,9 @@ def test_pairwise_report_and_manifest_match_code():
     assert manifest["expected_canonical_cells"] == 54
     assert manifest["expected_runs"] == 270
     assert manifest["training_recipe"] == ae_training_recipe()
-    assert manifest["execution_body_enabled"] is False
+    assert manifest["execution_body_enabled"] is True
     assert manifest["formal_execution_implemented"] is True
-    assert manifest["formal_execution_enabled"] is False
+    assert manifest["formal_execution_enabled"] is True
 
 
 def test_write_formal_plan_never_writes_metrics(tmp_path):
@@ -446,10 +450,11 @@ def test_real_cell_routing_stage_a_call_count_and_keys():
     assert assert_recipe_equality(graph["arm_plans"]) == "PASS"
     assert assert_d_parent_identity(graph["arm_plans"]) == "PASS"
     assert classify_paired_bundle({"A": "OK", "B": "OK", "C": "OK", "D": "OK", "E": "FAILED"}) == "PAIR_INCOMPLETE"
-    with pytest.raises(AETrainingBlocked, match="FORMAL_EXECUTION_BLOCKED"):
-        assert_phase_allowed(AEExecutionMode.FORMAL, AEExecutionPhase.STAGE_A_TRAIN)
+    assert_phase_allowed(AEExecutionMode.FORMAL, AEExecutionPhase.STAGE_A_TRAIN)
     with pytest.raises(AETrainingBlocked, match="TRAINING_FORBIDDEN_DURING_REAL_DRY_RUN"):
         assert_phase_allowed(AEExecutionMode.DRY_RUN, AEExecutionPhase.TRAIN_STAGE_B)
+    with pytest.raises(AETrainingBlocked, match="TRAINING_FORBIDDEN_DURING_REAL_DRY_RUN"):
+        assert_phase_allowed(AEExecutionMode.DRY_RUN, AEExecutionPhase.STAGE_A_TRAIN)
     with pytest.raises(AEContractError, match="resume root missing"):
         validate_resume_root(PROJECT_ROOT / "outputs" / "preflight" / "missing_resume")
 

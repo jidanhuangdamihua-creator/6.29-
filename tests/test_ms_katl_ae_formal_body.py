@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -27,6 +28,7 @@ from src.transfer_methods.ms_katl_ae_ablation import (
 from src.transfer_methods.ms_katl_ae_execution import (
     enumerate_real_arm_plans,
     enumerate_real_canonical_cell_plans,
+    resolve_all_formal_stage_a_input_plans,
 )
 from src.transfer_methods.ms_katl_ae_formal import (
     AE_METRIC_AUTHORITY,
@@ -187,16 +189,26 @@ def test_d_never_loads_old_v3_rmse():
     assert AE_METRIC_AUTHORITY is compute_screening_metrics
 
 
-def test_unlock_cannot_bypass_disabled_switch():
-    assert AE_FORMAL_EXECUTION_ENABLED is False
-    with pytest.raises(AETrainingBlocked, match="FORMAL_EXECUTION_BLOCKED"):
+def test_unlock_without_execute_does_not_train():
+    assert AE_FORMAL_EXECUTION_ENABLED is True
+    with pytest.raises(AETrainingBlocked, match="FORMAL_TRAINING_BLOCKED"):
         assert_formal_training_permitted(
-            execute=True, environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"}
+            execute=False, environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"}
         )
-    with pytest.raises(AETrainingBlocked, match="FORMAL_EXECUTION_BLOCKED"):
-        run_ae_formal_matrix(execute=True, environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"})
-    with pytest.raises(AETrainingBlocked, match="FORMAL_EXECUTION_BLOCKED"):
-        run_ae_formal_body(execute=True, environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"})
+    with pytest.raises(AETrainingBlocked, match="FORMAL_TRAINING_BLOCKED"):
+        run_ae_formal_matrix(execute=False, environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"})
+    with pytest.raises(AETrainingBlocked, match="FORMAL_TRAINING_BLOCKED"):
+        run_ae_formal_body(execute=False, environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"})
+
+
+def test_execute_without_unlock_is_blocked():
+    assert AE_FORMAL_EXECUTION_ENABLED is True
+    with pytest.raises(AETrainingBlocked, match="FORMAL_TRAINING_BLOCKED"):
+        assert_formal_training_permitted(execute=True, environ={})
+    with pytest.raises(AETrainingBlocked, match="FORMAL_TRAINING_BLOCKED"):
+        run_ae_formal_matrix(execute=True, environ={})
+    with pytest.raises(AETrainingBlocked, match="FORMAL_TRAINING_BLOCKED"):
+        run_ae_formal_body(execute=True, environ={})
 
 
 def test_formal_preflight_never_trains(monkeypatch):
@@ -210,8 +222,14 @@ def test_formal_preflight_never_trains(monkeypatch):
     result = run_ae_formal_preflight(project_root=PROJECT_ROOT, write_artifacts=False)
     assert result["FORMAL_PREFLIGHT"] == "PASS"
     assert result["TRAINING_STARTED"] == "NO"
-    assert result["AE_FORMAL_EXECUTION_ENABLED"] == "NO"
+    assert result["AE_FORMAL_EXECUTION_ENABLED"] == "YES"
+    assert result["FORMAL_EXECUTION_CAPABILITY"] == "ENABLED"
+    assert result["ACTUAL_EXECUTION_REQUESTED"] == "NO"
     assert result["D_OLD_RESULT_REUSE"] == "NO"
+    assert result["REAL_DATA_FORMAL_PRECHECK"] == "PASS"
+    assert result["REAL_STAGE_A_KWARGS_RESOLUTION"] == "54/54 PASS"
+    assert "FORMAL_EXECUTION_BLOCKED_BECAUSE_ENABLE_FALSE" not in result["text"]
+    assert "outputs/runs/<timestamp>_MS_KATL_AE_CORE_ABLATION" in result["text"]
 
 
 def test_mock_metrics_are_not_real_results(cells, tmp_path):
@@ -222,3 +240,70 @@ def test_mock_metrics_are_not_real_results(cells, tmp_path):
         for arm in AE_ARMS:
             assert payload["arms"][arm]["rmse_original"] is None
             assert payload["arms"][arm]["metric_kind"] == MOCK_METRIC
+
+
+def _load_ae_runner():
+    path = PROJECT_ROOT / "scripts" / "run_ms_katl_ae_ablation.py"
+    spec = importlib.util.spec_from_file_location("run_ms_katl_ae_ablation_cli", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_cli_default_requires_explicit_mode_and_does_not_train(capsys):
+    runner = _load_ae_runner()
+    code = runner.main([])
+    captured = capsys.readouterr().out
+    assert code == 0
+    assert "EXPLICIT_MODE_REQUIRED=YES" in captured
+    assert "TRAINING_STARTED=NO" in captured
+    assert "ACTUAL_EXECUTION_REQUESTED=NO" in captured
+
+
+def test_cli_execute_without_unlock_is_blocked(capsys, monkeypatch):
+    monkeypatch.delenv(FORMAL_TRAINING_UNLOCK_ENV, raising=False)
+    runner = _load_ae_runner()
+    code = runner.main(["--execute"])
+    captured = capsys.readouterr().out
+    assert code == 2
+    assert "FORMAL_EXECUTION_BLOCKED" in captured
+    assert "TRAINING_STARTED=NO" in captured
+
+
+def test_cli_unlock_without_execute_does_not_train(capsys, monkeypatch):
+    monkeypatch.setenv(FORMAL_TRAINING_UNLOCK_ENV, "YES")
+    runner = _load_ae_runner()
+    code = runner.main(["--preflight"])
+    captured = capsys.readouterr().out
+    assert code == 0
+    assert "TRAINING_STARTED=NO" in captured
+    assert "ACTUAL_EXECUTION_REQUESTED=NO" in captured
+
+
+def test_real_stage_a_kwargs_resolution_is_54_of_54():
+    cells = enumerate_real_canonical_cell_plans(project_root=PROJECT_ROOT)
+    report = resolve_all_formal_stage_a_input_plans(cells, project_root=PROJECT_ROOT)
+    assert report["REAL_DATA_FORMAL_PRECHECK"] == "PASS"
+    assert report["REAL_STAGE_A_KWARGS_RESOLUTION"] == "54/54 PASS"
+    assert report["resolved_count"] == 54
+    assert report["failures"] == []
+    assert len(report["plans"]) == 54
+    for plan in report["plans"]:
+        assert set(plan["stage_a_kwargs"]) >= {
+            "source_df",
+            "target_df",
+            "feature_cols",
+            "k",
+            "horizon",
+            "window_size",
+            "learning_rate",
+            "source_epochs",
+            "batch_size",
+            "tau_k",
+            "group_cols",
+        }
+        assert Path(plan["stage_a_kwargs"]["source_df"]["path"]).is_file()
+        assert Path(plan["stage_a_kwargs"]["target_df"]["path"]).is_file()
+        assert plan["shared_target_bundle_inputs"]["target_identity"]
+        assert len(plan["shared_target_bundle_inputs"]["knn_diagnostic_sources"]) == 3

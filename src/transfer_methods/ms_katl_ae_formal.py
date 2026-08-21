@@ -1,6 +1,7 @@
 """Formal A–E execution body bound to frozen V3 Stage-A / Stage-B / metric authorities.
 
-Real training remains unreachable unless AE_FORMAL_EXECUTION_ENABLED is flipped.
+Real training remains unreachable unless AE_FORMAL_EXECUTION_ENABLED is True
+and both CLI `--execute` and AE_FORMAL_TRAINING_UNLOCK=YES are present.
 Tests may inject mock authorities with mock_execution_authorized=True.
 """
 
@@ -18,6 +19,7 @@ from src.transfer_methods.ms_katl_ae_ablation import (
     AE_FORMAL_EXECUTION_ENABLED,
     EXPECTED_CANONICAL_CELLS,
     EXPECTED_RUNS,
+    FORMAL_TRAINING_UNLOCK_ENV,
     PARENT_METHOD,
     PROTOCOL_VERSION,
     AEContractError,
@@ -31,6 +33,7 @@ from src.transfer_methods.ms_katl_ae_ablation import (
     load_ae_manifest,
     project_root_from,
     reset_ae_rng,
+    run_ae_preflight,
 )
 from src.transfer_methods.ms_katl_ae_execution import (
     AE_RUN_LABEL,
@@ -41,6 +44,7 @@ from src.transfer_methods.ms_katl_ae_execution import (
     enumerate_real_arm_plans,
     enumerate_real_canonical_cell_plans,
     planned_formal_run_root,
+    resolve_all_formal_stage_a_input_plans,
     validate_resume_root,
 )
 from src.transfer_methods.ms_katl_fto_three_track_robustness import (
@@ -605,7 +609,7 @@ def run_ae_formal_body(
     ledger: Optional[FormalCallLedger] = None,
     cells: Optional[Sequence[RealCanonicalCellPlan]] = None,
 ) -> Dict[str, Any]:
-    """Canonical formal orchestration. Real trainers stay blocked without ENABLED."""
+    """Canonical formal orchestration. Real trainers stay blocked without dual lock."""
     if resume_root is not None and output_root is None:
         output_root = Path(resume_root)
     if not mock_execution_authorized:
@@ -794,13 +798,26 @@ def run_ae_formal_preflight(
     git_info = git_provenance(root)
     source = Path(__file__).read_text(encoding="utf-8")
     old_reuse = assert_no_old_v3_result_injection(source)
-    if AE_FORMAL_EXECUTION_ENABLED:
-        raise AEContractError("formal preflight requires ENABLED=NO")
+    preflight = run_ae_preflight(project_root=root, include_construction_contracts=True)
+    pairwise = preflight["pairwise"]
+    kwargs_report = resolve_all_formal_stage_a_input_plans(cells, project_root=root)
+    training_guard = "PASS"
     try:
-        run_ae_formal_body(execute=True, environ={"AE_FORMAL_TRAINING_UNLOCK": "YES"})
+        assert_formal_training_permitted(execute=True, environ={})
         training_guard = "FAIL"
-    except AETrainingBlocked as exc:
-        training_guard = "PASS" if "FORMAL_EXECUTION_BLOCKED" in str(exc) else "FAIL"
+    except AETrainingBlocked:
+        pass
+    try:
+        assert_formal_training_permitted(
+            execute=False,
+            environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"},
+        )
+        training_guard = "FAIL"
+    except AETrainingBlocked:
+        pass
+    enabled = "YES" if AE_FORMAL_EXECUTION_ENABLED else "NO"
+    unique_run_keys = len({item.run_key for item in arms})
+    unique_stage_a = len({cell.stage_a_key for cell in cells})
     payload = {
         "AE_PROTOCOL_VERSION": PROTOCOL_VERSION,
         "REAL_STAGE_A_AUTHORITY": authorities["REAL_STAGE_A_AUTHORITY"],
@@ -809,26 +826,58 @@ def run_ae_formal_preflight(
         "REAL_METRIC_AUTHORITY": authorities["REAL_METRIC_AUTHORITY"],
         "CANONICAL_CELLS": len(cells),
         "PLANNED_RUNS": len(arms),
-        "UNIQUE_STAGE_A_KEYS": len({cell.stage_a_key for cell in cells}),
+        "UNIQUE_RUN_KEYS": unique_run_keys,
+        "UNIQUE_STAGE_A_KEYS": unique_stage_a,
         "STAGE_A_AUTHORITY_NAME": AE_STAGE_A_AUTHORITY.__name__,
         "STAGE_B_AUTHORITY_NAME": AE_STAGE_B_AUTHORITY.__name__,
         "PREDICTION_AUTHORITY_NAME": AE_PREDICTION_AUTHORITY.__name__,
         "METRIC_AUTHORITY_NAME": AE_METRIC_AUTHORITY.__name__,
-        "AE_FORMAL_EXECUTION_ENABLED": "NO",
+        "AE_FORMAL_EXECUTION_ENABLED": enabled,
+        "FORMAL_EXECUTION_CAPABILITY": "ENABLED" if AE_FORMAL_EXECUTION_ENABLED else "DISABLED",
+        "ACTUAL_EXECUTION_REQUESTED": "NO",
         "TRAINING_GUARD": training_guard,
         "D_OLD_RESULT_REUSE": old_reuse,
+        "D_EQUALS_FROZEN_V3": preflight["d_identity"]["ARM_D_PARENT_V3_IDENTITY"],
+        "A_C_SINGLE_FACTOR": pairwise.get("A_C_SINGLE_FACTOR_CONTRACT", "FAIL"),
+        "B_C_SINGLE_FACTOR": pairwise.get("B_C_SINGLE_FACTOR_CONTRACT", "FAIL"),
+        "C_E_SINGLE_FACTOR": pairwise.get("C_E_SINGLE_FACTOR_CONTRACT", "FAIL"),
+        "C_D_SINGLE_FACTOR": pairwise.get("C_D_SINGLE_FACTOR_CONTRACT", "FAIL"),
+        "LR_CONTRACT": "PASS",
+        "RECIPE_CONTRACT": "PASS",
         "FORMAL_GIT_FREEZE_REQUIRED": git_info["FORMAL_GIT_FREEZE_REQUIRED"],
         "git": git_info,
         "planned_formal_run_root_pattern": str(planned_formal_run_root("<timestamp>")),
+        "REAL_DATA_FORMAL_PRECHECK": kwargs_report["REAL_DATA_FORMAL_PRECHECK"],
+        "REAL_STAGE_A_KWARGS_RESOLUTION": kwargs_report["REAL_STAGE_A_KWARGS_RESOLUTION"],
+        "REAL_STAGE_A_KWARGS_FAILURES": kwargs_report["failures"],
         "TRAINING_STARTED": "NO",
+    }
+    artifact = {
+        key: value
+        for key, value in payload.items()
+        if key != "REAL_STAGE_A_KWARGS_FAILURES" or value
     }
     if write_artifacts:
         out = root / PREFLIGHT_RELPATH
         out.mkdir(parents=True, exist_ok=True)
         (out / "formal_preflight_report.json").write_text(
-            json.dumps(payload, indent=2, default=str) + "\n", encoding="utf-8"
+            json.dumps(artifact, indent=2, default=str) + "\n", encoding="utf-8"
         )
-    ok = training_guard == "PASS" and old_reuse == "NO"
+    ok = (
+        training_guard == "PASS"
+        and old_reuse == "NO"
+        and payload["CANONICAL_CELLS"] == EXPECTED_CANONICAL_CELLS
+        and payload["PLANNED_RUNS"] == EXPECTED_RUNS
+        and unique_run_keys == EXPECTED_RUNS
+        and unique_stage_a == EXPECTED_CANONICAL_CELLS
+        and payload["A_C_SINGLE_FACTOR"] == "PASS"
+        and payload["B_C_SINGLE_FACTOR"] == "PASS"
+        and payload["C_E_SINGLE_FACTOR"] == "PASS"
+        and payload["C_D_SINGLE_FACTOR"] == "PASS"
+        and payload["D_EQUALS_FROZEN_V3"] == "PASS"
+        and kwargs_report["REAL_DATA_FORMAL_PRECHECK"] == "PASS"
+        and AE_FORMAL_EXECUTION_ENABLED
+    )
     lines = [
         f"AE_PROTOCOL_VERSION={PROTOCOL_VERSION}",
         f"REAL_STAGE_A_AUTHORITY={payload['REAL_STAGE_A_AUTHORITY']}",
@@ -837,11 +886,24 @@ def run_ae_formal_preflight(
         f"REAL_METRIC_AUTHORITY={payload['REAL_METRIC_AUTHORITY']}",
         f"CANONICAL_CELLS={payload['CANONICAL_CELLS']}",
         f"PLANNED_RUNS={payload['PLANNED_RUNS']}",
+        f"UNIQUE_RUN_KEYS={payload['UNIQUE_RUN_KEYS']}",
         f"UNIQUE_STAGE_A_KEYS={payload['UNIQUE_STAGE_A_KEYS']}",
-        "FORMAL_EXECUTION_ENABLED=NO",
+        f"LR_CONTRACT={payload['LR_CONTRACT']}",
+        f"RECIPE_CONTRACT={payload['RECIPE_CONTRACT']}",
+        f"A_C_SINGLE_FACTOR={payload['A_C_SINGLE_FACTOR']}",
+        f"B_C_SINGLE_FACTOR={payload['B_C_SINGLE_FACTOR']}",
+        f"C_E_SINGLE_FACTOR={payload['C_E_SINGLE_FACTOR']}",
+        f"C_D_SINGLE_FACTOR={payload['C_D_SINGLE_FACTOR']}",
+        f"D_EQUALS_FROZEN_V3={payload['D_EQUALS_FROZEN_V3']}",
+        f"FORMAL_EXECUTION_CAPABILITY={payload['FORMAL_EXECUTION_CAPABILITY']}",
+        f"ACTUAL_EXECUTION_REQUESTED={payload['ACTUAL_EXECUTION_REQUESTED']}",
+        f"AE_FORMAL_EXECUTION_ENABLED={enabled}",
         f"TRAINING_GUARD={training_guard}",
         f"D_OLD_RESULT_REUSE={old_reuse}",
         f"FORMAL_GIT_FREEZE_REQUIRED={payload['FORMAL_GIT_FREEZE_REQUIRED']}",
+        f"REAL_DATA_FORMAL_PRECHECK={payload['REAL_DATA_FORMAL_PRECHECK']}",
+        f"REAL_STAGE_A_KWARGS_RESOLUTION={payload['REAL_STAGE_A_KWARGS_RESOLUTION']}",
+        f"planned_formal_run_root={payload['planned_formal_run_root_pattern']}",
         "TRAINING_STARTED=NO",
         f"FORMAL_PREFLIGHT={'PASS' if ok else 'FAIL'}",
     ]

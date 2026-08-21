@@ -116,7 +116,7 @@
     "fused_frozen_backbone"
   ],
   "formal_training_unlock_env": "AE_FORMAL_TRAINING_UNLOCK",
-  "execution_body_enabled": false,
+  "execution_body_enabled": true,
   "formal_execution_implemented": true,
-  "formal_execution_enabled": false
+  "formal_execution_enabled": true
 }

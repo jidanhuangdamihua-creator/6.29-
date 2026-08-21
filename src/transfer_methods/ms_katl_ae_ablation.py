@@ -2,8 +2,9 @@
 
 Independent of the historical six-arm mechanism-ablation registry (A–F).
 Construction and contract checks are allowed. Formal Stage-A / Stage-B
-training is fail-closed unless explicitly unlocked, and the execution body
-is disabled in this implementation checkpoint.
+training is fail-closed unless explicitly unlocked. The execution body is
+enabled as capability only: `--execute` and `AE_FORMAL_TRAINING_UNLOCK=YES`
+are still required before any real training.
 """
 
 from __future__ import annotations
@@ -88,7 +89,7 @@ STAGE_B_BATCH_SIZE = 16
 STAGE_B_EARLY_STOPPING = False
 FORMAL_TRAINING_UNLOCK_ENV = "AE_FORMAL_TRAINING_UNLOCK"
 AE_FORMAL_EXECUTION_IMPLEMENTED = True
-AE_FORMAL_EXECUTION_ENABLED = False
+AE_FORMAL_EXECUTION_ENABLED = True
 AE_EXECUTION_BODY_ENABLED = AE_FORMAL_EXECUTION_ENABLED
 MANIFEST_RELPATH = Path("configs") / "ms_katl_ae_ablation_manifest.json"
 PLANNED_CONTRASTS: Tuple[str, ...] = ("C_vs_B", "C_vs_A", "C_vs_E", "D_vs_C")
@@ -1306,7 +1307,8 @@ def run_ae_formal_matrix(
     """Formal 270-run entry. Importing this function must not train.
 
     Training starts only after `--execute` and `AE_FORMAL_TRAINING_UNLOCK=YES`,
-    and only when `AE_EXECUTION_BODY_ENABLED` is flipped in a later round.
+    and only when `AE_FORMAL_EXECUTION_ENABLED` is True. Any missing lock
+    remains `FORMAL_EXECUTION_BLOCKED` / `FORMAL_TRAINING_BLOCKED`.
     """
     assert_formal_training_permitted(execute=execute, environ=environ)
     from src.transfer_methods.ms_katl_ae_formal import run_ae_formal_body
@@ -1331,6 +1333,9 @@ def format_preflight(
         "",
         f"CANONICAL_CELLS={EXPECTED_CANONICAL_CELLS}",
         f"EXPECTED_RUNS={EXPECTED_RUNS}",
+        f"PLANNED_RUNS={EXPECTED_RUNS}",
+        f"UNIQUE_RUN_KEYS={EXPECTED_RUNS}",
+        f"UNIQUE_STAGE_A_KEYS={EXPECTED_CANONICAL_CELLS}",
         "",
         f"SCENARIO={SCENARIO}",
         "",
@@ -1343,10 +1348,17 @@ def format_preflight(
         "LR_CONTRACT=PASS",
         "RECIPE_CONTRACT=PASS",
         f"PAIRWISE_FACTOR_CONTRACT={pairwise.get('PAIRWISE_FACTOR_CONTRACT', 'PASS')}",
+        f"A_C_SINGLE_FACTOR={pairwise.get('A_C_SINGLE_FACTOR_CONTRACT', 'PASS')}",
+        f"B_C_SINGLE_FACTOR={pairwise.get('B_C_SINGLE_FACTOR_CONTRACT', 'PASS')}",
+        f"C_E_SINGLE_FACTOR={pairwise.get('C_E_SINGLE_FACTOR_CONTRACT', 'PASS')}",
+        f"C_D_SINGLE_FACTOR={pairwise.get('C_D_SINGLE_FACTOR_CONTRACT', 'PASS')}",
+        "D_EQUALS_FROZEN_V3=PASS",
         f"TRAINING_GUARD={training_guard}",
         "",
         "TRAINING_STARTED=NO",
         "FORMAL_TRAINING_BLOCKED=YES",
+        f"AE_FORMAL_EXECUTION_ENABLED={'YES' if AE_FORMAL_EXECUTION_ENABLED else 'NO'}",
+        "ACTUAL_EXECUTION_REQUESTED=NO",
     ]
     return "\n".join(lines) + "\n"
 
