@@ -896,6 +896,94 @@ def construct_all_ae_arms(
     return arms
 
 
+def build_ae_stage_a_from_shared_bundle(shared_bundle: Any) -> AESyntheticStageA:
+    """Adapt frozen V3 MSKATLSharedBundle → AESyntheticStageA for construct_ae_arm.
+
+    Construction-only bridge. Does not train. Reuses the same snapshot helpers as
+    the synthetic Stage-A path so A–E arm construction stays single-authority.
+    """
+    artifacts = shared_bundle.stage_a
+    if not getattr(artifacts, "source_identities", None):
+        raise AEContractError("shared bundle Stage A has no sources")
+    layer_names = list(artifacts.layer_names)
+    if tuple(layer_names) != CONV_LAYER_NAMES:
+        raise AEContractError(f"transferable layers drifted: {layer_names}")
+    models = list(artifacts.source_models)
+    if len(models) != len(artifacts.source_identities):
+        raise AEContractError("source model / identity count mismatch")
+    conv_params = [extract_layer_params(model, layer_names) for model in models]
+    dense_out = [
+        [np.array(weight, copy=True) for weight in model.get_layer("dense_out").get_weights()]
+        for model in models
+    ]
+    snapshots = [
+        [np.array(weight, copy=True) for weight in item]
+        for item in artifacts.source_weight_snapshots
+    ]
+    identities = [tuple(item) for item in artifacts.source_identities]
+    distances = [float(value) for value in artifacts.source_distances]
+    weights = [float(value) for value in artifacts.source_weights]
+    if int(np.argmin(np.asarray(distances, dtype=np.float64))) != 0:
+        raise AEContractError("selected_sources[0] is not the nearest source")
+    rank1 = {
+        name: [np.array(array, copy=True) for array in conv_params[0][name]]
+        for name in CONV_LAYER_NAMES
+    }
+    learning_rate = float(shared_bundle.learning_rate)
+    seed = int(shared_bundle.seed)
+    input_shape = tuple(int(dim) for dim in artifacts.input_shape)
+    best_snapshot = best_source_target_init_snapshot(input_shape, learning_rate, rank1, seed=seed)
+    selection_digest = source_selection_digest(identities, distances, weights)
+    split_digest = {
+        str(key): str(value) for key, value in dict(shared_bundle.target_split_digest).items()
+    }
+    return AESyntheticStageA(
+        source_identities=identities,
+        source_distances=distances,
+        source_weights=weights,
+        selected_sources=list(artifacts.selected_sources),
+        input_shape=input_shape,
+        layer_names=layer_names,
+        source_conv_params=conv_params,
+        source_dense_out=dense_out,
+        source_weight_snapshots=snapshots,
+        source_weight_digests=[str(item) for item in artifacts.source_weight_digests],
+        fused_params={
+            name: [np.array(array, copy=True) for array in arrays]
+            for name, arrays in artifacts.fused_params.items()
+        },
+        fused_params_digest=str(artifacts.fused_params_digest),
+        fused_target_snapshot=[np.array(weight, copy=True) for weight in shared_bundle.fused_target_snapshot],
+        native_target_snapshot=[np.array(weight, copy=True) for weight in shared_bundle.raw_target_snapshot],
+        best_source_snapshot=best_snapshot,
+        fused_target_digest=str(shared_bundle.fused_target_digest),
+        native_target_digest=str(shared_bundle.raw_target_digest),
+        best_source_snapshot_digest=conv_params_digest(rank1),
+        source_selection_digest=selection_digest,
+        stage_a_digest=_json_digest(
+            {
+                "selection": selection_digest,
+                "source_weight_digests": list(artifacts.source_weight_digests),
+                "fused_params_digest": str(artifacts.fused_params_digest),
+            }
+        ),
+        knn_prior=np.asarray(artifacts.knn_prior, dtype=np.float64),
+        X_train=np.asarray(shared_bundle.X_train),
+        y_train=np.asarray(shared_bundle.y_train),
+        X_val=np.asarray(shared_bundle.X_val),
+        y_val=np.asarray(shared_bundle.y_val),
+        X_test=np.asarray(shared_bundle.X_test),
+        y_test=np.asarray(shared_bundle.y_test),
+        target_split_digest=split_digest,
+        target_scaler_digest=str(split_digest.get("target_scaler", "")),
+        target_feature_columns=list(shared_bundle.target_feature_columns),
+        learning_rate=learning_rate,
+        seed=seed,
+        d_model=int(getattr(shared_bundle, "d_model", 0) or 0),
+        source_extractors=list(getattr(artifacts, "source_extractors", []) or []),
+    )
+
+
 def verify_shared_stage_a_arms(
     arms: Mapping[str, AEConstructedArm],
     stage_a: AESyntheticStageA,

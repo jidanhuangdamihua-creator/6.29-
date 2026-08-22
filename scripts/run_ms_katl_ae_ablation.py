@@ -23,6 +23,7 @@ import tf_compat  # noqa: F401
 
 from src.transfer_methods.ms_katl_ae_ablation import (
     AE_FORMAL_EXECUTION_ENABLED,
+    AEContractError,
     AETrainingBlocked,
     run_ae_formal_matrix,
     run_ae_preflight,
@@ -85,9 +86,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"AE_FORMAL_EXECUTION_ENABLED={enabled}")
             print("ACTUAL_EXECUTION_REQUESTED=YES")
             return 2
+        except AEContractError as exc:
+            print(str(exc))
+            print("FORMAL_COMPLETION_FAILED=YES")
+            print(f"AE_FORMAL_EXECUTION_ENABLED={enabled}")
+            print("ACTUAL_EXECUTION_REQUESTED=YES")
+            return 2
         text = result.get("text")
         if text:
             print(text, end="" if str(text).endswith("\n") else "\n")
+        pair_incomplete = int(result.get("PAIR_INCOMPLETE") or 0)
+        if pair_incomplete > 0:
+            print(f"PAIR_COMPLETE={result.get('PAIR_COMPLETE')}")
+            print(f"PAIR_INCOMPLETE={pair_incomplete}")
+            print("FORMAL_COMPLETION_FAILED=YES")
+            return 2
         return 0
     if args.formal_preflight:
         result = run_ae_formal_preflight(project_root=PROJECT_ROOT)

@@ -26,6 +26,7 @@ from src.transfer_methods.ms_katl_ae_ablation import (
     FORMAL_TRAINING_UNLOCK_ENV,
     PARENT_METHOD,
     PROTOCOL_VERSION,
+    AEConstructedArm,
     AEContractError,
     AETrainingBlocked,
     ae_arm_spec,
@@ -34,10 +35,13 @@ from src.transfer_methods.ms_katl_ae_ablation import (
     ae_training_recipe,
     assert_d_equals_frozen_v3,
     assert_formal_training_permitted,
+    build_ae_stage_a_from_shared_bundle,
+    construct_all_ae_arms,
     load_ae_manifest,
     project_root_from,
     reset_ae_rng,
     run_ae_preflight,
+    select_ae_trainable_variables,
 )
 from src.transfer_methods.ms_katl_ae_execution import (
     AE_RUN_LABEL,
@@ -63,11 +67,14 @@ from src.transfer_methods.ms_katl_fto_v3_screening import (
     v3_training_recipe,
 )
 from src.transfer_methods.ms_katl_lite import (
+    extract_features_maybe_revin,
     prepare_ms_katl_stage_a,
     predict_ms_katl_decomposed,
     train_ms_katl_head,
 )
+from src.transfer_methods.ms_katl_mechanism_ablation import prepare_shared_target_bundle
 from src.transfer_methods.ms_katl_primary_target_lr_screening import compute_screening_metrics
+from src.transfer_methods.ms_katl_v3_frame_assembly import WINDOW_SIZE
 
 AE_STAGE_A_AUTHORITY = prepare_ms_katl_stage_a
 AE_STAGE_B_AUTHORITY = train_ms_katl_head
@@ -75,6 +82,21 @@ AE_PREDICTION_AUTHORITY = predict_ms_katl_decomposed
 AE_METRIC_AUTHORITY = compute_screening_metrics
 MOCK_STATUS = "MOCK_ACCEPTANCE_ONLY"
 MOCK_METRIC = "MOCK_METRIC"
+REAL_METRIC_KIND = "rmse_original"
+AE_CONSTRUCTED_ARMS_KEY = "ae_constructed_arms"
+AE_STAGE_A_VIEW_KEY = "ae_stage_a"
+AE_SHARED_BUNDLE_KEY = "bundle"
+AE_HEAD_DIGEST_KEY = "head_target_init_digest"
+AE_EPHEMERAL_KEYS = (
+    AE_CONSTRUCTED_ARMS_KEY,
+    AE_STAGE_A_VIEW_KEY,
+    "stage_a_artifacts",
+    "head",
+    "target_extractor",
+    "trainable_variables",
+    "revin",
+    "_predict_payload",
+)
 
 
 def _json_digest(payload: Mapping[str, Any]) -> str:
@@ -175,12 +197,91 @@ class FormalCallLedger:
 class AEFormalAuthorities:
     prepare_context: Callable[[RealCanonicalCellPlan], Dict[str, Any]]
     prepare_stage_a: Callable[[RealCanonicalCellPlan, Dict[str, Any]], FormalStageAView]
-    make_common_head: Callable[[RealCanonicalCellPlan, FormalStageAView], str]
+    make_common_head: Callable[..., str]
     train_stage_b: Callable[..., FormalArmRuntime]
     predict: Callable[..., FormalArmRuntime]
     metric: Callable[..., FormalArmRuntime]
     publish: Callable[[RealCanonicalCellPlan, Dict[str, FormalArmRuntime], str, Path], None]
     reset_rng: Callable[[int], None]
+
+
+@dataclass
+class FormalArmEphemeralRuntime:
+    """In-memory per-arm construction objects. Never serialized into cell bundles."""
+
+    constructed: AEConstructedArm
+    trainable_variables: List[Any]
+
+
+def _context_arms(context: Mapping[str, Any]) -> Dict[str, AEConstructedArm]:
+    arms = context.get(AE_CONSTRUCTED_ARMS_KEY)
+    if not isinstance(arms, dict) or set(arms) != set(AE_ARMS):
+        raise AEContractError("formal context missing constructed A–E arm runtimes")
+    return arms  # type: ignore[return-value]
+
+
+def _bind_arm_trainables(context: Dict[str, Any], arm: str) -> FormalArmEphemeralRuntime:
+    constructed = _context_arms(context)[arm]
+    trainable = select_ae_trainable_variables(
+        constructed.head,
+        constructed.target_extractor,
+        constructed.spec,
+        constructed.revin,
+    )
+    if not trainable:
+        raise AEContractError(f"arm {arm} trainable_variables empty after construction")
+    ephemeral = FormalArmEphemeralRuntime(constructed=constructed, trainable_variables=trainable)
+    context["head"] = constructed.head
+    context["target_extractor"] = constructed.target_extractor
+    context["trainable_variables"] = trainable
+    context["revin"] = constructed.revin
+    context["_arm_ephemeral"] = ephemeral
+    return ephemeral
+
+
+def materialize_formal_ae_arms(
+    context: Dict[str, Any],
+    cell: RealCanonicalCellPlan,
+    *,
+    stage_a_artifacts: Any,
+) -> Tuple[str, Dict[str, AEConstructedArm]]:
+    """Build shared Stage-B bundle + A–E arms once per canonical cell (construction only)."""
+    live = context.get("live")
+    kwargs = dict(context.get("stage_a_kwargs") or {})
+    if live is None and not kwargs:
+        raise AEContractError("materialize_formal_ae_arms requires live context or stage_a_kwargs")
+    target_df = getattr(live, "target_df", None) if live is not None else kwargs.get("target_df")
+    feature_cols = (
+        list(getattr(live, "feature_cols", ()) or ())
+        if live is not None
+        else list(kwargs.get("feature_cols") or [])
+    )
+    if target_df is None or not feature_cols:
+        raise AEContractError("shared target bundle requires target_df and feature_cols")
+    shared = prepare_shared_target_bundle(
+        stage_a_artifacts,
+        target_df,
+        feature_cols,
+        horizon=int(cell.horizon),
+        window_size=int(kwargs.get("window_size") or WINDOW_SIZE),
+        learning_rate=float(kwargs.get("learning_rate") or cell.selected_lr),
+        seed=int(cell.seed),
+        transformation_reuse_context=kwargs.get("transformation_reuse_context"),
+    )
+    ae_stage = build_ae_stage_a_from_shared_bundle(shared)
+    arms = construct_all_ae_arms(
+        ae_stage,
+        seed=int(cell.seed),
+        selected_lr=float(cell.selected_lr),
+        recipe=ae_training_recipe(),
+    )
+    head_digest = str(arms["A"].head_target_init_digest)
+    context[AE_SHARED_BUNDLE_KEY] = shared
+    context[AE_STAGE_A_VIEW_KEY] = ae_stage
+    context[AE_CONSTRUCTED_ARMS_KEY] = arms
+    context[AE_HEAD_DIGEST_KEY] = head_digest
+    context["stage_a_artifacts"] = stage_a_artifacts
+    return head_digest, arms
 
 
 def assert_no_old_v3_result_injection(source_text: str) -> str:
@@ -358,16 +459,38 @@ def default_v3_prepare_context(
 
 def default_v3_prepare_stage_a(cell: RealCanonicalCellPlan, context: Mapping[str, Any]) -> FormalStageAView:
     _require_enabled_real_path()
-    live = context.get("live")
+    mutable = dict(context) if not isinstance(context, dict) else context
+    live = mutable.get("live")
     if live is not None and str(getattr(live, "stage_a_key", "")) != cell.stage_a_key:
         raise AEContractError("Stage A cell does not match live context")
-    kwargs = dict(context.get("stage_a_kwargs") or {})
+    kwargs = dict(mutable.get("stage_a_kwargs") or {})
     if not kwargs:
         raise AEContractError("missing stage_a_kwargs for prepare_ms_katl_stage_a")
     artifacts = AE_STAGE_A_AUTHORITY(**kwargs)
-    bundle = context.get("bundle")
-    fused_digest = str(getattr(bundle, "fused_target_digest", "") or "")
-    return stage_a_view_from_v3(artifacts, cell, fused_target_digest=fused_digest)
+    head_digest, _arms = materialize_formal_ae_arms(mutable, cell, stage_a_artifacts=artifacts)
+    shared = mutable[AE_SHARED_BUNDLE_KEY]
+    fused_digest = str(getattr(shared, "fused_target_digest", "") or "")
+    view = stage_a_view_from_v3(artifacts, cell, fused_target_digest=fused_digest)
+    mutable[AE_HEAD_DIGEST_KEY] = head_digest
+    if not isinstance(context, dict):
+        raise AEContractError("formal Stage-A context must be a mutable dict")
+    return view
+
+
+def default_v3_make_common_head(
+    cell: RealCanonicalCellPlan,
+    stage_a: FormalStageAView,
+    context: Optional[Mapping[str, Any]] = None,
+) -> str:
+    _require_enabled_real_path()
+    _ = (cell, stage_a)
+    if context is None or AE_HEAD_DIGEST_KEY not in context:
+        raise AEContractError("common head digest requires prior A–E arm materialization")
+    arms = _context_arms(context)
+    digests = {arm: arms[arm].head_target_init_digest for arm in AE_ARMS}
+    if len(set(digests.values())) != 1:
+        raise AEContractError(f"A–E head_target_init_digest diverged: {digests}")
+    return str(context[AE_HEAD_DIGEST_KEY])
 
 
 def default_v3_train_stage_b(
@@ -378,35 +501,39 @@ def default_v3_train_stage_b(
     context: Mapping[str, Any],
 ) -> FormalArmRuntime:
     _require_enabled_real_path()
+    if not isinstance(context, dict):
+        raise AEContractError("Stage-B requires mutable formal context")
     spec = ae_arm_spec(arm)
     if arm == "D":
         _ = v3_arm_spec()
         _ = v3_architecture()
         _ = v3_training_recipe()
-    bundle = context.get("bundle")
-    trainable = context.get("trainable_variables")
-    if bundle is None or trainable is None:
+    ephemeral = _bind_arm_trainables(context, arm)
+    constructed = ephemeral.constructed
+    bundle = context.get(AE_SHARED_BUNDLE_KEY)
+    if bundle is None:
         raise AEContractError("Stage-B V3 authority requires shared bundle and trainable variables")
+    if constructed.head_target_init_digest != head_digest:
+        raise AEContractError("Stage-B arm head digest drifted from common snapshot")
     opt = ae_optimizer_contract()
     recipe = ae_training_recipe()
     AE_STAGE_B_AUTHORITY(
-        context["head"],
+        constructed.head,
         x_train=bundle.X_train,
         f_t_train=bundle.f_t["train"],
         y_train=bundle.y_train,
         f_s_pools=bundle.f_s_pools,
         knn_prior=bundle.stage_a.knn_prior,
-        target_extractor=context["target_extractor"],
+        target_extractor=constructed.target_extractor,
         epochs=int(opt["epochs"]),
         batch_size=int(opt["batch_size"]),
         learning_rate=float(cell.selected_lr),
         seed=int(cell.seed),
         use_adversarial=False,
-        trainable_variables=trainable,
-        revin=context.get("revin"),
+        trainable_variables=ephemeral.trainable_variables,
+        revin=constructed.revin,
         **recipe,
     )
-    pred_count, trainable_count, frozen = _parameter_counts(arm)
     return FormalArmRuntime(
         arm=arm,
         spec=spec,
@@ -414,7 +541,7 @@ def default_v3_train_stage_b(
         source_init_consumed=spec.init_mode != "native",
         stage_a_shared_for_pairing=True,
         head_target_init_digest=head_digest,
-        target_initial_conv_digest=_arm_init_digest(cell, arm, stage_a),
+        target_initial_conv_digest=str(constructed.target_initial_conv_digest),
         fused_init_digest=stage_a.fused_target_digest,
         best_source_identity=stage_a.best_source_identity,
         best_source_snapshot_digest=stage_a.best_source_conv_digest,
@@ -426,36 +553,61 @@ def default_v3_train_stage_b(
         target_split_digest=stage_a.target_split_digest,
         parent_method=PARENT_METHOD,
         parent_v3_architecture_digest=v3_architecture_digest(),
-        prediction_path_parameter_count=pred_count,
-        trainable_prediction_path_parameter_count=trainable_count,
-        frozen_prediction_path_parameter_count=frozen,
+        prediction_path_parameter_count=int(constructed.prediction_path_parameter_count),
+        trainable_prediction_path_parameter_count=int(
+            constructed.trainable_prediction_path_parameter_count
+        ),
+        frozen_prediction_path_parameter_count=int(constructed.frozen_prediction_path_parameter_count),
         status="OK",
     )
 
 
 def default_v3_predict(cell: RealCanonicalCellPlan, runtime: FormalArmRuntime, context: Optional[Mapping[str, Any]] = None) -> FormalArmRuntime:
     _require_enabled_real_path()
-    payload = dict(context or {})
+    if context is None or not isinstance(context, dict):
+        raise AEContractError("prediction requires mutable formal context with arm runtimes")
+    ephemeral = _bind_arm_trainables(context, runtime.arm)
+    constructed = ephemeral.constructed
+    bundle = context[AE_SHARED_BUNDLE_KEY]
+    z_t_test, test_mean, test_stdev = extract_features_maybe_revin(
+        constructed.target_extractor,
+        bundle.X_test,
+        revin=constructed.revin,
+        training=False,
+    )
     decomposed = AE_PREDICTION_AUTHORITY(
-        payload["head"],
-        payload["z_t_test"],
-        payload["f_t_test"],
-        payload["knn_prior"],
+        constructed.head,
+        z_t_test,
+        bundle.f_t["test"],
+        bundle.stage_a.knn_prior,
     )
     y_pred = decomposed["y_pred"]
-    revin = payload.get("revin")
     if runtime.spec.revin_enabled:
-        if revin is None:
+        if constructed.revin is None:
             raise AEContractError("arm D prediction requires RevIN inverse")
-        y_pred = revin.denormalize_numpy(
+        mean_np = test_mean.numpy() if hasattr(test_mean, "numpy") else test_mean
+        stdev_np = test_stdev.numpy() if hasattr(test_stdev, "numpy") else test_stdev
+        y_pred = constructed.revin.denormalize_numpy(
             y_pred,
-            payload["test_mean"],
-            payload["test_stdev"],
+            mean_np,
+            stdev_np,
             include_mean=True,
         )
+    payload = {
+        "head": constructed.head,
+        "target_extractor": constructed.target_extractor,
+        "revin": constructed.revin,
+        "z_t_test": z_t_test,
+        "f_t_test": bundle.f_t["test"],
+        "knn_prior": bundle.stage_a.knn_prior,
+        "y_pred": y_pred,
+        "y_true": bundle.y_test,
+        "target_scaler": bundle.target_scaler,
+        "feature_columns": list(bundle.target_feature_columns),
+        "test_mean": test_mean,
+        "test_stdev": test_stdev,
+    }
     runtime.metric_kind = "pending_v3_metric"
-    payload["y_pred"] = y_pred
-    payload["y_true"] = payload.get("y_true")
     runtime._predict_payload = payload  # type: ignore[attr-defined]
     _ = cell
     return runtime
@@ -474,6 +626,13 @@ def default_v3_metric(cell: RealCanonicalCellPlan, runtime: FormalArmRuntime, co
     )
     runtime.rmse_original = float(metrics["rmse_original"])
     runtime.smape_original = float(metrics["smape_original"])
+    if "y_true_original" in metrics and "y_pred_original" in metrics:
+        import numpy as np
+
+        true_o = np.asarray(metrics["y_true_original"], dtype=np.float64).reshape(-1)
+        pred_o = np.asarray(metrics["y_pred_original"], dtype=np.float64).reshape(-1)
+        runtime.mae_original = float(np.mean(np.abs(true_o - pred_o)))
+    runtime.metric_kind = REAL_METRIC_KIND
     runtime.status = "OK"
     _ = (cell, context)
     return runtime
@@ -521,7 +680,7 @@ def default_formal_authorities() -> AEFormalAuthorities:
     return AEFormalAuthorities(
         prepare_context=default_v3_prepare_context,
         prepare_stage_a=default_v3_prepare_stage_a,
-        make_common_head=lambda cell, stage_a: _json_digest({"authority": "v3_d", "key": cell.stage_a_key}),
+        make_common_head=default_v3_make_common_head,
         train_stage_b=default_v3_train_stage_b,
         predict=default_v3_predict,
         metric=default_v3_metric,
@@ -626,7 +785,12 @@ def make_mock_authorities(
         ledger.stage_a.append(cell.stage_a_key)
         return build_mock_stage_a(cell)
 
-    def make_common_head(cell: RealCanonicalCellPlan, stage_a: FormalStageAView) -> str:
+    def make_common_head(
+        cell: RealCanonicalCellPlan,
+        stage_a: FormalStageAView,
+        context: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        _ = context
         return _json_digest({"head": "v3_d_authority", "key": cell.stage_a_key, "fused": stage_a.fused_target_digest})
 
     def train_stage_b(
@@ -858,6 +1022,8 @@ def run_ae_formal_body(
         if completed.get(cell.stage_a_key) == "PAIR_COMPLETE":
             continue
         context = authorities.prepare_context(cell)
+        if not isinstance(context, dict):
+            raise AEContractError("prepare_context must return a mutable dict")
         if cell.stage_a_key not in active_ledger.context_prep:
             active_ledger.context_prep.append(cell.stage_a_key)
         live = context.get("live") if isinstance(context, Mapping) else None
@@ -866,7 +1032,7 @@ def run_ae_formal_body(
         if live is not None and str(getattr(live, "target_bundle_key", "")) != cell.stage_a_key:
             raise AEContractError("live context/target-bundle cell mismatch")
         stage_a = authorities.prepare_stage_a(cell, context)
-        head_digest = authorities.make_common_head(cell, stage_a)
+        head_digest = authorities.make_common_head(cell, stage_a, context)
         runtimes: Dict[str, FormalArmRuntime] = {}
         failed = False
         for arm in order:
@@ -879,6 +1045,7 @@ def run_ae_formal_body(
             except Exception as exc:
                 failed = True
                 spec = ae_arm_spec(arm)
+                failure_metric_kind = MOCK_METRIC if mock_execution_authorized else None
                 runtimes[arm] = FormalArmRuntime(
                     arm=arm,
                     spec=spec,
@@ -903,7 +1070,7 @@ def run_ae_formal_body(
                     frozen_prediction_path_parameter_count=0,
                     status="FAILED",
                     error=f"{type(exc).__name__}: {exc}",
-                    metric_kind=MOCK_METRIC,
+                    metric_kind=failure_metric_kind,
                 )
         active_ledger.bundle_validations.append(cell.stage_a_key)
         if failed or set(runtimes) != set(AE_ARMS):
@@ -925,7 +1092,9 @@ def run_ae_formal_body(
         bundles[cell.stage_a_key] = pair_status
 
     counts = active_ledger.counts()
-    return {
+    pair_complete = sum(1 for status in bundles.values() if status == "PAIR_COMPLETE")
+    pair_incomplete = sum(1 for status in bundles.values() if status != "PAIR_COMPLETE")
+    result = {
         "status": MOCK_STATUS if mock_execution_authorized else "FORMAL",
         "CANONICAL_CELLS": len(cell_plans),
         "CONTEXT_PREP_CALLS": counts["CONTEXT_PREP_CALLS"],
@@ -940,14 +1109,26 @@ def run_ae_formal_body(
         "C_CALLS": counts["C_CALLS"],
         "D_CALLS": counts["D_CALLS"],
         "E_CALLS": counts["E_CALLS"],
+        "PAIR_COMPLETE": pair_complete,
+        "PAIR_INCOMPLETE": pair_incomplete,
         "bundles": bundles,
         "identity_index": identity_index,
         "planned_matrix_digest": matrix_hash,
         "ledger": active_ledger,
         "output_root": str(out),
-        "TRAINING_STARTED": "NO",
+        "TRAINING_STARTED": "NO" if mock_execution_authorized else "YES",
         "AE_FORMAL_EXECUTION_ENABLED": AE_FORMAL_EXECUTION_ENABLED,
     }
+    if not mock_execution_authorized:
+        if pair_incomplete > 0 or pair_complete != EXPECTED_CANONICAL_CELLS:
+            raise AEContractError(
+                "FORMAL_COMPLETION_FAILED: "
+                f"PAIR_COMPLETE={pair_complete} PAIR_INCOMPLETE={pair_incomplete} "
+                f"canonical_cells={EXPECTED_CANONICAL_CELLS}"
+            )
+        result["TRAINING_STARTED"] = "YES"
+        result["status"] = "FORMAL_COMPLETE"
+    return result
 
 
 def git_provenance(project_root: Optional[Path] = None) -> Dict[str, str]:
