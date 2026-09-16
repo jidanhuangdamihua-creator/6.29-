@@ -17,12 +17,26 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from src.constants import SOLIDIFIED_KNN_ROOT
 from src.transfer_methods.ms_katl_ae_ablation import (
     AE_ARMS,
+    AE_ARM_NAMES,
     AE_FORMAL_EXECUTION_ENABLED,
     AE_FORMAL_EXECUTION_IMPLEMENTED,
     AE_LABEL,
     EXPECTED_CANONICAL_CELLS,
     EXPECTED_RUNS,
+    EXTRA_TARGET_CANONICAL_CELLS,
+    EXTRA_TARGET_DATASET_LR,
+    EXTRA_TARGET_MATRIX_KIND,
+    EXTRA_TARGET_RUNS,
+    FROZEN_MATRIX_KIND,
     HORIZONS,
+    UNIFORM_3E4_CANONICAL_CELLS,
+    UNIFORM_3E4_DATASETS,
+    UNIFORM_3E4_LEARNING_RATE_LABEL,
+    UNIFORM_3E4_MATRIX_KIND,
+    UNIFORM_3E4_OUTPUT_MARKER,
+    UNIFORM_3E4_RUNS,
+    UNIFORM_3E4_SEEDS,
+    UNIFORM_3E4_TARGETS,
     PARENT_METHOD,
     PROTOCOL_VERSION,
     SCENARIO,
@@ -30,6 +44,7 @@ from src.transfer_methods.ms_katl_ae_ablation import (
     STAGE_A_LEARNING_RATE,
     STAGE_B_BATCH_SIZE,
     STAGE_B_EPOCHS,
+    V3_LR_MAP,
     AEContractError,
     AERunIdentity,
     AESyntheticStageA,
@@ -51,6 +66,8 @@ from src.transfer_methods.ms_katl_ae_ablation import (
     project_root_from,
     require_v3_recipe,
     resolve_cell_lr,
+    resolve_extra_target_lr,
+    resolve_uniform_3e4_lr,
     run_ae_preflight,
     verify_common_head_init,
 )
@@ -58,6 +75,7 @@ from src.transfer_methods.ms_katl_fto_three_track_robustness import EXPECTED_V3_
 from src.transfer_methods.ms_katl_fto_v3_screening import v3_architecture_digest
 from src.transfer_methods.ms_katl_primary_target_lr_screening import (
     SCREENING_MODE,
+    parse_lr,
     parse_target_identity,
 )
 from src.utils.parquet_data_loader import load_knn_results
@@ -73,6 +91,8 @@ FORBIDDEN_RUN_MARKERS = (
     "THREE_TRACK_ROBUSTNESS",
     "MSML_TL",
     "d1d6_630ae4ef",
+    "SITA_ALL_TARGETS",
+    "PAPER_CANDIDATE_BASELINE",
 )
 
 
@@ -237,6 +257,11 @@ def planned_formal_run_root(timestamp: str) -> Path:
     return Path("outputs") / "runs" / f"{timestamp}_{AE_RUN_LABEL}"
 
 
+def planned_extra_target_run_root(timestamp: str, dataset: str, target: str) -> Path:
+    safe_target = str(target).replace("/", "-")
+    return Path("outputs") / "runs" / f"{timestamp}_{AE_RUN_LABEL}_EXTRA_{dataset}_{safe_target}"
+
+
 def load_v3_knn_authority(dataset: str, project_root: Optional[Path] = None) -> Dict[str, Any]:
     knn_dir = Path(SOLIDIFIED_KNN_ROOT) / f"Dataset{dataset_number(dataset)}"
     payload = load_knn_results(knn_dir, SCREENING_MODE)
@@ -271,13 +296,23 @@ def resolve_real_canonical_cell(
     *,
     knn_cache: Optional[Dict[str, Dict[str, Any]]] = None,
     project_root: Optional[Path] = None,
+    selected_lr: Optional[float] = None,
+    selected_lr_label: Optional[str] = None,
 ) -> RealCanonicalCellPlan:
     parsed = parse_target_identity(dataset, target)
     if parsed["target_identity"] != target:
         raise AEContractError(f"V3 identity resolver drifted: {parsed['target_identity']} != {target}")
     if parsed["dataset"] != dataset:
         raise AEContractError(f"dataset resolver drifted: {parsed['dataset']}")
-    lr_value, lr_label = resolve_cell_lr(dataset, target)
+    if (selected_lr is None) != (selected_lr_label is None):
+        raise AEContractError("selected_lr and selected_lr_label must be provided together")
+    if selected_lr is None:
+        lr_value, lr_label = resolve_cell_lr(dataset, target)
+    else:
+        lr_value = float(selected_lr)
+        lr_label = str(selected_lr_label).strip()
+        if float(parse_lr(lr_label)) != lr_value:
+            raise AEContractError(f"injected LR mismatch: {lr_label} != {lr_value}")
     cache = knn_cache if knn_cache is not None else {}
     if dataset not in cache:
         cache[dataset] = load_v3_knn_authority(dataset, project_root=project_root)
@@ -328,6 +363,208 @@ def enumerate_real_canonical_cell_plans(project_root: Optional[Path] = None) -> 
     if len(set(keys)) != EXPECTED_CANONICAL_CELLS:
         raise AEContractError("duplicate Stage-A keys in real cell plans")
     return plans
+
+
+def enumerate_extra_target_cell_plans(
+    dataset: str,
+    target: str,
+    *,
+    project_root: Optional[Path] = None,
+) -> List[RealCanonicalCellPlan]:
+    parsed = parse_target_identity(dataset, target)
+    dataset_key = parsed["dataset"]
+    target_key = parsed["target_identity"]
+    lr_value, lr_label = resolve_extra_target_lr(dataset_key, target_key)
+    knn_cache: Dict[str, Dict[str, Any]] = {}
+    plans = [
+        resolve_real_canonical_cell(
+            dataset_key,
+            target_key,
+            horizon,
+            seed,
+            knn_cache=knn_cache,
+            project_root=project_root,
+            selected_lr=lr_value,
+            selected_lr_label=lr_label,
+        )
+        for horizon in HORIZONS
+        for seed in SEEDS
+    ]
+    assert_extra_target_slice(plans)
+    return plans
+
+
+def assert_extra_target_slice(
+    cells: Sequence[RealCanonicalCellPlan],
+    arm_plans: Optional[Sequence[RealArmPlan]] = None,
+) -> Tuple[str, str]:
+    if not cells:
+        raise AEContractError("empty extra-target A–E slice")
+    datasets = {cell.dataset for cell in cells}
+    targets = {cell.target for cell in cells}
+    if len(datasets) != 1 or len(targets) != 1:
+        raise AEContractError("extra-target A–E slice must be a single dataset/target")
+    dataset = next(iter(datasets))
+    target = next(iter(targets))
+    if (dataset, target) in V3_LR_MAP:
+        raise AEContractError(
+            f"frozen primary target {(dataset, target)} is not an extra-target A–E slice"
+        )
+    if len(cells) != EXTRA_TARGET_CANONICAL_CELLS:
+        raise AEContractError(
+            f"extra-target canonical cells={len(cells)} != {EXTRA_TARGET_CANONICAL_CELLS}"
+        )
+    horizons = {int(cell.horizon) for cell in cells}
+    seeds = {int(cell.seed) for cell in cells}
+    if horizons != set(HORIZONS) or seeds != set(SEEDS):
+        raise AEContractError("extra-target slice must be H={1,3,5} × seeds={42,43,44}")
+    scenarios = {cell.scenario for cell in cells}
+    if scenarios != {SCENARIO}:
+        raise AEContractError("extra-target A–E scenario must be without")
+    labels = {cell.selected_lr_label for cell in cells}
+    expected_lr = EXTRA_TARGET_DATASET_LR[dataset]
+    if labels != {expected_lr}:
+        raise AEContractError(f"extra-target LR {labels} != inherited {expected_lr}")
+    if arm_plans is not None:
+        if len(arm_plans) != EXTRA_TARGET_RUNS:
+            raise AEContractError(f"extra-target runs={len(arm_plans)} != {EXTRA_TARGET_RUNS}")
+        arms = {item.arm for item in arm_plans}
+        if arms != set(AE_ARMS):
+            raise AEContractError(f"extra-target arms drifted: {sorted(arms)}")
+    return dataset, target
+
+
+def enumerate_uniform_3e4_cell_plans(
+    *,
+    project_root: Optional[Path] = None,
+) -> List[RealCanonicalCellPlan]:
+    knn_cache: Dict[str, Dict[str, Any]] = {}
+    plans: List[RealCanonicalCellPlan] = []
+    for dataset in UNIFORM_3E4_DATASETS:
+        target = UNIFORM_3E4_TARGETS[dataset]
+        lr_value, lr_label = resolve_uniform_3e4_lr(dataset, target)
+        for horizon in HORIZONS:
+            for seed in UNIFORM_3E4_SEEDS:
+                plans.append(
+                    resolve_real_canonical_cell(
+                        dataset,
+                        target,
+                        horizon,
+                        seed,
+                        knn_cache=knn_cache,
+                        project_root=project_root,
+                        selected_lr=lr_value,
+                        selected_lr_label=lr_label,
+                    )
+                )
+    assert_uniform_3e4_slice(plans)
+    return plans
+
+
+def assert_uniform_3e4_slice(
+    cells: Sequence[RealCanonicalCellPlan],
+    arm_plans: Optional[Sequence[RealArmPlan]] = None,
+) -> None:
+    if not cells:
+        raise AEContractError("empty uniform 3e-4 A–E slice")
+    datasets = {cell.dataset for cell in cells}
+    if datasets != set(UNIFORM_3E4_DATASETS):
+        raise AEContractError(f"uniform 3e-4 datasets drifted: {sorted(datasets)}")
+    if "D2" in datasets or "D3" in datasets:
+        raise AEContractError("uniform 3e-4 slice must not include D2 or D3")
+    if len(cells) != UNIFORM_3E4_CANONICAL_CELLS:
+        raise AEContractError(
+            f"uniform 3e-4 canonical cells={len(cells)} != {UNIFORM_3E4_CANONICAL_CELLS}"
+        )
+    keys = [cell.stage_a_key for cell in cells]
+    if len(set(keys)) != UNIFORM_3E4_CANONICAL_CELLS:
+        raise AEContractError("duplicate uniform 3e-4 Stage-A keys")
+    expected_pairs = {(dataset, UNIFORM_3E4_TARGETS[dataset]) for dataset in UNIFORM_3E4_DATASETS}
+    observed_pairs = {(cell.dataset, cell.target) for cell in cells}
+    if observed_pairs != expected_pairs:
+        raise AEContractError(f"uniform 3e-4 paper targets drifted: {sorted(observed_pairs)}")
+    if {int(cell.horizon) for cell in cells} != set(HORIZONS):
+        raise AEContractError("uniform 3e-4 horizons must be {1,3,5}")
+    if {int(cell.seed) for cell in cells} != set(UNIFORM_3E4_SEEDS):
+        raise AEContractError("uniform 3e-4 seeds must be {42,43,44,45,46}")
+    if {cell.scenario for cell in cells} != {SCENARIO}:
+        raise AEContractError("uniform 3e-4 scenario must be without")
+    if {cell.selected_lr_label for cell in cells} != {UNIFORM_3E4_LEARNING_RATE_LABEL}:
+        raise AEContractError("uniform 3e-4 LR must be strictly 3e-4")
+    expected_lr_value = float(parse_lr(UNIFORM_3E4_LEARNING_RATE_LABEL))
+    if any(float(cell.selected_lr) != expected_lr_value for cell in cells):
+        raise AEContractError("uniform 3e-4 LR values drifted from 3e-4")
+    by_dataset: Dict[str, int] = {}
+    by_dataset_horizon: Dict[Tuple[str, int], int] = {}
+    by_cell: Dict[Tuple[str, str, int, int], int] = {}
+    for cell in cells:
+        by_dataset[cell.dataset] = by_dataset.get(cell.dataset, 0) + 1
+        dh = (cell.dataset, int(cell.horizon))
+        by_dataset_horizon[dh] = by_dataset_horizon.get(dh, 0) + 1
+        key = (cell.dataset, cell.target, int(cell.horizon), int(cell.seed))
+        by_cell[key] = by_cell.get(key, 0) + 1
+    expected_cells_per_dataset = len(HORIZONS) * len(UNIFORM_3E4_SEEDS)
+    expected_cells_per_dh = len(UNIFORM_3E4_SEEDS)
+    if any(count != expected_cells_per_dataset for count in by_dataset.values()):
+        raise AEContractError(f"uniform 3e-4 cells per dataset drifted: {by_dataset}")
+    if any(count != expected_cells_per_dh for count in by_dataset_horizon.values()):
+        raise AEContractError(f"uniform 3e-4 cells per dataset×horizon drifted: {by_dataset_horizon}")
+    if any(count != 1 for count in by_cell.values()) or len(by_cell) != UNIFORM_3E4_CANONICAL_CELLS:
+        raise AEContractError("uniform 3e-4 cell grid has duplicates or missing cells")
+    if arm_plans is not None:
+        if len(arm_plans) != UNIFORM_3E4_RUNS:
+            raise AEContractError(f"uniform 3e-4 runs={len(arm_plans)} != {UNIFORM_3E4_RUNS}")
+        arms = {item.arm for item in arm_plans}
+        if arms != set(AE_ARMS):
+            raise AEContractError(f"uniform 3e-4 arms drifted: {sorted(arms)}")
+        by_d_runs: Dict[str, int] = {}
+        by_dh_runs: Dict[Tuple[str, int], int] = {}
+        by_dhs_arms: Dict[Tuple[str, int, int], set] = {}
+        for item in arm_plans:
+            if item.cell.selected_lr_label != UNIFORM_3E4_LEARNING_RATE_LABEL:
+                raise AEContractError("uniform 3e-4 arm LR drifted from 3e-4")
+            by_d_runs[item.cell.dataset] = by_d_runs.get(item.cell.dataset, 0) + 1
+            dh = (item.cell.dataset, int(item.cell.horizon))
+            by_dh_runs[dh] = by_dh_runs.get(dh, 0) + 1
+            dhs = (item.cell.dataset, int(item.cell.horizon), int(item.cell.seed))
+            by_dhs_arms.setdefault(dhs, set()).add(item.arm)
+        expected_runs_per_dataset = len(HORIZONS) * len(UNIFORM_3E4_SEEDS) * len(AE_ARMS)
+        expected_runs_per_dh = len(UNIFORM_3E4_SEEDS) * len(AE_ARMS)
+        if any(count != expected_runs_per_dataset for count in by_d_runs.values()):
+            raise AEContractError(f"uniform 3e-4 runs per dataset drifted: {by_d_runs}")
+        if any(count != expected_runs_per_dh for count in by_dh_runs.values()):
+            raise AEContractError(f"uniform 3e-4 runs per dataset×horizon drifted: {by_dh_runs}")
+        if any(item != set(AE_ARMS) for item in by_dhs_arms.values()):
+            raise AEContractError("each dataset×horizon×seed must contain arms A–E")
+
+
+def assert_formal_run_root(path: Path, matrix_kind: str = FROZEN_MATRIX_KIND) -> Path:
+    root = assert_ae_output_root(Path(path))
+    kind = str(matrix_kind).strip().upper().replace("-", "_")
+    posix = root.as_posix().replace("\\", "/")
+    name = root.name
+    if kind == UNIFORM_3E4_MATRIX_KIND:
+        if UNIFORM_3E4_OUTPUT_MARKER not in posix:
+            raise AEContractError("uniform 3e-4 run root must include sita_ablation_3e4")
+        if AE_RUN_LABEL in name or AE_LABEL in name:
+            raise AEContractError("uniform 3e-4 must not write into frozen A–E result roots")
+        if "/outputs/runs/" in f"/{posix}/":
+            raise AEContractError("uniform 3e-4 must not write under outputs/runs/")
+        return root
+    if AE_RUN_LABEL not in name:
+        raise AEContractError("formal run root must include MS_KATL_AE_CORE_ABLATION")
+    if UNIFORM_3E4_OUTPUT_MARKER in posix:
+        raise AEContractError("frozen/extra A–E must not write into uniform 3e-4 output")
+    return root
+
+
+def _formal_output_label_ok(path: Path) -> bool:
+    root = Path(path)
+    posix = root.as_posix()
+    name = root.name
+    frozen_ok = AE_RUN_LABEL in name and UNIFORM_3E4_OUTPUT_MARKER not in posix
+    uniform_ok = UNIFORM_3E4_OUTPUT_MARKER in posix and AE_RUN_LABEL not in name
+    return frozen_ok or uniform_ok
 
 
 STAGE_A_KWARG_KEYS: Tuple[str, ...] = (
@@ -476,12 +713,17 @@ def planned_arm_for(cell: RealCanonicalCellPlan, arm: str) -> RealArmPlan:
     )
 
 
-def enumerate_real_arm_plans(cells: Sequence[RealCanonicalCellPlan]) -> List[RealArmPlan]:
+def enumerate_real_arm_plans(
+    cells: Sequence[RealCanonicalCellPlan],
+    *,
+    expected_runs: Optional[int] = None,
+) -> List[RealArmPlan]:
     plans = [planned_arm_for(cell, arm) for cell in cells for arm in AE_ARMS]
-    if len(plans) != EXPECTED_RUNS:
-        raise AEContractError(f"real arm plans={len(plans)} != {EXPECTED_RUNS}")
+    expected = EXPECTED_RUNS if expected_runs is None else int(expected_runs)
+    if len(plans) != expected:
+        raise AEContractError(f"real arm plans={len(plans)} != {expected}")
     keys = [item.run_key for item in plans]
-    if len(set(keys)) != EXPECTED_RUNS:
+    if len(set(keys)) != expected:
         raise AEContractError("duplicate A–E run keys")
     return plans
 
@@ -729,12 +971,17 @@ PLANNED_MATRIX_FIELDNAMES = (
 )
 
 
-def write_planned_matrix_csv(path: Path, arm_plans: Sequence[RealArmPlan]) -> Path:
-    """Write the frozen formal planned-matrix CSV (54 cells × 5 arms = 270 rows)."""
+def write_planned_matrix_csv(
+    path: Path,
+    arm_plans: Sequence[RealArmPlan],
+    *,
+    expected_runs: int = EXPECTED_RUNS,
+) -> Path:
+    """Write a planned-matrix CSV. Frozen 270-run remains the default size."""
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if len(arm_plans) != EXPECTED_RUNS:
-        raise AEContractError(f"planned matrix rows={len(arm_plans)} != {EXPECTED_RUNS}")
+    if len(arm_plans) != int(expected_runs):
+        raise AEContractError(f"planned matrix rows={len(arm_plans)} != {expected_runs}")
     with destination.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(PLANNED_MATRIX_FIELDNAMES))
         writer.writeheader()
@@ -771,7 +1018,13 @@ def formal_manifest_snapshot_payload(planned_matrix_digest: str) -> Dict[str, An
     return payload
 
 
-def validate_resume_root(run_root: Path, project_root: Optional[Path] = None) -> Dict[str, str]:
+def validate_resume_root(
+    run_root: Path,
+    project_root: Optional[Path] = None,
+    *,
+    matrix_kind: str = FROZEN_MATRIX_KIND,
+    extra_target: Optional[Tuple[str, str]] = None,
+) -> Dict[str, str]:
     root = Path(run_root)
     manifest_path = root / "manifest_snapshot.json"
     plan_path = root / "plans" / "planned_matrix.csv"
@@ -783,10 +1036,77 @@ def validate_resume_root(run_root: Path, project_root: Optional[Path] = None) ->
         raise AEContractError("resume protocol_version mismatch")
     if snapshot.get("parent_v3_architecture_digest") != current["parent_v3_architecture_digest"]:
         raise AEContractError("resume parent V3 digest mismatch")
-    if snapshot.get("expected_runs") != EXPECTED_RUNS:
+    kind = str(snapshot.get("matrix_kind") or FROZEN_MATRIX_KIND)
+    if kind != matrix_kind:
+        raise AEContractError(f"resume matrix_kind mismatch: {kind} != {matrix_kind}")
+    if matrix_kind == EXTRA_TARGET_MATRIX_KIND:
+        expected = EXTRA_TARGET_RUNS
+        snapshot_target = snapshot.get("extra_target") or {}
+        if extra_target is not None:
+            if (
+                snapshot_target.get("dataset") != extra_target[0]
+                or snapshot_target.get("target_identity") != extra_target[1]
+            ):
+                raise AEContractError("resume extra-target identity mismatch")
+    elif matrix_kind == UNIFORM_3E4_MATRIX_KIND:
+        expected = UNIFORM_3E4_RUNS
+        if snapshot.get("uniform_learning_rate") not in {None, UNIFORM_3E4_LEARNING_RATE_LABEL}:
+            raise AEContractError("resume uniform 3e-4 learning_rate mismatch")
+    else:
+        expected = EXPECTED_RUNS
+    if snapshot.get("expected_runs") != expected:
         raise AEContractError("resume planned matrix size mismatch")
     _ = project_root
     return {"RESUME_CONTRACT": "PASS"}
+
+
+def write_extra_target_results_table(run_root: Path) -> Path:
+    root = assert_ae_output_root(Path(run_root))
+    bundle_dir = root / "cell_bundles"
+    rows: List[Dict[str, Any]] = []
+    for path in sorted(bundle_dir.glob("*.json")):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        arms = payload.get("arms") or {}
+        for arm in AE_ARMS:
+            arm_payload = arms.get(arm) or {}
+            rows.append(
+                {
+                    "dataset": payload.get("dataset"),
+                    "target": payload.get("target"),
+                    "horizon": payload.get("horizon"),
+                    "seed": payload.get("seed"),
+                    "arm": arm,
+                    "arm_name": AE_ARM_NAMES.get(arm, arm),
+                    "status": arm_payload.get("status"),
+                    "pair_status": payload.get("pair_status"),
+                    "selected_lr": payload.get("selected_lr"),
+                    "rmse_original": arm_payload.get("rmse_original"),
+                    "smape_original": arm_payload.get("smape_original"),
+                    "mae_original": arm_payload.get("mae_original"),
+                    "stage_a_key": payload.get("stage_a_key"),
+                }
+            )
+    destination = root / "ae_extra_target_cells.csv"
+    fieldnames = [
+        "dataset",
+        "target",
+        "horizon",
+        "seed",
+        "arm",
+        "arm_name",
+        "status",
+        "pair_status",
+        "selected_lr",
+        "rmse_original",
+        "smape_original",
+        "mae_original",
+        "stage_a_key",
+    ]
+    with destination.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    return destination
 
 
 def classify_paired_bundle(arm_statuses: Mapping[str, str]) -> str:

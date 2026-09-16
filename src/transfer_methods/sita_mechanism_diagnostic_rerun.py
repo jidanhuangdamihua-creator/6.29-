@@ -1,0 +1,1028 @@
+"""Plan-only 42-cell mechanism diagnostic rerun protocol.
+
+This module does not train and does not write frozen A–E results.
+`--plan-only` enumerates the diagnostic matrix and audits whether the
+current wiring is ready to execute.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import inspect
+import json
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Sequence, Tuple
+
+import numpy as np
+
+from src.transfer_methods.sita_mechanism_diagnostics_contract import (
+    CANONICAL_CKA_COMPARISONS,
+    COMPARISON_A_C_MATCHED_SEED,
+    COMPARISON_B_B_CROSS_SEED,
+    COMPARISON_B_C_MATCHED_SEED,
+    COMPARISON_C_C_CROSS_SEED,
+    COMPARISON_C_INIT_B_FINAL_FROZEN_REFERENCE,
+    COMPARISON_C_INIT_C_FINAL,
+    COMPARISON_C_INIT_C_FINAL_ADAPTATION_DISPLACEMENT,
+    FORMAL_EVALUATION_WEIGHT_VARIANT,
+    MechanismDiagnosticsContractError,
+)
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+DIAGNOSTIC_RERUN_TARGETS: Mapping[str, str] = {
+    "D1": "1/10",
+    "D4": "166/258",
+    "D5": "48/1159414",
+    "D6": "CA_1/FOODS_3_080",
+}
+DIAGNOSTIC_RERUN_ARMS = ("A", "B", "C")
+DIAGNOSTIC_RERUN_PILOT_DATASETS = ("D1", "D4", "D5")
+DIAGNOSTIC_RERUN_PILOT_HORIZON = 1
+DIAGNOSTIC_RERUN_PILOT_SEED = 42
+DIAGNOSTIC_RERUN_D6_HORIZONS = (1, 3, 5)
+DIAGNOSTIC_RERUN_D6_BC_SEEDS = (42, 43, 44, 45, 46)
+DIAGNOSTIC_RERUN_D6_A_SEEDS = (42,)
+EXPECTED_DIAGNOSTIC_RERUN_CELLS = 42
+
+PRIMARY_CKA_LAYER = "flatten"
+SUPPLEMENTARY_CKA_LAYERS = ("conv1", "conv2", "conv3")
+TRANSFERRED_BACKBONE_LAYERS = ("conv1", "conv2", "conv3")
+PREDICTION_HEAD_LAYER = "head_target"
+
+REQUIRED_CKA_COMPARISONS = CANONICAL_CKA_COMPARISONS
+AUXILIARY_CKA_COMPARISONS = (COMPARISON_A_C_MATCHED_SEED,)
+
+CONSISTENCY_PASS_PCT = 0.5
+CONSISTENCY_REVIEW_PCT = 2.0
+
+INTENDED_OUTPUT_ROOT_PARENT = Path("outputs") / "mechanism_diagnostics"
+INTENDED_OUTPUT_ROOT_PATTERN = "mechanism_rerun_YYYYMMDD_HHMMSS"
+FORBIDDEN_FIXED_OUTPUT_ROOT = Path("outputs") / "mechanism_diagnostics" / "rerun_42cell"
+INTENDED_REFERENCE_SPLIT = "formal_test_inputs"
+PRIMARY_WEIGHT_VARIANT = FORMAL_EVALUATION_WEIGHT_VARIANT
+
+TRAINING_DYNAMICS_FIELDS = (
+    "epoch_0",
+    "epoch_1_to_E",
+    "train_objective_loss",
+    "validation_loss",
+    "validation_rmse_original_scale",
+    "validation_smape_original_scale",
+)
+POINTWISE_PREDICTION_FIELDS = (
+    "sample_id_or_date",
+    "y_true",
+    "y_pred",
+    "absolute_error",
+    "squared_error",
+    "y_pred_ema_original_scale",
+)
+
+
+@dataclass(frozen=True)
+class DiagnosticRerunCell:
+    dataset: str
+    target: str
+    horizon: int
+    seed: int
+    arm: str
+
+    @property
+    def cell_key(self) -> str:
+        return f"{self.dataset}|{self.target}|h{self.horizon}|s{self.seed}|{self.arm}"
+
+    @property
+    def condition_key(self) -> str:
+        return f"{self.dataset}|{self.target}|h{self.horizon}"
+
+
+def enumerate_mechanism_diagnostic_rerun_cells() -> Tuple[DiagnosticRerunCell, ...]:
+    cells: List[DiagnosticRerunCell] = []
+    for dataset in DIAGNOSTIC_RERUN_PILOT_DATASETS:
+        target = DIAGNOSTIC_RERUN_TARGETS[dataset]
+        for arm in DIAGNOSTIC_RERUN_ARMS:
+            cells.append(
+                DiagnosticRerunCell(
+                    dataset=dataset,
+                    target=target,
+                    horizon=DIAGNOSTIC_RERUN_PILOT_HORIZON,
+                    seed=DIAGNOSTIC_RERUN_PILOT_SEED,
+                    arm=arm,
+                )
+            )
+    d6_target = DIAGNOSTIC_RERUN_TARGETS["D6"]
+    for horizon in DIAGNOSTIC_RERUN_D6_HORIZONS:
+        for seed in DIAGNOSTIC_RERUN_D6_A_SEEDS:
+            cells.append(
+                DiagnosticRerunCell(
+                    dataset="D6",
+                    target=d6_target,
+                    horizon=horizon,
+                    seed=seed,
+                    arm="A",
+                )
+            )
+        for seed in DIAGNOSTIC_RERUN_D6_BC_SEEDS:
+            for arm in ("B", "C"):
+                cells.append(
+                    DiagnosticRerunCell(
+                        dataset="D6",
+                        target=d6_target,
+                        horizon=horizon,
+                        seed=seed,
+                        arm=arm,
+                    )
+                )
+    ordered = tuple(cells)
+    if len(ordered) != EXPECTED_DIAGNOSTIC_RERUN_CELLS:
+        raise ValueError(
+            "diagnostic rerun matrix drifted: "
+            f"{len(ordered)} != {EXPECTED_DIAGNOSTIC_RERUN_CELLS}"
+        )
+    return ordered
+
+
+def _group_count(cells: Sequence[DiagnosticRerunCell], dataset: str, horizon: int) -> int:
+    return sum(1 for cell in cells if cell.dataset == dataset and cell.horizon == horizon)
+
+
+def matrix_group_counts(cells: Sequence[DiagnosticRerunCell]) -> Dict[str, int]:
+    return {
+        "D1-H1 seed42 A/B/C": _group_count(cells, "D1", 1),
+        "D4-H1 seed42 A/B/C": _group_count(cells, "D4", 1),
+        "D5-H1 seed42 A/B/C": _group_count(cells, "D5", 1),
+        "D6-H1 B/C×5 + A×1": _group_count(cells, "D6", 1),
+        "D6-H3 B/C×5 + A×1": _group_count(cells, "D6", 3),
+        "D6-H5 B/C×5 + A×1": _group_count(cells, "D6", 5),
+        "TOTAL": len(cells),
+    }
+
+
+def expected_matrix_group_counts() -> Dict[str, int]:
+    return {
+        "D1-H1 seed42 A/B/C": 3,
+        "D4-H1 seed42 A/B/C": 3,
+        "D5-H1 seed42 A/B/C": 3,
+        "D6-H1 B/C×5 + A×1": 11,
+        "D6-H3 B/C×5 + A×1": 11,
+        "D6-H5 B/C×5 + A×1": 11,
+        "TOTAL": 42,
+    }
+
+
+def _read(relpath: str) -> str:
+    return (PROJECT_ROOT / relpath).read_text(encoding="utf-8")
+
+
+def _status(ok: bool) -> str:
+    return "YES" if ok else "NO"
+
+
+MACHINE_READY_FLAGS = (
+    "MATRIX_MATCH",
+    "EMA_SEMANTICS_READY",
+    "REFERENCE_INPUTS_READY",
+    "TRAINING_DYNAMICS_READY",
+    "POINTWISE_PREDICTIONS_READY",
+    "CKA_MATRIX_READY",
+    "PARAMETER_DRIFT_SCHEMA_READY",
+    "CONSISTENCY_AUDIT_READY",
+    "RESUME_READY",
+    "OUTPUT_ISOLATION_READY",
+)
+FINAL_GATE_FLAGS = MACHINE_READY_FLAGS + (
+    "FORMAL_SEED_UNIVERSE_READY",
+    "DIAGNOSTIC_SEED_SUBSET_READY",
+    "AE_FORMAL_DIAGNOSTIC_PATH_AUDIT_READY",
+    "DIAGNOSTICS_DISABLED_FORMAL_PATH_UNCHANGED",
+    "DIAGNOSTICS_DISABLED_FORMAL_INTERFACE_UNCHANGED",
+    "REAL_CELL_LOOP_READY",
+    "42_CELL_EXECUTION_MATRIX_READY",
+    "PARAMETER_DRIFT_READY",
+    "FINAL_RUNTIME_DEPENDENCY_TRACE_READY",
+)
+SNAPSHOT_GATE_FLAGS = (
+    "REAL_CELL_LOOP_READY",
+    "CELL_LOOP_NOT_STARTED_PRESENT",
+    "42_CELL_EXECUTION_MATRIX_READY",
+    "EMA_SEMANTICS_READY",
+    "REFERENCE_INPUTS_READY",
+    "TRAINING_DYNAMICS_READY",
+    "POINTWISE_PREDICTIONS_READY",
+    "PARAMETER_DRIFT_READY",
+    "CKA_MATRIX_READY",
+    "CONSISTENCY_AUDIT_READY",
+    "RESUME_READY",
+    "OUTPUT_ISOLATION_READY",
+    "FINAL_RUNTIME_DEPENDENCY_TRACE_READY",
+)
+
+
+def matrix_digest_for_cells(cells: Sequence[DiagnosticRerunCell]) -> str:
+    return hashlib.sha256("|".join(cell.cell_key for cell in cells).encode("utf-8")).hexdigest()
+
+
+def mechanism_rerun_config_digest(cells: Sequence[DiagnosticRerunCell] | None = None) -> str:
+    resolved = tuple(cells) if cells is not None else enumerate_mechanism_diagnostic_rerun_cells()
+    payload = {
+        "matrix": [cell.cell_key for cell in resolved],
+        "weight_variant": PRIMARY_WEIGHT_VARIANT,
+        "reference_split": INTENDED_REFERENCE_SPLIT,
+        "cka_comparisons": list(CANONICAL_CKA_COMPARISONS),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _dummy_reps(rng: np.random.Generator, n: int = 12, d: int = 4) -> np.ndarray:
+    return rng.normal(size=(n, d))
+
+
+def _cka_matrix_self_check() -> Tuple[bool, List[str], Dict[str, int]]:
+    from src.transfer_methods.sita_mechanism_diagnostic_outputs import (
+        generate_cka_comparison_matrix,
+        unordered_seed_pairs,
+    )
+
+    rng = np.random.default_rng(0)
+    digest = "condition-digest"
+    seeds = DIAGNOSTIC_RERUN_D6_BC_SEEDS
+    records = []
+    for seed in seeds:
+        for arm in ("B", "C"):
+            for stage in ("INIT", "FINAL"):
+                records.append(
+                    {
+                        "arm": arm,
+                        "seed": seed,
+                        "stage": stage,
+                        "representations": _dummy_reps(rng),
+                        "reference_input_digest": digest,
+                    }
+                )
+        records.append(
+            {
+                "arm": "A",
+                "seed": 42,
+                "stage": "FINAL",
+                "representations": _dummy_reps(rng),
+                "reference_input_digest": digest,
+            }
+        )
+    rows = generate_cka_comparison_matrix(records, reference_scale_available=True, include_c_init_b_final=True)
+    counts = {name: 0 for name in CANONICAL_CKA_COMPARISONS}
+    for row in rows:
+        counts[str(row["comparison_type"])] = counts.get(str(row["comparison_type"]), 0) + 1
+    expected_pairs = len(unordered_seed_pairs(seeds))
+    ok = (
+        set(CANONICAL_CKA_COMPARISONS).issubset({row["comparison_type"] for row in rows})
+        and counts[COMPARISON_B_C_MATCHED_SEED] == 5
+        and counts[COMPARISON_C_INIT_C_FINAL_ADAPTATION_DISPLACEMENT] == 5
+        and counts[COMPARISON_C_INIT_B_FINAL_FROZEN_REFERENCE] == 5
+        and counts[COMPARISON_B_B_CROSS_SEED] == expected_pairs == 10
+        and counts[COMPARISON_C_C_CROSS_SEED] == expected_pairs == 10
+        and counts[COMPARISON_A_C_MATCHED_SEED] == 1
+        and all(row["weight_variant"] == PRIMARY_WEIGHT_VARIANT for row in rows)
+        and all(row["reference_input_digest"] == digest for row in rows)
+        and all("n_samples" in row and "n_features_left" in row and "n_features_right" in row for row in rows)
+    )
+    return ok, list(CANONICAL_CKA_COMPARISONS), counts
+
+
+def _audit_wiring() -> Dict[str, Any]:
+    from types import SimpleNamespace
+
+    from src.transfer_methods.sita_mechanism_diagnostic_outputs import (
+        FORMAL_AE_UNIFORM_3E4_CSV,
+        FORMAL_TEST_REFERENCE_SPLIT,
+        audit_status_from_diffs,
+        classify_layer_role,
+        consistency_audit_row,
+        diagnostic_selected_seeds,
+        epoch0_precedes_first_optimizer_update,
+        generate_cka_comparison_matrix,
+        latest_run_dir_forbidden,
+        original_scale_rmse,
+        original_scale_smape,
+        parameter_drift_rows,
+        parse_formal_ae_uniform_universe,
+        assert_formal_universe_schema,
+        assert_diagnostic_seeds_are_formal_subset,
+        pointwise_prediction_rows,
+        primary_transferred_backbone_weights,
+        record_diagnostic_epoch_eval,
+        reference_scale_available,
+        resolve_run_directory,
+        resume_cell_decision,
+        timestamped_run_root,
+    )
+    from src.transfer_methods.sita_mechanism_diagnostics_capture import (
+        DIAGNOSTIC_ARMS,
+        ENABLE_MECHANISM_DIAGNOSTICS_KEY,
+        ensure_session,
+        mechanism_diagnostics_enabled,
+        select_formal_test_reference_inputs,
+        select_reference_inputs,
+        stage_b_diagnostics_train_kwargs,
+    )
+    from src.transfer_methods.sita_mechanism_diagnostics_contract import (
+        refuse_forced_c_init_b_final_comparison,
+    )
+
+    capture = _read("src/transfer_methods/sita_mechanism_diagnostics_capture.py")
+    diagnostics = _read("src/transfer_methods/sita_mechanism_diagnostics.py")
+    contract = _read("src/transfer_methods/sita_mechanism_diagnostics_contract.py")
+    formal = _read("src/transfer_methods/ms_katl_ae_formal.py")
+    lite = _read("src/transfer_methods/ms_katl_lite.py")
+    outputs = _read("src/transfer_methods/sita_mechanism_diagnostic_outputs.py")
+    rerun_src = _read("src/transfer_methods/sita_mechanism_diagnostic_rerun.py")
+    cli = _read("scripts/run_mechanism_diagnostic_rerun.py")
+    execution = _read("src/transfer_methods/sita_mechanism_diagnostic_execution.py")
+
+    c_init_hook = (
+        "on_before_first_target_optimizer_update" in lite
+        and "stage_b_diagnostics_train_kwargs" in formal
+        and "finalize_stage_b_diagnostics" in formal
+        and mechanism_diagnostics_enabled({}) is False
+    )
+    ema_final = "ema_applied = True" in lite and "finalize_stage_b_diagnostics" in formal
+    primary_ema = PRIMARY_WEIGHT_VARIANT == "EMA" and "isolate_primary_weight_variant" in diagnostics
+    c_init_c_final = COMPARISON_C_INIT_C_FINAL in contract and "assemble_c_init_c_final_primary" in diagnostics
+    c_init_b_final = (
+        COMPARISON_C_INIT_B_FINAL_FROZEN_REFERENCE in contract
+        and "assemble_c_init_b_final_frozen_reference" in diagnostics
+        and "SKIPPED" in diagnostics
+        and "refuse_forced_c_init_b_final_comparison" in contract
+        and callable(refuse_forced_c_init_b_final_comparison)
+    )
+
+    dummy_test = np.arange(12, dtype=np.float32).reshape(6, 2)
+    dummy_train = np.ones((99, 2), dtype=np.float32)
+    dummy_bundle = SimpleNamespace(X_test=dummy_test, X_train=dummy_train)
+    refs = select_formal_test_reference_inputs(dummy_bundle)
+    train_prefix_rejected = False
+    try:
+        select_reference_inputs(np.ones((8, 2)))
+    except MechanismDiagnosticsContractError as exc:
+        train_prefix_rejected = "X_train_prefix" in str(exc)
+    session_context = {ENABLE_MECHANISM_DIAGNOSTICS_KEY: True}
+    session = ensure_session(
+        session_context,
+        cell=SimpleNamespace(dataset="D1", target="1/10", horizon=1, seed=42),
+        stage_a=SimpleNamespace(fused_target_digest="x", source_identities=(), source_weights=()),
+        bundle=dummy_bundle,
+    )
+    ensure_uses_test = (
+        int(session.reference_inputs.shape[0]) == 6
+        and int(np.asarray(session.reference_inputs).shape[0]) != 99
+        and "select_formal_test_reference_inputs(bundle)" in capture
+        and "bundle.X_test" in capture
+    )
+    reference_ok = (
+        FORMAL_TEST_REFERENCE_SPLIT == INTENDED_REFERENCE_SPLIT == "formal_test_inputs"
+        and int(refs.shape[0]) == 6
+        and train_prefix_rejected
+        and ensure_uses_test
+        and "X_train_prefix" not in capture.split("def select_formal_test_reference_inputs", 1)[-1].split(
+            "def condition_reference_id", 1
+        )[0]
+    )
+
+    epoch0_ok = (
+        epoch0_precedes_first_optimizer_update(lite)
+        and "on_diagnostic_epoch_eval" in lite
+        and "on_diagnostic_epoch_eval: Optional[Callable[[Mapping[str, object]], None]] = None" in lite
+    )
+    kwargs_source = inspect.getsource(stage_b_diagnostics_train_kwargs)
+    val_passed = '"x_val"' in kwargs_source and '"y_val"' in kwargs_source and '"f_t_val"' in kwargs_source
+    dynamics_row: List[Dict[str, Any]] = []
+    record_diagnostic_epoch_eval(
+        dynamics_row,
+        payload={
+            "epoch": 0,
+            "before_first_target_optimizer_update": True,
+            "weight_variant": "EMA",
+            "train_objective_loss": 1.0,
+            "validation_objective_loss": 1.2,
+            "y_true_original": np.array([10.0, 20.0, 30.0]),
+            "y_pred_original": np.array([11.0, 18.0, 33.0]),
+        },
+        constructed=None,
+        bundle=None,
+        cell=type("Cell", (), {"dataset": "D1", "target": "1/10", "horizon": 1, "seed": 42})(),
+        arm="C",
+    )
+    val_metrics_ok = (
+        dynamics_row[0]["validation_rmse_original_scale"] is not None
+        and dynamics_row[0]["validation_smape_original_scale"] is not None
+        and original_scale_rmse is not None
+        and original_scale_smape is not None
+    )
+    training_ok = epoch0_ok and val_passed and val_metrics_ok and '"forecast_loss"' in lite
+
+    pred_rows = pointwise_prediction_rows(
+        dataset="D1",
+        target="1/10",
+        horizon=1,
+        seed=42,
+        arm="C",
+        y_true_original=np.array([1.0, 2.0, 3.0]),
+        y_pred_original=np.array([1.1, 2.2, 2.7]),
+        weight_variant=PRIMARY_WEIGHT_VARIANT,
+    )
+    pointwise_ok = (
+        pred_rows[0]["weight_variant"] == "EMA"
+        and set(pred_rows[0]) >= {
+            "sample_id",
+            "date_or_prediction_index",
+            "y_true",
+            "y_pred",
+            "signed_error",
+            "absolute_error",
+            "squared_error",
+            "weight_variant",
+        }
+        and "y_pred_original" in _read("src/transfer_methods/ms_katl_primary_target_lr_screening.py")
+        and "ema_applied" in lite
+        and "default_v3_predict" in formal
+    )
+
+    matrix_ok, registered, _counts = _cka_matrix_self_check()
+    cka_ok = matrix_ok and callable(generate_cka_comparison_matrix) and not reference_scale_available("D1")
+
+    named = {
+        "conv1": [np.eye(2, dtype=np.float32)],
+        "conv2": [np.eye(2, dtype=np.float32)],
+        "conv3": [np.eye(2, dtype=np.float32)],
+        "head_target": [np.array([[9.0, 9.0]], dtype=np.float32)],
+    }
+    drift_rows = parameter_drift_rows(named, named)
+    roles = {row["layer"]: row["layer_role"] for row in drift_rows}
+    backbone = primary_transferred_backbone_weights(named)
+    drift_ok = (
+        roles["conv1"] == "transferred_backbone"
+        and roles["head_target"] == "prediction_head"
+        and classify_layer_role("head_target") == "prediction_head"
+        and all(arr.shape != (1, 2) for arr in backbone)
+        and "head_target" not in capture.split("def snapshot_backbone_from_constructed", 1)[-1].split(
+            "def forward_reference_from_constructed", 1
+        )[0]
+        and "layer_role" in outputs
+    )
+
+    audit_pass = audit_status_from_diffs(0.49, 0.49) == "PASS"
+    audit_review = audit_status_from_diffs(0.5, 0.1) == "REVIEW"
+    audit_fail = audit_status_from_diffs(2.01, 0.1) == "FAIL"
+    consistency_ok = (
+        audit_pass
+        and audit_review
+        and audit_fail
+        and FORMAL_AE_UNIFORM_3E4_CSV.is_file()
+        and consistency_audit_row(
+            dataset="D1",
+            target="1/10",
+            horizon=1,
+            seed=42,
+            arm="C",
+            formal_rmse=10.0,
+            rerun_rmse=10.04,
+            formal_smape=20.0,
+            rerun_smape=20.08,
+        )["audit_status"]
+        == "PASS"
+        and "replaces_frozen_results" in outputs
+    )
+
+    resume_skip = True
+    resume_fail_fast = True
+    try:
+        resume_cell_decision(
+            Path("."),
+            "x",
+            expected_config_digest="a",
+            expected_matrix_digest="b",
+            stored_config_digest="c",
+            stored_matrix_digest="b",
+        )
+        resume_fail_fast = False
+    except MechanismDiagnosticsContractError as exc:
+        resume_fail_fast = "config digest mismatch" in str(exc)
+    resume_ok = (
+        resume_fail_fast
+        and "CELL_STATUS_COMPLETE" in outputs
+        and "CELL_STATUS_FAILED" in outputs
+        and "--resume" in cli
+        and "--run-dir" in cli
+        and latest_run_dir_forbidden()
+        and resume_skip
+        and "PAIR_COMPLETE" in formal
+    )
+
+    root = timestamped_run_root()
+    isolation_ok = (
+        root.parent == INTENDED_OUTPUT_ROOT_PARENT
+        and root.name.startswith("mechanism_rerun_")
+        and "rerun_42cell" not in str(root)
+        and FORBIDDEN_FIXED_OUTPUT_ROOT.as_posix() not in rerun_src.split("INTENDED_OUTPUT_ROOT_PATTERN", 1)[0]
+        and resolve_run_directory(plan_only=True, resume=False, run_dir=None) is None
+        and "--plan-only" in cli
+    )
+
+    default_off = mechanism_diagnostics_enabled({}) is False and DIAGNOSTIC_ARMS == ("A", "B", "C")
+    kwargs_off = stage_b_diagnostics_train_kwargs({}, arm="C") == {}
+    finalize_source = inspect.getsource(
+        __import__(
+            "src.transfer_methods.sita_mechanism_diagnostics_capture",
+            fromlist=["finalize_stage_b_diagnostics"],
+        ).finalize_stage_b_diagnostics
+    )
+    disabled_path_ok = (
+        default_off
+        and kwargs_off
+        and "if not mechanism_diagnostics_enabled(context)" in finalize_source
+        and "on_diagnostic_epoch_eval: Optional[Callable[[Mapping[str, object]], None]] = None" in lite
+        and "on_before_first_target_optimizer_update: Optional[Callable[[Mapping[str, object]], None]] = None" in lite
+        and "on_diagnostic_epoch_eval is not None" in lite
+        and "on_before_first_target_optimizer_update is not None" in lite
+        and "optimizer.apply_gradients(finite_grads)" in lite
+        and lite.find("if on_diagnostic_epoch_eval is not None:")
+        < lite.find("ema_applied = False")
+        and lite.find("optimizer.apply_gradients(finite_grads)")
+        > lite.find("on_diagnostic_epoch_eval is not None")
+    )
+    disabled_interface_ok = (
+        disabled_path_ok
+        and "diagnostics_enabled = (" in lite
+        and 'result["before_first_target_optimizer_update_capture"] = before_first_update_capture'
+        in lite
+        and '"before_first_target_optimizer_update_capture": before_first_update_capture' not in lite
+        and lite.find("if diagnostics_enabled:")
+        < lite.find('result["before_first_target_optimizer_update_capture"]')
+        and lite.find("return result")
+        > lite.find('result["before_first_target_optimizer_update_capture"]')
+    )
+    diagnostic_path_audit_ok = (
+        "stage_b_diagnostics_train_kwargs(" in formal
+        and "finalize_stage_b_diagnostics(context, arm=arm, constructed=constructed)" in formal
+        and "ENABLE_MECHANISM_DIAGNOSTICS_KEY" in formal
+        and "train_kwargs = dict(recipe)" in formal
+        and "train_kwargs.update(" in formal
+        and kwargs_off
+        and "unexplained diagnostic-path blocker" not in formal.lower()
+    )
+    from src.transfer_methods.sita_mechanism_diagnostic_execution import (
+        RUNTIME_SOURCE_FILES,
+        sita_ablation_3e4_manifest_runtime_role,
+    )
+
+    role = sita_ablation_3e4_manifest_runtime_role()
+    real_cell_loop_ok = (
+        "def run_mechanism_diagnostic_cell_loop(" in execution
+        and "class FormalDiagnosticCellExecutor" in execution
+        and "run_mechanism_diagnostic_cell_loop(" in cli
+        and "CELL_LOOP_STARTED=YES" in cli
+        and "default_v3_train_stage_b" in execution
+        and "ENABLE_MECHANISM_DIAGNOSTICS_KEY" in execution
+        and "mark_cell_complete" in execution
+        and "mark_cell_failed" in execution
+        and "finalize_mechanism_diagnostic_run" in execution
+        and "expected_code_digest" in outputs
+    )
+    cell_loop_not_started_present = "CELL_LOOP_NOT_STARTED" in cli
+    matrix_execution_ok = (
+        "enumerate_mechanism_diagnostic_rerun_cells" in execution
+        and "if len(resolved) != 42" in execution
+    )
+    trace_ok = (
+        all((PROJECT_ROOT / rel).is_file() for rel in RUNTIME_SOURCE_FILES)
+        and role["runtime_authority"] == "NO"
+        and role["run_reads"] == "NO"
+        and "src/transfer_methods/sita_mechanism_diagnostic_execution.py" in RUNTIME_SOURCE_FILES
+        and "json.load" not in execution.split("sita_ablation_3e4_manifest_runtime_role", 1)[-1][:400]
+    )
+    universe_ok = False
+    subset_ok = False
+    try:
+        universe = parse_formal_ae_uniform_universe()
+        assert_formal_universe_schema(universe)
+        selected = diagnostic_selected_seeds(enumerate_mechanism_diagnostic_rerun_cells())
+        assert_diagnostic_seeds_are_formal_subset(universe, selected)
+        universe_ok = (
+            not universe["extra_or_duplicate_rows"]
+            and int(universe["n_rows"]) == 300
+            and all(len(seeds) >= 5 for seeds in universe["seeds_by_dataset"].values())
+        )
+        subset_ok = (
+            selected["D1 A/B/C"] != universe["seeds_by_dataset"]["D1"]
+            and selected["D4 A/B/C"] != universe["seeds_by_dataset"]["D4"]
+            and selected["D5 A/B/C"] != universe["seeds_by_dataset"]["D5"]
+            and set(selected["D1 A/B/C"]).issubset(universe["seeds_by_dataset"]["D1"])
+        )
+    except Exception:
+        universe_ok = False
+        subset_ok = False
+
+    return {
+        "diagnostic_default_off": _status(default_off and kwargs_off),
+        "c_init_before_first_optimizer_update": _status(c_init_hook),
+        "final_after_ema_assign": _status(ema_final),
+        "primary_weight_variant_ema": _status(primary_ema),
+        "c_init_c_final_assembly": _status(c_init_c_final),
+        "c_init_b_final_comparability_gate": _status(c_init_b_final),
+        "cka_reference_split_formal_test": _status(reference_ok),
+        "cka_reference_currently_uses_x_train": _status(not train_prefix_rejected),
+        "training_dynamics_epoch0_eval": _status(epoch0_ok),
+        "training_dynamics_epoch_history": _status('"forecast_loss"' in lite),
+        "training_dynamics_val_passed_to_stage_b": _status(val_passed),
+        "training_dynamics_val_rmse_original": _status(val_metrics_ok),
+        "training_dynamics_val_smape_original": _status(val_metrics_ok),
+        "pointwise_prediction_table": _status(pointwise_ok),
+        "formal_predict_has_original_scale": _status("y_pred_original" in _read("src/transfer_methods/ms_katl_primary_target_lr_screening.py")),
+        "formal_predict_runs_after_ema": _status("ema_applied" in lite and "default_v3_predict" in formal),
+        "cka_comparison_matrix_registered": _status(cka_ok),
+        "registered_comparisons": registered,
+        "drift_transferred_backbone_only": _status(drift_ok),
+        "drift_layer_role_field": _status(drift_ok),
+        "consistency_audit_thresholds": _status(consistency_ok),
+        "ae_formal_pair_complete_resume": _status("PAIR_COMPLETE" in formal),
+        "diagnostic_rerun_resume": _status(resume_ok),
+        "resume_config_digest_fail_closed": _status(resume_fail_fast),
+        "output_isolation_timestamped": _status(isolation_ok),
+        "training_ok": _status(training_ok),
+        "pointwise_ok": _status(pointwise_ok),
+        "cka_ok": _status(cka_ok),
+        "drift_ok": _status(drift_ok),
+        "consistency_ok": _status(consistency_ok),
+        "resume_ok": _status(resume_ok),
+        "isolation_ok": _status(isolation_ok),
+        "reference_ok": _status(reference_ok),
+        "ema_ok": _status(c_init_hook and ema_final and primary_ema),
+        "formal_seed_universe_ok": _status(universe_ok),
+        "diagnostic_seed_subset_ok": _status(subset_ok),
+        "ae_formal_diagnostic_path_audit_ok": _status(diagnostic_path_audit_ok),
+        "diagnostics_disabled_formal_path_ok": _status(disabled_path_ok),
+        "diagnostics_disabled_formal_interface_ok": _status(disabled_interface_ok),
+        "real_cell_loop_ok": _status(real_cell_loop_ok),
+        "cell_loop_not_started_present": _status(cell_loop_not_started_present),
+        "execution_matrix_ok": _status(matrix_execution_ok),
+        "runtime_dependency_trace_ok": _status(trace_ok),
+        "sita_3e4_manifest_runtime_authority": role["runtime_authority"],
+        "unexplained_diagnostic_path_blocker": _status(not diagnostic_path_audit_ok),
+    }
+
+
+def machine_readiness_flags(audit: Mapping[str, Any], *, matrix_match: bool) -> Dict[str, str]:
+    flags = {
+        "MATRIX_MATCH": _status(matrix_match),
+        "EMA_SEMANTICS_READY": _status(
+            audit.get("c_init_before_first_optimizer_update") == "YES"
+            and audit.get("final_after_ema_assign") == "YES"
+            and audit.get("primary_weight_variant_ema") == "YES"
+        ),
+        "REFERENCE_INPUTS_READY": audit.get("cka_reference_split_formal_test", "NO"),
+        "TRAINING_DYNAMICS_READY": _status(
+            audit.get("training_dynamics_epoch0_eval") == "YES"
+            and audit.get("training_dynamics_val_passed_to_stage_b") == "YES"
+            and audit.get("training_dynamics_val_rmse_original") == "YES"
+            and audit.get("training_dynamics_val_smape_original") == "YES"
+        ),
+        "POINTWISE_PREDICTIONS_READY": audit.get("pointwise_prediction_table", "NO"),
+        "CKA_MATRIX_READY": audit.get("cka_comparison_matrix_registered", "NO"),
+        "PARAMETER_DRIFT_SCHEMA_READY": _status(
+            audit.get("drift_transferred_backbone_only") == "YES"
+            and audit.get("drift_layer_role_field") == "YES"
+        ),
+        "CONSISTENCY_AUDIT_READY": audit.get("consistency_audit_thresholds", "NO"),
+        "RESUME_READY": _status(
+            audit.get("diagnostic_rerun_resume") == "YES"
+            and audit.get("resume_config_digest_fail_closed") == "YES"
+        ),
+        "OUTPUT_ISOLATION_READY": audit.get("output_isolation_timestamped", "NO"),
+        "FORMAL_SEED_UNIVERSE_READY": audit.get("formal_seed_universe_ok", "NO"),
+        "DIAGNOSTIC_SEED_SUBSET_READY": audit.get("diagnostic_seed_subset_ok", "NO"),
+        "AE_FORMAL_DIAGNOSTIC_PATH_AUDIT_READY": audit.get("ae_formal_diagnostic_path_audit_ok", "NO"),
+        "DIAGNOSTICS_DISABLED_FORMAL_PATH_UNCHANGED": audit.get(
+            "diagnostics_disabled_formal_path_ok", "NO"
+        ),
+        "DIAGNOSTICS_DISABLED_FORMAL_INTERFACE_UNCHANGED": audit.get(
+            "diagnostics_disabled_formal_interface_ok", "NO"
+        ),
+        "REAL_CELL_LOOP_READY": audit.get("real_cell_loop_ok", "NO"),
+        "CELL_LOOP_NOT_STARTED_PRESENT": audit.get("cell_loop_not_started_present", "YES"),
+        "42_CELL_EXECUTION_MATRIX_READY": _status(
+            matrix_match and audit.get("execution_matrix_ok") == "YES"
+        ),
+        "PARAMETER_DRIFT_READY": _status(
+            audit.get("drift_transferred_backbone_only") == "YES"
+            and audit.get("drift_layer_role_field") == "YES"
+        ),
+        "FINAL_RUNTIME_DEPENDENCY_TRACE_READY": audit.get("runtime_dependency_trace_ok", "NO"),
+    }
+    return flags
+
+
+def _execute_ready(flags: Mapping[str, str]) -> bool:
+    return all(flags.get(name) == "YES" for name in MACHINE_READY_FLAGS)
+
+
+def _final_execute_ready(flags: Mapping[str, str]) -> bool:
+    return all(flags.get(name) == "YES" for name in FINAL_GATE_FLAGS)
+
+
+def _ready_to_snapshot_runtime(flags: Mapping[str, str]) -> bool:
+    for name in SNAPSHOT_GATE_FLAGS:
+        expected = "NO" if name == "CELL_LOOP_NOT_STARTED_PRESENT" else "YES"
+        if flags.get(name) != expected:
+            return False
+    return True
+
+
+def plan_mechanism_diagnostic_rerun() -> Dict[str, Any]:
+    from src.transfer_methods.sita_mechanism_diagnostic_outputs import (
+        assert_diagnostic_seeds_are_formal_subset,
+        assert_formal_universe_schema,
+        diagnostic_selected_seeds,
+        parse_formal_ae_uniform_universe,
+    )
+
+    cells = enumerate_mechanism_diagnostic_rerun_cells()
+    groups = matrix_group_counts(cells)
+    expected = expected_matrix_group_counts()
+    audit = _audit_wiring()
+    matrix_match = groups == expected
+    flags = machine_readiness_flags(audit, matrix_match=matrix_match)
+    execute_ready = _execute_ready(flags)
+    universe = parse_formal_ae_uniform_universe()
+    selected = diagnostic_selected_seeds(cells)
+    assert_formal_universe_schema(universe)
+    assert_diagnostic_seeds_are_formal_subset(universe, selected)
+    final_execute_ready = _final_execute_ready(flags)
+    ready_to_snapshot_runtime = _ready_to_snapshot_runtime(flags)
+    digest = matrix_digest_for_cells(cells)
+    return {
+        "mode": "plan-only",
+        "execute_ready": execute_ready,
+        "final_execute_ready": final_execute_ready,
+        "ready_to_snapshot_runtime": ready_to_snapshot_runtime,
+        "matrix_match": matrix_match,
+        "machine_flags": flags,
+        "resolved_cells": [asdict(cell) for cell in cells],
+        "resolved_cell_keys": [cell.cell_key for cell in cells],
+        "group_counts": groups,
+        "expected_group_counts": expected,
+        "matrix_digest": digest,
+        "config_digest": mechanism_rerun_config_digest(cells),
+        "formal_targets": dict(DIAGNOSTIC_RERUN_TARGETS),
+        "formal_available_seeds": universe["seeds_by_dataset"],
+        "formal_seed_universe": {
+            "n_rows": universe["n_rows"],
+            "n_unique_cells": universe["n_unique_cells"],
+            "n_conditions": universe["n_conditions"],
+            "extra_or_duplicate_rows": universe["extra_or_duplicate_rows"],
+            "seed_count_per_condition_arm_min": universe["seed_count_per_condition_arm_min"],
+            "seed_count_per_condition_arm_max": universe["seed_count_per_condition_arm_max"],
+            "seeds_by_dataset": universe["seeds_by_dataset"],
+            "path": universe["path"],
+            "note": (
+                "D1/D4/D5 diagnostic seed42 is a deliberate subset; "
+                "formal available seed provenance is unchanged"
+            ),
+        },
+        "diagnostic_selected_seeds": selected,
+        "ema_semantics": {
+            "formal_evaluation_weight_variant": PRIMARY_WEIGHT_VARIANT,
+            "init_captured_before_first_optimizer_update": audit["c_init_before_first_optimizer_update"],
+            "final_captured_after_ema_assign": audit["final_after_ema_assign"],
+            "primary_weight_variant": PRIMARY_WEIGHT_VARIANT,
+        },
+        "cka": {
+            "intended_reference_split": INTENDED_REFERENCE_SPLIT,
+            "wired_reference_split": (
+                "formal_test_inputs" if flags["REFERENCE_INPUTS_READY"] == "YES" else "X_train_prefix"
+            ),
+            "reference_source": (
+                "formal_test_inputs" if flags["REFERENCE_INPUTS_READY"] == "YES" else "UNKNOWN"
+            ),
+            "reference_n_samples": "RESOLVED_AT_EXECUTE",
+            "reference_sha256": "RESOLVED_AT_EXECUTE",
+            "primary_layer": PRIMARY_CKA_LAYER,
+            "supplementary_layers": list(SUPPLEMENTARY_CKA_LAYERS),
+            "required_comparisons": list(REQUIRED_CKA_COMPARISONS),
+            "auxiliary_comparisons": list(AUXILIARY_CKA_COMPARISONS),
+            "registered_comparisons": audit["registered_comparisons"],
+        },
+        "parameter_drift": {
+            "transferred_backbone_layers": list(TRANSFERRED_BACKBONE_LAYERS),
+            "prediction_head_layer": PREDICTION_HEAD_LAYER,
+            "primary_aggregate_excludes_head": audit["drift_transferred_backbone_only"],
+            "layer_role_field": audit["drift_layer_role_field"],
+        },
+        "training_dynamics": {
+            "fields": list(TRAINING_DYNAMICS_FIELDS),
+            "epoch0_eval": audit["training_dynamics_epoch0_eval"],
+            "epoch_history": audit["training_dynamics_epoch_history"],
+            "val_passed_to_stage_b": audit["training_dynamics_val_passed_to_stage_b"],
+            "val_rmse_original": audit["training_dynamics_val_rmse_original"],
+            "val_smape_original": audit["training_dynamics_val_smape_original"],
+        },
+        "prediction": {
+            "fields": list(POINTWISE_PREDICTION_FIELDS),
+            "pointwise_table": audit["pointwise_prediction_table"],
+            "formal_predict_original_scale": audit["formal_predict_has_original_scale"],
+            "formal_predict_after_ema": audit["formal_predict_runs_after_ema"],
+            "intended_y_pred": "EMA + original scale",
+        },
+        "consistency_audit": {
+            "pass": f"<{CONSISTENCY_PASS_PCT}%",
+            "review": f"{CONSISTENCY_PASS_PCT}%–{CONSISTENCY_REVIEW_PCT}%",
+            "fail": f">{CONSISTENCY_REVIEW_PCT}%",
+            "replaces_frozen_results": "NO",
+            "implemented": audit["consistency_audit_thresholds"],
+            "lookup_scope": "diagnostic_selected_cells_only",
+            "formal_seed_universe_recorded": True,
+        },
+        "resume": {
+            "output_root": str(INTENDED_OUTPUT_ROOT_PARENT / INTENDED_OUTPUT_ROOT_PATTERN),
+            "frozen_ae_root_untouched": "YES",
+            "complete_cell_skip": flags["RESUME_READY"],
+            "failed_cell_resume": flags["RESUME_READY"],
+            "config_digest_mismatch_fails": audit["resume_config_digest_fail_closed"],
+            "ae_formal_pair_complete_resume_exists": audit["ae_formal_pair_complete_resume"],
+            "timestamped_new_run_root": flags["OUTPUT_ISOLATION_READY"],
+        },
+        "wiring_audit": audit,
+        "c_init_b_final_comparability": audit["c_init_b_final_comparability_gate"],
+    }
+
+
+def format_plan(report: Mapping[str, Any]) -> str:
+    groups = report["group_counts"]
+    expected = report["expected_group_counts"]
+    flags = report["machine_flags"]
+    lines = [
+        "=== MECHANISM DIAGNOSTIC RERUN PLAN-ONLY ===",
+        f"EXECUTE_READY={'YES' if report['execute_ready'] else 'NO'}",
+        f"FINAL_EXECUTE_READY={'YES' if report['final_execute_ready'] else 'NO'}",
+        f"READY_TO_SNAPSHOT_RUNTIME={'YES' if report.get('ready_to_snapshot_runtime') else 'NO'}",
+        f"MATRIX_MATCH={flags['MATRIX_MATCH']}",
+        "",
+        f"REAL_CELL_LOOP_READY={flags['REAL_CELL_LOOP_READY']}",
+        f"CELL_LOOP_NOT_STARTED_PRESENT={flags['CELL_LOOP_NOT_STARTED_PRESENT']}",
+        f"42_CELL_EXECUTION_MATRIX_READY={flags['42_CELL_EXECUTION_MATRIX_READY']}",
+        f"EMA_SEMANTICS_READY={flags['EMA_SEMANTICS_READY']}",
+        f"REFERENCE_INPUTS_READY={flags['REFERENCE_INPUTS_READY']}",
+        f"TRAINING_DYNAMICS_READY={flags['TRAINING_DYNAMICS_READY']}",
+        f"POINTWISE_PREDICTIONS_READY={flags['POINTWISE_PREDICTIONS_READY']}",
+        f"CKA_MATRIX_READY={flags['CKA_MATRIX_READY']}",
+        f"PARAMETER_DRIFT_SCHEMA_READY={flags['PARAMETER_DRIFT_SCHEMA_READY']}",
+        f"PARAMETER_DRIFT_READY={flags['PARAMETER_DRIFT_READY']}",
+        f"CONSISTENCY_AUDIT_READY={flags['CONSISTENCY_AUDIT_READY']}",
+        f"RESUME_READY={flags['RESUME_READY']}",
+        f"OUTPUT_ISOLATION_READY={flags['OUTPUT_ISOLATION_READY']}",
+        f"FORMAL_SEED_UNIVERSE_READY={flags['FORMAL_SEED_UNIVERSE_READY']}",
+        f"DIAGNOSTIC_SEED_SUBSET_READY={flags['DIAGNOSTIC_SEED_SUBSET_READY']}",
+        f"AE_FORMAL_DIAGNOSTIC_PATH_AUDIT_READY={flags['AE_FORMAL_DIAGNOSTIC_PATH_AUDIT_READY']}",
+        f"DIAGNOSTICS_DISABLED_FORMAL_PATH_UNCHANGED={flags['DIAGNOSTICS_DISABLED_FORMAL_PATH_UNCHANGED']}",
+        f"DIAGNOSTICS_DISABLED_FORMAL_INTERFACE_UNCHANGED={flags['DIAGNOSTICS_DISABLED_FORMAL_INTERFACE_UNCHANGED']}",
+        f"FINAL_RUNTIME_DEPENDENCY_TRACE_READY={flags['FINAL_RUNTIME_DEPENDENCY_TRACE_READY']}",
+        "",
+        "Resolved cells",
+    ]
+    for label, count in groups.items():
+        mark = "OK" if count == expected[label] else "MISMATCH"
+        lines.append(f"  {label} = {count}  [{mark}, expected {expected[label]}]")
+    lines.extend(
+        [
+            "",
+            "Formal available seeds",
+            f"  D1 = {report['formal_available_seeds']['D1']}",
+            f"  D4 = {report['formal_available_seeds']['D4']}",
+            f"  D5 = {report['formal_available_seeds']['D5']}",
+            f"  D6 = {report['formal_available_seeds']['D6']}",
+            f"  n_rows = {report['formal_seed_universe']['n_rows']}",
+            f"  n_conditions = {report['formal_seed_universe']['n_conditions']}",
+            f"  seeds_per_condition_arm = {report['formal_seed_universe']['seed_count_per_condition_arm_min']}",
+            f"  extra_or_duplicate_rows = {report['formal_seed_universe']['extra_or_duplicate_rows']}",
+            f"  note = {report['formal_seed_universe']['note']}",
+            "",
+            "Diagnostic selected seeds",
+            f"  D1 A/B/C = {report['diagnostic_selected_seeds']['D1 A/B/C']}",
+            f"  D4 A/B/C = {report['diagnostic_selected_seeds']['D4 A/B/C']}",
+            f"  D5 A/B/C = {report['diagnostic_selected_seeds']['D5 A/B/C']}",
+            f"  D6 A     = {report['diagnostic_selected_seeds']['D6 A']}",
+            f"  D6 B/C   = {report['diagnostic_selected_seeds']['D6 B/C']}",
+            f"  targets  = {report['formal_targets']}",
+            f"  matrix_digest = {report['matrix_digest']}",
+            "",
+            "EMA semantics",
+            f"  formal evaluation weight variant = {report['ema_semantics']['formal_evaluation_weight_variant']}",
+            f"  INIT before first optimizer.update = {report['ema_semantics']['init_captured_before_first_optimizer_update']}",
+            f"  FINAL after EMA assign = {report['ema_semantics']['final_captured_after_ema_assign']}",
+            "",
+            "PRIMARY weight variant",
+            f"  {report['ema_semantics']['primary_weight_variant']}",
+            "",
+            "PRIMARY CKA layer",
+            f"  {report['cka']['primary_layer']}",
+            "",
+            "Supplementary CKA layers",
+            f"  {', '.join(report['cka']['supplementary_layers'])}",
+            "",
+            "C_INIT_B_FINAL comparability",
+            f"  gate = {report['c_init_b_final_comparability']}",
+            "",
+            "reference sample source/count/digest",
+            f"  intended split = {report['cka']['intended_reference_split']}",
+            f"  wired split    = {report['cka']['wired_reference_split']}",
+            f"  source         = {report['cka']['reference_source']}",
+            f"  n_samples      = {report['cka']['reference_n_samples']}",
+            f"  digest         = {report['cka']['reference_sha256']}",
+            "  reuse rule     = same digest for all arms/seeds in one condition",
+            "",
+            "CKA comparisons",
+            f"  required     = {', '.join(report['cka']['required_comparisons'])}",
+            f"  auxiliary    = {', '.join(report['cka']['auxiliary_comparisons'])}",
+            f"  registered   = {', '.join(report['cka']['registered_comparisons']) or 'NONE'}",
+            f"  matrix ready = {report['wiring_audit']['cka_comparison_matrix_registered']}",
+            "",
+            "parameter drift layer role",
+            f"  transferred_backbone = {', '.join(report['parameter_drift']['transferred_backbone_layers'])}",
+            f"  prediction_head      = {report['parameter_drift']['prediction_head_layer']}",
+            f"  PRIMARY excludes head = {report['parameter_drift']['primary_aggregate_excludes_head']}",
+            f"  layer_role field      = {report['parameter_drift']['layer_role_field']}",
+            "",
+            "training-dynamics hooks",
+            f"  epoch 0 eval              = {report['training_dynamics']['epoch0_eval']}",
+            f"  epoch 1...E history       = {report['training_dynamics']['epoch_history']}",
+            f"  val split passed to Stage-B = {report['training_dynamics']['val_passed_to_stage_b']}",
+            f"  val RMSE original         = {report['training_dynamics']['val_rmse_original']}",
+            f"  val sMAPE original        = {report['training_dynamics']['val_smape_original']}",
+            "",
+            "prediction hooks",
+            f"  intended y_pred           = {report['prediction']['intended_y_pred']}",
+            f"  pointwise table           = {report['prediction']['pointwise_table']}",
+            f"  formal original-scale path = {report['prediction']['formal_predict_original_scale']}",
+            f"  predict after EMA         = {report['prediction']['formal_predict_after_ema']}",
+            "",
+            "consistency audit",
+            f"  {report['consistency_audit']['pass']} PASS",
+            f"  {report['consistency_audit']['review']} REVIEW",
+            f"  {report['consistency_audit']['fail']} FAIL",
+            f"  replaces frozen results   = {report['consistency_audit']['replaces_frozen_results']}",
+            f"  implemented               = {report['consistency_audit']['implemented']}",
+            f"  lookup_scope              = {report['consistency_audit']['lookup_scope']}",
+            f"  formal seed universe recorded = {report['consistency_audit']['formal_seed_universe_recorded']}",
+            "",
+            "resume/output root",
+            f"  output_root               = {report['resume']['output_root']}",
+            f"  frozen A-E root untouched = {report['resume']['frozen_ae_root_untouched']}",
+            f"  COMPLETE skip             = {report['resume']['complete_cell_skip']}",
+            f"  FAILED resume             = {report['resume']['failed_cell_resume']}",
+            f"  config digest mismatch    = {report['resume']['config_digest_mismatch_fails']}",
+            f"  timestamped new run root  = {report['resume']['timestamped_new_run_root']}",
+            "",
+            "summary",
+            f"  reference input source = {report['cka']['reference_source']}",
+            f"  epoch 0 eval = {report['training_dynamics']['epoch0_eval']}",
+            f"  validation original-scale RMSE = {report['training_dynamics']['val_rmse_original']}",
+            f"  validation original-scale sMAPE = {report['training_dynamics']['val_smape_original']}",
+            f"  pointwise prediction = {report['prediction']['pointwise_table']}",
+            f"  CKA required comparison matrix = {'READY' if flags['CKA_MATRIX_READY'] == 'YES' else 'NO'}",
+            f"  layer_role field = {report['parameter_drift']['layer_role_field']}",
+            f"  consistency audit = {report['consistency_audit']['implemented']}",
+            f"  COMPLETE skip = {report['resume']['complete_cell_skip']}",
+            f"  FAILED resume = {report['resume']['failed_cell_resume']}",
+            f"  timestamped new run root = {report['resume']['timestamped_new_run_root']}",
+            "",
+            "ms_katl_ae_formal.py diagnostic-path audit",
+            f"  AE_FORMAL_DIAGNOSTIC_PATH_AUDIT_READY = {flags['AE_FORMAL_DIAGNOSTIC_PATH_AUDIT_READY']}",
+            f"  diagnostics disabled formal path unchanged = {flags['DIAGNOSTICS_DISABLED_FORMAL_PATH_UNCHANGED']}",
+            f"  diagnostics disabled formal interface unchanged = {flags['DIAGNOSTICS_DISABLED_FORMAL_INTERFACE_UNCHANGED']}",
+            f"  real cell loop ready = {flags['REAL_CELL_LOOP_READY']}",
+            f"  CELL_LOOP_NOT_STARTED present = {flags['CELL_LOOP_NOT_STARTED_PRESENT']}",
+            f"  3e4 manifest runtime authority = {report['wiring_audit'].get('sita_3e4_manifest_runtime_authority', 'UNKNOWN')}",
+            f"  unexplained diagnostic-path blocker = {report['wiring_audit'].get('unexplained_diagnostic_path_blocker', 'UNKNOWN')}",
+            "",
+            "wiring audit",
+        ]
+    )
+    for key, value in report["wiring_audit"].items():
+        if key == "registered_comparisons":
+            continue
+        lines.append(f"  {key} = {value}")
+    lines.append("")
+    if report.get("ready_to_snapshot_runtime"):
+        lines.append("READY_TO_SNAPSHOT_RUNTIME=YES")
+        lines.append("VERDICT: runtime snapshot gate passed. Do not git add/commit/--run until the user authorizes them.")
+    elif report["final_execute_ready"]:
+        lines.append("VERDICT: final gate passed. Do not start --run until the user authorizes it.")
+    elif report["execute_ready"]:
+        blockers = [name for name in FINAL_GATE_FLAGS if flags.get(name) != "YES"]
+        lines.append("VERDICT: EXECUTE_READY=YES but FINAL_EXECUTE_READY=NO. Gaps remain.")
+        lines.append("Remaining final blockers: " + (", ".join(blockers) if blockers else "none"))
+    else:
+        blockers = [name for name in FINAL_GATE_FLAGS if flags.get(name) != "YES"]
+        lines.append("VERDICT: do not start the 42-cell diagnostic rerun. Gaps remain.")
+        lines.append("Remaining blockers: " + (", ".join(blockers) if blockers else "none"))
+    return "\n".join(lines) + "\n"

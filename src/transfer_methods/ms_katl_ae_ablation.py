@@ -50,7 +50,11 @@ from src.transfer_methods.ms_katl_lite import (
     snapshot_named_layer_weights,
 )
 from src.transfer_methods.ms_katl_mechanism_ablation import ABLATION_ARM_NAMES, assert_formal_methods_untouched
-from src.transfer_methods.ms_katl_primary_target_lr_screening import parse_lr
+from src.transfer_methods.ms_katl_primary_target_lr_screening import (
+    canonical_candidate_targets,
+    dataset_name,
+    parse_lr,
+)
 from src.transfer_methods.msml_tl import (
     extract_layer_params,
     fuse_source_models_layerwise,
@@ -83,6 +87,39 @@ SEEDS: Tuple[int, ...] = (42, 43, 44)
 SCENARIO = "without"
 EXPECTED_CANONICAL_CELLS = 54
 EXPECTED_RUNS = 270
+FROZEN_MATRIX_KIND = "FROZEN_270"
+EXTRA_TARGET_MATRIX_KIND = "EXTRA_TARGET_SLICE"
+EXTRA_TARGET_CANONICAL_CELLS = len(HORIZONS) * len(SEEDS)
+EXTRA_TARGET_RUNS = EXTRA_TARGET_CANONICAL_CELLS * len(AE_ARMS)
+EXTRA_TARGET_DATASET_LR: Mapping[str, str] = MappingProxyType(
+    {
+        "D4": "3e-5",
+        "D5": "3e-4",
+        "D6": "3e-5",
+    }
+)
+# Independent paper-target slice. Does not mutate SEEDS, V3_LR_MAP, or the 270-run.
+UNIFORM_3E4_MATRIX_KIND = "UNIFORM_3E4_PAPER_5SEED"
+UNIFORM_3E4_LEARNING_RATE_LABEL = "3e-4"
+UNIFORM_3E4_SEEDS: Tuple[int, ...] = (42, 43, 44, 45, 46)
+UNIFORM_3E4_DATASETS: Tuple[str, ...] = ("D1", "D4", "D5", "D6")
+UNIFORM_3E4_TARGETS: Mapping[str, str] = MappingProxyType(
+    {
+        "D1": "1/10",
+        "D4": "166/258",
+        "D5": "48/1159414",
+        "D6": "CA_1/FOODS_3_080",
+    }
+)
+UNIFORM_3E4_CANONICAL_CELLS = (
+    len(UNIFORM_3E4_DATASETS) * len(HORIZONS) * len(UNIFORM_3E4_SEEDS)
+)
+UNIFORM_3E4_RUNS = UNIFORM_3E4_CANONICAL_CELLS * len(AE_ARMS)
+UNIFORM_3E4_RUNS_PER_DATASET = len(HORIZONS) * len(UNIFORM_3E4_SEEDS) * len(AE_ARMS)
+UNIFORM_3E4_RUNS_PER_DATASET_HORIZON = len(UNIFORM_3E4_SEEDS) * len(AE_ARMS)
+UNIFORM_3E4_OUTPUT_MARKER = "sita_ablation_3e4"
+UNIFORM_3E4_OUTPUT_RELPATH = Path("outputs") / "sita_ablation_3e4_d1_d4_d5_d6_5seed"
+UNIFORM_3E4_MANIFEST_RELPATH = Path("configs") / "ms_katl_sita_ablation_3e4_manifest.json"
 STAGE_A_LEARNING_RATE = float(FIXED_LEARNING_RATE)
 STAGE_B_EPOCHS = int(FIXED_EPOCHS)
 STAGE_B_BATCH_SIZE = 16
@@ -313,6 +350,53 @@ def resolve_cell_lr(dataset: str, target_identity: str) -> Tuple[float, str]:
     if key not in V3_LR_MAP:
         raise AEContractError(f"no frozen V3 LR for {key}")
     label = V3_LR_MAP[key]
+    return float(parse_lr(label)), label
+
+
+def resolve_extra_target_lr(dataset: str, target_identity: str) -> Tuple[float, str]:
+    """Dataset-inherited V3 LR for paper-candidate extra targets.
+
+    Does not mutate V3_LR_MAP. Frozen primary targets must stay on the 270-run runner.
+    Extra-target LR matches SITA all-candidate D4–D6 inherited LR so arm D stays
+    comparable to CURRENT_V3 / SITA on the same target.
+    """
+    dataset_key = dataset_name(dataset)
+    parsed_target = str(target_identity).strip()
+    key = (dataset_key, parsed_target)
+    if key in V3_LR_MAP:
+        raise AEContractError(
+            f"frozen primary target {key} is not an extra-target A–E slice; use the 270-run runner"
+        )
+    inventory = set(canonical_candidate_targets(dataset_key))
+    if parsed_target not in inventory:
+        raise AEContractError(f"extra target {key} is not in the canonical inventory {sorted(inventory)}")
+    if dataset_key not in EXTRA_TARGET_DATASET_LR:
+        raise AEContractError(f"no dataset-inherited A–E LR for {dataset_key}")
+    label = EXTRA_TARGET_DATASET_LR[dataset_key]
+    from src.transfer_methods.ms_katl_sita_all_targets_d4_d6 import DATASET_INHERITED_LR
+
+    if DATASET_INHERITED_LR.get(dataset_key) != label:
+        raise AEContractError(
+            f"extra-target LR {label} drifted from SITA inherited LR {DATASET_INHERITED_LR.get(dataset_key)}"
+        )
+    return float(parse_lr(label)), label
+
+
+def resolve_uniform_3e4_lr(dataset: str, target_identity: str) -> Tuple[float, str]:
+    """Fixed Stage-B LR=3e-4 for the paper-target 5-seed slice.
+
+    Does not mutate V3_LR_MAP or extra-target inherited LR.
+    """
+    dataset_key = dataset_name(dataset)
+    parsed_target = str(target_identity).strip()
+    expected = UNIFORM_3E4_TARGETS.get(dataset_key)
+    if expected is None:
+        raise AEContractError(f"uniform 3e-4 slice forbids dataset {dataset_key}")
+    if parsed_target != expected:
+        raise AEContractError(
+            f"uniform 3e-4 target for {dataset_key} must be {expected}, got {parsed_target}"
+        )
+    label = UNIFORM_3E4_LEARNING_RATE_LABEL
     return float(parse_lr(label)), label
 
 
@@ -894,6 +978,94 @@ def construct_all_ae_arms(
     verify_shared_stage_a_arms(arms, stage_a)
     verify_common_head_init(arms)
     return arms
+
+
+def build_ae_stage_a_from_shared_bundle(shared_bundle: Any) -> AESyntheticStageA:
+    """Adapt frozen V3 MSKATLSharedBundle → AESyntheticStageA for construct_ae_arm.
+
+    Construction-only bridge. Does not train. Reuses the same snapshot helpers as
+    the synthetic Stage-A path so A–E arm construction stays single-authority.
+    """
+    artifacts = shared_bundle.stage_a
+    if not getattr(artifacts, "source_identities", None):
+        raise AEContractError("shared bundle Stage A has no sources")
+    layer_names = list(artifacts.layer_names)
+    if tuple(layer_names) != CONV_LAYER_NAMES:
+        raise AEContractError(f"transferable layers drifted: {layer_names}")
+    models = list(artifacts.source_models)
+    if len(models) != len(artifacts.source_identities):
+        raise AEContractError("source model / identity count mismatch")
+    conv_params = [extract_layer_params(model, layer_names) for model in models]
+    dense_out = [
+        [np.array(weight, copy=True) for weight in model.get_layer("dense_out").get_weights()]
+        for model in models
+    ]
+    snapshots = [
+        [np.array(weight, copy=True) for weight in item]
+        for item in artifacts.source_weight_snapshots
+    ]
+    identities = [tuple(item) for item in artifacts.source_identities]
+    distances = [float(value) for value in artifacts.source_distances]
+    weights = [float(value) for value in artifacts.source_weights]
+    if int(np.argmin(np.asarray(distances, dtype=np.float64))) != 0:
+        raise AEContractError("selected_sources[0] is not the nearest source")
+    rank1 = {
+        name: [np.array(array, copy=True) for array in conv_params[0][name]]
+        for name in CONV_LAYER_NAMES
+    }
+    learning_rate = float(shared_bundle.learning_rate)
+    seed = int(shared_bundle.seed)
+    input_shape = tuple(int(dim) for dim in artifacts.input_shape)
+    best_snapshot = best_source_target_init_snapshot(input_shape, learning_rate, rank1, seed=seed)
+    selection_digest = source_selection_digest(identities, distances, weights)
+    split_digest = {
+        str(key): str(value) for key, value in dict(shared_bundle.target_split_digest).items()
+    }
+    return AESyntheticStageA(
+        source_identities=identities,
+        source_distances=distances,
+        source_weights=weights,
+        selected_sources=list(artifacts.selected_sources),
+        input_shape=input_shape,
+        layer_names=layer_names,
+        source_conv_params=conv_params,
+        source_dense_out=dense_out,
+        source_weight_snapshots=snapshots,
+        source_weight_digests=[str(item) for item in artifacts.source_weight_digests],
+        fused_params={
+            name: [np.array(array, copy=True) for array in arrays]
+            for name, arrays in artifacts.fused_params.items()
+        },
+        fused_params_digest=str(artifacts.fused_params_digest),
+        fused_target_snapshot=[np.array(weight, copy=True) for weight in shared_bundle.fused_target_snapshot],
+        native_target_snapshot=[np.array(weight, copy=True) for weight in shared_bundle.raw_target_snapshot],
+        best_source_snapshot=best_snapshot,
+        fused_target_digest=str(shared_bundle.fused_target_digest),
+        native_target_digest=str(shared_bundle.raw_target_digest),
+        best_source_snapshot_digest=conv_params_digest(rank1),
+        source_selection_digest=selection_digest,
+        stage_a_digest=_json_digest(
+            {
+                "selection": selection_digest,
+                "source_weight_digests": list(artifacts.source_weight_digests),
+                "fused_params_digest": str(artifacts.fused_params_digest),
+            }
+        ),
+        knn_prior=np.asarray(artifacts.knn_prior, dtype=np.float64),
+        X_train=np.asarray(shared_bundle.X_train),
+        y_train=np.asarray(shared_bundle.y_train),
+        X_val=np.asarray(shared_bundle.X_val),
+        y_val=np.asarray(shared_bundle.y_val),
+        X_test=np.asarray(shared_bundle.X_test),
+        y_test=np.asarray(shared_bundle.y_test),
+        target_split_digest=split_digest,
+        target_scaler_digest=str(split_digest.get("target_scaler", "")),
+        target_feature_columns=list(shared_bundle.target_feature_columns),
+        learning_rate=learning_rate,
+        seed=seed,
+        d_model=int(getattr(shared_bundle, "d_model", 0) or 0),
+        source_extractors=list(getattr(artifacts, "source_extractors", []) or []),
+    )
 
 
 def verify_shared_stage_a_arms(

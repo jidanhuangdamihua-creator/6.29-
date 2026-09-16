@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Literal, Optional, Tuple
 
 import pandas as pd
 
@@ -63,10 +63,12 @@ D46_POOL_METADATA = {4: (), 5: ("family",), 6: ("dept_id",)}
 WINDOW_SIZE = 10
 REQUESTED_K = 3
 
-_D13_POOL_CACHE: Dict[Tuple[str, int, int, str], dict] = {}
+V3Mode = Literal["without", "with"]
+
+_D13_POOL_CACHE: Dict[Tuple[str, int, int, str, str], dict] = {}
 _D13_BASE_CACHE: Dict[Tuple[str, str], dict] = {}
-_D46_POOL_CACHE: Dict[Tuple[str, str], dict] = {}
-_D46_BOUND_CACHE: Dict[Tuple[str, str, str], dict] = {}
+_D46_POOL_CACHE: Dict[Tuple[str, str, str], dict] = {}
+_D46_BOUND_CACHE: Dict[Tuple[str, str, str, str], dict] = {}
 
 
 def reset_v3_frame_caches() -> None:
@@ -78,6 +80,26 @@ def reset_v3_frame_caches() -> None:
 
 def dataset_number(dataset: str) -> int:
     return int(str(dataset).strip().upper()[1:])
+
+
+def normalize_v3_mode(mode: str = SCREENING_MODE) -> V3Mode:
+    resolved = str(mode).strip().lower()
+    if resolved not in {"without", "with"}:
+        raise AEContractError(f"V3 mode must be 'without' or 'with', got {mode!r}")
+    return resolved  # type: ignore[return-value]
+
+
+def v3_scenario_for_mode(mode: str = SCREENING_MODE) -> str:
+    return f"{normalize_v3_mode(mode)}_information_sharing"
+
+
+def v3_knn_authority_path(dataset: str, mode: str = SCREENING_MODE) -> Path:
+    dataset_id = dataset_number(dataset)
+    return (
+        Path(SOLIDIFIED_KNN_ROOT)
+        / f"Dataset{dataset_id}"
+        / f"knn_{normalize_v3_mode(mode)}_info_sharing.json"
+    )
 
 
 def _require_sealed_paths(dataset: str, project_root: Path):
@@ -137,8 +159,17 @@ def _load_d13_base(dataset: str, *, project_root: Path, cfg: dict) -> dict:
     return payload
 
 
-def load_d13_pool(dataset: str, horizon: int, seed: int, *, project_root: Path) -> dict:
-    cache_key = (dataset, int(horizon), int(seed), str(project_root))
+def load_d13_pool(
+    dataset: str,
+    horizon: int,
+    seed: int,
+    *,
+    project_root: Path,
+    mode: str = SCREENING_MODE,
+) -> dict:
+    resolved_mode = normalize_v3_mode(mode)
+    scenario = v3_scenario_for_mode(resolved_mode)
+    cache_key = (dataset, int(horizon), int(seed), resolved_mode, str(project_root))
     if cache_key in _D13_POOL_CACHE:
         return _D13_POOL_CACHE[cache_key]
     from scripts.run_full_paper_experiments import _prepare_cell_source_dependencies
@@ -149,7 +180,7 @@ def load_d13_pool(dataset: str, horizon: int, seed: int, *, project_root: Path) 
     base = loaded["base"]
     cell_source = _prepare_cell_source_dependencies(
         dataset_name=dataset_name,
-        information_sharing_scenario="without_information_sharing",
+        information_sharing_scenario=scenario,
         cfg=cfg,
         protocol=protocol,
         strict_paper_mode=True,
@@ -164,12 +195,23 @@ def load_d13_pool(dataset: str, horizon: int, seed: int, *, project_root: Path) 
         "sealed_source_path": loaded["sealed_source_path"],
         "sealed_target_path": loaded["sealed_target_path"],
         "frame_authority": loaded["frame_authority"],
+        "mode": resolved_mode,
+        "scenario": scenario,
+        "source_authority_identity": (
+            f"formal_lifecycle:{scenario}|sealed_source:{loaded['sealed_source_path']}"
+        ),
     }
     _D13_POOL_CACHE[cache_key] = payload
     return payload
 
 
-def prepare_d13_target_cell(dataset: str, pool: dict, parsed: dict) -> dict:
+def prepare_d13_target_cell(
+    dataset: str,
+    pool: dict,
+    parsed: dict,
+    *,
+    mode: str = SCREENING_MODE,
+) -> dict:
     from scripts.run_full_paper_experiments import (
         _bind_protocol_cell_identity as bind_d13,
         _cell_lifecycle_identity,
@@ -181,9 +223,15 @@ def prepare_d13_target_cell(dataset: str, pool: dict, parsed: dict) -> dict:
     dataset_name = pool["dataset_name"]
     cfg = pool["cfg"]
     cell_source = pool["cell_source"]
+    resolved_mode = normalize_v3_mode(mode)
+    if resolved_mode != pool.get("mode", SCREENING_MODE):
+        raise AEContractError(
+            f"D1-D3 V3 pool mode mismatch: pool={pool.get('mode')!r}, cell={resolved_mode!r}"
+        )
+    scenario = v3_scenario_for_mode(resolved_mode)
     target_df = pool["base"]["target_df"].copy()
     expected_lifecycle_identity = _cell_lifecycle_identity(
-        dataset_name, "without_information_sharing", cfg
+        dataset_name, scenario, cfg
     )
     _require_cell_context_identity(cell_source, expected_lifecycle_identity)
     source_df = cell_source.source_frame.copy()
@@ -212,7 +260,7 @@ def prepare_d13_target_cell(dataset: str, pool: dict, parsed: dict) -> dict:
         source_df,
         target_df,
         dataset_id=dataset_name,
-        scenario="without_information_sharing",
+        scenario=scenario,
         group_cols=group_cols,
         observed_start=None if dataset in {"D1", "D2"} else "2015-01-03",
         prepared_pool=cell_source.prepared_pool,
@@ -232,16 +280,24 @@ def prepare_d13_target_cell(dataset: str, pool: dict, parsed: dict) -> dict:
         "frame_authority": pool["frame_authority"],
         "sealed_source_path": pool["sealed_source_path"],
         "sealed_target_path": pool["sealed_target_path"],
+        "mode": resolved_mode,
+        "scenario": scenario,
+        "source_authority_identity": pool["source_authority_identity"],
     }
 
 
-def _d46_config(dataset_id: int, project_root: Path) -> dict:
+def _d46_config(
+    dataset_id: int,
+    project_root: Path,
+    mode: str = SCREENING_MODE,
+) -> dict:
+    resolved_mode = normalize_v3_mode(mode)
     return {
         "use_parquet": True,
         "dataset_id": dataset_id,
         "dataset_name": f"Dataset{dataset_id}",
         "knn_json_dir": str(Path(SOLIDIFIED_KNN_ROOT) / f"Dataset{dataset_id}"),
-        "info_sharing": SCREENING_MODE,
+        "info_sharing": resolved_mode,
         "source_history_days": SOURCE_HISTORY_DAYS,
         "entity_col": "entity_id",
         "horizon": 1,
@@ -261,12 +317,18 @@ def _d46_config(dataset_id: int, project_root: Path) -> dict:
     }
 
 
-def load_d46_pool(dataset: str, *, project_root: Path) -> dict:
-    cache_key = (dataset, str(project_root))
+def load_d46_pool(
+    dataset: str,
+    *,
+    project_root: Path,
+    mode: str = SCREENING_MODE,
+) -> dict:
+    resolved_mode = normalize_v3_mode(mode)
+    cache_key = (dataset, resolved_mode, str(project_root))
     if cache_key in _D46_POOL_CACHE:
         return _D46_POOL_CACHE[cache_key]
     dataset_id = dataset_number(dataset)
-    config = _d46_config(dataset_id, project_root)
+    config = _d46_config(dataset_id, project_root, resolved_mode)
     paths = _require_sealed_paths(dataset, project_root)
     knn_dir = Path(SOLIDIFIED_KNN_ROOT) / f"Dataset{dataset_id}"
     if not knn_dir.is_dir():
@@ -332,6 +394,9 @@ def load_d46_pool(dataset: str, *, project_root: Path) -> dict:
         "sealed_source_path": str(paths.source_path),
         "sealed_target_path": str(paths.target_path),
         "frame_authority": "src.utils.parquet_data_loader.load_parquet_source_target",
+        "mode": resolved_mode,
+        "scenario": v3_scenario_for_mode(resolved_mode),
+        "source_authority_identity": str(knn_data.get("_path") or v3_knn_authority_path(dataset, resolved_mode)),
     }
     _D46_POOL_CACHE[cache_key] = payload
     return payload
@@ -341,7 +406,12 @@ def _bound_d46_frames(dataset: str, pool: dict, parsed: dict) -> dict:
     config = dict(pool["config"])
     dataset_id = int(config["dataset_id"])
     entity_key = parsed["entity_key"]
-    cache_key = (dataset, str(entity_key), str(pool["sealed_source_path"]))
+    cache_key = (
+        dataset,
+        str(entity_key),
+        str(pool.get("mode", SCREENING_MODE)),
+        str(pool["sealed_source_path"]),
+    )
     if cache_key in _D46_BOUND_CACHE:
         return _D46_BOUND_CACHE[cache_key]
     knn_data = pool["knn_data"]
@@ -398,6 +468,8 @@ def _bound_d46_frames(dataset: str, pool: dict, parsed: dict) -> dict:
         "sealed_source_path": pool["sealed_source_path"],
         "sealed_target_path": pool["sealed_target_path"],
         "entity_key": entity_key,
+        "mode": pool.get("mode", SCREENING_MODE),
+        "source_authority_identity": pool["source_authority_identity"],
     }
     model_feature_cols = _resolve_model_feature_cols(source_bound, target_bound, feature_cols, config)
     source_model_df = _sanitize_source_model_dataframe(
@@ -485,6 +557,9 @@ def prepare_d46_target_cell(dataset: str, pool: dict, parsed: dict, *, horizon: 
         "frame_authority": bound["frame_authority"],
         "sealed_source_path": bound["sealed_source_path"],
         "sealed_target_path": bound["sealed_target_path"],
+        "mode": bound["mode"],
+        "scenario": scenario,
+        "source_authority_identity": bound["source_authority_identity"],
     }
 
 
@@ -495,22 +570,25 @@ def assemble_v3_cell_frames(
     horizon: int,
     seed: int,
     project_root: Optional[Path] = None,
+    mode: str = SCREENING_MODE,
 ) -> dict:
     """Return the frozen V3 source/target modeling frames for one AE cell. No training."""
     root = project_root_from(project_root)
+    resolved_mode = normalize_v3_mode(mode)
     parsed = parse_target_identity(dataset, target_identity)
     if parsed["target_identity"] != target_identity:
         raise AEContractError(f"target identity drifted: {parsed['target_identity']}")
     if dataset in {"D1", "D2", "D3"}:
-        pool = load_d13_pool(dataset, horizon, seed, project_root=root)
-        cell = prepare_d13_target_cell(dataset, pool, parsed)
+        pool = load_d13_pool(dataset, horizon, seed, project_root=root, mode=resolved_mode)
+        cell = prepare_d13_target_cell(dataset, pool, parsed, mode=resolved_mode)
     elif dataset in {"D4", "D5", "D6"}:
-        pool = load_d46_pool(dataset, project_root=root)
+        pool = load_d46_pool(dataset, project_root=root, mode=resolved_mode)
         cell = prepare_d46_target_cell(dataset, pool, parsed, horizon=horizon, seed=seed)
     else:
         raise AEContractError(f"unknown dataset {dataset}")
     if cell["source_model_df"].empty or cell["target_model_df"].empty:
         raise AEContractError(f"empty V3 frames for {dataset}/{target_identity}")
     cell["parsed"] = parsed
-    cell["scenario"] = SCREENING_MODE
+    cell["mode"] = resolved_mode
+    cell["scenario"] = v3_scenario_for_mode(resolved_mode)
     return cell

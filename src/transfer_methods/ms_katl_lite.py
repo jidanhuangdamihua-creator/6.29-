@@ -28,7 +28,7 @@ import hashlib
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -473,6 +473,8 @@ def train_ms_katl_head(
     ema_momentum: float = DEFAULT_EMA_MOMENTUM,
     revin: Optional[RevIN] = None,
     revin_include_mean: bool = True,
+    on_before_first_target_optimizer_update: Optional[Callable[[Mapping[str, object]], None]] = None,
+    on_diagnostic_epoch_eval: Optional[Callable[[Mapping[str, object]], None]] = None,
 ) -> Dict[str, object]:
     """
     MS-KATL Stage B 训练循环：
@@ -485,6 +487,12 @@ def train_ms_katl_head(
       回到 MinMax 空间。默认关闭，V1/V2 行为不变。
     - revin_include_mean 默认 True，保持 V3 location+scale 反变换；False 为
       residual-aware 的 scale-only 反变换（V3.2）。默认值不得改变 V3 数值路径。
+    - 可选 on_before_first_target_optimizer_update：仅在第一次 target
+      optimizer.apply_gradients 之前调用一次。默认 None，正式训练数值路径不变。
+    - 可选 on_diagnostic_epoch_eval：诊断专用。默认 None。不为 None 时在
+      第一次 optimizer update 之前记录 epoch 0，并在每个 epoch 结束后用
+      正式 EMA 权重（若 use_ema）做只读 evaluation，然后恢复 RAW 训练权重。
+      不改变 optimizer、early stopping 或训练数据。
     """
     logger = _get_logger()
     resolved_loss = str(loss_name).strip().lower()
@@ -578,6 +586,18 @@ def train_ms_katl_head(
     history.update({f"disc_{i}_acc": [] for i in range(k)})
 
     global_step = 0
+    diagnostics_enabled = (
+        on_before_first_target_optimizer_update is not None
+        or on_diagnostic_epoch_eval is not None
+    )
+    before_first_update_capture = None
+    if diagnostics_enabled:
+        before_first_update_capture = {
+            "requested": on_before_first_target_optimizer_update is not None,
+            "invoked": False,
+            "optimizer_update_count": None,
+            "captured_before_first_target_optimizer_update": False,
+        }
     for epoch in range(int(epochs)):
         order = rng.permutation(n)
         epoch_stats: Dict[str, List[float]] = {key: [] for key in history if key != "val_rmse"}
@@ -660,6 +680,34 @@ def train_ms_katl_head(
                     step_gate_sq += float(tf.reduce_sum(tf.square(grad)).numpy())
             if collect_gate_grads and gate_var_ids:
                 gate_grad_norms.append(float(math.sqrt(step_gate_sq)) if saw_gate_grad else 0.0)
+            if (
+                global_step == 0
+                and on_before_first_target_optimizer_update is not None
+            ):
+                on_before_first_target_optimizer_update(
+                    {
+                        "optimizer_update_count": 0,
+                        "captured_before_first_target_optimizer_update": True,
+                        "global_step": int(global_step),
+                        "trainable_variable_count": int(len(trainable_vars)),
+                    }
+                )
+                before_first_update_capture = {
+                    "requested": True,
+                    "invoked": True,
+                    "optimizer_update_count": 0,
+                    "captured_before_first_target_optimizer_update": True,
+                }
+            if global_step == 0 and on_diagnostic_epoch_eval is not None:
+                on_diagnostic_epoch_eval(
+                    {
+                        "epoch": 0,
+                        "before_first_target_optimizer_update": True,
+                        "optimizer_update_count": 0,
+                        "weight_variant": "EMA" if use_ema else "RAW",
+                        "train_objective_loss": float(loss_forecast.numpy()),
+                    }
+                )
             optimizer.apply_gradients(finite_grads)
             if use_ema:
                 momentum = float(ema_momentum)
@@ -705,6 +753,26 @@ def train_ms_katl_head(
         else:
             history["val_rmse"].append(float("nan"))
 
+        if on_diagnostic_epoch_eval is not None:
+            raw_snapshot = None
+            if use_ema:
+                raw_snapshot = [tf.identity(tf.convert_to_tensor(v)) for v in trainable_vars]
+                for var, ema in zip(trainable_vars, ema_values):
+                    var.assign(ema)
+            try:
+                on_diagnostic_epoch_eval(
+                    {
+                        "epoch": int(epoch) + 1,
+                        "before_first_target_optimizer_update": False,
+                        "weight_variant": "EMA" if use_ema else "RAW",
+                        "train_objective_loss": float(history["forecast_loss"][-1]),
+                    }
+                )
+            finally:
+                if raw_snapshot is not None:
+                    for var, raw in zip(trainable_vars, raw_snapshot):
+                        var.assign(raw)
+
     ema_applied = False
     if use_ema:
         for var, ema in zip(trainable_vars, ema_values):
@@ -724,7 +792,7 @@ def train_ms_katl_head(
     final_gate_bias = None
     if model.gate_mode == "learnable" and model.residual_gate.built:
         final_gate_bias = float(model.residual_gate.gate_proj.bias.numpy().reshape(-1)[0])
-    return {
+    result = {
         "history": history,
         "total_steps": total_steps,
         "steps_per_epoch": steps_per_epoch,
@@ -759,6 +827,9 @@ def train_ms_katl_head(
             "gate_grad_steps": int(len(gate_grad_norms)),
         },
     }
+    if diagnostics_enabled:
+        result["before_first_target_optimizer_update_capture"] = before_first_update_capture
+    return result
 
 
 def predict_ms_katl(
