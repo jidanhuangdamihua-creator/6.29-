@@ -622,12 +622,25 @@ def run_mechanism_diagnostic_cell_loop(
     code_digest: Optional[str] = None,
     project_root: Optional[Path] = None,
     environ: Optional[Mapping[str, str]] = None,
+    allow_cell_subset: bool = False,
 ) -> Dict[str, Any]:
     run_dir = Path(run_dir)
     if FROZEN_AE_OUTPUT_MARKER in run_dir.as_posix():
         raise MechanismDiagnosticsContractError("diagnostic cell loop refuses the frozen A–E output root")
-    resolved = tuple(cells) if cells is not None else enumerate_mechanism_diagnostic_rerun_cells()
-    if len(resolved) != 42:
+    universe = enumerate_mechanism_diagnostic_rerun_cells()
+    if len(universe) != 42:
+        raise MechanismDiagnosticsContractError(f"diagnostic matrix drifted: {len(universe)} != 42")
+    resolved = tuple(cells) if cells is not None else universe
+    if allow_cell_subset:
+        if not resolved:
+            raise MechanismDiagnosticsContractError("--only-cell subset is empty")
+        universe_keys = {cell.cell_key for cell in universe}
+        unknown = [cell.cell_key for cell in resolved if cell.cell_key not in universe_keys]
+        if unknown:
+            raise MechanismDiagnosticsContractError(
+                f"--only-cell is not in the 42-cell diagnostic matrix: {unknown}"
+            )
+    elif len(resolved) != 42:
         raise MechanismDiagnosticsContractError(f"diagnostic matrix drifted: {len(resolved)} != 42")
     cfg = config_digest or mechanism_rerun_config_digest(resolved)
     mat = matrix_digest or matrix_digest_for_cells(resolved)

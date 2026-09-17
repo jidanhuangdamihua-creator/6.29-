@@ -46,6 +46,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Alias of --run. Blocked until plan-only reports EXECUTE_READY=YES.",
     )
+    parser.add_argument(
+        "--only-cell",
+        type=str,
+        default=None,
+        help=(
+            "Run one cell from the official 42-cell matrix, e.g. D1-H1-seed42-B. "
+            "Does not change the default 42-cell matrix."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -53,17 +62,27 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     from src.transfer_methods.sita_mechanism_diagnostic_rerun import (
         format_plan,
+        matrix_digest_for_cells,
         mechanism_rerun_config_digest,
         plan_mechanism_diagnostic_rerun,
+        resolve_diagnostic_only_cell,
     )
 
     want_run = bool(args.run or args.execute)
+    only_cell = str(args.only_cell).strip() if args.only_cell else ""
+    if only_cell and not (want_run or args.resume or args.plan_only):
+        print("usage: scripts/run_mechanism_diagnostic_rerun.py --run --only-cell D1-H1-seed42-B")
+        return 2
     if args.plan_only or not (want_run or args.resume):
         if not args.plan_only and not want_run and not args.resume:
             print("usage: scripts/run_mechanism_diagnostic_rerun.py --plan-only")
             return 2
         report = plan_mechanism_diagnostic_rerun()
         sys.stdout.write(format_plan(report))
+        if only_cell:
+            cell = resolve_diagnostic_only_cell(only_cell)
+            print(f"ONLY_CELL={cell.cell_key}")
+            print("DEFAULT_42_CELL_MATRIX_UNCHANGED=YES")
         return 0
 
     report = plan_mechanism_diagnostic_rerun()
@@ -82,15 +101,24 @@ def main(argv: list[str] | None = None) -> int:
         resolve_run_directory,
     )
 
+    smoke_cells = None
     try:
         assert_formal_training_permitted(execute=True)
+        smoke_cells = None
+        allow_subset = False
+        config_digest = str(report.get("config_digest") or mechanism_rerun_config_digest())
+        matrix_digest = str(report["matrix_digest"])
+        if only_cell:
+            smoke = resolve_diagnostic_only_cell(only_cell)
+            smoke_cells = (smoke,)
+            allow_subset = True
+            config_digest = mechanism_rerun_config_digest(smoke_cells)
+            matrix_digest = matrix_digest_for_cells(smoke_cells)
         run_dir = resolve_run_directory(
             plan_only=False,
             resume=bool(args.resume),
             run_dir=args.run_dir,
         )
-        config_digest = str(report.get("config_digest") or mechanism_rerun_config_digest())
-        matrix_digest = str(report["matrix_digest"])
         code_digest = mechanism_rerun_code_digest()
         prepare_run_root(
             run_dir,
@@ -101,10 +129,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         loop = run_mechanism_diagnostic_cell_loop(
             run_dir,
+            cells=smoke_cells,
             resume=bool(args.resume),
             config_digest=config_digest,
             matrix_digest=matrix_digest,
             code_digest=code_digest,
+            allow_cell_subset=allow_subset,
         )
     except AETrainingBlocked as exc:
         print(f"EXECUTE_BLOCKED: {exc}. Frozen A–E results were not touched.")
@@ -114,6 +144,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     print(f"run_dir={loop['run_dir']}")
     print(f"CELL_LOOP_STARTED=YES")
+    if only_cell:
+        print(f"ONLY_CELL={smoke_cells[0].cell_key}")
+        print("DEFAULT_42_CELL_MATRIX_UNCHANGED=YES")
     print(f"n_cells={loop['n_cells']}")
     print(f"n_ran={loop['n_ran']}")
     print(f"n_skipped={loop['n_skipped']}")
