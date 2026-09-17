@@ -27,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -987,6 +988,29 @@ class MSKATLStageAArtifacts:
     effective_k: int
     tau_k: float
     source_extractors: List[object] = field(default_factory=list)
+    stage_a_seed: Optional[int] = None
+
+
+def reset_stage_a_source_training_rng(seed: int) -> int:
+    """Reset Python/NumPy/TensorFlow RNG once at the Stage-A source-training boundary.
+
+    The cell seed is applied here exactly once. Subsequent source CNN
+    construction, initialization, and ``model.fit`` calls consume this stream
+    in selection order, so the three sources stay independently initialized
+    while remaining reproducible.
+    """
+    if seed is None:
+        raise ValueError(
+            "prepare_ms_katl_stage_a requires an explicit seed; "
+            "refusing to inherit ambient RNG state"
+        )
+    normalized = int(seed)
+    random.seed(normalized)
+    np.random.seed(normalized)
+    tf.random.set_seed(normalized)
+    if hasattr(tf.keras.utils, "set_random_seed"):
+        tf.keras.utils.set_random_seed(normalized)
+    return normalized
 
 
 def prepare_ms_katl_stage_a(
@@ -1005,9 +1029,24 @@ def prepare_ms_katl_stage_a(
     k3_selection_context: TargetK3SelectionContext | None = None,
     k3_raw_source_context: TargetK3RawSourceContext | None = None,
     transformation_reuse_context: "TargetTransformationReuseContext | None" = None,
+    *,
+    seed: int,
 ) -> MSKATLStageAArtifacts:
-    """Train/load Stage A once: KNN sources, frozen source CNNs, scalers, fused conv params."""
+    """Train/load Stage A once: KNN sources, frozen source CNNs, scalers, fused conv params.
+
+    ``seed`` is keyword-only and required. It uniquely determines Stage-A source
+    CNN initialization and training randomness for this cell. Source selection,
+    source order, distances, fusion weights, and model hyperparameters are
+    unchanged.
+    """
+    if seed is None:
+        raise ValueError(
+            "prepare_ms_katl_stage_a requires an explicit seed; "
+            "refusing to inherit ambient RNG state"
+        )
+    stage_a_seed = reset_stage_a_source_training_rng(seed)
     logger = _get_logger()
+    logger.info("[prepare_ms_katl_stage_a] RNG reset once at entry. seed=%d", stage_a_seed)
     resolved_group_cols = tuple(group_cols)
 
     if k3_selection_context is None:
@@ -1174,8 +1213,9 @@ def prepare_ms_katl_stage_a(
         for i, model in enumerate(source_models)
     ]
     logger.info(
-        "[prepare_ms_katl_stage_a] Frozen K=%d identities=%s digests=%s",
+        "[prepare_ms_katl_stage_a] Frozen K=%d seed=%d identities=%s digests=%s",
         effective_k,
+        stage_a_seed,
         source_identities,
         source_weight_digests,
     )
@@ -1201,6 +1241,7 @@ def prepare_ms_katl_stage_a(
         effective_k=int(effective_k),
         tau_k=float(tau_k),
         source_extractors=source_extractors,
+        stage_a_seed=int(stage_a_seed),
     )
 
 
@@ -1307,6 +1348,7 @@ def run_ms_katl_lite(
         k3_selection_context=k3_selection_context,
         k3_raw_source_context=k3_raw_source_context,
         transformation_reuse_context=transformation_reuse_context,
+        seed=int(seed),
     )
     selection_result = stage_a.selection_result
     selected_sources = stage_a.selected_sources
