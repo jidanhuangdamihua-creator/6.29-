@@ -140,6 +140,64 @@ def forward_reference_from_constructed(
     return as_representation_matrix(np.asarray(z))
 
 
+def snapshot_named_layers_from_constructed(
+    constructed: Any,
+) -> Dict[str, Tuple[np.ndarray, ...]]:
+    if constructed is None:
+        raise MechanismDiagnosticsContractError("cannot snapshot named layers without constructed arm")
+    target_cnn = getattr(constructed, "target_cnn", None)
+    head = getattr(constructed, "head", None)
+    if target_cnn is None:
+        raise MechanismDiagnosticsContractError("constructed arm is missing target_cnn")
+    if head is None:
+        raise MechanismDiagnosticsContractError("constructed arm is missing head")
+
+    def _get_layer(model: Any, name: str) -> Any:
+        getter = getattr(model, "get_layer", None)
+        if callable(getter):
+            try:
+                layer = getter(name)
+            except Exception as exc:
+                raise MechanismDiagnosticsContractError(
+                    f"constructed target_cnn is missing layer {name!r}"
+                ) from exc
+            if layer is not None:
+                return layer
+        for layer in getattr(model, "layers", ()) or ():
+            if getattr(layer, "name", None) == name:
+                return layer
+        raise MechanismDiagnosticsContractError(
+            f"constructed target_cnn is missing layer {name!r}"
+        )
+
+    def _copy_layer_weights(layer: Any, name: str) -> Tuple[np.ndarray, ...]:
+        getter = getattr(layer, "get_weights", None)
+        if not callable(getter):
+            raise MechanismDiagnosticsContractError(
+                f"constructed layer {name!r} cannot provide weights"
+            )
+        try:
+            weights = getter()
+        except Exception as exc:
+            raise MechanismDiagnosticsContractError(
+                f"constructed layer {name!r} cannot provide weights"
+            ) from exc
+        if not weights:
+            raise MechanismDiagnosticsContractError(
+                f"constructed layer {name!r} has no weights"
+            )
+        return tuple(np.array(weight, copy=True) for weight in weights)
+
+    named: Dict[str, Tuple[np.ndarray, ...]] = {}
+    for name in ("conv1", "conv2", "conv3"):
+        named[name] = _copy_layer_weights(_get_layer(target_cnn, name), name)
+    head_target = getattr(head, "head_target", None)
+    if head_target is None:
+        raise MechanismDiagnosticsContractError("constructed head is missing head_target")
+    named["head_target"] = _copy_layer_weights(head_target, "head_target")
+    return named
+
+
 @dataclass
 class MechanismDiagnosticsSession:
     dataset: str
@@ -155,6 +213,9 @@ class MechanismDiagnosticsSession:
     reference_input_digest: str = ""
     checkpoints: Dict[Tuple[str, str], MechanismCheckpoint] = field(default_factory=dict)
     backbone_weights: Dict[Tuple[str, str], Tuple[np.ndarray, ...]] = field(default_factory=dict)
+    named_layer_weights: Dict[
+        Tuple[str, str], Dict[str, Tuple[np.ndarray, ...]]
+    ] = field(default_factory=dict)
     representations: Dict[Tuple[str, str], np.ndarray] = field(default_factory=dict)
     primary: Optional[Any] = None
     frozen_reference: Optional[Dict[str, Any]] = None
@@ -372,7 +433,8 @@ def capture_live_stage(
 ) -> MechanismCheckpoint:
     if session.reference_inputs is None:
         raise MechanismDiagnosticsContractError("session missing reference_inputs")
-    return session.capture_stage(
+    named_layer_weights = snapshot_named_layers_from_constructed(constructed)
+    checkpoint = session.capture_stage(
         arm=arm,
         stage=stage,
         backbone_weights=snapshot_backbone_from_constructed(constructed),
@@ -382,6 +444,8 @@ def capture_live_stage(
         init_mode=_arm_init_mode(constructed, arm),
         backbone_trainable=_arm_backbone_trainable(constructed, arm),
     )
+    session.named_layer_weights[(arm, stage)] = named_layer_weights
+    return checkpoint
 
 
 def stage_b_diagnostics_train_kwargs(

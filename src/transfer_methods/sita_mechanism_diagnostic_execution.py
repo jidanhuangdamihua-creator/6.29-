@@ -322,7 +322,6 @@ class FormalDiagnosticCellExecutor:
             default_v3_prepare_stage_a,
             default_v3_train_stage_b,
         )
-        from src.transfer_methods.ms_katl_lite import CONV_LAYER_NAMES, snapshot_named_layer_weights
         from src.transfer_methods.sita_mechanism_diagnostics_capture import (
             ENABLE_MECHANISM_DIAGNOSTICS_KEY,
             MECHANISM_DIAGNOSTICS_SESSION_KEY,
@@ -404,44 +403,24 @@ class FormalDiagnosticCellExecutor:
             final_rep=session.representations[final_key],
             reference_input_digest_value=str(session.reference_input_digest),
         )
-        named_init = None
-        named_final = None
-        live_cnn = getattr(constructed, "target_cnn", None) if constructed is not None else None
-        if live_cnn is not None and hasattr(live_cnn, "get_layer"):
-            named_final = snapshot_named_layer_weights(live_cnn, CONV_LAYER_NAMES + ("head_target",))
-        init_w = session.backbone_weights.get(init_key)
-        final_w = session.backbone_weights.get(final_key)
-        if named_final is not None and init_w is not None and final_w is not None:
-            named_init = {
-                "conv1": (np.asarray(init_w[0]),) if init_w else (),
-                "conv2": (np.asarray(init_w[1]),) if len(init_w) > 1 else (),
-                "conv3": (np.asarray(init_w[2]),) if len(init_w) > 2 else (),
-            }
-            named_init = {key: value for key, value in named_init.items() if value}
-            named_init["head_target"] = tuple(named_final.get("head_target", ()))
-            drift_rows = parameter_drift_rows(
-                named_init,
-                {key: tuple(np.asarray(w) for w in value) for key, value in named_final.items()},
-                extra={
-                    "dataset": cell.dataset,
-                    "target": cell.target,
-                    "horizon": int(cell.horizon),
-                    "seed": int(cell.seed),
-                    "arm": cell.arm,
-                },
+        named_snapshots = getattr(session, "named_layer_weights", None)
+        named_init = named_snapshots.get(init_key) if isinstance(named_snapshots, Mapping) else None
+        named_final = named_snapshots.get(final_key) if isinstance(named_snapshots, Mapping) else None
+        if named_init is None or named_final is None:
+            raise MechanismDiagnosticsContractError(
+                "INIT/FINAL named layer weight snapshots missing"
             )
-        else:
-            drift_rows = parameter_drift_rows(
-                {"conv1": init_w or ()},
-                {"conv1": final_w or ()},
-                extra={
-                    "dataset": cell.dataset,
-                    "target": cell.target,
-                    "horizon": int(cell.horizon),
-                    "seed": int(cell.seed),
-                    "arm": cell.arm,
-                },
-            )
+        drift_rows = parameter_drift_rows(
+            named_init,
+            named_final,
+            extra={
+                "dataset": cell.dataset,
+                "target": cell.target,
+                "horizon": int(cell.horizon),
+                "seed": int(cell.seed),
+                "arm": cell.arm,
+            },
+        )
         write_cell_parameter_drift(run_dir, cid, drift_rows)
         _ = AETrainingBlocked
         return {
