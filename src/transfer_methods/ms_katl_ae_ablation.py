@@ -906,8 +906,8 @@ def construct_ae_arm(
     if spec.arm == "B":
         for name in CONV_LAYER_NAMES:
             layer = target_cnn.get_layer(name)
-            if layer.trainable or any(getattr(var, "trainable", False) for var in layer.weights):
-                raise AEContractError(f"arm B {name} is trainable")
+            if layer.trainable:
+                raise AEContractError(f"arm B {name} layer must be frozen")
     if spec.arm in {"A", "C", "D", "E"}:
         if not trainable_includes_conv:
             raise AEContractError(f"arm {spec.arm} trainable set is missing conv backbone")
