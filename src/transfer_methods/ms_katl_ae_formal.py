@@ -13,7 +13,7 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from uuid import uuid4
@@ -31,8 +31,10 @@ from src.transfer_methods.ms_katl_ae_ablation import (
     PARENT_METHOD,
     PROTOCOL_VERSION,
     UNIFORM_3E4_CANONICAL_CELLS,
+    UNIFORM_3E4_DATASETS,
     UNIFORM_3E4_MATRIX_KIND,
     UNIFORM_3E4_RUNS,
+    UNIFORM_3E4_SEEDS,
     UNIFORM_3E4_TARGETS,
     AEConstructedArm,
     AEContractError,
@@ -123,6 +125,330 @@ def _json_digest(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
 
+ARM_D_REASON = (
+    "uniform ablation protocol uses target LR=3e-4 and is not numerically identical "
+    "to the formal SITA main configuration"
+)
+FORMAL_HARDENING_RUNTIME_FILES = (
+    "configs/ms_katl_ae_ablation_manifest.json",
+    "configs/ms_katl_sita_ablation_3e4_manifest.json",
+    "scripts/run_ms_katl_ae_ablation.py",
+    "scripts/run_ms_katl_sita_ablation_3e4.py",
+    "src/transfer_methods/ms_katl_ae_ablation.py",
+    "src/transfer_methods/ms_katl_ae_execution.py",
+    "src/transfer_methods/ms_katl_ae_formal.py",
+    "src/transfer_methods/ms_katl_ae_live_context.py",
+    "src/transfer_methods/ms_katl_lite.py",
+    "src/transfer_methods/msml_tl.py",
+    "src/transfer_methods/ms_katl_sita_ablation_3e4.py",
+)
+FORMAL_RESUME_DIGEST_KEYS = (
+    "matrix_digest",
+    "protocol_digest",
+    "critical_runtime_digest",
+    "working_tree_protocol_digest",
+)
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _git_output(project_root: Path, args: Sequence[str]) -> str:
+    try:
+        return subprocess.check_output(
+            ["git", *args], cwd=str(project_root), stderr=subprocess.STDOUT, text=True
+        ).strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise AEContractError(f"git provenance failed: {' '.join(args)}") from exc
+
+
+def _critical_runtime_snapshot(project_root: Path) -> Dict[str, str]:
+    root = Path(project_root)
+    snapshot: Dict[str, str] = {}
+    for relative in FORMAL_HARDENING_RUNTIME_FILES:
+        path = root / relative
+        if not path.is_file():
+            raise AEContractError(f"critical runtime file missing: {path}")
+        snapshot[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return snapshot
+
+
+def _critical_runtime_digest(project_root: Path) -> str:
+    return _json_digest(_critical_runtime_snapshot(Path(project_root)))
+
+
+def _working_tree_protocol_digest(project_root: Path) -> str:
+    root = Path(project_root)
+    head = _git_output(root, ["rev-parse", "HEAD"])
+    diff = _git_output(root, ["diff", "--no-ext-diff", "--binary", "--", *FORMAL_HARDENING_RUNTIME_FILES])
+    untracked = _git_output(root, ["ls-files", "--others", "--exclude-standard", "--", *FORMAL_HARDENING_RUNTIME_FILES])
+    untracked_digests = {
+        relative: _critical_runtime_snapshot(root)[relative]
+        for relative in untracked.splitlines()
+        if relative.strip()
+    }
+    return _json_digest(
+        {
+            "HEAD": head,
+            "critical_file_bytes": _critical_runtime_snapshot(root),
+            "critical_git_diff": diff,
+            "critical_untracked_file_digests": untracked_digests,
+        }
+    )
+
+
+def formal_protocol_digest(*, matrix_kind: str, expected_runs: int) -> str:
+    uniform = str(matrix_kind).strip().upper().replace("-", "_") == UNIFORM_3E4_MATRIX_KIND
+    payload: Dict[str, Any] = {
+        "matrix_kind": str(matrix_kind),
+        "expected_runs": int(expected_runs),
+        "ae_protocol": ae_protocol_manifest_payload(),
+        "arm_d_is_formal_main_sita": False,
+        "arm_d_reason": ARM_D_REASON,
+    }
+    if uniform:
+        payload["uniform_protocol"] = {
+            "datasets": list(UNIFORM_3E4_DATASETS),
+            "targets": dict(UNIFORM_3E4_TARGETS),
+            "seeds": list(UNIFORM_3E4_SEEDS),
+            "target_lr": "3e-4",
+            "source_lr": "1e-4",
+            "canonical_cells": UNIFORM_3E4_CANONICAL_CELLS,
+            "runs": UNIFORM_3E4_RUNS,
+        }
+    return _json_digest(payload)
+
+
+def build_formal_run_provenance(
+    project_root: Path,
+    *,
+    matrix_digest: str,
+    matrix_kind: str,
+    expected_runs: int,
+    cells: Sequence[RealCanonicalCellPlan],
+) -> Dict[str, Any]:
+    root = Path(project_root)
+    branch = _git_output(root, ["branch", "--show-current"])
+    head = _git_output(root, ["rev-parse", "HEAD"])
+    targets: Dict[str, str] = {}
+    for cell in cells:
+        targets[str(cell.dataset)] = str(cell.target)
+    uniform = str(matrix_kind).strip().upper().replace("-", "_") == UNIFORM_3E4_MATRIX_KIND
+    if uniform:
+        targets = dict(UNIFORM_3E4_TARGETS)
+    return {
+        "paper_method_name": "SITA",
+        "ablation_protocol_name": "CORRECTED_AE_UNIFORM_3E4",
+        "matrix_kind": str(matrix_kind),
+        "branch": branch,
+        "HEAD": head,
+        "runtime_commit": head,
+        "matrix_digest": str(matrix_digest),
+        "protocol_digest": formal_protocol_digest(matrix_kind=matrix_kind, expected_runs=expected_runs),
+        "critical_runtime_digest": _critical_runtime_digest(root),
+        "working_tree_protocol_digest": _working_tree_protocol_digest(root),
+        "dataset_target_map": targets,
+        "horizons": sorted({int(cell.horizon) for cell in cells}),
+        "seeds": sorted({int(cell.seed) for cell in cells}),
+        "arms": list(AE_ARMS),
+        "source_lr": "1e-4",
+        "uniform_target_lr": "3e-4" if uniform else None,
+        "stage_a_rng_contract": {
+            "stage_a_seed_equals_cell_seed": True,
+            "reset_once_at_entry": True,
+            "reset_before_source_model_creation": True,
+            "per_source_reseed": False,
+            "sequential_source_stream": True,
+            "historical_source_weight_reuse": False,
+        },
+        "historical_source_weight_reuse": False,
+        "ARM_D_IS_FORMAL_MAIN_SITA": False,
+        "ARM_D_REASON": ARM_D_REASON,
+        "created_at": _utc_now(),
+        "expected_runs": int(expected_runs),
+        "canonical_stage_a_keys": sorted({str(cell.stage_a_key) for cell in cells}),
+    }
+
+
+def _attempt_cell_dir(run_root: Path, cell: RealCanonicalCellPlan) -> Path:
+    safe_key = str(cell.stage_a_key).replace("|", "__").replace("/", "-")
+    return Path(run_root) / "cells" / safe_key
+
+
+def _attempt_dir(run_root: Path, cell: RealCanonicalCellPlan, number: int) -> Path:
+    return _attempt_cell_dir(run_root, cell) / f"attempt_{int(number):03d}"
+
+
+def _attempt_numbers(cell_dir: Path) -> List[int]:
+    numbers: List[int] = []
+    for candidate in Path(cell_dir).glob("attempt_*"):
+        try:
+            numbers.append(int(candidate.name.split("_", 1)[1]))
+        except (IndexError, ValueError):
+            continue
+    return sorted(numbers)
+
+
+def _attempt_payload_base(
+    cell: RealCanonicalCellPlan,
+    attempt_id: str,
+    digests: Mapping[str, str],
+    *,
+    branch: str,
+    head: str,
+) -> Dict[str, Any]:
+    return {
+        "dataset": cell.dataset,
+        "target": cell.target,
+        "horizon": int(cell.horizon),
+        "seed": int(cell.seed),
+        "cell_key": str(cell.stage_a_key),
+        "canonical_stage_a_key": str(cell.stage_a_key),
+        "stage_a_seed": int(cell.seed),
+        "attempt_id": attempt_id,
+        "runtime_commit": head,
+        "branch": branch,
+        **dict(digests),
+    }
+
+
+def _assert_attempt_digests(attempt: Path, digests: Mapping[str, str]) -> None:
+    for name in ("status.json", "result.json", "provenance.json"):
+        path = Path(attempt) / name
+        if not path.is_file():
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        for key in FORMAL_RESUME_DIGEST_KEYS:
+            if payload.get(key) != digests.get(key):
+                raise AEContractError(f"resume digest mismatch: {key}")
+
+
+def _attempt_is_complete(attempt: Path, cell: RealCanonicalCellPlan, digests: Mapping[str, str]) -> bool:
+    status_path = Path(attempt) / "status.json"
+    result_path = Path(attempt) / "result.json"
+    if not status_path.is_file() or not result_path.is_file():
+        return False
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    return (
+        status.get("status") == "COMPLETE"
+        and result.get("status") == "COMPLETE"
+        and result.get("cell_key") == cell.stage_a_key
+        and int(result.get("stage_a_seed")) == int(cell.seed)
+        and all(result.get(key) == value for key, value in digests.items())
+    )
+
+
+def _pid_alive(pid: Any) -> bool:
+    try:
+        value = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if value <= 0:
+        return False
+    try:
+        os.kill(value, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def prepare_formal_cell_attempt(
+    run_root: Path,
+    cell: RealCanonicalCellPlan,
+    *,
+    resume: bool,
+    digests: Mapping[str, str],
+    branch: str,
+    head: str,
+) -> Tuple[str, Optional[Path]]:
+    cell_dir = _attempt_cell_dir(Path(run_root), cell)
+    latest_number = _attempt_numbers(cell_dir)[-1] if _attempt_numbers(cell_dir) else None
+    latest = _attempt_dir(run_root, cell, latest_number) if latest_number is not None else None
+    if latest is not None and resume:
+        _assert_attempt_digests(latest, digests)
+        if _attempt_is_complete(latest, cell, digests):
+            return "SKIPPED_COMPLETE", latest
+    if latest is not None and not resume:
+        raise AEContractError(f"existing cell attempts require explicit resume: {cell.stage_a_key}")
+    if latest is not None:
+        status_path = latest / "status.json"
+        if status_path.is_file():
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+            if str(status.get("status", "")).upper() == "RUNNING":
+                if _pid_alive(status.get("pid")):
+                    raise AEContractError(f"resume active attempt: {cell.stage_a_key}")
+                status.update(
+                    {
+                        "status": "INTERRUPTED",
+                        "interrupted_at": _utc_now(),
+                        "interrupted_reason": "resume_observed_dead_process",
+                    }
+                )
+                atomic_write_json(status_path, status)
+                atomic_write_json(
+                    latest / "result.json",
+                    {
+                        **_attempt_payload_base(cell, latest.name, digests, branch=branch, head=head),
+                        "status": "INTERRUPTED",
+                    },
+                )
+    next_number = (latest_number + 1) if latest_number is not None else 1
+    attempt = _attempt_dir(run_root, cell, next_number)
+    attempt.mkdir(parents=True, exist_ok=False)
+    base = _attempt_payload_base(cell, attempt.name, digests, branch=branch, head=head)
+    atomic_write_json(
+        attempt / "status.json",
+        {**base, "status": "RUNNING", "pid": os.getpid(), "start_time": _utc_now()},
+    )
+    atomic_write_json(attempt / "result.json", {**base, "status": "RUNNING"})
+    atomic_write_json(attempt / "provenance.json", {**base, "status": "RUNNING"})
+    return "RUN", attempt
+
+
+def finalize_formal_cell_attempt(
+    attempt: Path,
+    *,
+    status: str,
+    result: Optional[Mapping[str, Any]] = None,
+    error: Optional[BaseException] = None,
+) -> None:
+    status_path = Path(attempt) / "status.json"
+    status_payload = json.loads(status_path.read_text(encoding="utf-8"))
+    status_payload.update({"status": str(status), "end_time": _utc_now()})
+    if error is not None:
+        status_payload["exception_type"] = type(error).__name__
+        status_payload["exception_message"] = str(error)
+    atomic_write_json(status_path, status_payload)
+    provenance_path = Path(attempt) / "provenance.json"
+    provenance = (
+        json.loads(provenance_path.read_text(encoding="utf-8"))
+        if provenance_path.is_file()
+        else {}
+    )
+    result_payload = {**provenance, **dict(result or {})}
+    result_payload.setdefault("status", str(status))
+    if error is not None:
+        result_payload["exception_type"] = type(error).__name__
+        result_payload["exception_message"] = str(error)
+    atomic_write_json(Path(attempt) / "result.json", result_payload)
+
+
+def validate_formal_resume_provenance(run_root: Path, expected: Mapping[str, Any]) -> None:
+    manifest_path = Path(run_root) / "manifest_snapshot.json"
+    if not manifest_path.is_file():
+        raise AEContractError("resume root missing manifest_snapshot.json")
+    snapshot = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for key in FORMAL_RESUME_DIGEST_KEYS:
+        if snapshot.get(key) != expected.get(key):
+            raise AEContractError(f"resume digest mismatch: {key}")
+
+
 def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     """Atomic JSON publish: temp write + fsync + os.replace (run_artifacts convention)."""
     destination = Path(path)
@@ -152,6 +478,7 @@ class FormalStageAView:
     target_split_digest: str
     requested_k: int = 3
     effective_k: int = 3
+    stage_a_seed: Optional[int] = None
 
 
 @dataclass
@@ -348,6 +675,11 @@ _MANIFEST_IDENTITY_KEYS = (
     "parent_v3_architecture_digest",
     "expected_runs",
     "planned_matrix_digest",
+    "matrix_digest",
+    "protocol_digest",
+    "critical_runtime_digest",
+    "working_tree_protocol_digest",
+    "runtime_commit",
 )
 
 
@@ -451,7 +783,18 @@ def serialize_formal_arm_runtime(runtime: FormalArmRuntime) -> Dict[str, Any]:
 
 
 def cell_bundle_path(run_root: Path, stage_a_key: str) -> Path:
-    return Path(run_root) / "cell_bundles" / f"{stage_a_key.replace('/', '-')}.json"
+    root = Path(run_root)
+    if root.name.startswith("attempt_"):
+        return root / "result.json"
+    return root / "cell_bundles" / f"{stage_a_key.replace('/', '-')}.json"
+
+
+def _is_hardened_attempt_root(path: Path) -> bool:
+    root = Path(path)
+    if not root.name.startswith("attempt_"):
+        return False
+    formal_root = root.parent.parent.parent
+    return (formal_root / "manifest_snapshot.json").is_file() and (formal_root / "plans").is_dir()
 
 
 def stage_a_view_from_v3(artifacts: Any, cell: RealCanonicalCellPlan, fused_target_digest: str = "") -> FormalStageAView:
@@ -469,6 +812,7 @@ def stage_a_view_from_v3(artifacts: Any, cell: RealCanonicalCellPlan, fused_targ
         target_split_digest=cell.target_split_digest,
         requested_k=3,
         effective_k=int(artifacts.effective_k),
+        stage_a_seed=int(getattr(artifacts, "stage_a_seed", cell.seed) or cell.seed),
     )
 
 
@@ -502,6 +846,12 @@ def default_v3_prepare_stage_a(cell: RealCanonicalCellPlan, context: Mapping[str
     kwargs = dict(mutable.get("stage_a_kwargs") or {})
     if not kwargs:
         raise AEContractError("missing stage_a_kwargs for prepare_ms_katl_stage_a")
+    if kwargs.get("seed") is None:
+        raise AEContractError("missing stage_a seed for prepare_ms_katl_stage_a")
+    if int(kwargs["seed"]) != int(cell.seed):
+        raise AEContractError(
+            f"stage_a seed {kwargs['seed']} != cell.seed {cell.seed} for {cell.stage_a_key}"
+        )
     artifacts = AE_STAGE_A_AUTHORITY(**kwargs)
     head_digest, _arms = materialize_formal_ae_arms(mutable, cell, stage_a_artifacts=artifacts)
     shared = mutable[AE_SHARED_BUNDLE_KEY]
@@ -696,14 +1046,16 @@ def default_v3_publish(
     root = assert_ae_output_root(Path(output_root))
     from src.transfer_methods.ms_katl_ae_execution import _formal_output_label_ok
 
-    if not _formal_output_label_ok(root):
+    if not _formal_output_label_ok(root) and not _is_hardened_attempt_root(root):
         raise AEContractError("real publisher requires MS_KATL_AE_CORE_ABLATION or sita_ablation_3e4 run root")
     if "results" in root.parts and "preflight" not in root.parts and "audits" not in root.parts:
         raise AEContractError("real publisher refuses results/ roots")
     if "preflight" in root.parts:
         raise AEContractError("real publisher refuses preflight mock roots")
-    if set(runtimes) != set(AE_ARMS):
-        raise AEContractError("real publisher requires full A–E runtime bundle")
+    if not set(runtimes).issubset(set(AE_ARMS)) or not runtimes:
+        raise AEContractError("real publisher requires a non-empty A–E runtime subset")
+    if pair_status == "PAIR_COMPLETE" and set(runtimes) != set(AE_ARMS):
+        raise AEContractError("PAIR_COMPLETE requires full A–E runtime bundle")
 
     bundle_dir = root / "cell_bundles"
     bundle_dir.mkdir(parents=True, exist_ok=True)
@@ -715,9 +1067,10 @@ def default_v3_publish(
         "target": cell.target,
         "horizon": int(cell.horizon),
         "seed": int(cell.seed),
+        "stage_a_seed": int(cell.seed),
         "scenario": cell.scenario,
         "selected_lr": float(cell.selected_lr),
-        "arms": {arm: serialize_formal_arm_runtime(runtimes[arm]) for arm in AE_ARMS},
+        "arms": {arm: serialize_formal_arm_runtime(runtimes[arm]) for arm in runtimes},
     }
     if pair_status == "PAIR_COMPLETE":
         for arm in AE_ARMS:
@@ -797,6 +1150,7 @@ def build_mock_stage_a(cell: RealCanonicalCellPlan) -> FormalStageAView:
         target_split_digest=cell.target_split_digest,
         requested_k=3,
         effective_k=3,
+        stage_a_seed=int(cell.seed),
     )
 
 
@@ -1007,6 +1361,9 @@ def run_ae_formal_body(
     ledger: Optional[FormalCallLedger] = None,
     cells: Optional[Sequence[RealCanonicalCellPlan]] = None,
     matrix_kind: str = FROZEN_MATRIX_KIND,
+    hardened_attempts: bool = False,
+    selected_stage_a_key: Optional[str] = None,
+    selected_arm: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Canonical formal orchestration. Real trainers stay blocked without dual lock."""
     if resume_root is not None and output_root is None:
@@ -1019,7 +1376,14 @@ def run_ae_formal_body(
     elif authorities is None:
         raise AEContractError("mock formal body requires injected authorities")
     order = tuple(str(item).strip().upper() for item in arm_order)
-    if tuple(sorted(order)) != tuple(sorted(AE_ARMS)):
+    if selected_arm is not None:
+        selected_arm = str(selected_arm).strip().upper()
+        if selected_arm not in AE_ARMS:
+            raise AEContractError(f"selected_arm must be one of {list(AE_ARMS)}")
+        if selected_stage_a_key is None:
+            raise AEContractError("selected_arm requires selected_stage_a_key")
+        order = (selected_arm,)
+    elif tuple(sorted(order)) != tuple(sorted(AE_ARMS)):
         raise AEContractError(f"arm_order must be a permutation of {list(AE_ARMS)}")
     kind = str(matrix_kind).strip().upper().replace("-", "_")
     if kind == "FROZEN270":
@@ -1055,6 +1419,15 @@ def run_ae_formal_body(
         expected_cells = EXPECTED_CANONICAL_CELLS
         expected_runs = EXPECTED_RUNS
     matrix_hash = planned_matrix_digest(arm_plans)
+    provenance: Optional[Dict[str, Any]] = None
+    if not mock_execution_authorized:
+        provenance = build_formal_run_provenance(
+            root,
+            matrix_digest=matrix_hash,
+            matrix_kind=kind,
+            expected_runs=expected_runs,
+            cells=cell_plans,
+        )
     if resume_root is not None:
         validate_resume_root(
             Path(resume_root),
@@ -1070,6 +1443,10 @@ def run_ae_formal_body(
             raise AEContractError("resume parent V3 digest mismatch")
         if snapshot.get("planned_matrix_digest") not in {None, matrix_hash} and snapshot.get("planned_matrix_digest") != matrix_hash:
             raise AEContractError("resume planned matrix digest mismatch")
+        if not mock_execution_authorized:
+            if provenance is None:
+                raise AEContractError("resume provenance is unavailable")
+            validate_formal_resume_provenance(Path(resume_root), provenance)
 
     if output_root is not None:
         out = Path(output_root)
@@ -1117,6 +1494,10 @@ def run_ae_formal_body(
                     "extra_target_slice_untouched": True,
                     "only_global_lr_changed": True,
                 }
+            if provenance is not None:
+                extra_snapshot = dict(extra_snapshot or {})
+                extra_snapshot.update(provenance)
+                extra_snapshot["run_root"] = str(out.resolve())
             bootstrap_fresh_formal_run_metadata(
                 out,
                 arm_plans,
@@ -1126,13 +1507,31 @@ def run_ae_formal_body(
             )
         # Resume path: validate_resume_root already ran; never rewrite manifest/matrix.
 
-    completed = load_pair_statuses(out)
+    completed = {} if hardened_attempts else load_pair_statuses(out)
     active_ledger = ledger if ledger is not None else FormalCallLedger()
     bundles: Dict[str, str] = dict(completed)
     identity_index: Dict[str, Dict[str, Any]] = {}
+    selected_only = selected_stage_a_key is not None
 
     for cell in cell_plans:
-        if completed.get(cell.stage_a_key) == "PAIR_COMPLETE":
+        if selected_only and cell.stage_a_key != selected_stage_a_key:
+            continue
+        attempt_path: Optional[Path] = None
+        if hardened_attempts:
+            if provenance is None:
+                raise AEContractError("hardened attempts require formal provenance")
+            action, attempt_path = prepare_formal_cell_attempt(
+                out,
+                cell,
+                resume=resume_root is not None,
+                digests={key: provenance[key] for key in FORMAL_RESUME_DIGEST_KEYS},
+                branch=str(provenance["branch"]),
+                head=str(provenance["HEAD"]),
+            )
+            if action == "SKIPPED_COMPLETE":
+                bundles[cell.stage_a_key] = "PAIR_COMPLETE"
+                continue
+        elif completed.get(cell.stage_a_key) == "PAIR_COMPLETE":
             continue
         if kind in {EXTRA_TARGET_MATRIX_KIND, UNIFORM_3E4_MATRIX_KIND} and not mock_execution_authorized:
             print(f"AE_CELL_START {cell.stage_a_key}", flush=True)
@@ -1188,7 +1587,9 @@ def run_ae_formal_body(
                     metric_kind=failure_metric_kind,
                 )
         active_ledger.bundle_validations.append(cell.stage_a_key)
-        if failed or set(runtimes) != set(AE_ARMS):
+        if selected_only:
+            pair_status = "SINGLE_ARM_INCOMPLETE" if failed else "SINGLE_ARM_COMPLETE"
+        elif failed or set(runtimes) != set(AE_ARMS):
             pair_status = "PAIR_INCOMPLETE"
         else:
             pair_status = validate_paired_runtime_bundle(cell, stage_a, runtimes)
@@ -1203,7 +1604,38 @@ def run_ae_formal_body(
                 }
                 for arm in AE_ARMS
             }
-        authorities.publish(cell, runtimes, pair_status, out)
+        publish_root = attempt_path if attempt_path is not None else out
+        authorities.publish(cell, runtimes, pair_status, publish_root)
+        if attempt_path is not None and provenance is not None:
+            result_path = attempt_path / "result.json"
+            raw_result: Dict[str, Any] = {}
+            if result_path.is_file():
+                raw_result = json.loads(result_path.read_text(encoding="utf-8"))
+            result_payload = {
+                **raw_result,
+                "status": "COMPLETE" if pair_status in {"PAIR_COMPLETE", "SINGLE_ARM_COMPLETE"} else "FAILED",
+                "pair_status": pair_status,
+                "dataset": cell.dataset,
+                "target": cell.target,
+                "horizon": int(cell.horizon),
+                "seed": int(cell.seed),
+                "cell_key": cell.stage_a_key,
+                "canonical_stage_a_key": cell.stage_a_key,
+                "stage_a_seed": int(cell.seed),
+                "attempt_id": attempt_path.name,
+                "matrix_digest": provenance["matrix_digest"],
+                "protocol_digest": provenance["protocol_digest"],
+                "critical_runtime_digest": provenance["critical_runtime_digest"],
+                "working_tree_protocol_digest": provenance["working_tree_protocol_digest"],
+                "runtime_commit": provenance["runtime_commit"],
+                "branch": provenance["branch"],
+                "arms": {arm: serialize_formal_arm_runtime(runtime) for arm, runtime in runtimes.items()},
+            }
+            finalize_formal_cell_attempt(
+                attempt_path,
+                status=result_payload["status"],
+                result=result_payload,
+            )
         bundles[cell.stage_a_key] = pair_status
         if kind in {EXTRA_TARGET_MATRIX_KIND, UNIFORM_3E4_MATRIX_KIND} and not mock_execution_authorized:
             print(f"AE_CELL_DONE {cell.stage_a_key} {pair_status}", flush=True)
@@ -1211,6 +1643,9 @@ def run_ae_formal_body(
     counts = active_ledger.counts()
     pair_complete = sum(1 for status in bundles.values() if status == "PAIR_COMPLETE")
     pair_incomplete = sum(1 for status in bundles.values() if status != "PAIR_COMPLETE")
+    selected_complete = sum(
+        1 for status in bundles.values() if status in {"SINGLE_ARM_COMPLETE", "PAIR_COMPLETE"}
+    )
     result = {
         "status": MOCK_STATUS if mock_execution_authorized else "FORMAL",
         "MATRIX_KIND": kind,
@@ -1230,6 +1665,7 @@ def run_ae_formal_body(
         "E_CALLS": counts["E_CALLS"],
         "PAIR_COMPLETE": pair_complete,
         "PAIR_INCOMPLETE": pair_incomplete,
+        "SINGLE_ARM_COMPLETE": selected_complete if selected_only else 0,
         "bundles": bundles,
         "identity_index": identity_index,
         "planned_matrix_digest": matrix_hash,
@@ -1242,7 +1678,13 @@ def run_ae_formal_body(
         result["EXTRA_DATASET"] = extra_identity[0]
         result["EXTRA_TARGET"] = extra_identity[1]
     if not mock_execution_authorized:
-        if pair_incomplete > 0 or pair_complete != expected_cells:
+        if selected_only:
+            selected_status = bundles.get(str(selected_stage_a_key))
+            if selected_status not in {"SINGLE_ARM_COMPLETE", "PAIR_COMPLETE"}:
+                raise AEContractError(
+                    f"FORMAL_COMPLETION_FAILED: selected cell status={selected_status}"
+                )
+        elif pair_incomplete > 0 or pair_complete != expected_cells:
             raise AEContractError(
                 "FORMAL_COMPLETION_FAILED: "
                 f"PAIR_COMPLETE={pair_complete} PAIR_INCOMPLETE={pair_incomplete} "
@@ -1250,6 +1692,8 @@ def run_ae_formal_body(
             )
         result["TRAINING_STARTED"] = "YES"
         result["status"] = "FORMAL_COMPLETE"
+        if selected_only:
+            return result
         if kind == EXTRA_TARGET_MATRIX_KIND:
             from src.transfer_methods.ms_katl_ae_execution import write_extra_target_results_table
 
