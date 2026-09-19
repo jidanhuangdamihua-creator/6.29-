@@ -81,6 +81,7 @@ from src.transfer_methods.ms_katl_fto_v3_screening import (
     v3_training_recipe,
 )
 from src.transfer_methods.ms_katl_lite import (
+    digest_weight_arrays,
     extract_features_maybe_revin,
     prepare_ms_katl_stage_a,
     predict_ms_katl_decomposed,
@@ -479,6 +480,8 @@ class FormalStageAView:
     requested_k: int = 3
     effective_k: int = 3
     stage_a_seed: Optional[int] = None
+    source_selection_digest: Optional[str] = None
+    stage_a_digest: Optional[str] = None
 
 
 @dataclass
@@ -510,6 +513,15 @@ class FormalArmRuntime:
     smape_original: Optional[float] = None
     mae_original: Optional[float] = None
     metric_kind: Optional[str] = None
+    source_model_digests: List[str] = field(default_factory=list)
+    source_selection_digest: Optional[str] = None
+    stage_a_digest: Optional[str] = None
+    fused_params_digest: Optional[str] = None
+    final_formal_model_digest: Optional[str] = None
+    formal_weight_variant: Optional[str] = None
+    prediction_digest: Optional[str] = None
+    prediction_digest_space: Optional[str] = None
+    n_test: Optional[int] = None
 
 
 @dataclass
@@ -752,6 +764,12 @@ def bootstrap_fresh_formal_run_metadata(
 
 def serialize_formal_arm_runtime(runtime: FormalArmRuntime) -> Dict[str, Any]:
     """JSON-safe FormalArmRuntime provenance (no TF/numpy payloads)."""
+    source_identities = [list(item) for item in runtime.source_identities]
+    source_model_digests = list(runtime.source_model_digests)
+    if source_model_digests and len(source_model_digests) != len(source_identities):
+        raise AEContractError(
+            "source_model_digests must align one-to-one with source_identities"
+        )
     return {
         "arm": runtime.arm,
         "status": runtime.status,
@@ -766,11 +784,15 @@ def serialize_formal_arm_runtime(runtime: FormalArmRuntime) -> Dict[str, Any]:
         "head_target_init_digest": runtime.head_target_init_digest,
         "target_initial_conv_digest": runtime.target_initial_conv_digest,
         "fused_init_digest": runtime.fused_init_digest,
+        "fused_params_digest": runtime.fused_params_digest,
         "best_source_identity": list(runtime.best_source_identity),
         "best_source_snapshot_digest": runtime.best_source_snapshot_digest,
-        "source_identities": [list(item) for item in runtime.source_identities],
+        "source_identities": source_identities,
+        "source_model_digests": source_model_digests,
         "source_distances": list(runtime.source_distances),
         "source_weights": list(runtime.source_weights),
+        "source_selection_digest": runtime.source_selection_digest,
+        "stage_a_digest": runtime.stage_a_digest,
         "selected_lr": runtime.selected_lr,
         "recipe_digest": runtime.recipe_digest,
         "target_split_digest": runtime.target_split_digest,
@@ -779,7 +801,21 @@ def serialize_formal_arm_runtime(runtime: FormalArmRuntime) -> Dict[str, Any]:
         "prediction_path_parameter_count": runtime.prediction_path_parameter_count,
         "trainable_prediction_path_parameter_count": runtime.trainable_prediction_path_parameter_count,
         "frozen_prediction_path_parameter_count": runtime.frozen_prediction_path_parameter_count,
+        "final_formal_model_digest": runtime.final_formal_model_digest,
+        "formal_weight_variant": runtime.formal_weight_variant,
+        "prediction_digest": runtime.prediction_digest,
+        "prediction_digest_space": runtime.prediction_digest_space,
+        "n_test": runtime.n_test,
     }
+
+
+def formal_inference_model_digest(constructed: AEConstructedArm) -> str:
+    """Digest the exact post-training weights used by the formal inference path."""
+    weights = list(constructed.target_cnn.get_weights())
+    weights.extend(constructed.head.get_weights())
+    if constructed.revin is not None:
+        weights.extend(constructed.revin.get_weights())
+    return digest_weight_arrays(weights)
 
 
 def cell_bundle_path(run_root: Path, stage_a_key: str) -> Path:
@@ -813,6 +849,8 @@ def stage_a_view_from_v3(artifacts: Any, cell: RealCanonicalCellPlan, fused_targ
         requested_k=3,
         effective_k=int(artifacts.effective_k),
         stage_a_seed=int(getattr(artifacts, "stage_a_seed", cell.seed) or cell.seed),
+        source_selection_digest=str(getattr(artifacts, "source_selection_digest", "")) or None,
+        stage_a_digest=str(getattr(artifacts, "stage_a_digest", "")) or None,
     )
 
 
@@ -941,11 +979,15 @@ def default_v3_train_stage_b(
         head_target_init_digest=head_digest,
         target_initial_conv_digest=str(constructed.target_initial_conv_digest),
         fused_init_digest=stage_a.fused_target_digest,
+        fused_params_digest=stage_a.fused_params_digest,
         best_source_identity=stage_a.best_source_identity,
         best_source_snapshot_digest=stage_a.best_source_conv_digest,
         source_identities=list(stage_a.source_identities),
+        source_model_digests=list(stage_a.source_weight_digests),
         source_distances=list(stage_a.source_distances),
         source_weights=list(stage_a.source_weights),
+        source_selection_digest=stage_a.source_selection_digest,
+        stage_a_digest=stage_a.stage_a_digest,
         selected_lr=float(cell.selected_lr),
         recipe_digest=_json_digest(ae_training_recipe()),
         target_split_digest=stage_a.target_split_digest,
@@ -991,6 +1033,8 @@ def default_v3_predict(cell: RealCanonicalCellPlan, runtime: FormalArmRuntime, c
             stdev_np,
             include_mean=True,
         )
+    runtime.final_formal_model_digest = formal_inference_model_digest(constructed)
+    runtime.formal_weight_variant = "EMA" if ae_training_recipe()["use_ema"] else "RAW"
     payload = {
         "head": constructed.head,
         "target_extractor": constructed.target_extractor,
@@ -1024,6 +1068,12 @@ def default_v3_metric(cell: RealCanonicalCellPlan, runtime: FormalArmRuntime, co
     )
     runtime.rmse_original = float(metrics["rmse_original"])
     runtime.smape_original = float(metrics["smape_original"])
+    prediction_original = metrics.get("y_pred_original")
+    if prediction_original is None:
+        raise AEContractError("metric authority did not return original-space predictions")
+    runtime.prediction_digest = digest_weight_arrays([prediction_original])
+    runtime.prediction_digest_space = str(metrics.get("metric_space") or "original_sales_space")
+    runtime.n_test = int(prediction_original.size)
     if "y_true_original" in metrics and "y_pred_original" in metrics:
         import numpy as np
 
@@ -1034,6 +1084,51 @@ def default_v3_metric(cell: RealCanonicalCellPlan, runtime: FormalArmRuntime, co
     runtime.status = "OK"
     _ = (cell, context)
     return runtime
+
+
+def _validate_real_complete_arm_evidence(runtime: FormalArmRuntime) -> None:
+    """Fail closed on publication-only evidence required for formal C/D arms."""
+    source_identities = runtime.source_identities
+    source_model_digests = runtime.source_model_digests
+    if (
+        not isinstance(source_identities, (list, tuple))
+        or len(source_identities) != 3
+        or not isinstance(source_model_digests, (list, tuple))
+        or len(source_model_digests) != len(source_identities)
+        or any(
+            not isinstance(digest, str) or not digest.strip()
+            for digest in source_model_digests
+        )
+    ):
+        raise AEContractError(
+            f"REAL_COMPLETE_EVIDENCE_FAILED arm={runtime.arm}: "
+            "source_model_digests must contain exactly 3 non-empty digests "
+            "aligned with source_identities"
+        )
+
+    if (
+        not isinstance(runtime.final_formal_model_digest, str)
+        or not runtime.final_formal_model_digest.strip()
+    ):
+        raise AEContractError(
+            f"REAL_COMPLETE_EVIDENCE_FAILED arm={runtime.arm}: "
+            "final_formal_model_digest is required"
+        )
+
+    if (
+        not isinstance(runtime.prediction_digest, str)
+        or not runtime.prediction_digest.strip()
+    ):
+        raise AEContractError(
+            f"REAL_COMPLETE_EVIDENCE_FAILED arm={runtime.arm}: "
+            "prediction_digest is required"
+        )
+
+    if isinstance(runtime.n_test, bool) or not isinstance(runtime.n_test, int) or runtime.n_test <= 0:
+        raise AEContractError(
+            f"REAL_COMPLETE_EVIDENCE_FAILED arm={runtime.arm}: "
+            "n_test must be a positive integer"
+        )
 
 
 def default_v3_publish(
@@ -1056,6 +1151,11 @@ def default_v3_publish(
         raise AEContractError("real publisher requires a non-empty A–E runtime subset")
     if pair_status == "PAIR_COMPLETE" and set(runtimes) != set(AE_ARMS):
         raise AEContractError("PAIR_COMPLETE requires full A–E runtime bundle")
+    if pair_status in {"PAIR_COMPLETE", "SINGLE_ARM_COMPLETE"}:
+        for arm in ("C", "D"):
+            runtime = runtimes.get(arm)
+            if runtime is not None:
+                _validate_real_complete_arm_evidence(runtime)
 
     bundle_dir = root / "cell_bundles"
     bundle_dir.mkdir(parents=True, exist_ok=True)
@@ -1151,6 +1251,8 @@ def build_mock_stage_a(cell: RealCanonicalCellPlan) -> FormalStageAView:
         requested_k=3,
         effective_k=3,
         stage_a_seed=int(cell.seed),
+        source_selection_digest=_json_digest({"selection": cell.stage_a_key}),
+        stage_a_digest=_json_digest({"stage_a": cell.stage_a_key}),
     )
 
 
@@ -1220,11 +1322,15 @@ def make_mock_authorities(
             head_target_init_digest=head_digest,
             target_initial_conv_digest=_arm_init_digest(cell, arm, stage_a),
             fused_init_digest=stage_a.fused_target_digest,
+            fused_params_digest=stage_a.fused_params_digest,
             best_source_identity=stage_a.best_source_identity,
             best_source_snapshot_digest=stage_a.best_source_conv_digest,
             source_identities=list(stage_a.source_identities),
+            source_model_digests=list(stage_a.source_weight_digests),
             source_distances=list(stage_a.source_distances),
             source_weights=list(stage_a.source_weights),
+            source_selection_digest=stage_a.source_selection_digest,
+            stage_a_digest=stage_a.stage_a_digest,
             selected_lr=float(cell.selected_lr),
             recipe_digest=_json_digest(recipe),
             target_split_digest=stage_a.target_split_digest,
