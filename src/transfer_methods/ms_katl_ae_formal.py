@@ -833,8 +833,15 @@ def _is_hardened_attempt_root(path: Path) -> bool:
     return (formal_root / "manifest_snapshot.json").is_file() and (formal_root / "plans").is_dir()
 
 
-def stage_a_view_from_v3(artifacts: Any, cell: RealCanonicalCellPlan, fused_target_digest: str = "") -> FormalStageAView:
+def stage_a_view_from_v3(
+    artifacts: Any,
+    cell: RealCanonicalCellPlan,
+    fused_target_digest: str = "",
+    *,
+    digest_source: Optional[Any] = None,
+) -> FormalStageAView:
     identities = [tuple(item) for item in artifacts.source_identities]
+    existing_stage_a = digest_source if digest_source is not None else artifacts
     return FormalStageAView(
         stage_a_key=cell.stage_a_key,
         source_identities=identities,
@@ -849,8 +856,8 @@ def stage_a_view_from_v3(artifacts: Any, cell: RealCanonicalCellPlan, fused_targ
         requested_k=3,
         effective_k=int(artifacts.effective_k),
         stage_a_seed=int(getattr(artifacts, "stage_a_seed", cell.seed) or cell.seed),
-        source_selection_digest=str(getattr(artifacts, "source_selection_digest", "")) or None,
-        stage_a_digest=str(getattr(artifacts, "stage_a_digest", "")) or None,
+        source_selection_digest=str(getattr(existing_stage_a, "source_selection_digest", "")) or None,
+        stage_a_digest=str(getattr(existing_stage_a, "stage_a_digest", "")) or None,
     )
 
 
@@ -894,7 +901,12 @@ def default_v3_prepare_stage_a(cell: RealCanonicalCellPlan, context: Mapping[str
     head_digest, _arms = materialize_formal_ae_arms(mutable, cell, stage_a_artifacts=artifacts)
     shared = mutable[AE_SHARED_BUNDLE_KEY]
     fused_digest = str(getattr(shared, "fused_target_digest", "") or "")
-    view = stage_a_view_from_v3(artifacts, cell, fused_target_digest=fused_digest)
+    view = stage_a_view_from_v3(
+        artifacts,
+        cell,
+        fused_target_digest=fused_digest,
+        digest_source=mutable.get(AE_STAGE_A_VIEW_KEY),
+    )
     mutable[AE_HEAD_DIGEST_KEY] = head_digest
     if not isinstance(context, dict):
         raise AEContractError("formal Stage-A context must be a mutable dict")
@@ -1104,6 +1116,21 @@ def _validate_real_complete_arm_evidence(runtime: FormalArmRuntime) -> None:
             f"REAL_COMPLETE_EVIDENCE_FAILED arm={runtime.arm}: "
             "source_model_digests must contain exactly 3 non-empty digests "
             "aligned with source_identities"
+        )
+
+    if (
+        not isinstance(runtime.source_selection_digest, str)
+        or not runtime.source_selection_digest.strip()
+    ):
+        raise AEContractError(
+            f"REAL_COMPLETE_EVIDENCE_FAILED arm={runtime.arm}: "
+            "source_selection_digest is required"
+        )
+
+    if not isinstance(runtime.stage_a_digest, str) or not runtime.stage_a_digest.strip():
+        raise AEContractError(
+            f"REAL_COMPLETE_EVIDENCE_FAILED arm={runtime.arm}: "
+            "stage_a_digest is required"
         )
 
     if (

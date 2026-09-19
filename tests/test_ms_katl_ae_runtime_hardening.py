@@ -25,6 +25,7 @@ from src.transfer_methods.ms_katl_ae_formal import (
     serialize_formal_arm_runtime,
     validate_formal_resume_provenance,
 )
+from src.transfer_methods import ms_katl_ae_formal as formal_module
 from src.transfer_methods.ms_katl_ae_ablation import ae_arm_spec
 from src.transfer_methods.ms_katl_sita_ablation_3e4 import (
     enumerate_uniform_3e4_identities,
@@ -41,6 +42,7 @@ def _cell():
         seed=42,
         scenario="without",
         stage_a_key="D1|1/10|h1|s42|without",
+        target_split_digest={"train": "train", "val": "val", "test": "test"},
         selected_lr=3e-4,
         selected_lr_label="3e-4",
     )
@@ -184,6 +186,46 @@ def _synthetic_formal_runtime(arm="D", *, prediction_digest="prediction", model_
     )
 
 
+def test_real_stage_a_to_view_to_runtime_to_serializer_preserves_existing_digests(monkeypatch):
+    artifacts = SimpleNamespace(
+        source_identities=[("1", "7"), ("1", "8"), ("1", "2")],
+        source_distances=[0.1, 0.2, 0.3],
+        source_weights=[0.5, 0.3, 0.2],
+        source_weight_digests=["source-1", "source-2", "source-3"],
+        fused_params_digest="fused-params",
+        effective_k=3,
+        stage_a_seed=42,
+    )
+    stage_a_bridge = SimpleNamespace(
+        source_selection_digest="selection_digest_x",
+        stage_a_digest="stage_a_digest_x",
+    )
+
+    def fake_materialize(context, cell, *, stage_a_artifacts):
+        assert stage_a_artifacts is artifacts
+        context[formal_module.AE_STAGE_A_VIEW_KEY] = stage_a_bridge
+        context[formal_module.AE_SHARED_BUNDLE_KEY] = SimpleNamespace(
+            fused_target_digest="fused-target"
+        )
+        return "head", {}
+
+    monkeypatch.setattr(formal_module, "AE_FORMAL_EXECUTION_ENABLED", True)
+    monkeypatch.setattr(formal_module, "AE_STAGE_A_AUTHORITY", lambda **kwargs: artifacts)
+    monkeypatch.setattr(formal_module, "materialize_formal_ae_arms", fake_materialize)
+
+    context = {"stage_a_kwargs": {"seed": 42}}
+    stage_a = formal_module.default_v3_prepare_stage_a(_cell(), context)
+    assert stage_a.source_selection_digest == "selection_digest_x"
+    assert stage_a.stage_a_digest == "stage_a_digest_x"
+
+    runtime = _synthetic_formal_runtime("D")
+    runtime.source_selection_digest = stage_a.source_selection_digest
+    runtime.stage_a_digest = stage_a.stage_a_digest
+    payload = formal_module.serialize_formal_arm_runtime(runtime)
+    assert payload["source_selection_digest"] == "selection_digest_x"
+    assert payload["stage_a_digest"] == "stage_a_digest_x"
+
+
 def test_formal_evidence_schema_is_additive_deterministic_and_a_to_e_compatible():
     first = {
         arm: serialize_formal_arm_runtime(_synthetic_formal_runtime(arm))
@@ -238,6 +280,8 @@ def test_real_complete_c_d_full_evidence_publishes(tmp_path, arm):
     payload = _publish_complete_runtime_bundle(tmp_path, _complete_runtime_bundle())
     runtime = payload["arms"][arm]
     assert len(runtime["source_model_digests"]) == 3
+    assert runtime["source_selection_digest"] == "selection"
+    assert runtime["stage_a_digest"] == "stage-a"
     assert runtime["final_formal_model_digest"]
     assert runtime["prediction_digest"]
     assert runtime["n_test"] == 3
@@ -246,12 +290,16 @@ def test_real_complete_c_d_full_evidence_publishes(tmp_path, arm):
 def test_synthetic_nonexecuted_missing_evidence_remains_json_safe():
     runtime = _synthetic_formal_runtime("C")
     runtime.source_model_digests = []
+    runtime.source_selection_digest = None
+    runtime.stage_a_digest = None
     runtime.final_formal_model_digest = None
     runtime.prediction_digest = None
     runtime.n_test = None
     payload = serialize_formal_arm_runtime(runtime)
     json.dumps(payload)
     assert payload["source_model_digests"] == []
+    assert payload["source_selection_digest"] is None
+    assert payload["stage_a_digest"] is None
     assert payload["final_formal_model_digest"] is None
     assert payload["prediction_digest"] is None
     assert payload["n_test"] is None
@@ -270,6 +318,14 @@ def test_real_complete_partial_source_digests_fail_closed(tmp_path, count):
     runtimes = _complete_runtime_bundle()
     runtimes["D"].source_model_digests = ["source-1"] * count
     with pytest.raises(AEContractError, match="source_model_digests"):
+        _publish_complete_runtime_bundle(tmp_path, runtimes)
+
+
+@pytest.mark.parametrize("field", ["source_selection_digest", "stage_a_digest"])
+def test_real_complete_missing_stage_a_evidence_fails_closed(tmp_path, field):
+    runtimes = _complete_runtime_bundle()
+    setattr(runtimes["C"], field, None)
+    with pytest.raises(AEContractError, match=field):
         _publish_complete_runtime_bundle(tmp_path, runtimes)
 
 
