@@ -1,0 +1,65 @@
+{
+  "status": "PROTOCOL_AUDIT_FREEZE",
+  "acceptance": "not_phase0_acceptance",
+  "matches": "消融实验/configs/protocol_frozen.json tcn_reference",
+  "structure_path": {
+    "value": "scripts/baselines/bl7_tcn.py",
+    "ref": "scripts/baselines/bl7_tcn.py:18-23,63-93,187-207"
+  },
+  "revin_wrapper_path": {
+    "value": "scripts/baselines/bl7_tcn_revin.py",
+    "ref": "scripts/baselines/bl7_tcn_revin.py:149"
+  },
+  "fusion_key_path": {
+    "value": "src/transfer_methods/sita_tcn.py",
+    "ref": "src/transfer_methods/sita_tcn.py:43-59,142"
+  },
+  "channels": {"value": 16, "ref": "scripts/baselines/bl7_tcn.py:18"},
+  "levels": {"value": 2, "ref": "scripts/baselines/bl7_tcn.py:19"},
+  "kernel_size": {"value": 3, "ref": "scripts/baselines/bl7_tcn.py:20"},
+  "dilations": {"value": [1, 2], "ref": "scripts/baselines/bl7_tcn.py:192-199"},
+  "causal_padding": {
+    "value": "left pad (kernel_size - 1) * dilation, conv padding 0",
+    "ref": "scripts/baselines/bl7_tcn.py:84-87"
+  },
+  "block": {
+    "value": "two causal convs, ReLU, 1x1 residual only when in_channels != out_channels",
+    "ref": "scripts/baselines/bl7_tcn.py:63-93"
+  },
+  "input_channels": {"value": 1, "ref": "scripts/baselines/bl7_tcn.py:191; src/transfer_methods/sita_tcn.py:142"},
+  "head": {"value": "Linear(16, 1) on last timestep", "ref": "scripts/baselines/bl7_tcn.py:203-207"},
+  "revin_num_features": {"value": 1, "ref": "src/transfer_methods/sita_tcn.py:142; scripts/baselines/bl7_tcn_revin.py:149"},
+  "fused_tensors": {
+    "value": ["blocks.0.conv1", "blocks.0.conv2", "blocks.0.residual", "blocks.1.conv1", "blocks.1.conv2"],
+    "ref": "src/transfer_methods/sita_tcn.py:43-54"
+  },
+  "not_fused": {
+    "value": ["head.weight", "head.bias", "revin.affine_weight", "revin.affine_bias"],
+    "ref": "src/transfer_methods/sita_tcn.py:55-59"
+  },
+  "bl7_fit_not_for_ablation": {
+    "value": "PyTorch, MSE, Adam 1e-4, max 50 epochs, patience 5",
+    "ref": "scripts/baselines/bl7_tcn.py:21-23,214-236"
+  },
+  "tcn_source_fit": {
+    "status": "CLOSED",
+    "applies_to": "SITA_TCN source models",
+    "loss": "mse",
+    "loss_space": "source Min-Max scaled sales; source-side RevIN is not applied",
+    "optimizer": "adam",
+    "learning_rate": 0.0001,
+    "batch_size": 16,
+    "epochs": 50,
+    "clipnorm": null,
+    "shuffle": true,
+    "validation_used_for_fit": false,
+    "validation_for_early_stopping": false,
+    "validation_for_checkpoint_selection": false,
+    "validation_for_source_ranking": false,
+    "ema": false,
+    "final_weights": "last_epoch_raw",
+    "source_revin": "UNUSED",
+    "seed": "cell_seed_reset_per_stage_a_key",
+    "not_inherited": ["bl7_early_stopping", "bl7_patience", "bl7_best_state", "target_huber", "target_cosine", "target_ema"]
+  }
+}

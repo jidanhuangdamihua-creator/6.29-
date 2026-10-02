@@ -1,0 +1,193 @@
+{
+  "status": "PROTOCOL_AUDIT_FREEZE",
+  "acceptance": "not_phase0_acceptance",
+  "phase": 0,
+  "note": "每个 value 都附 ref。null 表示本轮不能冻结。",
+  "scenario": {
+    "value": "without",
+    "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:5"
+  },
+  "input_window": {
+    "value": 10,
+    "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:25; src/data_processing/data_preprocessing.py:1136,1230-1232"
+  },
+  "horizons": {
+    "value": [1, 3, 5],
+    "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:13"
+  },
+  "lag_columns": {
+    "value": [],
+    "meaning": "没有 sales_lag 列；标签位于输入窗终点再偏移 horizon 天",
+    "ref": "src/data_processing/data_preprocessing.py:1230-1232"
+  },
+  "datasets": {
+    "D1": {
+      "model_features": {
+        "value": ["sales", "year", "month", "week", "day"],
+        "ref": "src/protocols/transformation_identity.py:1083"
+      },
+      "similarity_variables": {
+        "value": ["sales"],
+        "ref": "src/protocols/transformation_identity.py:1104; src/protocols/experiment_protocol.py:29,265"
+      },
+      "target_key": {
+        "value": "1/10",
+        "ref": "src/protocols/experiment_protocol.py:263; configs/ms_katl_corrected_sita_60cell_manifest.json:8"
+      },
+      "knn_window": {
+        "value": ["2017-06-01", "2017-06-30"],
+        "ref": "src/protocols/experiment_protocol.py:24-28,137-146; src/protocols/gate1_transformation.py:239"
+      },
+      "source_history": {
+        "value": ["2017-01-02", "2017-06-30"],
+        "ref": "src/protocols/gate1_transformation.py:239; src/constants.py:4"
+      },
+      "target_train": {
+        "value": ["2017-06-01", "2017-06-15"],
+        "ref": "src/protocols/gate1_transformation.py:239"
+      },
+      "target_val": {
+        "value": ["2017-06-16", "2017-06-30"],
+        "ref": "src/protocols/gate1_transformation.py:239"
+      },
+      "target_test": {
+        "value": ["2017-07-01", "2017-12-27"],
+        "ref": "src/protocols/gate1_transformation.py:239"
+      },
+      "availability": {
+        "value": "without 候选为 store 1、item 1-9；源日期不晚于 2017-06-30；比较窗口 30 天必须完整",
+        "ref": "src/protocols/experiment_protocol.py:379-386; src/protocols/runner_adapter.py:536,645; src/protocols/candidate_pool.py:1431-1439"
+      }
+    },
+    "D4": {
+      "model_features": {
+        "value": ["sales", "stock_hour6_22_cnt", "activity_flag", "discount", "holiday_flag", "precpt", "avg_temperature", "avg_humidity", "avg_wind_level", "year", "month", "week", "day"],
+        "ref": "src/protocols/transformation_identity.py:1088-1091"
+      },
+      "similarity_variables": {
+        "value": ["sales"],
+        "ref": "src/protocols/transformation_identity.py:1107; src/protocols/experiment_protocol.py:298"
+      },
+      "target_key": {
+        "value": "166/258",
+        "label": "Store166/SKU258",
+        "status": "RESOLVED",
+        "ref": "论文文稿相关/4 Experiments and Results.docx 表2；src/transfer_methods/ms_katl_corrected_sita_60cell.py:33; configs/ms_katl_corrected_sita_60cell_manifest.json:9",
+        "not_used": {
+          "value": "166/311",
+          "ref": "src/transfer_methods/ms_katl_fto_three_track_robustness.py:124"
+        }
+      },
+      "knn_window": {
+        "value": ["2024-12-16", "2025-01-14"],
+        "ref": "src/protocols/gate1_transformation.py:242"
+      },
+      "source_history": {
+        "value": ["2024-07-19", "2025-01-14"],
+        "ref": "src/protocols/gate1_transformation.py:242"
+      },
+      "target_train": {
+        "value": ["2024-12-16", "2024-12-30"],
+        "ref": "src/protocols/gate1_transformation.py:242"
+      },
+      "target_val": {
+        "value": ["2024-12-31", "2025-01-14"],
+        "ref": "src/protocols/gate1_transformation.py:242"
+      },
+      "target_test": {
+        "value": ["2025-01-15", "2025-07-13"],
+        "ref": "src/protocols/gate1_transformation.py:242; src/constants.py:278-280"
+      },
+      "availability": {
+        "value": "require_same_group 为假；domain_filter_scope 为 target_only，源池不做域过滤",
+        "ref": "src/protocols/experiment_protocol.py:284-289; src/utils/source_domain_filter.py:136-140"
+      }
+    },
+    "D5": {
+      "model_features": {
+        "value": ["sales", "year", "month", "week", "day", "class", "perishable", "cluster", "transactions", "oil_price", "is_holiday"],
+        "ref": "src/protocols/transformation_identity.py:1092-1095"
+      },
+      "similarity_variables": {
+        "value": ["sales", "onpromotion", "oil_price"],
+        "ref": "src/protocols/transformation_identity.py:1108; src/protocols/experiment_protocol.py:31,311"
+      },
+      "target_key": {
+        "value": "48/1159414",
+        "ref": "src/transfer_methods/ms_katl_fto_three_track_robustness.py:125; src/transfer_methods/ms_katl_corrected_sita_60cell.py:34"
+      },
+      "knn_window": {
+        "value": ["2017-01-17", "2017-02-15"],
+        "ref": "src/protocols/gate1_transformation.py:243"
+      },
+      "source_history": {
+        "value": ["2016-08-20", "2017-02-15"],
+        "ref": "src/protocols/gate1_transformation.py:243"
+      },
+      "target_train": {
+        "value": ["2017-01-17", "2017-01-31"],
+        "ref": "src/protocols/gate1_transformation.py:243"
+      },
+      "target_val": {
+        "value": ["2017-02-01", "2017-02-15"],
+        "ref": "src/protocols/gate1_transformation.py:243"
+      },
+      "target_test": {
+        "value": ["2017-02-16", "2017-08-14"],
+        "status": "CLOSED",
+        "formal_test_end": "2017-08-14",
+        "load_rule": "keep sealed parquet unchanged; before the 15/15/180 split, keep only date <= 2017-08-14",
+        "rejected_split": {
+          "reason": "2017-08-15 is an extra physical date, not the formal test end",
+          "train": ["2017-01-18", "2017-02-01"],
+          "val": ["2017-02-02", "2017-02-16"],
+          "test": ["2017-02-17", "2017-08-15"],
+          "existing_loader_upper_bound": "src/constants.py:284"
+        },
+        "ref": "src/protocols/gate1_transformation.py:243; src/protocols/formal_target_scope.py:29-44; 数据集/固化数据/d1_d6_sealed_v1/dataset5/manifest.json:67; 数据集/固化数据/d1_d6_sealed_v1/dataset5/formal-proof.json:182-185"
+      },
+      "availability": {
+        "value": "同一 family；源池应用域过滤",
+        "ref": "src/protocols/experiment_protocol.py:300-303; src/utils/source_domain_filter.py:136-154"
+      }
+    },
+    "D6": {
+      "model_features": {
+        "value": ["sales", "year", "month", "week", "day", "wm_yr_wk", "weekday", "is_event_1", "is_event_2", "snap", "sell_price"],
+        "ref": "src/protocols/transformation_identity.py:1096-1099"
+      },
+      "similarity_variables": {
+        "value": ["sales"],
+        "ref": "src/protocols/transformation_identity.py:1109"
+      },
+      "target_key": {
+        "value": "CA_1/FOODS_3_080",
+        "ref": "src/transfer_methods/ms_katl_fto_three_track_robustness.py:126; src/transfer_methods/ms_katl_corrected_sita_60cell.py:35"
+      },
+      "knn_window": {
+        "value": ["2015-10-26", "2015-11-24"],
+        "ref": "src/protocols/gate1_transformation.py:244"
+      },
+      "source_history": {
+        "value": ["2015-05-29", "2015-11-24"],
+        "ref": "src/protocols/gate1_transformation.py:244"
+      },
+      "target_train": {
+        "value": ["2015-10-26", "2015-11-09"],
+        "ref": "src/protocols/gate1_transformation.py:244"
+      },
+      "target_val": {
+        "value": ["2015-11-10", "2015-11-24"],
+        "ref": "src/protocols/gate1_transformation.py:244"
+      },
+      "target_test": {
+        "value": ["2015-11-25", "2016-05-22"],
+        "ref": "src/protocols/gate1_transformation.py:244; src/constants.py:286-288"
+      },
+      "availability": {
+        "value": "同一 department",
+        "ref": "src/protocols/experiment_protocol.py:313-316"
+      }
+    }
+  }
+}
