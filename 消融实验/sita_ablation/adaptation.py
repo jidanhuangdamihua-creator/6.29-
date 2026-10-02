@@ -220,6 +220,11 @@ def adapt_target(
         raise ContractError(f"test predictions must be float64 (180,), got {predictions.shape} {predictions.dtype}")
     if windows.test.unscored_test_dates:
         raise ContractError("test inference left unscored dates")
+    from sita_ablation.metrics import signed_error as signed_error_value
+
+    recorded_signed_error = float(
+        np.float64(signed_error_value(windows.test.y_original, predictions))
+    )
     return AdaptationResult(
         status=COMPLETED,
         spec=spec,
@@ -240,7 +245,7 @@ def adapt_target(
         test_weight_variant=protocol.final_weight_state,
         test_weight_sha256_before=before_digest,
         test_weight_sha256_after=after_digest,
-        signed_error=None,
+        signed_error=recorded_signed_error,
         alpha_entropy=_alpha_entropy(spec, stage_a),
         effective_source_count=_effective_source_count(spec, stage_a),
         source_info=ABSENT if spec.selection_rule == "none" else PRESENT,
