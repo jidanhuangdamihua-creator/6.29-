@@ -36,6 +36,7 @@ from sita_ablation.arms import (
     stage_a_key_for,
 )
 from sita_ablation.data import ConditionFrames, ContractError, DateSpan, DatasetId, load_dataset_contract
+from sita_ablation.formal_context import assemble_formal_context
 from sita_ablation.io import RunPayload, cell_id, require_clean_workspace_for_formal_run
 from sita_ablation.source_selection import STATUS_SKIPPED
 from sita_ablation.stage_a import StageAKey
@@ -149,6 +150,8 @@ class CellContext:
     init_template: object = None
     stage_a: object = None
     y_true: object = None
+    frames: dict[str, ConditionFrames] | None = None
+    conditions: dict[tuple[str, int], object] | None = None
 
 
 def probe_workspace_dirty(repo_root: Path | None = None) -> bool:
@@ -622,7 +625,7 @@ def _require_phase(phase: int) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """CLI entry. A formal invocation hits preflight and does not train."""
+    """CLI entry. Dry-run stops after preflight. A formal run loads inputs only after the gates pass."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Ablation runner gates and dry-run plan")
@@ -636,12 +639,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = dry_run(args.phase, workers=args.workers, arms=args.arms, only_cell=args.only_cell)
         print(json.dumps({"accepted": result.preflight.accepted, "reasons": list(result.preflight.reasons), "plan": len(result.plan)}))
         return 0 if result.preflight.accepted else 2
+    preview = dry_run(args.phase, workers=args.workers, arms=args.arms, only_cell=args.only_cell)
+    if not preview.preflight.accepted:
+        print(json.dumps({"accepted": preview.preflight.accepted, "reasons": list(preview.preflight.reasons)}))
+        return 2
+    context = assemble_formal_context(tuple(cell.spec for cell in preview.plan))
+    audit_path = _REPO_ROOT / io_mod.phase_audit_path(args.phase)
     result = execute(
         args.phase,
         workers=args.workers,
         runs_root=_PACKAGE_ROOT / "runs",
         arms=args.arms,
         only_cell=args.only_cell,
+        context=context,
+        audit_path=audit_path,
     )
     print(json.dumps({"accepted": result.preflight.accepted, "reasons": list(result.preflight.reasons)}))
     return 0 if result.preflight.accepted else 2
