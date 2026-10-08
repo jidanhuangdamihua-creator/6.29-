@@ -1,0 +1,109 @@
+{
+  "experiment_name": "contemporaneous_product_error_borrowing_exploratory_pilot",
+  "display_name": "同期产品误差借用的探索性小试",
+  "does_not_claim_simultaneous_market_launch": true,
+  "prediction_root": "outputs/sita_all_targets_d4_d6_5seed/predictions/mode=without/v3",
+  "output_root": "outputs/source_error_borrowing_pilot",
+  "sealed_target_parquet": {
+    "D4": "数据集/固化数据/d1_d6_sealed_v1/dataset4/target.parquet",
+    "D5": "数据集/固化数据/d1_d6_sealed_v1/dataset5/target.parquet",
+    "D6": "数据集/固化数据/d1_d6_sealed_v1/dataset6/target.parquet"
+  },
+  "solidified_windows": {
+    "D4": {"train_start": "2024-12-16", "test_end": "2025-07-13"},
+    "D5": {"train_start": "2017-01-17", "test_end": "2017-08-15"},
+    "D6": {"train_start": "2015-10-26", "test_end": "2016-05-22"}
+  },
+  "products": {
+    "D4": ["166_258", "166_311", "166_313", "166_432", "166_433"],
+    "D5": ["48_1159414", "48_1159415", "48_1349808", "48_320682", "48_364606"],
+    "D6": ["CA_1_FOODS_3_080", "CA_1_FOODS_3_377", "CA_1_FOODS_3_555", "CA_1_FOODS_3_586", "CA_1_FOODS_3_668"]
+  },
+  "v3_primary_targets_actually_used": {
+    "D4": {"entity_key": "166_311", "identity": "166/311", "learning_rate": "3e-5"},
+    "D5": {"entity_key": "48_1159414", "identity": "48/1159414", "learning_rate": "3e-4"},
+    "D6": {"entity_key": "CA_1_FOODS_3_080", "identity": "CA_1/FOODS_3_080", "learning_rate": "3e-5"}
+  },
+  "not_used_earlier_primary_manifest": {
+    "path": "configs/primary_target_lr_selection_manifest.json",
+    "note": "Earlier screening listed D4 primary as 166/258 at 1e-4. The 225 SITA runs use the V3 frozen manifest. Do not substitute 166/258."
+  },
+  "lr_selection": {
+    "authority": "configs/ms_katl_fto_v3_robustness_manifest.json",
+    "source_run": "outputs/runs/20260818_180250_355272_MS_KATL_FTO_V3_SCREENING",
+    "grid": ["3e-5", "1e-4", "3e-4"],
+    "horizon": 1,
+    "seed": 42,
+    "epochs": 50,
+    "metric": "rmse_original",
+    "metric_space": "original_sales_space",
+    "tie_relative_threshold": 0.01,
+    "tie_break": "numerically_smallest_lr",
+    "primary_target_rule": "Among targets, keep those beating no-TL, then MSML, then BL4, and take the first by the transfer sort key.",
+    "applied_to": "The selected learning rate is reused for every product, horizon, and seed in that dataset.",
+    "overlap_with_this_pilot": true,
+    "report_banner": "底层预测配置存在测试集选择影响，本轮不作为正式独立测试证据"
+  },
+  "split": {
+    "eval_days": 210,
+    "train_days": 15,
+    "val_days": 15,
+    "test_days": 180,
+    "window_size": 10,
+    "date_rule": "Take the last 210 calendar days of the solidified window, then the last 180 are the test segment. D5's solidified window has 211 days, so 2017-01-17 falls outside this 210-day block.",
+    "issue_index_rule": "Row i uses test day index 9+i as the issue date and 9+i+horizon as the label date.",
+    "same_day_order": "On calendar day T, reveal every label with label_date <= T, then issue the forecast whose window ends on T."
+  },
+  "scale": {
+    "epsilon": 1e-6,
+    "history_days": 30,
+    "zero_observed_sales_included": true,
+    "filled_missing_days_excluded_from_scale": true,
+    "no_future_sales": true
+  },
+  "startup": {
+    "revealed_target_scores_before_evaluation": 15,
+    "first_evaluable_row_rule": "i = 14 + horizon",
+    "n0": 15
+  },
+  "quantile": {
+    "primary_alpha": 0.1,
+    "secondary_alpha": 0.05,
+    "test_atom_weight": 1.0,
+    "test_atom_location": "+inf",
+    "endpoint_truncation": false,
+    "no_distribution_free_guarantee": true
+  },
+  "similarity": {
+    "distance": "wasserstein_1_empirical_absolute_standardized_residual",
+    "inverse_map": "1 / (distance + delta)",
+    "delta": 0.001,
+    "method3_min_sources_with_5_scores": 2,
+    "method3_min_scores_per_source": 5,
+    "method3_fallback": "equal_weight_among_sources_with_at_least_one_startup_score"
+  },
+  "methods": ["m1", "m2", "m3", "m4", "m4b"],
+  "candidate_control": {
+    "c_grid": [0.0, 0.5, 1.0, 2.0, 4.0],
+    "lookback": 30,
+    "history_requires_all_candidates_finite_at_issue": true,
+    "history_requires_label_revealed": true,
+    "shared_history_dates_across_candidates": true,
+    "no_infinite_score_imputation": true,
+    "empty_history_selects_c": 0.0,
+    "tie_break": "smaller_c"
+  },
+  "segments": [
+    "label_day_1_30",
+    "label_day_31_180",
+    "all_legal",
+    "post_start_first_30_predictions",
+    "post_start_thereafter"
+  ],
+  "empty_segment_value": "NA",
+  "coverage_warning_below_nominal": 0.05,
+  "y_true_match_atol": 0.0001,
+  "seeds": [42, 43, 44, 45, 46],
+  "horizons": [1, 3, 5],
+  "literature_search_status": "not_done"
+}

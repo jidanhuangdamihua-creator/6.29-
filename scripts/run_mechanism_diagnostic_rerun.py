@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""42-cell SITA mechanism diagnostic rerun.
+"""SITA mechanism diagnostic rerun.
 
-Plan-only by default. `--run` starts the 42-cell execution loop into a
+Plan-only by default. `--run` starts the selected diagnostic execution loop into a
 timestamped diagnostic root. It does not write frozen A–E results.
 
     PYTHONPATH="$PWD" .venv/bin/python scripts/run_mechanism_diagnostic_rerun.py --plan-only
@@ -21,14 +21,20 @@ if str(PROJECT_ROOT) not in sys.path:
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="SITA mechanism diagnostic 42-cell rerun.")
     parser.add_argument(
+        "--matrix",
+        choices=("diagnostic-42", "formal-300"),
+        default="diagnostic-42",
+        help="Diagnostic universe. Default preserves the existing 42-cell behavior.",
+    )
+    parser.add_argument(
         "--plan-only",
         action="store_true",
-        help="Enumerate the 42-cell matrix and audit wiring. No training. Does not create a run directory.",
+        help="Enumerate the selected matrix and audit wiring. No training. Does not create a run directory.",
     )
     parser.add_argument(
         "--run",
         action="store_true",
-        help="Create a timestamped run root and execute the 42-cell diagnostic loop.",
+        help="Create a timestamped run root and execute the selected diagnostic loop.",
     )
     parser.add_argument(
         "--run-dir",
@@ -51,8 +57,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default=None,
         help=(
-            "Run one cell from the official 42-cell matrix, e.g. D1-H1-seed42-B. "
-            "Does not change the default 42-cell matrix."
+            "Run one cell from the selected official matrix, e.g. D1-H1-seed42-B."
         ),
     )
     return parser.parse_args(argv)
@@ -77,15 +82,16 @@ def main(argv: list[str] | None = None) -> int:
         if not args.plan_only and not want_run and not args.resume:
             print("usage: scripts/run_mechanism_diagnostic_rerun.py --plan-only")
             return 2
-        report = plan_mechanism_diagnostic_rerun()
+        report = plan_mechanism_diagnostic_rerun(args.matrix)
         sys.stdout.write(format_plan(report))
         if only_cell:
-            cell = resolve_diagnostic_only_cell(only_cell)
+            cell = resolve_diagnostic_only_cell(only_cell, matrix_mode=args.matrix)
             print(f"ONLY_CELL={cell.cell_key}")
-            print("DEFAULT_42_CELL_MATRIX_UNCHANGED=YES")
+            if args.matrix == "diagnostic-42":
+                print("DEFAULT_42_CELL_MATRIX_UNCHANGED=YES")
         return 0
 
-    report = plan_mechanism_diagnostic_rerun()
+    report = plan_mechanism_diagnostic_rerun(args.matrix)
     sys.stdout.write(format_plan(report))
     if not report.get("final_execute_ready", report["execute_ready"]):
         print("EXECUTE_BLOCKED: plan-only gaps remain. Frozen A–E results were not touched.")
@@ -109,16 +115,24 @@ def main(argv: list[str] | None = None) -> int:
         config_digest = str(report.get("config_digest") or mechanism_rerun_config_digest())
         matrix_digest = str(report["matrix_digest"])
         if only_cell:
-            smoke = resolve_diagnostic_only_cell(only_cell)
+            smoke = resolve_diagnostic_only_cell(only_cell, matrix_mode=args.matrix)
             smoke_cells = (smoke,)
             allow_subset = True
-            config_digest = mechanism_rerun_config_digest(smoke_cells)
+            config_digest = mechanism_rerun_config_digest(smoke_cells, matrix_mode=args.matrix)
             matrix_digest = matrix_digest_for_cells(smoke_cells)
         run_dir = resolve_run_directory(
             plan_only=False,
             resume=bool(args.resume),
             run_dir=args.run_dir,
+            matrix_mode=args.matrix,
         )
+        allowed_root = (PROJECT_ROOT / "outputs" / "mechanism_diagnostics").resolve()
+        resolved_run_dir = Path(run_dir).resolve()
+        if resolved_run_dir == allowed_root or allowed_root not in resolved_run_dir.parents:
+            raise RuntimeError(
+                "diagnostic outputs must stay under outputs/mechanism_diagnostics; "
+                "frozen formal result roots are not valid run directories"
+            )
         code_digest = mechanism_rerun_code_digest()
         prepare_run_root(
             run_dir,
@@ -126,6 +140,7 @@ def main(argv: list[str] | None = None) -> int:
             matrix_digest=matrix_digest,
             code_digest=code_digest,
             resume=bool(args.resume),
+            matrix_mode=args.matrix,
         )
         loop = run_mechanism_diagnostic_cell_loop(
             run_dir,
@@ -135,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
             matrix_digest=matrix_digest,
             code_digest=code_digest,
             allow_cell_subset=allow_subset,
+            matrix_mode=args.matrix,
         )
     except AETrainingBlocked as exc:
         print(f"EXECUTE_BLOCKED: {exc}. Frozen A–E results were not touched.")
@@ -146,7 +162,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"CELL_LOOP_STARTED=YES")
     if only_cell:
         print(f"ONLY_CELL={smoke_cells[0].cell_key}")
-        print("DEFAULT_42_CELL_MATRIX_UNCHANGED=YES")
+        if args.matrix == "diagnostic-42":
+            print("DEFAULT_42_CELL_MATRIX_UNCHANGED=YES")
     print(f"n_cells={loop['n_cells']}")
     print(f"n_ran={loop['n_ran']}")
     print(f"n_skipped={loop['n_skipped']}")

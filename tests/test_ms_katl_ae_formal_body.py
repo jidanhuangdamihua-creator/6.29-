@@ -391,7 +391,7 @@ def test_real_stage_a_kwargs_resolution_is_54_of_54():
     assert report["resolved_count"] == 54
     assert report["failures"] == []
     assert len(report["plans"]) == 54
-    for plan in report["plans"]:
+    for cell, plan in zip(cells, report["plans"]):
         assert set(plan["stage_a_kwargs"]) >= {
             "source_df",
             "target_df",
@@ -404,7 +404,9 @@ def test_real_stage_a_kwargs_resolution_is_54_of_54():
             "batch_size",
             "tau_k",
             "group_cols",
+            "seed",
         }
+        assert plan["stage_a_kwargs"]["seed"] == cell.seed
         assert Path(plan["stage_a_kwargs"]["source_df"]["path"]).is_file()
         assert Path(plan["stage_a_kwargs"]["target_df"]["path"]).is_file()
         assert plan["shared_target_bundle_inputs"]["target_identity"]
@@ -728,7 +730,449 @@ def test_fresh_formal_root_semantics_unchanged(cells, tmp_path, monkeypatch):
 
 
 def test_failed_historical_root_untouched():
-    failed = PROJECT_ROOT / "outputs" / "runs" / "20260821_220124_MS_KATL_AE_CORE_ABLATION"
-    assert failed.name == "20260821_220124_MS_KATL_AE_CORE_ABLATION"
+    # Prior empty placeholder (if present) must stay empty.
+    legacy = PROJECT_ROOT / "outputs" / "runs" / "20260821_220124_MS_KATL_AE_CORE_ABLATION"
+    assert legacy.name == "20260821_220124_MS_KATL_AE_CORE_ABLATION"
+    if legacy.exists():
+        assert list(legacy.iterdir()) == []
+
+    failed = PROJECT_ROOT / "outputs" / "runs" / "20260821_231516_MS_KATL_AE_CORE_ABLATION"
+    assert failed.name == "20260821_231516_MS_KATL_AE_CORE_ABLATION"
+    # Must never resume / rewrite / delete this historical failure root.
+    before = None
     if failed.exists():
-        assert list(failed.iterdir()) == []
+        before = sorted(path.name for path in failed.rglob("*"))
+    after = None
+    if failed.exists():
+        after = sorted(path.name for path in failed.rglob("*"))
+    assert before == after
+
+
+# ---------------------------------------------------------------------------
+# Stage-B runtime wiring + completion contract (construction / fake only)
+# ---------------------------------------------------------------------------
+
+
+def _synthetic_stage_b_bundle(stage_a):
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    n = int(stage_a.X_train.shape[0])
+    k = len(stage_a.source_identities)
+    d = int(np.prod(stage_a.input_shape))
+    f_row = np.zeros((n, d), dtype=np.float32)
+    return SimpleNamespace(
+        stage_a=stage_a,
+        X_train=stage_a.X_train,
+        y_train=stage_a.y_train,
+        X_val=stage_a.X_val,
+        y_val=stage_a.y_val,
+        X_test=stage_a.X_test,
+        y_test=stage_a.y_test,
+        f_t={"train": [f_row.copy() for _ in range(k)], "val": [f_row.copy() for _ in range(k)], "test": [f_row.copy() for _ in range(k)]},
+        f_s_pools=[np.zeros((4, d), dtype=np.float32) for _ in range(k)],
+        target_scaler=SimpleNamespace(data_min_=np.zeros(3), data_max_=np.ones(3), scale_=np.ones(3), min_=np.zeros(3)),
+        target_feature_columns=list(stage_a.target_feature_columns),
+        fused_target_digest=stage_a.fused_target_digest,
+        learning_rate=float(stage_a.learning_rate),
+        seed=int(stage_a.seed),
+    )
+
+
+def test_real_context_reaches_arm_construction(cells):
+    import src.transfer_methods.ms_katl_ae_formal as formal
+    from src.transfer_methods.ms_katl_ae_ablation import build_synthetic_stage_a, construct_all_ae_arms
+    from src.transfer_methods.ms_katl_ae_live_context import build_live_ae_cell_context
+
+    cell = next(item for item in cells if item.dataset == "D4" and item.horizon == 1 and item.seed == 42)
+    live = build_live_ae_cell_context(cell, project_root=PROJECT_ROOT)
+    context = live.as_formal_context()
+    assert context.get("bundle") is not None
+    assert "trainable_variables" not in context
+
+    stage_a = build_synthetic_stage_a(seed=int(cell.seed))
+    arms = construct_all_ae_arms(stage_a, seed=int(cell.seed), selected_lr=float(cell.selected_lr))
+    context[formal.AE_CONSTRUCTED_ARMS_KEY] = arms
+    context[formal.AE_SHARED_BUNDLE_KEY] = _synthetic_stage_b_bundle(stage_a)
+    context[formal.AE_HEAD_DIGEST_KEY] = arms["A"].head_target_init_digest
+
+    assert set(context[formal.AE_CONSTRUCTED_ARMS_KEY]) == set(AE_ARMS)
+    serialized = formal.serialize_formal_arm_runtime(
+        FormalArmRuntime(
+            arm="A",
+            spec=ae_arm_spec("A"),
+            init_mode="native",
+            source_init_consumed=False,
+            stage_a_shared_for_pairing=True,
+            head_target_init_digest=arms["A"].head_target_init_digest,
+            target_initial_conv_digest=arms["A"].target_initial_conv_digest,
+            fused_init_digest=stage_a.fused_target_digest,
+            best_source_identity=tuple(stage_a.source_identities[0]),
+            best_source_snapshot_digest=stage_a.best_source_snapshot_digest,
+            source_identities=list(stage_a.source_identities),
+            source_distances=list(stage_a.source_distances),
+            source_weights=list(stage_a.source_weights),
+            selected_lr=float(cell.selected_lr),
+            recipe_digest=_json_digest(ae_training_recipe()),
+            target_split_digest=cell.target_split_digest,
+            parent_method=PARENT_METHOD,
+            parent_v3_architecture_digest=v3_architecture_digest(),
+            prediction_path_parameter_count=1,
+            trainable_prediction_path_parameter_count=1,
+            frozen_prediction_path_parameter_count=0,
+            status="OK",
+        )
+    )
+    assert "head" not in serialized
+    assert "trainable_variables" not in serialized
+    blob = json.dumps(serialized)
+    assert "MSKATLLite" not in blob
+    assert "Variable" not in blob
+
+
+def test_five_arm_runtime_construction_and_common_head():
+    from src.transfer_methods.ms_katl_ae_ablation import (
+        build_synthetic_stage_a,
+        construct_all_ae_arms,
+        select_ae_trainable_variables,
+        verify_common_head_init,
+    )
+
+    stage_a = build_synthetic_stage_a(seed=42)
+    arms = construct_all_ae_arms(stage_a, seed=42, selected_lr=3e-5)
+    assert verify_common_head_init(arms) == "PASS"
+    digests = {arm: arms[arm].head_target_init_digest for arm in AE_ARMS}
+    assert len(set(digests.values())) == 1
+
+    assert arms["A"].spec.init_mode == "native"
+    assert arms["A"].spec.init_mode != "fused"
+    assert arms["B"].spec.init_mode == arms["C"].spec.init_mode == arms["D"].spec.init_mode == "fused"
+    assert arms["E"].spec.init_mode == "best_source"
+    assert arms["D"].spec.revin_enabled is True
+
+    for arm in AE_ARMS:
+        constructed = arms[arm]
+        assert constructed.head is not None
+        assert constructed.target_extractor is not None
+        trainable = select_ae_trainable_variables(
+            constructed.head, constructed.target_extractor, constructed.spec, constructed.revin
+        )
+        assert trainable
+        head_ids = {id(var) for var in constructed.head.head_target.trainable_variables}
+        assert head_ids and head_ids.issubset({id(var) for var in trainable})
+        for var in trainable:
+            lowered = var.name.lower()
+            assert "adapter" not in lowered
+            assert "head_transfer" not in lowered
+            assert "residual_gate" not in lowered
+            assert "cross_attention" not in lowered
+
+
+def test_stage_b_prediction_metric_adapters_no_real_training(cells, monkeypatch):
+    import numpy as np
+    import src.transfer_methods.ms_katl_ae_formal as formal
+    from src.transfer_methods.ms_katl_ae_ablation import build_synthetic_stage_a, construct_all_ae_arms
+
+    cell = cells[0]
+    stage_a_syn = build_synthetic_stage_a(seed=int(cell.seed))
+    arms = construct_all_ae_arms(stage_a_syn, seed=int(cell.seed), selected_lr=float(cell.selected_lr))
+    bundle = _synthetic_stage_b_bundle(stage_a_syn)
+    context = {
+        formal.AE_CONSTRUCTED_ARMS_KEY: arms,
+        formal.AE_SHARED_BUNDLE_KEY: bundle,
+        formal.AE_HEAD_DIGEST_KEY: arms["A"].head_target_init_digest,
+    }
+    stage_a = build_mock_stage_a(cell)
+    stage_a.fused_target_digest = stage_a_syn.fused_target_digest
+    stage_a.best_source_conv_digest = stage_a_syn.best_source_snapshot_digest
+    stage_a.source_identities = list(stage_a_syn.source_identities)
+    stage_a.source_distances = list(stage_a_syn.source_distances)
+    stage_a.source_weights = list(stage_a_syn.source_weights)
+    stage_a.best_source_identity = tuple(stage_a_syn.source_identities[0])
+
+    calls = {"stage_b": 0, "fit": 0, "apply": 0}
+
+    def _fake_stage_b(head, **kwargs):
+        calls["stage_b"] += 1
+        assert head is arms["C"].head
+        assert kwargs["target_extractor"] is arms["C"].target_extractor
+        assert kwargs["trainable_variables"]
+        assert kwargs["learning_rate"] == float(cell.selected_lr)
+        assert kwargs["use_adversarial"] is False
+        assert kwargs["x_train"] is bundle.X_train
+        assert kwargs["f_t_train"] is bundle.f_t["train"]
+        assert kwargs["loss_name"] == "huber"
+        assert "on_before_first_target_optimizer_update" not in kwargs
+        return {"status": "FAKE_TRAINED"}
+
+    monkeypatch.setattr(formal, "AE_STAGE_B_AUTHORITY", _fake_stage_b)
+    monkeypatch.setattr(
+        formal,
+        "AE_PREDICTION_AUTHORITY",
+        lambda head, z_t_test, f_t_test, knn_prior: {
+            "y_pred": np.zeros(len(bundle.y_test), dtype=np.float32),
+            "head_id": id(head),
+        },
+    )
+    monkeypatch.setattr(
+        formal,
+        "AE_METRIC_AUTHORITY",
+        lambda y_true, y_pred, target_scaler=None, feature_columns=None: {
+            "rmse_original": 1.25,
+            "smape_original": 0.11,
+            "y_true_original": np.asarray(y_true, dtype=np.float64),
+            "y_pred_original": np.asarray(y_pred, dtype=np.float64),
+        },
+    )
+    monkeypatch.setattr(
+        formal,
+        "extract_features_maybe_revin",
+        lambda extractor, x, revin=None, training=False: (
+            np.zeros((len(bundle.y_test), 4), dtype=np.float32),
+            None,
+            None,
+        ),
+    )
+
+    runtime = formal.default_v3_train_stage_b(
+        cell, "C", stage_a, arms["A"].head_target_init_digest, context
+    )
+    assert calls["stage_b"] == 1
+    assert runtime.status == "OK"
+    assert runtime.head_target_init_digest == arms["A"].head_target_init_digest
+
+    head_before = arms["C"].head
+    extractor_before = arms["C"].target_extractor
+    runtime = formal.default_v3_predict(cell, runtime, context)
+    payload = runtime._predict_payload  # type: ignore[attr-defined]
+    assert payload["head"] is head_before
+    assert payload["target_extractor"] is extractor_before
+    runtime = formal.default_v3_metric(cell, runtime, context)
+    assert runtime.status == "OK"
+    assert runtime.metric_kind == formal.REAL_METRIC_KIND
+    assert runtime.metric_kind != MOCK_METRIC
+    assert np.isfinite(runtime.rmse_original)
+    assert np.isfinite(runtime.smape_original)
+    assert calls["fit"] == 0 and calls["apply"] == 0
+
+
+def test_real_failure_marker_is_not_mock(cells, tmp_path):
+    fail_key = cells[0].stage_a_key
+    ledger = FormalCallLedger()
+    base = make_mock_authorities(ledger=ledger, publish_root=None)
+
+    def train_stage_b(cell_plan, arm, stage_a, head_digest, context):
+        if cell_plan.stage_a_key == fail_key:
+            raise RuntimeError("injected real Stage-B failure")
+        runtime = base.train_stage_b(cell_plan, arm, stage_a, head_digest, context)
+        runtime.status = "OK"
+        runtime.metric_kind = "rmse_original"
+        runtime.rmse_original = 1.0
+        runtime.smape_original = 0.1
+        runtime.mae_original = 0.8
+        runtime.error = ""
+        return runtime
+
+    def predict(cell_plan, runtime, context=None):
+        return runtime
+
+    def metric(cell_plan, runtime, context=None):
+        runtime.status = "OK"
+        runtime.metric_kind = "rmse_original"
+        return runtime
+
+    def publish(cell_plan, runtimes, pair_status, output_root):
+        default_v3_publish(cell_plan, runtimes, pair_status, output_root)
+
+    authorities = AEFormalAuthorities(
+        prepare_context=base.prepare_context,
+        prepare_stage_a=base.prepare_stage_a,
+        make_common_head=base.make_common_head,
+        train_stage_b=train_stage_b,
+        predict=predict,
+        metric=metric,
+        publish=publish,
+        reset_rng=lambda _seed: None,
+    )
+    root = tmp_path / "outputs" / "runs" / f"20260821_stageb_fail_{AE_RUN_LABEL}"
+    with pytest.raises(AEContractError, match="FORMAL_COMPLETION_FAILED"):
+        run_ae_formal_body(
+            mock_execution_authorized=False,
+            execute=True,
+            environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"},
+            authorities=authorities,
+            output_root=root,
+            project_root=PROJECT_ROOT,
+            cells=cells,
+            ledger=ledger,
+        )
+    payload = json.loads(cell_bundle_path(root, fail_key).read_text(encoding="utf-8"))
+    assert payload["pair_status"] == "PAIR_INCOMPLETE"
+    for arm in AE_ARMS:
+        assert payload["arms"][arm]["status"] == "FAILED"
+        assert payload["arms"][arm]["error"]
+        assert payload["arms"][arm]["metric_kind"] is None
+        assert payload["arms"][arm]["metric_kind"] != MOCK_METRIC
+        assert payload["arms"][arm]["status"] != MOCK_STATUS
+    assert MOCK_METRIC not in json.dumps(payload["arms"])
+    assert MOCK_STATUS not in json.dumps(payload["arms"])
+
+def test_partial_formal_matrix_fails_top_level(cells, tmp_path):
+    fail_key = cells[0].stage_a_key
+    ledger = FormalCallLedger()
+    base = make_mock_authorities(ledger=ledger, publish_root=None)
+
+    def train_stage_b(cell, arm, stage_a, head_digest, context):
+        if cell.stage_a_key == fail_key and arm == "E":
+            raise RuntimeError("one-cell incomplete")
+        runtime = base.train_stage_b(cell, arm, stage_a, head_digest, context)
+        runtime.status = "OK"
+        runtime.metric_kind = "rmse_original"
+        runtime.rmse_original = 1.0
+        runtime.smape_original = 0.1
+        runtime.mae_original = 0.8
+        runtime.error = ""
+        return runtime
+
+    def predict(cell, runtime, context=None):
+        return runtime
+
+    def metric(cell, runtime, context=None):
+        runtime.status = "OK"
+        runtime.metric_kind = "rmse_original"
+        return runtime
+
+    def publish(cell, runtimes, pair_status, output_root):
+        default_v3_publish(cell, runtimes, pair_status, output_root)
+
+    authorities = AEFormalAuthorities(
+        prepare_context=base.prepare_context,
+        prepare_stage_a=base.prepare_stage_a,
+        make_common_head=base.make_common_head,
+        train_stage_b=train_stage_b,
+        predict=predict,
+        metric=metric,
+        publish=publish,
+        reset_rng=base.reset_rng,
+    )
+    root = tmp_path / "outputs" / "runs" / f"20260821_partial_{AE_RUN_LABEL}"
+    with pytest.raises(AEContractError, match="FORMAL_COMPLETION_FAILED"):
+        run_ae_formal_body(
+            mock_execution_authorized=False,
+            execute=True,
+            environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"},
+            authorities=authorities,
+            output_root=root,
+            project_root=PROJECT_ROOT,
+            cells=cells,
+            ledger=ledger,
+        )
+    bundles = list((root / "cell_bundles").glob("*.json"))
+    assert len(bundles) == 54
+    statuses = load_pair_statuses(root)
+    assert sum(1 for status in statuses.values() if status == "PAIR_COMPLETE") == 53
+    assert sum(1 for status in statuses.values() if status == "PAIR_INCOMPLETE") == 1
+    assert statuses[fail_key] == "PAIR_INCOMPLETE"
+
+
+def test_all_complete_formal_matrix_succeeds(cells, tmp_path):
+    ledger = FormalCallLedger()
+    base = make_mock_authorities(ledger=ledger, publish_root=None)
+
+    def train_stage_b(cell, arm, stage_a, head_digest, context):
+        runtime = base.train_stage_b(cell, arm, stage_a, head_digest, context)
+        runtime.status = "OK"
+        runtime.metric_kind = "rmse_original"
+        runtime.rmse_original = 1.0
+        runtime.smape_original = 0.1
+        runtime.mae_original = 0.8
+        runtime.error = ""
+        return runtime
+
+    def predict(cell, runtime, context=None):
+        return runtime
+
+    def metric(cell, runtime, context=None):
+        runtime.status = "OK"
+        runtime.metric_kind = "rmse_original"
+        return runtime
+
+    def publish(cell, runtimes, pair_status, output_root):
+        default_v3_publish(cell, runtimes, pair_status, output_root)
+
+    authorities = AEFormalAuthorities(
+        prepare_context=base.prepare_context,
+        prepare_stage_a=base.prepare_stage_a,
+        make_common_head=base.make_common_head,
+        train_stage_b=train_stage_b,
+        predict=predict,
+        metric=metric,
+        publish=publish,
+        reset_rng=base.reset_rng,
+    )
+    root = tmp_path / "outputs" / "runs" / f"20260821_complete_{AE_RUN_LABEL}"
+    result = run_ae_formal_body(
+        mock_execution_authorized=False,
+        execute=True,
+        environ={FORMAL_TRAINING_UNLOCK_ENV: "YES"},
+        authorities=authorities,
+        output_root=root,
+        project_root=PROJECT_ROOT,
+        cells=cells,
+        ledger=ledger,
+    )
+    assert result["PAIR_COMPLETE"] == 54
+    assert result["PAIR_INCOMPLETE"] == 0
+    assert result["status"] == "FORMAL_COMPLETE"
+    assert len(list((root / "cell_bundles").glob("*.json"))) == 54
+
+
+def test_cli_completion_failure_exits_nonzero(cells, tmp_path, monkeypatch):
+    module = _load_ae_runner()
+
+    def _fail(*_args, **_kwargs):
+        raise AEContractError("FORMAL_COMPLETION_FAILED: PAIR_INCOMPLETE=1")
+
+    monkeypatch.setattr(module, "run_ae_formal_matrix", _fail)
+    monkeypatch.setenv(FORMAL_TRAINING_UNLOCK_ENV, "YES")
+    code = module.main(["--execute"])
+    assert code != 0
+
+
+def test_stage_b_runtime_wiring_never_trains(monkeypatch):
+    import src.transfer_methods.ms_katl_ae_formal as formal
+    import src.transfer_methods.ms_katl_lite as lite
+
+    counters = {"stage_a": 0, "stage_b": 0, "fit": 0, "apply": 0}
+
+    def _count_stage_a(*_args, **_kwargs):
+        counters["stage_a"] += 1
+        raise AssertionError("REAL_STAGE_A_FORBIDDEN")
+
+    def _count_stage_b(*_args, **_kwargs):
+        counters["stage_b"] += 1
+        raise AssertionError("REAL_STAGE_B_FORBIDDEN")
+
+    monkeypatch.setattr(lite, "prepare_ms_katl_stage_a", _count_stage_a)
+    monkeypatch.setattr(lite, "train_ms_katl_head", _count_stage_b)
+    monkeypatch.setattr(formal, "AE_STAGE_A_AUTHORITY", _count_stage_a)
+    monkeypatch.setattr(formal, "AE_STAGE_B_AUTHORITY", _count_stage_b)
+    if hasattr(lite.tf.keras.Model, "fit"):
+        original_fit = lite.tf.keras.Model.fit
+
+        def _fit(self, *args, **kwargs):
+            counters["fit"] += 1
+            return original_fit(self, *args, **kwargs)
+
+        monkeypatch.setattr(lite.tf.keras.Model, "fit", _fit)
+
+    from src.transfer_methods.ms_katl_ae_ablation import build_synthetic_stage_a, construct_all_ae_arms
+
+    stage_a = build_synthetic_stage_a(seed=7)
+    arms = construct_all_ae_arms(stage_a, seed=7, selected_lr=3e-5)
+    assert set(arms) == set(AE_ARMS)
+    assert counters["stage_a"] == 0
+    assert counters["stage_b"] == 0
+    assert counters["fit"] == 0
+    assert counters["apply"] == 0

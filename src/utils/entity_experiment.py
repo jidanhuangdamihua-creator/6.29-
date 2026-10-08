@@ -18,6 +18,7 @@ from src.constants import (
     UNKNOWN,
 )
 from src.experiment.experiment_runner import (
+    run_ms_katl_lite_experiment,
     run_msml_experiment,
     run_msml_rfe_experiment,
     run_mssb_experiment,
@@ -271,6 +272,9 @@ def _method_runner(method: str):
         "MSSB-TL": run_mssb_experiment,
         "MSML-TL": run_msml_experiment,
         "MSML-TL-RFE": run_msml_rfe_experiment,
+        # Extended-track method (not in FORMAL_METHODS); gated in
+        # run_single_entity_experiment by smoke/extended_methods_enabled.
+        "MS-KATL-Lite": run_ms_katl_lite_experiment,
     }[method]
 
 
@@ -718,6 +722,36 @@ def _row_from_metric_protocol_error(
     return _row_from_result(raw, method, entity_key, config, elapsed)
 
 
+def _capture_bl8_prediction_payload(
+    *,
+    config: Dict[str, Any],
+    method: str,
+    entity_key: str,
+    raw: Dict[str, Any],
+    protocol_manifest: Any,
+    horizon: int,
+) -> None:
+    sink = config.get("bl8_prediction_payload_sink")
+    if not isinstance(sink, list) or method != "MSML-TL":
+        return
+    records = protocol_manifest.for_horizon(int(horizon))
+    timestamps = [str(record.label_date) for record in records]
+    meta = raw.get("meta") if isinstance(raw.get("meta"), dict) else {}
+    y_true = raw.get("y_true_original")
+    y_pred = raw.get("y_pred_original")
+    sink.append(
+        {
+            "method": method,
+            "target_entity_key": str(entity_key),
+            "timestamps": timestamps,
+            "y_true_original": None if y_true is None else np.asarray(y_true, dtype=np.float64).reshape(-1),
+            "y_pred_original": None if y_pred is None else np.asarray(y_pred, dtype=np.float64).reshape(-1),
+            "meta": dict(meta),
+            "raw": raw,
+        }
+    )
+
+
 def run_single_entity_experiment(
     entity_key: str,
     source_df: pd.DataFrame,
@@ -900,9 +934,22 @@ def run_single_entity_experiment(
         lifecycle_identity=target_k3_context.lifecycle_identity
     )
 
+    extended_only_methods = {"MS-KATL-Lite"}
     for method in enabled_methods:
-        if method not in {"No-TL", "SS-TL", "MSWA-TL", "MSSB-TL", "MSML-TL", "MSML-TL-RFE"}:
+        if method not in {
+            "No-TL", "SS-TL", "MSWA-TL", "MSSB-TL", "MSML-TL", "MSML-TL-RFE",
+            "MS-KATL-Lite",
+        }:
             raise ValueError(f"Unsupported method: {method}")
+        if method in extended_only_methods and not (
+            bool(config.get("smoke", False))
+            or bool(config.get("extended_methods_enabled", False))
+        ):
+            raise ValueError(
+                f"Method {method} is extended-track only; enable it with "
+                "config['extended_methods_enabled']=True (or smoke mode) to avoid "
+                "contaminating formal acceptance results."
+            )
         source_model_df.attrs["method"] = method
         target_model_df.attrs["method"] = method
         t0 = time.perf_counter()
@@ -953,10 +1000,13 @@ def run_single_entity_experiment(
                 if method_source_count == 3:
                     kwargs["k3_selection_context"] = target_k3_context
                     kwargs["k3_raw_source_context"] = target_k3_raw_context
-            if method == "MSML-TL-RFE":
+            if method in {"MSML-TL-RFE", "MS-KATL-Lite"}:
                 kwargs["random_state"] = int(
                     config.get("random_state", config.get("seed", 42))
                 )
+            if method == "MS-KATL-Lite":
+                kwargs["gamma"] = float(config.get("ms_katl_gamma", 0.5))
+                kwargs["tau_k"] = float(config.get("ms_katl_tau_k", 1.0))
             try:
                 raw = runner(**kwargs)
             except AllSourcesFailedError as exc:
@@ -990,4 +1040,12 @@ def run_single_entity_experiment(
                 )
                 continue
         rows.append(_row_from_result(raw, method, canonical_entity_key, config, time.perf_counter() - t0))
+        _capture_bl8_prediction_payload(
+            config=config,
+            method=method,
+            entity_key=canonical_entity_key,
+            raw=raw,
+            protocol_manifest=protocol_manifest,
+            horizon=int(config["horizon"]),
+        )
     return rows

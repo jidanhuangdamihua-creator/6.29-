@@ -497,6 +497,8 @@ def _extract_method_metrics(
         "inverse_transform_available": bool(selected.get("inverse_transform_available", False)),
         "metric_protocol_note": str(selected.get("metric_protocol_note", "")),
         "metric_notes": str(selected.get("metric_notes", "")),
+        "y_true_original": selected.get("y_true_original"),
+        "y_pred_original": selected.get("y_pred_original"),
         "meta": method_meta,
     }
     result.update(_metric_audit_values(selected))
@@ -1140,6 +1142,7 @@ def run_msml_experiment(
         source_epochs=source_epochs,
         target_epochs=target_epochs,
         batch_size=batch_size,
+        seed=int(target_df.attrs["protocol_seed"]) if "protocol_seed" in target_df.attrs else None,
         metric_identity=expected_metric_identity,
         **(
             {"k3_selection_context": k3_selection_context}
@@ -1154,6 +1157,11 @@ def run_msml_experiment(
         **(
             {"transformation_reuse_context": transformation_reuse_context}
             if transformation_reuse_context is not None
+            else {}
+        ),
+        **(
+            {"formal_bl8": True}
+            if k3_selection_context is not None
             else {}
         ),
     )
@@ -1232,6 +1240,78 @@ def run_msml_rfe_experiment(
     return _extract_method_metrics(
         raw,
         method_name="MSML-TL-RFE",
+        metric_protocol=metric_protocol,
+        expected_metric_identity=expected_metric_identity,
+    )
+
+
+def run_ms_katl_lite_experiment(
+    source_df: pd.DataFrame,
+    target_df: pd.DataFrame,
+    feature_cols: Sequence[str],
+    k: int = 3,
+    number_of_sources: Optional[int] = None,
+    horizon: int = 1,
+    window_size: int = 10,
+    weight_mode: str = "inverse_distance",
+    include_sales_in_knn: bool = True,
+    learning_rate: float = 0.001,
+    source_epochs: int = 3,
+    target_epochs: int = 3,
+    batch_size: int = 16,
+    gamma: float = 0.5,
+    tau_k: float = 1.0,
+    random_state: int = 42,
+    metric_protocol: Optional[Dict[str, Any]] = None,
+    expected_metric_identity: Optional[Dict[str, Any]] = None,
+    group_cols: Sequence[str] = ("entity_id", "item_id"),
+    k3_selection_context: TargetK3SelectionContext | None = None,
+    k3_raw_source_context: TargetK3RawSourceContext | None = None,
+    transformation_reuse_context: TargetTransformationReuseContext | None = None,
+) -> Dict[str, Any]:
+    """运行 MS-KATL-Lite（extended 轨道方法），并返回统一结构。"""
+    try:
+        from src.transfer_methods.ms_katl_lite import run_ms_katl_lite
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(f"MS-KATL-Lite dependency missing: {exc}") from exc
+
+    k = int(number_of_sources) if number_of_sources is not None else int(k)
+    raw = run_ms_katl_lite(
+        source_df=source_df,
+        target_df=target_df,
+        feature_cols=feature_cols,
+        k=k,
+        group_cols=tuple(group_cols),
+        horizon=horizon,
+        window_size=window_size,
+        weight_mode=weight_mode,
+        learning_rate=learning_rate,
+        source_epochs=source_epochs,
+        target_epochs=target_epochs,
+        batch_size=batch_size,
+        gamma=gamma,
+        tau_k=tau_k,
+        seed=int(random_state),
+        metric_identity=expected_metric_identity,
+        **(
+            {"k3_selection_context": k3_selection_context}
+            if k3_selection_context is not None
+            else {}
+        ),
+        **(
+            {"k3_raw_source_context": k3_raw_source_context}
+            if k3_raw_source_context is not None
+            else {}
+        ),
+        **(
+            {"transformation_reuse_context": transformation_reuse_context}
+            if transformation_reuse_context is not None
+            else {}
+        ),
+    )
+    return _extract_method_metrics(
+        raw,
+        method_name="MS-KATL-Lite",
         metric_protocol=metric_protocol,
         expected_metric_identity=expected_metric_identity,
     )

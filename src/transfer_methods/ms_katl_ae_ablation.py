@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import random
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
@@ -46,6 +45,7 @@ from src.transfer_methods.ms_katl_lite import (
     fused_params_digest,
     fused_target_init_snapshot,
     raw_target_init_snapshot,
+    reset_stage_a_source_training_rng,
     snapshot_model_weights,
     snapshot_named_layer_weights,
 )
@@ -120,6 +120,12 @@ UNIFORM_3E4_RUNS_PER_DATASET_HORIZON = len(UNIFORM_3E4_SEEDS) * len(AE_ARMS)
 UNIFORM_3E4_OUTPUT_MARKER = "sita_ablation_3e4"
 UNIFORM_3E4_OUTPUT_RELPATH = Path("outputs") / "sita_ablation_3e4_d1_d4_d5_d6_5seed"
 UNIFORM_3E4_MANIFEST_RELPATH = Path("configs") / "ms_katl_sita_ablation_3e4_manifest.json"
+# Independent corrected paper-target matrix. This must not mutate the retained
+# uniform-3e-4 slice or the historical 270-run V3 matrix.
+FORMAL_PER_DATASET_LR_MATRIX_KIND = "FORMAL_PER_DATASET_LR_AE"
+FORMAL_PER_DATASET_LR_OUTPUT_MARKER = "sita_ablation_formal_per_dataset_lr_ae"
+FORMAL_PER_DATASET_LR_RUNS = 300
+FORMAL_PER_DATASET_LR_CANONICAL_CELLS = 60
 STAGE_A_LEARNING_RATE = float(FIXED_LEARNING_RATE)
 STAGE_B_EPOCHS = int(FIXED_EPOCHS)
 STAGE_B_BATCH_SIZE = 16
@@ -484,13 +490,7 @@ def _ae_name(prefix: str) -> str:
 
 
 def reset_ae_rng(seed: int) -> None:
-    normalized = int(seed)
-    os.environ["PYTHONHASHSEED"] = str(normalized)
-    random.seed(normalized)
-    np.random.seed(normalized)
-    tf.random.set_seed(normalized)
-    if hasattr(tf.keras.utils, "set_random_seed"):
-        tf.keras.utils.set_random_seed(normalized)
+    reset_stage_a_source_training_rng(seed)
 
 
 def _json_digest(payload: Mapping[str, Any]) -> str:
@@ -1049,6 +1049,7 @@ def build_ae_stage_a_from_shared_bundle(shared_bundle: Any) -> AESyntheticStageA
                 "selection": selection_digest,
                 "source_weight_digests": list(artifacts.source_weight_digests),
                 "fused_params_digest": str(artifacts.fused_params_digest),
+                "stage_a_seed": int(getattr(artifacts, "stage_a_seed", seed) or seed),
             }
         ),
         knn_prior=np.asarray(artifacts.knn_prior, dtype=np.float64),

@@ -1,0 +1,142 @@
+{
+  "label": "SITA_ABLATION_3E4_PAPER_5SEED",
+  "matrix_kind": "UNIFORM_3E4_PAPER_5SEED",
+  "protocol_version": "ae_core_mechanism_v1",
+  "formal_ablation_runner": "scripts/run_ms_katl_ae_ablation.py",
+  "formal_ablation_module": "src/transfer_methods/ms_katl_ae_ablation.py",
+  "formal_config": "FUSED_TARGET_ONLY_V3",
+  "parent_method": "FUSED_TARGET_ONLY_V3",
+  "parent_v3_architecture_digest": "ac07f0863906ec9a3b4ed23ea56189ecae70e2b80ac2485cf85f5c7ee270b760",
+  "frozen_270_untouched": true,
+  "extra_target_slice_untouched": true,
+  "sita_model_changed": false,
+  "ablation_definition_changed": false,
+  "data_protocol_changed": false,
+  "target_mapping_changed": true,
+  "only_global_lr_changed": true,
+  "learning_rate": "3e-4",
+  "datasets": [
+    "D1",
+    "D4",
+    "D5",
+    "D6"
+  ],
+  "paper_targets": {
+    "D1": "1/10",
+    "D4": "166/258",
+    "D5": "48/1159414",
+    "D6": "CA_1/FOODS_3_080"
+  },
+  "horizons": [
+    1,
+    3,
+    5
+  ],
+  "seeds": [
+    42,
+    43,
+    44,
+    45,
+    46
+  ],
+  "arms": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E"
+  ],
+  "arm_names": {
+    "A": "TARGET_NATIVE_INIT",
+    "B": "CONTROLLED_FROZEN_FUSED",
+    "C": "FUSED_TRAINABLE",
+    "D": "CURRENT_V3",
+    "E": "BEST_SOURCE_TRAINABLE"
+  },
+  "scenario": "without",
+  "k": 3,
+  "window_size": 10,
+  "weight_mode": "inverse_distance",
+  "conv_transfer_scope": [
+    "conv1",
+    "conv2",
+    "conv3"
+  ],
+  "recipe": {
+    "loss_name": "huber",
+    "huber_delta": 1.0,
+    "lr_schedule": "cosine",
+    "use_ema": true,
+    "ema_momentum": 0.99
+  },
+  "optimizer": {
+    "optimizer": "Adam",
+    "clipnorm": null,
+    "epochs": 50,
+    "batch_size": 16,
+    "stage_b_early_stopping": false,
+    "stage_a_learning_rate": 0.0001
+  },
+  "stage_a_learning_rate": 0.0001,
+  "expected_canonical_cells": 60,
+  "expected_runs": 300,
+  "runs_per_dataset": 75,
+  "runs_per_dataset_horizon": 25,
+  "planned_matrix_digest": "8ef861a48c63ea0d34d55e8d6cdacf3c1dfeb44956abe1a49fad3ad7375d68fa",
+  "matrix_report": {
+    "DATASETS": 4,
+    "HORIZONS": "1,3,5",
+    "SEEDS": "42,43,44,45,46",
+    "ARMS": "A,B,C,D,E",
+    "LEARNING_RATE": "3e-4",
+    "EXPECTED_D1_RUNS": 75,
+    "EXPECTED_D4_RUNS": 75,
+    "EXPECTED_D5_RUNS": 75,
+    "EXPECTED_D6_RUNS": 75,
+    "EXPECTED_TOTAL_RUNS": 300,
+    "DRY_RUN_TOTAL_RUNS": 300,
+    "UNIQUE_RUN_KEYS": 300,
+    "UNIQUE_STAGE_A_KEYS": 60,
+    "NO_D2": "YES",
+    "NO_D3": "YES",
+    "NO_OTHER_TARGET": "YES",
+    "NO_DUPLICATE_CELL": "YES",
+    "NO_MISSING_CELL": "YES",
+    "ALL_LR_3E4": "YES",
+    "MATRIX_OK": "YES"
+  },
+  "config_identities": {
+    "A": "bbebdcfaf822cfd7251652dc8b83880e24ed5251f362a71ab3d1828b2d971641",
+    "B": "3754565b97f1e0057dda93727f8e133524f1e4d4357965b9b18dfb5a4c0b3cc3",
+    "C": "b09fc76caac8380f5185a3557c75613dcc7ce3be01a01ed04782b18e889104cb",
+    "D": "0589f599649202771227361cb3939bc35a82ec913762fa88ed7cba303887e7cc",
+    "E": "af1f55f412482c7502932c206abc2729ae4c6f3af8b5165a9064cc3bf854fc5d"
+  },
+  "formal_v3_lr_map_untouched": {
+    "D1": {
+      "target_identity": "1/10",
+      "learning_rate": "3e-5"
+    },
+    "D2": {
+      "target_identity": "1/10",
+      "learning_rate": "3e-5"
+    },
+    "D3": {
+      "target_identity": "10",
+      "learning_rate": "3e-5"
+    },
+    "D4": {
+      "target_identity": "166/311",
+      "learning_rate": "3e-5"
+    },
+    "D5": {
+      "target_identity": "48/1159414",
+      "learning_rate": "3e-4"
+    },
+    "D6": {
+      "target_identity": "CA_1/FOODS_3_080",
+      "learning_rate": "3e-5"
+    }
+  },
+  "output_relpath": "outputs/sita_ablation_3e4_d1_d4_d5_d6_5seed"
+}

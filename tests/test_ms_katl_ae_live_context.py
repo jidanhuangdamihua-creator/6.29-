@@ -58,6 +58,7 @@ def test_live_contexts_have_real_frames_and_null_metrics(live_report):
         assert ctx.scenario == "without"
         assert ctx.source_pool_authority == "shared_protocol_selector"
         assert ctx.shared_target_bundle.target_test_excluded == "YES"
+        assert ctx.stage_a_kwargs["seed"] == ctx.seed
 
 
 def test_d4_representative_live_trace(live_report):
@@ -73,6 +74,8 @@ def test_d4_representative_live_trace(live_report):
     assert Path(trace["sealed_target_path"]).is_file()
     assert trace["STOP"] == "BEFORE prepare_ms_katl_stage_a"
     assert "prepare_ms_katl_stage_a" not in str(trace["stage_a_kwargs_keys"])
+    assert "seed" in trace["stage_a_kwargs_keys"]
+    assert matches[0].stage_a_kwargs["seed"] == matches[0].seed == 42
 
 
 def test_real_context_mock_formal_body_topology(cells, live_report, tmp_path, monkeypatch):

@@ -1,0 +1,124 @@
+{
+  "selection_frozen": true,
+  "method": "FUSED_TARGET_ONLY_V3",
+  "selection_stage": "development_screening",
+  "common_target_policy": "V3_FROZEN_PRIMARY_TARGETS",
+  "targets": 6,
+  "screening_lr_grid": [
+    3e-05,
+    0.0001,
+    0.0003
+  ],
+  "screening_lr_grid_labels": [
+    "3e-5",
+    "1e-4",
+    "3e-4"
+  ],
+  "screening_seed": 42,
+  "screening_horizon": 1,
+  "epochs": 50,
+  "training_recipe": {
+    "loss_name": "huber",
+    "huber_delta": 1.0,
+    "lr_schedule": "cosine",
+    "use_ema": true,
+    "ema_momentum": 0.99
+  },
+  "RevIN": {
+    "enabled": true,
+    "affine": true,
+    "eps": 1e-05,
+    "target_channel": 0
+  },
+  "architecture": {
+    "use_fused_target_init": true,
+    "target_backbone_trainable": true,
+    "transfer_branch_enabled": false,
+    "gate_mode": "zero",
+    "lambda_adv": 0.0,
+    "attention_used_in_prediction": false,
+    "adapter_used_in_prediction": false,
+    "revin_enabled": true,
+    "revin_affine": true,
+    "revin_eps": 1e-05,
+    "revin_target_channel": 0
+  },
+  "architecture_digest": "ac07f0863906ec9a3b4ed23ea56189ecae70e2b80ac2485cf85f5c7ee270b760",
+  "selection_policy": {
+    "metric": "rmse_original",
+    "metric_space": "original_sales_space",
+    "relative_tie_threshold": 0.01,
+    "tie_break": "numerically_smallest_lr"
+  },
+  "metric_space": "original_sales_space",
+  "auto_start_robustness": false,
+  "source_run_root": "/Users/ming/Desktop/\u590d\u73b0\u5b9e\u9a8c/\u4fdd\u7559\u7684\u590d\u73b0\u5b9e\u9a8c\u4fee\u6539rfe/outputs/runs/20260818_180250_355272_MS_KATL_FTO_V3_SCREENING",
+  "source_selection_manifest": "/Users/ming/Desktop/\u590d\u73b0\u5b9e\u9a8c/\u4fdd\u7559\u7684\u590d\u73b0\u5b9e\u9a8c\u4fee\u6539rfe/outputs/runs/20260818_180250_355272_MS_KATL_FTO_V3_SCREENING/results/v3_selection_manifest.json",
+  "source_target_best_csv": "/Users/ming/Desktop/\u590d\u73b0\u5b9e\u9a8c/\u4fdd\u7559\u7684\u590d\u73b0\u5b9e\u9a8c\u4fee\u6539rfe/outputs/runs/20260818_180250_355272_MS_KATL_FTO_V3_SCREENING/results/v3_screening_target_best_lr.csv",
+  "source_all_runs_csv": "/Users/ming/Desktop/\u590d\u73b0\u5b9e\u9a8c/\u4fdd\u7559\u7684\u590d\u73b0\u5b9e\u9a8c\u4fee\u6539rfe/outputs/runs/20260818_180250_355272_MS_KATL_FTO_V3_SCREENING/results/v3_screening_all_runs.csv",
+  "source_screening_selection_frozen": false,
+  "datasets": {
+    "D1": {
+      "primary_target": "1/10",
+      "learning_rate": "3e-5",
+      "rmse_original": 14.826275994478381,
+      "smape_original": 15.50946877249815,
+      "verdict": "PRIMARY_TARGET_STRONG_CANDIDATE",
+      "selection_role": "development_selected",
+      "selection_frozen": true,
+      "target_selection_stage": "development_screening"
+    },
+    "D2": {
+      "primary_target": "1/10",
+      "learning_rate": "3e-5",
+      "rmse_original": 4.075982037550666,
+      "smape_original": 117.122985863116,
+      "verdict": "PRIMARY_TARGET_STRONG_CANDIDATE",
+      "selection_role": "development_selected",
+      "selection_frozen": true,
+      "target_selection_stage": "development_screening"
+    },
+    "D3": {
+      "primary_target": "10",
+      "learning_rate": "3e-5",
+      "rmse_original": 2555.800487000726,
+      "smape_original": 53.7362965608645,
+      "verdict": "PRIMARY_TARGET_STRONG_CANDIDATE",
+      "selection_role": "development_selected",
+      "selection_frozen": true,
+      "target_selection_stage": "development_screening"
+    },
+    "D4": {
+      "primary_target": "166/311",
+      "learning_rate": "3e-5",
+      "rmse_original": 0.3968415570618157,
+      "smape_original": 26.3212839939645,
+      "verdict": "PRIMARY_TARGET_STRONG_CANDIDATE",
+      "selection_role": "development_selected",
+      "selection_frozen": true,
+      "target_selection_stage": "development_screening"
+    },
+    "D5": {
+      "primary_target": "48/1159414",
+      "learning_rate": "3e-4",
+      "rmse_original": 9.99982659885883,
+      "smape_original": 34.78651404716081,
+      "verdict": "PRIMARY_TARGET_STRONG_CANDIDATE",
+      "selection_role": "development_selected",
+      "selection_frozen": true,
+      "target_selection_stage": "development_screening"
+    },
+    "D6": {
+      "primary_target": "CA_1/FOODS_3_080",
+      "learning_rate": "3e-5",
+      "rmse_original": 7.342267437457999,
+      "smape_original": 33.28920388158121,
+      "verdict": "PRIMARY_TARGET_STRONG_CANDIDATE",
+      "selection_role": "development_selected",
+      "selection_frozen": true,
+      "target_selection_stage": "development_screening"
+    }
+  },
+  "V3_SELECTION_CONTRACT_VERIFIED": true,
+  "READY_TO_FREEZE_V3_AND_ENTER_ROBUSTNESS": "YES"
+}

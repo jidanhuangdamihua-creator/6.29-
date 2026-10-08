@@ -476,6 +476,7 @@ def create_manifest(
     digests: Mapping[str, str],
     branch: str,
     head: str,
+    source_selection_mode: str = "aligned_30d",
 ) -> Dict[str, Any]:
     return {
         "manifest_version": "corrected_sita_runtime_v2",
@@ -495,6 +496,7 @@ def create_manifest(
         "critical_runtime_files": list(CRITICAL_RUNTIME_FILES),
         "output_layout": "cells/<cell_key>/attempt_<nnn>/{status,result,provenance}.json",
         "resume_policy": "fail_closed_digests_preserve_attempts",
+        "source_selection_mode": str(source_selection_mode),
     }
 
 
@@ -623,6 +625,7 @@ def _run_stage_a(
     seed: int,
     epochs: int,
     batch_size: int,
+    source_selection_mode: str = "aligned_30d",
 ) -> Tuple[Any, Any]:
     """Assemble the existing Stage-A and shared-target authorities."""
     from src.protocols.reproducibility import set_protocol_seed
@@ -647,6 +650,7 @@ def _run_stage_a(
         k3_raw_source_context=cell["k3_raw_source_context"],
         transformation_reuse_context=cell["transformation_reuse_context"],
         seed=int(seed),
+        source_selection_mode=source_selection_mode,
     )
     bundle = prepare_shared_target_bundle(
         stage_a,
@@ -783,6 +787,7 @@ def execute_authority_cell(
     attempt_path: Path,
     project_root: Path,
     manifest: Mapping[str, Any],
+    source_selection_mode: str = "aligned_30d",
 ) -> Mapping[str, Any]:
     """Run exactly one cell through the existing V3 formal numerical path.
 
@@ -809,6 +814,7 @@ def execute_authority_cell(
         seed=cell.seed,
         epochs=int(manifest["source_epochs"]),
         batch_size=batch_size,
+        source_selection_mode=source_selection_mode,
     )
     if int(getattr(stage_a, "stage_a_seed", cell.seed)) != cell.seed:
         raise CorrectedSITAContractError("formal Stage-A authority did not preserve exact cell seed")

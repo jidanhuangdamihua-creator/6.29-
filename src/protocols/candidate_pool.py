@@ -20,9 +20,20 @@ from .experiment_protocol import (
     normalize_source_key,
 )
 from .knn_frames import canonical_knn_frame_digest
+from src.constants import SOURCE_HISTORY_DAYS
 from src.utils.dataframe_attrs import (
     copy_frame_with_lightweight_attrs,
     temporarily_detached_attrs,
+)
+
+
+SOURCE_SELECTION_MODE_ALIGNED_30D = "aligned_30d"
+SOURCE_SELECTION_MODE_HISTORICAL_WINDOW_30D = "historical_window_30d"
+_SOURCE_SELECTION_MODES = frozenset(
+    {
+        SOURCE_SELECTION_MODE_ALIGNED_30D,
+        SOURCE_SELECTION_MODE_HISTORICAL_WINDOW_30D,
+    }
 )
 
 
@@ -275,6 +286,11 @@ class SelectionEntry:
     observed_end: str
     raw_vector: Tuple[float, ...]
     scaled_vector: Tuple[float, ...]
+    match_window_start: str | None = None
+    match_window_end: str | None = None
+    valid_window_count: int | None = None
+    match_raw_vector: Tuple[float, ...] = ()
+    scaled_outside_unit_interval: bool = False
 
 
 @dataclass(frozen=True)
@@ -295,6 +311,12 @@ class SelectionResult:
     excluded_candidates: Tuple[Mapping[str, Any], ...]
     scaler_min: float
     scaler_max: float
+    source_selection_mode: str = SOURCE_SELECTION_MODE_ALIGNED_30D
+    source_history_start: str | None = None
+    source_history_end: str | None = None
+    candidate_search_records: Tuple[Mapping[str, Any], ...] = ()
+    scaled_outside_unit_interval: bool = False
+    scaler_range_is_zero: bool = False
 
     @property
     def ordered_source_keys(self) -> Tuple[SourceKey, ...]:
@@ -324,24 +346,35 @@ def build_selection_result_digest(
     weight_mode: str,
     weight_epsilon: float,
     entries: Sequence[SelectionEntry],
+    source_selection_mode: str | None = None,
 ) -> str:
+    ordered_top_k = []
+    for entry in entries:
+        item = {
+            "rank": int(entry.rank),
+            "source_key": list(entry.source_key),
+            "distance": _float_text(entry.distance),
+            "weight": _float_text(entry.weight),
+            "tie_group": int(entry.tie_group),
+        }
+        if entry.match_window_start is not None:
+            item["match_window_start"] = str(entry.match_window_start)
+            item["match_window_end"] = str(entry.match_window_end)
+            item["valid_window_count"] = int(entry.valid_window_count)
+        ordered_top_k.append(item)
     payload = {
         "protocol_version": protocol_version,
         "candidate_pool_digest": candidate_pool_digest,
         "k": int(k),
         "weight_mode": weight_mode,
         "weight_epsilon": _float_text(weight_epsilon),
-        "ordered_top_k": [
-            {
-                "rank": int(entry.rank),
-                "source_key": list(entry.source_key),
-                "distance": _float_text(entry.distance),
-                "weight": _float_text(entry.weight),
-                "tie_group": int(entry.tie_group),
-            }
-            for entry in entries
-        ],
+        "ordered_top_k": ordered_top_k,
     }
+    if (
+        source_selection_mode is not None
+        and str(source_selection_mode) != SOURCE_SELECTION_MODE_ALIGNED_30D
+    ):
+        payload["source_selection_mode"] = str(source_selection_mode)
     return _sha256_payload(payload)
 
 
@@ -960,6 +993,263 @@ def _exact_observed_vector(
     return np.concatenate(vectors).astype(np.float64, copy=False)
 
 
+def _normalize_source_selection_mode(mode: object) -> str:
+    text = str(mode).strip()
+    if text not in _SOURCE_SELECTION_MODES:
+        raise ProtocolViolation(
+            "source_selection_mode must be "
+            f"{SOURCE_SELECTION_MODE_ALIGNED_30D!r} or "
+            f"{SOURCE_SELECTION_MODE_HISTORICAL_WINDOW_30D!r}, got {mode!r}"
+        )
+    return text
+
+
+def _require_frozen_source_history(
+    frame: pd.DataFrame | None,
+    *,
+    observed_end: str,
+) -> pd.DatetimeIndex:
+    """Return the formal 180-day source-CNN calendar, or fail closed."""
+
+    if frame is None:
+        raise ProtocolViolation(
+            "historical_window_30d requires the frozen source-history frame"
+        )
+    missing = [
+        name
+        for name in (
+            "source_history_days",
+            "source_history_start",
+            "source_history_end",
+        )
+        if name not in frame.attrs or frame.attrs.get(name) in (None, "")
+    ]
+    declared_days = frame.attrs.get("source_history_days")
+    if missing or int(declared_days) != int(SOURCE_HISTORY_DAYS):
+        raise ProtocolViolation(
+            "historical_window_30d requires frozen source_history_days == "
+            f"{int(SOURCE_HISTORY_DAYS)}; missing_or_unfrozen="
+            f"{missing or declared_days!r}"
+        )
+    start = pd.Timestamp(frame.attrs["source_history_start"]).normalize()
+    end = pd.Timestamp(frame.attrs["source_history_end"]).normalize()
+    cutoff = pd.Timestamp(observed_end).normalize()
+    if pd.isna(start) or pd.isna(end) or start > end or end != cutoff:
+        raise ProtocolViolation(
+            "historical_window_30d source history must end on the KNN observation "
+            f"cutoff: start={start} end={end} cutoff={cutoff.date().isoformat()}"
+        )
+    expected = pd.DatetimeIndex(pd.date_range(start, end, freq="D")).normalize()
+    if len(expected) != int(SOURCE_HISTORY_DAYS):
+        raise ProtocolViolation(
+            "frozen source history is not "
+            f"{int(SOURCE_HISTORY_DAYS)} contiguous calendar days"
+        )
+    return expected
+
+
+def _history_groups(
+    frame: pd.DataFrame,
+    *,
+    group_cols: Sequence[str],
+    expected_dates: pd.DatetimeIndex,
+) -> Dict[SourceKey, pd.DataFrame]:
+    prepared = frame.copy()
+    if "date" not in prepared.columns:
+        raise ProtocolViolation("source history frame requires date column")
+    prepared["date"] = pd.to_datetime(prepared["date"], errors="coerce").dt.normalize()
+    if prepared["date"].isna().any():
+        raise ProtocolViolation("source history frame contains invalid dates")
+    start = expected_dates[0]
+    end = expected_dates[-1]
+    window = prepared.loc[prepared["date"].between(start, end, inclusive="both")].copy()
+    groups: Dict[SourceKey, pd.DataFrame] = {}
+    grouped = window.groupby(list(group_cols), sort=False, dropna=False)
+    for raw_key, group in grouped:
+        key = normalize_source_key(raw_key if isinstance(raw_key, tuple) else (raw_key,))
+        if key in groups:
+            raise ProtocolViolation(
+                f"source history contains duplicate normalized source key: {key!r}"
+            )
+        groups[key] = group
+    return groups
+
+
+def _contiguous_history_matrix(
+    group: pd.DataFrame,
+    *,
+    source_key: SourceKey,
+    expected_dates: pd.DatetimeIndex,
+    feature_cols: Sequence[str],
+) -> np.ndarray:
+    if group["date"].duplicated().any():
+        raise ProtocolViolation(
+            f"source {source_key!r} contains duplicate dates inside the frozen source history"
+        )
+    ordered = group.sort_values("date", kind="mergesort")
+    actual = pd.DatetimeIndex(ordered["date"]).asi8
+    if not np.array_equal(actual, expected_dates.asi8):
+        raise ProtocolViolation(
+            f"source {source_key!r} source-history date set is not the frozen calendar"
+        )
+    columns = []
+    for column in feature_cols:
+        values = pd.to_numeric(ordered[column], errors="coerce").to_numpy(dtype=np.float64)
+        if not np.isfinite(values).all():
+            raise ProtocolViolation(
+                f"source {source_key!r} source-history feature {column!r} "
+                "contains non-finite values"
+            )
+        columns.append(values)
+    return np.stack(columns, axis=0)
+
+
+def _window_rows(series: np.ndarray) -> np.ndarray:
+    """Return feature-major 30-day windows from one (features, 180) series."""
+
+    if series.ndim != 2 or series.shape[1] < 30:
+        raise ProtocolViolation("source history series is too short for a 30-day window")
+    view = np.lib.stride_tricks.sliding_window_view(series, 30, axis=1)
+    return np.transpose(view, (1, 0, 2)).reshape(view.shape[1], -1)
+
+
+def _scale_windows(
+    windows: np.ndarray,
+    *,
+    scaler_min: float,
+    scaler_max: float,
+) -> np.ndarray:
+    span = float(scaler_max) - float(scaler_min)
+    if span == 0.0:
+        return np.zeros_like(windows, dtype=np.float64)
+    return (windows - float(scaler_min)) / span
+
+
+def _search_historical_windows(
+    *,
+    history_frame: pd.DataFrame | None,
+    group_cols: Sequence[str],
+    feature_cols: Sequence[str],
+    aligned_keys: Sequence[SourceKey],
+    observed_end: str,
+    scaled_target: np.ndarray,
+    scaler_min: float,
+    scaler_max: float,
+) -> Tuple[
+    List[SourceKey],
+    np.ndarray,
+    Dict[SourceKey, Mapping[str, Any]],
+    Tuple[Mapping[str, Any], ...],
+    List[Mapping[str, Any]],
+    str,
+    str,
+    bool,
+]:
+    expected_dates = _require_frozen_source_history(
+        history_frame,
+        observed_end=observed_end,
+    )
+    assert history_frame is not None
+    history_start = expected_dates[0].strftime("%Y-%m-%d")
+    history_end = expected_dates[-1].strftime("%Y-%m-%d")
+    groups = _history_groups(
+        history_frame,
+        group_cols=group_cols,
+        expected_dates=expected_dates,
+    )
+    kept_keys: List[SourceKey] = []
+    distances: List[float] = []
+    matches: Dict[SourceKey, Mapping[str, Any]] = {}
+    records: List[Mapping[str, Any]] = []
+    excluded: List[Mapping[str, Any]] = []
+    outside_unit = False
+    for source_key in aligned_keys:
+        group = groups.get(source_key)
+        if group is None:
+            record = {
+                "source_key": source_key,
+                "reason": "incomplete_source_history",
+                "valid_window_count": 0,
+                "source_history_start": history_start,
+                "source_history_end": history_end,
+                "missing_date_count": int(len(expected_dates)),
+            }
+            excluded.append(record)
+            records.append({**record, "status": "excluded"})
+            continue
+        if group["date"].duplicated().any():
+            raise ProtocolViolation(
+                f"source {source_key!r} contains duplicate dates inside the frozen source history"
+            )
+        actual_dates = pd.DatetimeIndex(pd.to_datetime(group["date"]).dt.normalize())
+        if not np.array_equal(np.sort(actual_dates.asi8), expected_dates.asi8):
+            missing = expected_dates.difference(actual_dates)
+            record = {
+                "source_key": source_key,
+                "reason": "incomplete_source_history",
+                "valid_window_count": 0,
+                "source_history_start": history_start,
+                "source_history_end": history_end,
+                "missing_date_count": int(len(missing)),
+                "missing_dates": tuple(missing.strftime("%Y-%m-%d")[:20]),
+            }
+            excluded.append(record)
+            records.append({**record, "status": "excluded"})
+            continue
+        series = _contiguous_history_matrix(
+            group,
+            source_key=source_key,
+            expected_dates=expected_dates,
+            feature_cols=feature_cols,
+        )
+        windows = _window_rows(series)
+        if windows.shape[0] != int(SOURCE_HISTORY_DAYS) - 29:
+            raise ProtocolViolation(
+                f"source {source_key!r} produced {windows.shape[0]} windows "
+                f"from {int(SOURCE_HISTORY_DAYS)} history days"
+            )
+        scaled = _scale_windows(windows, scaler_min=scaler_min, scaler_max=scaler_max)
+        outside = bool(np.any((scaled < 0.0) | (scaled > 1.0)))
+        outside_unit = outside_unit or outside
+        window_distances = np.linalg.norm(scaled - scaled_target, axis=1).astype(np.float64)
+        best_offset = int(np.argmin(window_distances))
+        best_start = expected_dates[best_offset]
+        best_end = expected_dates[best_offset + 29]
+        match_raw = tuple(float(value) for value in windows[best_offset])
+        matches[source_key] = {
+            "start": best_start.strftime("%Y-%m-%d"),
+            "end": best_end.strftime("%Y-%m-%d"),
+            "count": int(windows.shape[0]),
+            "raw": match_raw,
+            "outside": outside,
+        }
+        kept_keys.append(source_key)
+        distances.append(float(window_distances[best_offset]))
+        records.append(
+            {
+                "source_key": source_key,
+                "status": "searched",
+                "source_history_start": history_start,
+                "source_history_end": history_end,
+                "valid_window_count": int(windows.shape[0]),
+                "best_window_start": best_start.strftime("%Y-%m-%d"),
+                "best_window_end": best_end.strftime("%Y-%m-%d"),
+                "distance": float(window_distances[best_offset]),
+                "scaled_outside_unit_interval": outside,
+            }
+        )
+    return (
+        kept_keys,
+        np.asarray(distances, dtype=np.float64),
+        matches,
+        tuple(records),
+        excluded,
+        history_start,
+        history_end,
+        outside_unit,
+    )
+
+
 def select_daily_sequence_sources(
     *,
     target_df: pd.DataFrame,
@@ -973,6 +1263,8 @@ def select_daily_sequence_sources(
     observed_start: object,
     feature_cols: Sequence[str],
     k: int,
+    source_selection_mode: str = SOURCE_SELECTION_MODE_ALIGNED_30D,
+    source_history_frame: pd.DataFrame | None = None,
 ) -> SelectionResult:
     """Select exactly K sources using protocol-declared aligned 30-day features."""
 
@@ -985,6 +1277,7 @@ def select_daily_sequence_sources(
         )
     if not isinstance(k, int) or isinstance(k, bool) or k <= 0:
         raise ProtocolViolation("K must be a positive integer")
+    selection_mode = _normalize_source_selection_mode(source_selection_mode)
     normalized_scenario = normalize_scenario(scenario)
     normalized_target = normalize_source_key(target_key)
     normalized_candidates = tuple(normalize_source_key(key) for key in candidate_keys)
@@ -1157,6 +1450,43 @@ def select_daily_sequence_sources(
         scaled_target = (target_vector - scaler_min) / scaler_range
         scaled_sources = (source_matrix - scaler_min) / scaler_range
     distances = np.linalg.norm(scaled_sources - scaled_target, axis=1).astype(np.float64)
+    aligned_keys = list(valid_keys)
+    aligned_raw_vectors = list(raw_vectors)
+    match_by_key: Dict[SourceKey, Mapping[str, Any]] = {}
+    search_records: Tuple[Mapping[str, Any], ...] = ()
+    history_start_iso = None
+    history_end_iso = None
+    scaled_outside_unit_interval = False
+    if selection_mode == SOURCE_SELECTION_MODE_HISTORICAL_WINDOW_30D:
+        (
+            valid_keys,
+            distances,
+            match_by_key,
+            search_records,
+            history_exclusions,
+            history_start_iso,
+            history_end_iso,
+            scaled_outside_unit_interval,
+        ) = _search_historical_windows(
+            history_frame=source_history_frame,
+            group_cols=tuple(group_cols),
+            feature_cols=declared_features,
+            aligned_keys=tuple(aligned_keys),
+            observed_end=observed_end_iso,
+            scaled_target=scaled_target,
+            scaler_min=scaler_min,
+            scaler_max=scaler_max,
+        )
+        excluded.extend(history_exclusions)
+        if len(valid_keys) < k:
+            raise InsufficientCandidatePoolError(
+                valid_count=len(valid_keys),
+                required_k=k,
+                exclusions=excluded,
+                eligible_count=len(normalized_candidates),
+                target_key=normalized_target,
+                scenario=normalized_scenario,
+            )
     ranked = rank_source_distances(
         valid_keys,
         distances,
@@ -1171,8 +1501,8 @@ def select_daily_sequence_sources(
     if not np.isfinite(weights).all():
         raise ProtocolViolation("source weights are non-finite")
 
-    raw_by_key = {key: vector for key, vector in zip(valid_keys, raw_vectors)}
-    scaled_by_key = {key: vector for key, vector in zip(valid_keys, scaled_sources)}
+    raw_by_key = {key: vector for key, vector in zip(aligned_keys, aligned_raw_vectors)}
+    scaled_by_key = {key: vector for key, vector in zip(aligned_keys, scaled_sources)}
     entries = tuple(
         SelectionEntry(
             rank=index,
@@ -1184,6 +1514,31 @@ def select_daily_sequence_sources(
             observed_end=observed_end_iso,
             raw_vector=tuple(float(value) for value in raw_by_key[ranked_entry.source_key]),
             scaled_vector=tuple(float(value) for value in scaled_by_key[ranked_entry.source_key]),
+            match_window_start=(
+                None
+                if ranked_entry.source_key not in match_by_key
+                else str(match_by_key[ranked_entry.source_key]["start"])
+            ),
+            match_window_end=(
+                None
+                if ranked_entry.source_key not in match_by_key
+                else str(match_by_key[ranked_entry.source_key]["end"])
+            ),
+            valid_window_count=(
+                None
+                if ranked_entry.source_key not in match_by_key
+                else int(match_by_key[ranked_entry.source_key]["count"])
+            ),
+            match_raw_vector=(
+                ()
+                if ranked_entry.source_key not in match_by_key
+                else tuple(match_by_key[ranked_entry.source_key]["raw"])
+            ),
+            scaled_outside_unit_interval=(
+                False
+                if ranked_entry.source_key not in match_by_key
+                else bool(match_by_key[ranked_entry.source_key]["outside"])
+            ),
         )
         for index, ranked_entry in enumerate(selected_ranked, start=1)
     )
@@ -1213,6 +1568,7 @@ def select_daily_sequence_sources(
         weight_mode=protocol.weight_mode,
         weight_epsilon=protocol.weight_epsilon,
         entries=entries,
+        source_selection_mode=selection_mode,
     )
     return SelectionResult(
         protocol_version=protocol.protocol_version,
@@ -1231,4 +1587,10 @@ def select_daily_sequence_sources(
         excluded_candidates=tuple(excluded),
         scaler_min=scaler_min,
         scaler_max=scaler_max,
+        source_selection_mode=selection_mode,
+        source_history_start=history_start_iso,
+        source_history_end=history_end_iso,
+        candidate_search_records=search_records,
+        scaled_outside_unit_interval=scaled_outside_unit_interval,
+        scaler_range_is_zero=bool(scaler_range == 0.0),
     )

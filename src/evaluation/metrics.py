@@ -398,6 +398,16 @@ def compute_metrics_with_protocol(
         **SMAPE_CONTRACT_FIELDS,
         "metric_protocol_note": metric_protocol_note,
         "metric_notes": " | ".join(notes),
+        "y_true_original": (
+            np.asarray(y_true_paper, dtype=np.float64).reshape(-1)
+            if original_scale_available
+            else None
+        ),
+        "y_pred_original": (
+            np.asarray(y_pred_paper, dtype=np.float64).reshape(-1)
+            if original_scale_available
+            else None
+        ),
     }
 
 

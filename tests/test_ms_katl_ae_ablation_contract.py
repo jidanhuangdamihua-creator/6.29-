@@ -48,6 +48,7 @@ from src.transfer_methods.ms_katl_ae_ablation import (
     assert_formal_training_permitted,
     best_source_target_init_snapshot,
     build_synthetic_stage_a,
+    construct_ae_arm,
     construct_all_ae_arms,
     enumerate_canonical_cells,
     enumerate_planned_runs,
@@ -494,3 +495,116 @@ def test_real_dry_run_does_not_call_training(monkeypatch, tmp_path):
     assert result["d4_trace"]["target_identity"] == "166/311"
     assert result["d4_trace"]["source_ids_status"] == "SOURCE_IDS_DEFERRED_TO_FORMAL_STAGE_A"
     assert result["READY_FOR_FORMAL_AE_EXECUTION_ENABLE"] == "YES"
+
+
+def _backbone_trainability(cnn):
+    payload = {}
+    for name in CONV_LAYER_NAMES:
+        layer = cnn.get_layer(name)
+        payload[name] = {
+            "layer": bool(layer.trainable),
+            "weights": [bool(getattr(var, "trainable", False)) for var in layer.weights],
+        }
+    return payload
+
+
+def _assert_backbone_frozen(cnn):
+    for name, flags in _backbone_trainability(cnn).items():
+        assert flags["layer"] is False, name
+        assert flags["weights"] and all(flag is False for flag in flags["weights"]), name
+
+
+def _assert_backbone_trainable(cnn):
+    for name, flags in _backbone_trainability(cnn).items():
+        assert flags["layer"] is True, name
+        assert flags["weights"] and all(flag is True for flag in flags["weights"]), name
+
+
+def _assert_head_target_trainable(head):
+    layer = head.head_target
+    assert layer.trainable is True
+    weights = [bool(getattr(var, "trainable", False)) for var in layer.weights]
+    assert weights and all(flag is True for flag in weights)
+
+
+def test_construct_arm_b_freezes_transferred_backbone(synthetic_stage_a):
+    from src.transfer_methods.ms_katl_ae_ablation import construct_v3_head_target_snapshot
+
+    head_snapshot, _ = construct_v3_head_target_snapshot(synthetic_stage_a, seed=42)
+    constructed = construct_ae_arm(
+        ae_arm_spec("B"),
+        synthetic_stage_a,
+        seed=42,
+        selected_lr=3e-4,
+        recipe=ae_training_recipe(),
+        head_target_snapshot=head_snapshot,
+    )
+    _assert_backbone_frozen(constructed.target_cnn)
+    _assert_head_target_trainable(constructed.head)
+    assert constructed.spec.target_backbone_trainable is False
+    assert constructed.trainable_includes_conv is False
+    assert constructed.trainable_includes_head_target is True
+    assert constructed.trainable_prediction_path_parameter_count == constructed.head.head_target.count_params()
+
+
+def test_construct_all_ae_arms_trainability_isolated(constructed_arms):
+    expected = {
+        "A": True,
+        "B": False,
+        "C": True,
+        "D": True,
+        "E": True,
+    }
+    ids = {}
+    for arm, trainable in expected.items():
+        cnn = constructed_arms[arm].target_cnn
+        ids[arm] = id(cnn.get_layer("conv1"))
+        if trainable:
+            _assert_backbone_trainable(cnn)
+        else:
+            _assert_backbone_frozen(cnn)
+        _assert_head_target_trainable(constructed_arms[arm].head)
+    assert len(set(ids.values())) == len(ids)
+
+
+def test_constructing_c_does_not_mutate_b_trainability(synthetic_stage_a):
+    from src.transfer_methods.ms_katl_ae_ablation import construct_v3_head_target_snapshot
+
+    head_snapshot, _ = construct_v3_head_target_snapshot(synthetic_stage_a, seed=42)
+    kwargs = dict(
+        stage_a=synthetic_stage_a,
+        seed=42,
+        selected_lr=3e-4,
+        recipe=ae_training_recipe(),
+        head_target_snapshot=head_snapshot,
+    )
+    arm_b = construct_ae_arm(ae_arm_spec("B"), **kwargs)
+    before = _backbone_trainability(arm_b.target_cnn)
+    arm_c = construct_ae_arm(ae_arm_spec("C"), **kwargs)
+    _assert_backbone_trainable(arm_c.target_cnn)
+    assert _backbone_trainability(arm_b.target_cnn) == before
+    _assert_backbone_frozen(arm_b.target_cnn)
+    assert arm_b.target_cnn.get_layer("conv1") is not arm_c.target_cnn.get_layer("conv1")
+    arm_c.target_cnn.get_layer("conv1").trainable = False
+    assert arm_b.target_cnn.get_layer("conv1").trainable is False
+    assert arm_c.target_cnn.get_layer("conv2").trainable is True
+    assert arm_b.target_cnn.get_layer("conv2").trainable is False
+
+
+def test_materialize_formal_ae_arms_preserves_arm_b_contract(monkeypatch, synthetic_stage_a):
+    from types import SimpleNamespace
+
+    from src.transfer_methods import ms_katl_ae_formal as formal
+
+    monkeypatch.setattr(formal, "prepare_shared_target_bundle", lambda *args, **kwargs: object())
+    monkeypatch.setattr(formal, "build_ae_stage_a_from_shared_bundle", lambda shared: synthetic_stage_a)
+    context = {"stage_a_kwargs": {"target_df": object(), "feature_cols": ["sales"]}}
+    cell = SimpleNamespace(horizon=1, seed=42, selected_lr=3e-4)
+    _, arms = formal.materialize_formal_ae_arms(context, cell, stage_a_artifacts=object())
+    _assert_backbone_frozen(arms["B"].target_cnn)
+    _assert_head_target_trainable(arms["B"].head)
+    _assert_backbone_trainable(arms["A"].target_cnn)
+    _assert_backbone_trainable(arms["C"].target_cnn)
+    assert arms["B"].spec.init_mode == "fused"
+    assert arms["B"].trainable_includes_conv is False
+    assert arms["B"].trainable_includes_head_target is True

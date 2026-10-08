@@ -25,23 +25,38 @@ from src.transfer_methods.sita_mechanism_diagnostics import (
 )
 from src.transfer_methods.sita_mechanism_diagnostics_contract import (
     FORMAL_EVALUATION_WEIGHT_VARIANT,
+    INITIAL_WEIGHT_VARIANT,
     MechanismCheckpoint,
     MechanismDiagnosticsContractError,
 )
 
 ENABLE_MECHANISM_DIAGNOSTICS_KEY = "enable_mechanism_diagnostics"
 MECHANISM_DIAGNOSTICS_SESSION_KEY = "mechanism_diagnostics_session"
+ACTIVE_DIAGNOSTIC_ARMS_KEY = "mechanism_diagnostics_arms"
 FORMAL_DIAGNOSTIC_ARCHITECTURE = "SITA_CNN_V3"
 DIAGNOSTIC_ARMS = ("A", "B", "C")
+FORMAL_DIAGNOSTIC_ARMS = ("A", "B", "C", "D", "E")
 MIN_REFERENCE_SAMPLES = 2
 FORMAL_TEST_REFERENCE_SPLIT = "formal_test_inputs"
 CKA_CONDITION_REFERENCE_STORE_KEY = "cka_condition_references"
+CKA_REPRESENTATION_LAYERS = ("flatten", "conv1", "conv2", "conv3")
+CKA_ACTIVATION_RESHAPE_RULE = "reshape(n_samples, -1)"
 
 
 def mechanism_diagnostics_enabled(context: Optional[Mapping[str, Any]]) -> bool:
     if not isinstance(context, Mapping):
         return False
     return bool(context.get(ENABLE_MECHANISM_DIAGNOSTICS_KEY))
+
+
+def active_diagnostic_arms(context: Optional[Mapping[str, Any]]) -> Tuple[str, ...]:
+    if not isinstance(context, Mapping):
+        return DIAGNOSTIC_ARMS
+    configured = context.get(ACTIVE_DIAGNOSTIC_ARMS_KEY, DIAGNOSTIC_ARMS)
+    arms = tuple(str(arm).strip().upper() for arm in configured)
+    if not arms or any(arm not in FORMAL_DIAGNOSTIC_ARMS for arm in arms):
+        raise MechanismDiagnosticsContractError(f"invalid active diagnostic arms: {configured!r}")
+    return arms
 
 
 def flatten_named_conv(named: Mapping[str, Sequence[np.ndarray]]) -> Tuple[np.ndarray, ...]:
@@ -140,6 +155,53 @@ def forward_reference_from_constructed(
     return as_representation_matrix(np.asarray(z))
 
 
+def forward_named_representations_from_constructed(
+    constructed: Any,
+    reference_inputs: np.ndarray,
+    *,
+    flatten_rep: Optional[np.ndarray] = None,
+) -> Dict[str, np.ndarray]:
+    """Capture flatten + conv1/conv2/conv3 activations on the fixed test reference.
+
+    Conv activations with ndim > 2 are reshaped with ``activation.reshape(n_samples, -1)``.
+    The primary flatten representation continues to come from
+    ``extract_features_maybe_revin`` / ``forward_reference_from_constructed``.
+    """
+    flatten = (
+        as_representation_matrix(np.asarray(flatten_rep))
+        if flatten_rep is not None
+        else forward_reference_from_constructed(constructed, reference_inputs)
+    )
+    named: Dict[str, np.ndarray] = {"flatten": flatten}
+    target_cnn = getattr(constructed, "target_cnn", None)
+    if target_cnn is None or not hasattr(target_cnn, "layers"):
+        return named
+    import tensorflow as tf
+
+    x_tf = tf.constant(np.asarray(reference_inputs), dtype=tf.float32)
+    revin = getattr(constructed, "revin", None)
+    if revin is not None:
+        x_tf, _, _ = revin.normalize(x_tf)
+    hidden = x_tf
+    captured: Dict[str, np.ndarray] = {}
+    for layer in target_cnn.layers:
+        layer_name = str(getattr(layer, "name", "") or "")
+        class_name = layer.__class__.__name__
+        if class_name == "InputLayer" or layer_name in {"", "input"}:
+            continue
+        hidden = layer(hidden, training=False)
+        if layer_name in ("conv1", "conv2", "conv3"):
+            array = hidden.numpy() if hasattr(hidden, "numpy") else np.asarray(hidden)
+            captured[layer_name] = as_representation_matrix(array)
+    missing = [name for name in ("conv1", "conv2", "conv3") if name not in captured]
+    if missing:
+        raise MechanismDiagnosticsContractError(
+            f"conv activation capture missing layers: {missing}"
+        )
+    named.update(captured)
+    return named
+
+
 def snapshot_named_layers_from_constructed(
     constructed: Any,
 ) -> Dict[str, Tuple[np.ndarray, ...]]:
@@ -204,6 +266,7 @@ class MechanismDiagnosticsSession:
     target: str
     horizon: int
     seed: int
+    diagnostic_arms: Tuple[str, ...] = DIAGNOSTIC_ARMS
     architecture: str = FORMAL_DIAGNOSTIC_ARCHITECTURE
     weight_variant: str = FORMAL_EVALUATION_WEIGHT_VARIANT
     source_informed_init_digest: str = ""
@@ -217,6 +280,9 @@ class MechanismDiagnosticsSession:
         Tuple[str, str], Dict[str, Tuple[np.ndarray, ...]]
     ] = field(default_factory=dict)
     representations: Dict[Tuple[str, str], np.ndarray] = field(default_factory=dict)
+    named_representations: Dict[Tuple[str, str], Dict[str, np.ndarray]] = field(
+        default_factory=dict
+    )
     primary: Optional[Any] = None
     frozen_reference: Optional[Dict[str, Any]] = None
 
@@ -232,8 +298,10 @@ class MechanismDiagnosticsSession:
         init_mode: str,
         backbone_trainable: Optional[bool],
         weight_variant: Optional[str] = None,
+        ema_update_count: int = 0,
+        named_representations: Optional[Mapping[str, np.ndarray]] = None,
     ) -> MechanismCheckpoint:
-        if arm not in DIAGNOSTIC_ARMS:
+        if arm not in self.diagnostic_arms:
             raise MechanismDiagnosticsContractError(f"diagnostics capture rejects arm={arm!r}")
         if self.reference_input_digest == "":
             raise MechanismDiagnosticsContractError("reference_input_digest is required before capture")
@@ -265,10 +333,18 @@ class MechanismDiagnosticsSession:
             ),
             init_mode=init_mode,
             backbone_trainable=backbone_trainable,
+            ema_update_count=int(ema_update_count),
         )
         self.checkpoints[key] = checkpoint
         self.backbone_weights[key] = weights
         self.representations[key] = reps
+        if named_representations is not None:
+            self.named_representations[key] = {
+                str(layer): as_representation_matrix(np.asarray(array))
+                for layer, array in named_representations.items()
+            }
+        else:
+            self.named_representations[key] = {"flatten": reps}
         return checkpoint
 
     def maybe_assemble(self) -> None:
@@ -308,6 +384,7 @@ class MechanismDiagnosticsSession:
             "target": self.target,
             "horizon": int(self.horizon),
             "seed": int(self.seed),
+            "diagnostic_arms": list(self.diagnostic_arms),
             "architecture": self.architecture,
             "weight_variant": self.weight_variant,
             "reference_input_digest": self.reference_input_digest,
@@ -321,6 +398,7 @@ class MechanismDiagnosticsSession:
                     "backbone_digest": checkpoint.backbone_digest,
                     "weight_variant": checkpoint.weight_variant,
                     "optimizer_update_count": checkpoint.optimizer_update_count,
+                    "ema_update_count": checkpoint.ema_update_count,
                     "captured_before_first_target_optimizer_update": (
                         checkpoint.captured_before_first_target_optimizer_update
                     ),
@@ -342,6 +420,7 @@ def session_from_cell(
     reference_inputs: np.ndarray,
     architecture: str = FORMAL_DIAGNOSTIC_ARCHITECTURE,
     weight_variant: str = FORMAL_EVALUATION_WEIGHT_VARIANT,
+    diagnostic_arms: Sequence[str] = DIAGNOSTIC_ARMS,
 ) -> MechanismDiagnosticsSession:
     refs = np.asarray(reference_inputs)
     return MechanismDiagnosticsSession(
@@ -349,6 +428,7 @@ def session_from_cell(
         target=str(cell.target),
         horizon=int(cell.horizon),
         seed=int(cell.seed),
+        diagnostic_arms=tuple(str(arm).strip().upper() for arm in diagnostic_arms),
         architecture=architecture,
         weight_variant=weight_variant,
         source_informed_init_digest=str(getattr(stage_a, "fused_target_digest", "") or ""),
@@ -397,7 +477,12 @@ def ensure_session(
         {key: [str(value["digest"])] for key, value in store.items()}
     )
     persist_condition_reference_if_needed(context, cell=cell, x_test=refs, digest=digest)
-    session = session_from_cell(cell, stage_a, reference_inputs=refs)
+    session = session_from_cell(
+        cell,
+        stage_a,
+        reference_inputs=refs,
+        diagnostic_arms=active_diagnostic_arms(context),
+    )
     if session.reference_input_digest != digest:
         raise MechanismDiagnosticsContractError("session digest drifted from condition store")
     context[MECHANISM_DIAGNOSTICS_SESSION_KEY] = session
@@ -430,19 +515,30 @@ def capture_live_stage(
     constructed: Any,
     optimizer_update_count: int,
     captured_before_first_target_optimizer_update: bool,
+    weight_variant: str = FORMAL_EVALUATION_WEIGHT_VARIANT,
+    ema_update_count: int = 0,
 ) -> MechanismCheckpoint:
     if session.reference_inputs is None:
         raise MechanismDiagnosticsContractError("session missing reference_inputs")
     named_layer_weights = snapshot_named_layers_from_constructed(constructed)
+    flatten_rep = forward_reference_from_constructed(constructed, session.reference_inputs)
+    named_reps = forward_named_representations_from_constructed(
+        constructed,
+        session.reference_inputs,
+        flatten_rep=flatten_rep,
+    )
     checkpoint = session.capture_stage(
         arm=arm,
         stage=stage,
         backbone_weights=snapshot_backbone_from_constructed(constructed),
-        representations=forward_reference_from_constructed(constructed, session.reference_inputs),
+        representations=flatten_rep,
         optimizer_update_count=optimizer_update_count,
         captured_before_first_target_optimizer_update=captured_before_first_target_optimizer_update,
         init_mode=_arm_init_mode(constructed, arm),
         backbone_trainable=_arm_backbone_trainable(constructed, arm),
+        weight_variant=weight_variant,
+        ema_update_count=int(ema_update_count),
+        named_representations=named_reps,
     )
     session.named_layer_weights[(arm, stage)] = named_layer_weights
     return checkpoint
@@ -458,7 +554,7 @@ def stage_b_diagnostics_train_kwargs(
     bundle: Any = None,
 ) -> Dict[str, Any]:
     """Return extra train_ms_katl_head kwargs. Empty when diagnostics are off."""
-    if not mechanism_diagnostics_enabled(context) or arm not in DIAGNOSTIC_ARMS:
+    if not mechanism_diagnostics_enabled(context) or arm not in active_diagnostic_arms(context):
         return {}
     if not isinstance(context, MutableMapping):
         raise MechanismDiagnosticsContractError("diagnostics capture requires a mutable context")
@@ -477,6 +573,8 @@ def stage_b_diagnostics_train_kwargs(
             captured_before_first_target_optimizer_update=bool(
                 payload.get("captured_before_first_target_optimizer_update", False)
             ),
+            weight_variant=INITIAL_WEIGHT_VARIANT,
+            ema_update_count=int(payload.get("ema_update_count", 0)),
         )
 
     def _on_epoch(payload: Mapping[str, object]) -> None:
@@ -493,9 +591,22 @@ def stage_b_diagnostics_train_kwargs(
             arm=arm,
         )
 
+    def _on_before_ema(payload: Mapping[str, object]) -> None:
+        capture_live_stage(
+            session,
+            arm=arm,
+            stage="RAW_FINAL",
+            constructed=constructed,
+            optimizer_update_count=int(payload.get("optimizer_update_count", 0)),
+            captured_before_first_target_optimizer_update=False,
+            weight_variant="RAW",
+            ema_update_count=int(payload.get("ema_update_count", 0)),
+        )
+
     extra: Dict[str, Any] = {
         "on_before_first_target_optimizer_update": _on_before,
         "on_diagnostic_epoch_eval": _on_epoch,
+        "on_before_ema_assign": _on_before_ema,
     }
     x_val = getattr(bundle, "X_val", None)
     y_val = getattr(bundle, "y_val", None)
@@ -514,7 +625,7 @@ def finalize_stage_b_diagnostics(
     arm: str,
     constructed: Any = None,
 ) -> None:
-    if not mechanism_diagnostics_enabled(context) or arm not in DIAGNOSTIC_ARMS:
+    if not mechanism_diagnostics_enabled(context) or arm not in active_diagnostic_arms(context):
         return
     if not isinstance(context, MutableMapping):
         raise MechanismDiagnosticsContractError("diagnostics finalize requires a mutable context")
@@ -527,12 +638,18 @@ def finalize_stage_b_diagnostics(
         raise MechanismDiagnosticsContractError(
             f"{arm}_INIT was not captured before the first target optimizer update"
         )
+    if (arm, "RAW_FINAL") not in session.checkpoints:
+        raise MechanismDiagnosticsContractError(
+            f"{arm}_RAW_FINAL was not captured before EMA assignment"
+        )
+    raw_final = session.checkpoints[(arm, "RAW_FINAL")]
     capture_live_stage(
         session,
         arm=arm,
         stage="FINAL",
         constructed=constructed,
-        optimizer_update_count=max(1, session.checkpoints[(arm, "INIT")].optimizer_update_count),
+        optimizer_update_count=int(raw_final.optimizer_update_count),
         captured_before_first_target_optimizer_update=False,
+        ema_update_count=int(raw_final.ema_update_count),
     )
     session.maybe_assemble()

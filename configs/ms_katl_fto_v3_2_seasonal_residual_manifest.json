@@ -1,0 +1,112 @@
+{
+  "selection_frozen": true,
+  "method": "FUSED_TARGET_ONLY_V3_2_SEASONAL_RESIDUAL",
+  "parent_method": "FUSED_TARGET_ONLY_V3",
+  "parent_manifest": "/Users/ming/Desktop/\u590d\u73b0\u5b9e\u9a8c/\u4fdd\u7559\u7684\u590d\u73b0\u5b9e\u9a8c\u4fee\u6539rfe/configs/ms_katl_fto_v3_robustness_manifest.json",
+  "parent_architecture_digest": "ac07f0863906ec9a3b4ed23ea56189ecae70e2b80ac2485cf85f5c7ee270b760",
+  "parent_robustness_run": "/Users/ming/Desktop/\u590d\u73b0\u5b9e\u9a8c/\u4fdd\u7559\u7684\u590d\u73b0\u5b9e\u9a8c\u4fee\u6539rfe/outputs/runs/20260818_190337_640037_MS_KATL_FTO_THREE_TRACK_ROBUSTNESS",
+  "parent_screening_run": "/Users/ming/Desktop/\u590d\u73b0\u5b9e\u9a8c/\u4fdd\u7559\u7684\u590d\u73b0\u5b9e\u9a8c\u4fee\u6539rfe/outputs/runs/20260818_180250_355272_MS_KATL_FTO_V3_SCREENING",
+  "selection_stage": "development_seasonal_residual",
+  "common_target_policy": "V3_FROZEN_PRIMARY_TARGETS",
+  "targets": 6,
+  "horizons": [
+    1,
+    3,
+    5
+  ],
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "expected_runs": 54,
+  "epochs": 50,
+  "window_size": 10,
+  "training_recipe": {
+    "loss_name": "huber",
+    "huber_delta": 1.0,
+    "lr_schedule": "cosine",
+    "use_ema": true,
+    "ema_momentum": 0.99
+  },
+  "RevIN": {
+    "enabled": true,
+    "affine": true,
+    "eps": 1e-05,
+    "target_channel": 0,
+    "output_mode": "scale_only_residual",
+    "include_mean": false,
+    "residualization_scope": "TARGET_STAGE_B_ONLY"
+  },
+  "architecture": {
+    "use_fused_target_init": true,
+    "target_backbone_trainable": true,
+    "transfer_branch_enabled": false,
+    "gate_mode": "zero",
+    "lambda_adv": 0.0,
+    "attention_used_in_prediction": false,
+    "adapter_used_in_prediction": false,
+    "revin_enabled": true,
+    "revin_affine": true,
+    "revin_eps": 1e-05,
+    "revin_target_channel": 0
+  },
+  "architecture_digest": "ac07f0863906ec9a3b4ed23ea56189ecae70e2b80ac2485cf85f5c7ee270b760",
+  "metric_space": "original_sales_space",
+  "seasonal_prior": {
+    "type": "lag7_seasonal_naive",
+    "lag_days": 7,
+    "selection": false,
+    "date_aware": true,
+    "missing_lag_policy": "fail_closed",
+    "matured_truth_required": true
+  },
+  "residual": {
+    "definition": "y_t-y_t_minus_7",
+    "prediction_reconstruction": "y_t_minus_7+residual_hat",
+    "scope": "TARGET_STAGE_B_ONLY"
+  },
+  "V3_1_calibration": false,
+  "datasets": {
+    "D1": {
+      "primary_target": "1/10",
+      "learning_rate": "3e-5"
+    },
+    "D2": {
+      "primary_target": "1/10",
+      "learning_rate": "3e-5"
+    },
+    "D3": {
+      "primary_target": "10",
+      "learning_rate": "3e-5"
+    },
+    "D4": {
+      "primary_target": "166/311",
+      "learning_rate": "3e-5"
+    },
+    "D5": {
+      "primary_target": "48/1159414",
+      "learning_rate": "3e-4"
+    },
+    "D6": {
+      "primary_target": "CA_1/FOODS_3_080",
+      "learning_rate": "3e-5"
+    }
+  },
+  "frozen_lr_mapping": {
+    "D1|1/10": "3e-5",
+    "D2|1/10": "3e-5",
+    "D3|10": "3e-5",
+    "D4|166/311": "3e-5",
+    "D5|48/1159414": "3e-4",
+    "D6|CA_1/FOODS_3_080": "3e-5"
+  },
+  "TARGET_RESELECTION": "NO",
+  "LR_RESELECTION": "NO",
+  "PRIOR_RESELECTION": "NO",
+  "FORMAL_METHODS_CHANGE": "NO",
+  "parent_v3_manifest_verified": true,
+  "RESIDUALIZATION_SCOPE": "TARGET_STAGE_B_ONLY",
+  "RESIDUAL_REVIN_SEMANTICS": "PASS",
+  "V3_1_CALIBRATION_ENABLED": "NO"
+}

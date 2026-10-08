@@ -91,6 +91,14 @@ def relative_parameter_drift(
     return float(l2 / (np.sqrt(init_sq) + float(eps)))
 
 
+def parameter_frobenius_norm(weights: Sequence[np.ndarray]) -> float:
+    total_sq = 0.0
+    for weight in _as_weight_list(weights):
+        values = np.asarray(weight, dtype=np.float64)
+        total_sq += float(np.sum(values * values))
+    return float(np.sqrt(total_sq))
+
+
 def linear_cka(x: np.ndarray, y: np.ndarray) -> float:
     """Linear CKA on sample-aligned representations, columns centered.
 
@@ -200,7 +208,12 @@ def assemble_c_init_c_final_primary(
 ) -> PrimaryDiagnosticBundle:
     """Build PRIMARY prediction / drift / CKA for a legal C_INIT → C_FINAL pair."""
     pairing = pair_c_init_c_final(c_init, c_final)
-    _require_shared_weight_variant(c_init, c_final, weight_variant=weight_variant)
+    if c_init.weight_variant not in {"INITIAL", weight_variant}:
+        raise MechanismDiagnosticsContractError(
+            "C_INIT weight_variant must be INITIAL or the evaluation variant: "
+            f"got {c_init.weight_variant!r}"
+        )
+    _require_shared_weight_variant(c_final, weight_variant=weight_variant)
     artifacts = (
         _primary_artifact("prediction", c_init, comparison=COMPARISON_C_INIT_C_FINAL, weight_variant=weight_variant),
         _primary_artifact(

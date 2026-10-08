@@ -1,0 +1,118 @@
+{
+  "method": "FUSED_TARGET_ONLY",
+  "selection_stage": "development_screening",
+  "metric_space": "original_sales_space",
+  "horizon_used_for_screening": 1,
+  "seed_used_for_screening": 42,
+  "epochs": 50,
+  "lr_grid": [
+    3e-05,
+    0.0001,
+    0.0003
+  ],
+  "lr_grid_labels": [
+    "3e-5",
+    "1e-4",
+    "3e-4"
+  ],
+  "stage_a_learning_rate": 0.0001,
+  "selection_frozen": true,
+  "targets_frozen_after_screening": true,
+  "auto_start_robustness": false,
+  "architecture": {
+    "use_fused_target_init": true,
+    "target_backbone_trainable": true,
+    "transfer_branch_enabled": false,
+    "gate_mode": "zero",
+    "lambda_adv": 0.0,
+    "attention_used_in_prediction": false,
+    "adapter_used_in_prediction": false
+  },
+  "run_dir": "/Users/ming/Desktop/\u590d\u73b0\u5b9e\u9a8c/\u4fdd\u7559\u7684\u590d\u73b0\u5b9e\u9a8c\u4fee\u6539rfe/outputs/runs/20260818_155005_113008_MS_KATL_PRIMARY_TARGET_LR_SCREENING",
+  "datasets": {
+    "D1": {
+      "primary_target": "1/10",
+      "learning_rate": "3e-5",
+      "rmse_original": 25.257543920450807,
+      "smape_original": 27.891718875693343,
+      "beats_no_tl": true,
+      "beats_msml": false,
+      "beats_bl4": true,
+      "beats_best_bl": false,
+      "verdict": "PRIMARY_TARGET_MIXED_CANDIDATE",
+      "selection_role": "development_selected",
+      "selection_frozen": true,
+      "target_selection_stage": "development_screening"
+    },
+    "D2": {
+      "primary_target": "1/10",
+      "learning_rate": "3e-5",
+      "rmse_original": 4.250825627517435,
+      "smape_original": 151.74525582248916,
+      "beats_no_tl": true,
+      "beats_msml": true,
+      "beats_bl4": false,
+      "beats_best_bl": false,
+      "verdict": "PRIMARY_TARGET_STRONG_CANDIDATE",
+      "selection_role": "development_selected",
+      "selection_frozen": true,
+      "target_selection_stage": "development_screening"
+    },
+    "D3": {
+      "primary_target": "10",
+      "learning_rate": "1e-4",
+      "rmse_original": 2872.962057540706,
+      "smape_original": 59.45405138064284,
+      "beats_no_tl": true,
+      "beats_msml": true,
+      "beats_bl4": true,
+      "beats_best_bl": false,
+      "verdict": "PRIMARY_TARGET_STRONG_CANDIDATE",
+      "selection_role": "development_selected",
+      "selection_frozen": true,
+      "target_selection_stage": "development_screening"
+    },
+    "D4": {
+      "primary_target": "166/258",
+      "learning_rate": "1e-4",
+      "rmse_original": 0.4388435593240169,
+      "smape_original": 29.02300536562366,
+      "beats_no_tl": true,
+      "beats_msml": true,
+      "beats_bl4": true,
+      "beats_best_bl": false,
+      "verdict": "PRIMARY_TARGET_STRONG_CANDIDATE",
+      "selection_role": "development_selected",
+      "selection_frozen": true,
+      "target_selection_stage": "development_screening"
+    },
+    "D5": {
+      "primary_target": "48/1159414",
+      "learning_rate": "3e-5",
+      "rmse_original": 10.573300136722823,
+      "smape_original": 34.92370133490755,
+      "beats_no_tl": true,
+      "beats_msml": true,
+      "beats_bl4": true,
+      "beats_best_bl": false,
+      "verdict": "PRIMARY_TARGET_STRONG_CANDIDATE",
+      "selection_role": "development_selected",
+      "selection_frozen": true,
+      "target_selection_stage": "development_screening"
+    },
+    "D6": {
+      "primary_target": "CA_1/FOODS_3_080",
+      "learning_rate": "3e-5",
+      "rmse_original": 8.17303360949443,
+      "smape_original": 39.58928321874247,
+      "beats_no_tl": true,
+      "beats_msml": true,
+      "beats_bl4": true,
+      "beats_best_bl": false,
+      "verdict": "PRIMARY_TARGET_STRONG_CANDIDATE",
+      "selection_role": "development_selected",
+      "selection_frozen": true,
+      "target_selection_stage": "development_screening"
+    }
+  }
+}

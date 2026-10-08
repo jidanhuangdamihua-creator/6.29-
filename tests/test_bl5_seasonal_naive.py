@@ -131,6 +131,8 @@ class SeasonalNaiveBaselineTest(unittest.TestCase):
                 "BL3_LightGBM",
                 "BL4_LSTM",
                 "BL5_SeasonalNaive",
+                "BL6_DLinear",
+                "BL7_TCN",
             ),
         )
         data, _ = self._seasonal_record()

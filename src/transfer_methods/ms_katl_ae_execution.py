@@ -37,6 +37,9 @@ from src.transfer_methods.ms_katl_ae_ablation import (
     UNIFORM_3E4_RUNS,
     UNIFORM_3E4_SEEDS,
     UNIFORM_3E4_TARGETS,
+    FORMAL_PER_DATASET_LR_MATRIX_KIND,
+    FORMAL_PER_DATASET_LR_OUTPUT_MARKER,
+    FORMAL_PER_DATASET_LR_RUNS,
     PARENT_METHOD,
     PROTOCOL_VERSION,
     SCENARIO,
@@ -551,6 +554,16 @@ def assert_formal_run_root(path: Path, matrix_kind: str = FROZEN_MATRIX_KIND) ->
         if "/outputs/runs/" in f"/{posix}/":
             raise AEContractError("uniform 3e-4 must not write under outputs/runs/")
         return root
+    if kind == FORMAL_PER_DATASET_LR_MATRIX_KIND:
+        if FORMAL_PER_DATASET_LR_OUTPUT_MARKER not in posix:
+            raise AEContractError(
+                "formal per-dataset LR run root must include sita_ablation_formal_per_dataset_lr_ae"
+            )
+        if UNIFORM_3E4_OUTPUT_MARKER in posix:
+            raise AEContractError("formal per-dataset LR must not write into uniform 3e-4 output")
+        if "/outputs/runs/" in f"/{posix}/":
+            raise AEContractError("formal per-dataset LR must not write under outputs/runs/")
+        return root
     if AE_RUN_LABEL not in name:
         raise AEContractError("formal run root must include MS_KATL_AE_CORE_ABLATION")
     if UNIFORM_3E4_OUTPUT_MARKER in posix:
@@ -580,6 +593,7 @@ STAGE_A_KWARG_KEYS: Tuple[str, ...] = (
     "batch_size",
     "tau_k",
     "group_cols",
+    "seed",
 )
 SHARED_BUNDLE_INPUT_KEYS: Tuple[str, ...] = (
     "target_identity",
@@ -641,6 +655,7 @@ def plan_formal_stage_a_kwargs(
         "batch_size": int(STAGE_B_BATCH_SIZE),
         "tau_k": 1.0,
         "group_cols": tuple(group_cols),
+        "seed": int(cell.seed),
     }
     missing_kwargs = [key for key in STAGE_A_KWARG_KEYS if key not in kwargs_plan]
     if missing_kwargs:
@@ -1052,6 +1067,12 @@ def validate_resume_root(
         expected = UNIFORM_3E4_RUNS
         if snapshot.get("uniform_learning_rate") not in {None, UNIFORM_3E4_LEARNING_RATE_LABEL}:
             raise AEContractError("resume uniform 3e-4 learning_rate mismatch")
+    elif matrix_kind == FORMAL_PER_DATASET_LR_MATRIX_KIND:
+        expected = FORMAL_PER_DATASET_LR_RUNS
+        target_lrs = snapshot.get("target_learning_rates")
+        expected_target_lrs = {"D1": "3e-5", "D4": "3e-5", "D5": "3e-4", "D6": "3e-5"}
+        if target_lrs is not None and target_lrs != expected_target_lrs:
+            raise AEContractError("resume formal per-dataset target LR map mismatch")
     else:
         expected = EXPECTED_RUNS
     if snapshot.get("expected_runs") != expected:

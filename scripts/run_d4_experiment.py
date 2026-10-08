@@ -71,11 +71,22 @@ config = {
 }
 
 
+def _normalize_d4_target_key(key: str) -> str:
+    return str(key).strip().replace("/", "_")
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Dataset4 fixed-parquet experiment.")
     parser.add_argument("--info-sharing", choices=["without", "with"], default=config["info_sharing"])
     parser.add_argument("--smoke", action="store_true", help="Run tiny target/source limits with the same window logic.")
     parser.add_argument("--target-limit", type=int, default=None)
+    parser.add_argument("--target-keys", nargs="+", default=None)
+    parser.add_argument(
+        "--methods",
+        nargs="+",
+        default=None,
+        help="Optional method subset, e.g. MSML-TL for a single-cell dry run.",
+    )
     parser.add_argument("--source-limit", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=None, help="Override source/target epochs for lightweight checks.")
     parser.add_argument("--output-dir", type=Path, default=None, help="Optional run directory.")
@@ -117,6 +128,14 @@ def main() -> None:
     config["smoke"] = bool(args.smoke)
     if args.target_limit is not None:
         config["smoke_target_limit"] = int(args.target_limit)
+    if args.target_keys is not None:
+        config["target_keys"] = [_normalize_d4_target_key(key) for key in args.target_keys]
+    if args.methods is not None:
+        requested_methods = [str(method) for method in args.methods]
+        unknown_methods = [method for method in requested_methods if method not in config["enabled_methods"]]
+        if unknown_methods:
+            raise ValueError(f"Unknown --methods: {unknown_methods}")
+        config["enabled_methods"] = requested_methods
     if args.source_limit is not None:
         config["smoke_source_limit"] = int(args.source_limit)
     if args.epochs is not None:
@@ -213,9 +232,16 @@ def main() -> None:
 
     source_df = apply_runtime_source_domain_policy(source_df, knn_data, config)
     target_entity_keys = list(knn_data["results"].keys())
+    if config.get("target_keys"):
+        requested_target_keys = [str(key) for key in config["target_keys"]]
+        missing_target_keys = [key for key in requested_target_keys if key not in knn_data["results"]]
+        if missing_target_keys:
+            raise ValueError(f"--target-keys not found in D4 KNN results: {missing_target_keys}")
+        target_entity_keys = requested_target_keys
     validate_runtime_target_domain(target_df, target_entity_keys, knn_data, config)
-    if config["smoke"]:
+    if config["smoke"] and not config.get("target_keys"):
         target_entity_keys = target_entity_keys[: int(config["smoke_target_limit"])]
+    if config["smoke"]:
         selected_source_entities = {
             str(item.get("source_entity"))
             for values in knn_data["results"].values()
@@ -261,8 +287,39 @@ def main() -> None:
     df = pd.DataFrame(all_rows)
     df = _align_results_to_reference_schema(df)
     out_path = results_dir / config["output_filename"]
-    if config["smoke"]:
+    subset_dry_run = bool(config.get("target_keys")) or set(config["enabled_methods"]) != {
+        "No-TL",
+        "SS-TL",
+        "MSWA-TL",
+        "MSSB-TL",
+        "MSML-TL",
+        "MSML-TL-RFE",
+    }
+    if config["smoke"] or subset_dry_run:
         df.to_csv(out_path, index=False, encoding="utf-8")
+        if subset_dry_run:
+            manifest_path = results_dir / "single_cell_dry_run_manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "dry_run": True,
+                        "formal_protocol_path": True,
+                        "published_as_formal_cell": False,
+                        "dataset_id": config["dataset_id"],
+                        "info_sharing": config["info_sharing"],
+                        "horizon": config["horizon"],
+                        "seed": config["random_state"],
+                        "target_keys": list(config.get("target_keys") or target_entity_keys),
+                        "enabled_methods": list(config["enabled_methods"]),
+                        "source_epochs": config["source_epochs"],
+                        "target_epochs": config["target_epochs"],
+                        "output_csv": str(out_path),
+                    },
+                    indent=2,
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
     else:
         canonical_targets = tuple(
             dict.fromkeys(df["target_entity_key"].astype(str))

@@ -47,6 +47,7 @@ from src.data_processing.data_preprocessing import (
     temporal_split_by_ratio_or_dates,
     to_cnn_tensor,
 )
+from src.protocols.candidate_pool import SOURCE_SELECTION_MODE_ALIGNED_30D
 from src.source_selection.source_selector import SourceSelector, TargetK3SelectionContext
 from src.utils.runtime_control import keras_verbose
 from src.evaluation.metrics import smape
@@ -70,6 +71,7 @@ from src.transfer_methods.msml_tl import (
     train_source_cnn_for_msml,
     get_transferable_layer_names,
     fuse_source_models_layerwise,
+    fuse_source_models_layerwise_aligned,
     load_fused_params_into_target_model,
 )
 from src.protocols.runner_adapter import source_key_mask
@@ -476,6 +478,10 @@ def train_ms_katl_head(
     revin_include_mean: bool = True,
     on_before_first_target_optimizer_update: Optional[Callable[[Mapping[str, object]], None]] = None,
     on_diagnostic_epoch_eval: Optional[Callable[[Mapping[str, object]], None]] = None,
+    on_before_ema_assign: Optional[Callable[[Mapping[str, object]], None]] = None,
+    on_epoch_metric_record: Optional[Callable[[Mapping[str, object]], None]] = None,
+    record_update_counters: bool = False,
+    init_anchor_lambda: float = 0.0,
 ) -> Dict[str, object]:
     """
     MS-KATL Stage B 训练循环：
@@ -494,6 +500,16 @@ def train_ms_katl_head(
       第一次 optimizer update 之前记录 epoch 0，并在每个 epoch 结束后用
       正式 EMA 权重（若 use_ema）做只读 evaluation，然后恢复 RAW 训练权重。
       不改变 optimizer、early stopping 或训练数据。
+    - 可选 on_epoch_metric_record：默认 None。不为 None 时，在每轮 RAW 验证
+      计算完成后立即调用。只接收数值，不参与选模。写入失败必须由调用方
+      看到异常，这里不捕获。
+    - record_update_counters 默认 False。为 True 时读取优化器 iterations
+      的起止差，并返回 EMA 初始化次数和更新点上的 EMA 次数。不改变 EMA
+      公式、时机或覆盖变量。
+    - init_anchor_lambda（默认 0.0 = 不影响现有路径）：backbone 初始化锚定
+      正则强度。当 > 0 且 target_extractor 不为 None 时，在 forecast loss 之上
+      叠加 λ * ||θ_backbone - θ_fused_init||_2^2，防止融合初始化先验在适配中
+      被过度冲刷。仅对 FUSED_TRAINABLE（C 臂）有意义；A/D/E 臂保持 lambda=0。
     """
     logger = _get_logger()
     resolved_loss = str(loss_name).strip().lower()
@@ -568,6 +584,26 @@ def train_ms_katl_head(
     ema_values: List[tf.Tensor] = (
         [tf.identity(tf.convert_to_tensor(v)) for v in trainable_vars] if use_ema else []
     )
+    optimizer_iterations_start = None
+    ema_initialization_count = 0
+    if record_update_counters:
+        optimizer_iterations_start = int(optimizer.iterations.numpy())
+        ema_initialization_count = 1 if use_ema else 0
+
+    # 初始化锚定：保存 backbone 初始参数快照，供 loss 中惩罚漂移使用
+    # 仅当 init_anchor_lambda > 0 且 target_extractor 存在时生效（C 臂专用）
+    _anchor_lambda = float(init_anchor_lambda)
+    _anchor_vars: List[tf.Variable] = []
+    _anchor_tensors: List[tf.Tensor] = []
+    if _anchor_lambda > 0.0 and target_extractor is not None:
+        _anchor_vars = list(target_extractor.trainable_variables)
+        _anchor_tensors = [
+            tf.constant(v.numpy(), dtype=tf.float32) for v in _anchor_vars
+        ]
+        logger.info(
+            "[train_ms_katl_head] init_anchor_lambda=%.4f, anchoring %d backbone vars",
+            _anchor_lambda, len(_anchor_vars),
+        )
     gate_var_ids = {
         id(v) for v in model.residual_gate.trainable_variables
     } if model.gate_mode == "learnable" and model.residual_gate.built else set()
@@ -578,6 +614,14 @@ def train_ms_katl_head(
         initial_gate_bias = float(model.residual_gate.gate_proj.bias.numpy().reshape(-1)[0])
     gate_grad_norms: List[float] = []
 
+    def _parameter_norm(values) -> float:
+        tensors = [tf.convert_to_tensor(value) for value in values]
+        return float(tf.linalg.global_norm(tensors).numpy()) if tensors else 0.0
+
+    def _learning_rate_at(step: int) -> float:
+        value = lr_arg(step) if callable(lr_arg) else lr_arg
+        return float(value.numpy()) if hasattr(value, "numpy") else float(value)
+
     history: Dict[str, List[float]] = {
         "forecast_loss": [], "adv_loss": [], "total_loss": [],
         "lambda": [], "gate_mean": [], "gate_std": [],
@@ -587,9 +631,11 @@ def train_ms_katl_head(
     history.update({f"disc_{i}_acc": [] for i in range(k)})
 
     global_step = 0
+    ema_update_count = 0
     diagnostics_enabled = (
         on_before_first_target_optimizer_update is not None
         or on_diagnostic_epoch_eval is not None
+        or on_before_ema_assign is not None
     )
     before_first_update_capture = None
     if diagnostics_enabled:
@@ -662,9 +708,18 @@ def train_ms_katl_head(
 
                 total_loss = loss_forecast + lambda_val * loss_adv
 
+                # 初始化锚定正则（仅 C 臂，lambda>0 时生效）
+                if _anchor_lambda > 0.0 and _anchor_vars:
+                    anchor_reg = tf.add_n([
+                        tf.reduce_sum(tf.square(v - a))
+                        for v, a in zip(_anchor_vars, _anchor_tensors)
+                    ])
+                    total_loss = total_loss + tf.cast(_anchor_lambda, tf.float32) * anchor_reg
+
             grads = tape.gradient(total_loss, trainable_vars)
             finite_grads = []
             step_gate_sq = 0.0
+            step_grad_sq = 0.0
             saw_gate_grad = False
             for grad, var in zip(grads, trainable_vars):
                 if grad is None:
@@ -676,6 +731,7 @@ def train_ms_katl_head(
                         diagnostics={"variable": var.name, "step": int(global_step)},
                     )
                 finite_grads.append((grad, var))
+                step_grad_sq += float(tf.reduce_sum(tf.square(grad)).numpy())
                 if collect_gate_grads and id(var) in gate_var_ids:
                     saw_gate_grad = True
                     step_gate_sq += float(tf.reduce_sum(tf.square(grad)).numpy())
@@ -691,6 +747,12 @@ def train_ms_katl_head(
                         "captured_before_first_target_optimizer_update": True,
                         "global_step": int(global_step),
                         "trainable_variable_count": int(len(trainable_vars)),
+                        "learning_rate": _learning_rate_at(global_step),
+                        "gradient_norm": float(math.sqrt(step_grad_sq)),
+                        "parameter_norm": _parameter_norm(trainable_vars),
+                        "ema_parameter_norm": _parameter_norm(ema_values),
+                        "ema_applied": False,
+                        "ema_update_count": int(ema_update_count),
                     }
                 )
                 before_first_update_capture = {
@@ -705,8 +767,14 @@ def train_ms_katl_head(
                         "epoch": 0,
                         "before_first_target_optimizer_update": True,
                         "optimizer_update_count": 0,
+                        "ema_update_count": int(ema_update_count),
                         "weight_variant": "EMA" if use_ema else "RAW",
                         "train_objective_loss": float(loss_forecast.numpy()),
+                        "learning_rate": _learning_rate_at(global_step),
+                        "gradient_norm": float(math.sqrt(step_grad_sq)),
+                        "parameter_norm": _parameter_norm(trainable_vars),
+                        "ema_parameter_norm": _parameter_norm(ema_values),
+                        "ema_applied": False,
                     }
                 )
             optimizer.apply_gradients(finite_grads)
@@ -716,6 +784,7 @@ def train_ms_katl_head(
                     momentum * ema + (1.0 - momentum) * tf.convert_to_tensor(var)
                     for ema, var in zip(ema_values, trainable_vars)
                 ]
+                ema_update_count += 1
             global_step += 1
 
             epoch_stats["forecast_loss"].append(float(loss_forecast.numpy()))
@@ -751,8 +820,29 @@ def train_ms_katl_head(
                 )
             val_rmse = float(np.sqrt(np.mean((val_pred.flatten() - np.asarray(y_val).flatten()) ** 2)))
             history["val_rmse"].append(val_rmse)
+            val_metric = val_rmse if math.isfinite(val_rmse) else None
+            val_missing_reason = None if val_metric is not None else "validation_metric_non_finite"
         else:
             history["val_rmse"].append(float("nan"))
+            val_metric = None
+            val_missing_reason = "validation_inputs_absent"
+        if on_epoch_metric_record is not None:
+            on_epoch_metric_record(
+                {
+                    "epoch": int(epoch) + 1,
+                    "global_step": int(global_step),
+                    "train_loss": float(history["forecast_loss"][-1]),
+                    "train_loss_name": resolved_loss,
+                    "val_metric_name": "rmse",
+                    "val_metric": val_metric,
+                    "val_metric_missing_reason": val_missing_reason,
+                    "learning_rate": _learning_rate_at(global_step),
+                    "metric_space": "scaled_target",
+                    "weight_variant": "RAW",
+                    "ema_applied_for_metric": False,
+                    "used_for_checkpoint_selection": False,
+                }
+            )
 
         if on_diagnostic_epoch_eval is not None:
             raw_snapshot = None
@@ -765,8 +855,28 @@ def train_ms_katl_head(
                     {
                         "epoch": int(epoch) + 1,
                         "before_first_target_optimizer_update": False,
+                        "optimizer_update_count": int(global_step),
+                        "ema_update_count": int(ema_update_count),
                         "weight_variant": "EMA" if use_ema else "RAW",
                         "train_objective_loss": float(history["forecast_loss"][-1]),
+                        "learning_rate": _learning_rate_at(global_step),
+                        "gradient_norm": float(
+                            np.mean(
+                                [
+                                    math.sqrt(
+                                        float(
+                                            tf.reduce_sum(tf.square(grad)).numpy()
+                                        )
+                                    )
+                                    for grad, _ in finite_grads
+                                ]
+                            )
+                            if finite_grads
+                            else float("nan")
+                        ),
+                        "parameter_norm": _parameter_norm(trainable_vars),
+                        "ema_parameter_norm": _parameter_norm(ema_values),
+                        "ema_applied": bool(use_ema),
                     }
                 )
             finally:
@@ -775,6 +885,18 @@ def train_ms_katl_head(
                         var.assign(raw)
 
     ema_applied = False
+    if on_before_ema_assign is not None:
+        on_before_ema_assign(
+            {
+                "optimizer_update_count": int(global_step),
+                "ema_update_count": int(ema_update_count),
+                "captured_before_ema_assign": True,
+                "weight_variant": "RAW",
+                "ema_applied": False,
+                "parameter_norm": _parameter_norm(trainable_vars),
+                "ema_parameter_norm": _parameter_norm(ema_values),
+            }
+        )
     if use_ema:
         for var, ema in zip(trainable_vars, ema_values):
             var.assign(ema)
@@ -830,6 +952,19 @@ def train_ms_katl_head(
     }
     if diagnostics_enabled:
         result["before_first_target_optimizer_update_capture"] = before_first_update_capture
+    if record_update_counters:
+        optimizer_iterations_end = int(optimizer.iterations.numpy())
+        result["update_counters"] = {
+            "optimizer_iterations_start": int(optimizer_iterations_start),
+            "optimizer_iterations_end": optimizer_iterations_end,
+            "optimizer_update_count": int(optimizer_iterations_end - int(optimizer_iterations_start)),
+            "optimizer_update_count_evidence": "observed_optimizer_iterations_delta",
+            "apply_gradients_calls": int(global_step),
+            "ema_initialization_count": int(ema_initialization_count),
+            "ema_initialized_variable_count": int(len(ema_values)),
+            "ema_update_count": int(ema_update_count),
+            "ema_update_count_evidence": "observed_at_ema_update",
+        }
     return result
 
 
@@ -1029,8 +1164,10 @@ def prepare_ms_katl_stage_a(
     k3_selection_context: TargetK3SelectionContext | None = None,
     k3_raw_source_context: TargetK3RawSourceContext | None = None,
     transformation_reuse_context: "TargetTransformationReuseContext | None" = None,
+    align_fusion_filters: bool = False,
     *,
     seed: int,
+    source_selection_mode: str = SOURCE_SELECTION_MODE_ALIGNED_30D,
 ) -> MSKATLStageAArtifacts:
     """Train/load Stage A once: KNN sources, frozen source CNNs, scalers, fused conv params.
 
@@ -1038,6 +1175,11 @@ def prepare_ms_katl_stage_a(
     CNN initialization and training randomness for this cell. Source selection,
     source order, distances, fusion weights, and model hyperparameters are
     unchanged.
+
+    ``align_fusion_filters``: when True, uses Hungarian filter-matching before
+    weighted parameter averaging, reducing the risk of misaligned-filter
+    cancellation across independently-trained source CNNs. Default False
+    preserves the original (position-wise) fusion behaviour.
     """
     if seed is None:
         raise ValueError(
@@ -1058,6 +1200,7 @@ def prepare_ms_katl_stage_a(
             k=k,
             group_cols=resolved_group_cols,
             weight_mode=weight_mode,
+            source_selection_mode=source_selection_mode,
         )
     else:
         evidence = k3_selection_context.selection_for_method(
@@ -1067,6 +1210,7 @@ def prepare_ms_katl_stage_a(
             group_cols=resolved_group_cols,
             k=k,
             weight_mode=weight_mode,
+            source_selection_mode=source_selection_mode,
         )
         selection_result = evidence.method_wrapper(
             lifecycle_identity=k3_selection_context.lifecycle_identity,
@@ -1076,6 +1220,7 @@ def prepare_ms_katl_stage_a(
             group_cols=resolved_group_cols,
             k=k,
             weight_mode=weight_mode,
+            source_selection_mode=source_selection_mode,
         )
     selected_sources = (
         selection_result.get("sources", [])
@@ -1204,7 +1349,12 @@ def prepare_ms_katl_stage_a(
 
     knn_prior = compute_knn_prior(source_distances, tau_k=tau_k)
     layer_names = get_transferable_layer_names(source_models[0])
-    fused_params = fuse_source_models_layerwise(source_models, source_weights, layer_names)
+    if align_fusion_filters and len(source_models) > 1:
+        fused_params = fuse_source_models_layerwise_aligned(
+            source_models, source_weights, layer_names, align_filters=True
+        )
+    else:
+        fused_params = fuse_source_models_layerwise(source_models, source_weights, layer_names)
     source_weight_snapshots = [snapshot_model_weights(model) for model in source_models]
     source_weight_digests = [digest_weight_arrays(snapshot) for snapshot in source_weight_snapshots]
     source_scaler_digests = [scaler_digest(scaler) for scaler in source_scalers]

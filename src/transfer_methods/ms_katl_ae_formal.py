@@ -36,6 +36,9 @@ from src.transfer_methods.ms_katl_ae_ablation import (
     UNIFORM_3E4_RUNS,
     UNIFORM_3E4_SEEDS,
     UNIFORM_3E4_TARGETS,
+    FORMAL_PER_DATASET_LR_MATRIX_KIND,
+    FORMAL_PER_DATASET_LR_RUNS,
+    FORMAL_PER_DATASET_LR_CANONICAL_CELLS,
     AEConstructedArm,
     AEContractError,
     AETrainingBlocked,
@@ -201,6 +204,10 @@ def _working_tree_protocol_digest(project_root: Path) -> str:
 
 def formal_protocol_digest(*, matrix_kind: str, expected_runs: int) -> str:
     uniform = str(matrix_kind).strip().upper().replace("-", "_") == UNIFORM_3E4_MATRIX_KIND
+    formal_per_dataset = (
+        str(matrix_kind).strip().upper().replace("-", "_")
+        == FORMAL_PER_DATASET_LR_MATRIX_KIND
+    )
     payload: Dict[str, Any] = {
         "matrix_kind": str(matrix_kind),
         "expected_runs": int(expected_runs),
@@ -217,6 +224,23 @@ def formal_protocol_digest(*, matrix_kind: str, expected_runs: int) -> str:
             "source_lr": "1e-4",
             "canonical_cells": UNIFORM_3E4_CANONICAL_CELLS,
             "runs": UNIFORM_3E4_RUNS,
+        }
+    if formal_per_dataset:
+        from src.transfer_methods.ms_katl_sita_formal_per_dataset_lr_ae import (
+            FORMAL_PER_DATASET_LR_DATASETS,
+            FORMAL_PER_DATASET_LR_LABELS,
+            FORMAL_PER_DATASET_LR_TARGETS,
+            FORMAL_PER_DATASET_LR_SEEDS,
+        )
+
+        payload["formal_per_dataset_lr_protocol"] = {
+            "datasets": list(FORMAL_PER_DATASET_LR_DATASETS),
+            "targets": dict(FORMAL_PER_DATASET_LR_TARGETS),
+            "seeds": list(FORMAL_PER_DATASET_LR_SEEDS),
+            "target_learning_rates": dict(FORMAL_PER_DATASET_LR_LABELS),
+            "source_lr": "1e-4",
+            "canonical_cells": FORMAL_PER_DATASET_LR_CANONICAL_CELLS,
+            "runs": FORMAL_PER_DATASET_LR_RUNS,
         }
     return _json_digest(payload)
 
@@ -235,12 +259,18 @@ def build_formal_run_provenance(
     targets: Dict[str, str] = {}
     for cell in cells:
         targets[str(cell.dataset)] = str(cell.target)
-    uniform = str(matrix_kind).strip().upper().replace("-", "_") == UNIFORM_3E4_MATRIX_KIND
+    normalized_kind = str(matrix_kind).strip().upper().replace("-", "_")
+    uniform = normalized_kind == UNIFORM_3E4_MATRIX_KIND
+    formal_per_dataset = normalized_kind == FORMAL_PER_DATASET_LR_MATRIX_KIND
     if uniform:
         targets = dict(UNIFORM_3E4_TARGETS)
     return {
         "paper_method_name": "SITA",
-        "ablation_protocol_name": "CORRECTED_AE_UNIFORM_3E4",
+        "ablation_protocol_name": (
+            "FORMAL_AE_PER_DATASET_TARGET_LR"
+            if formal_per_dataset
+            else "CORRECTED_AE_UNIFORM_3E4"
+        ),
         "matrix_kind": str(matrix_kind),
         "branch": branch,
         "HEAD": head,
@@ -270,6 +300,12 @@ def build_formal_run_provenance(
         "expected_runs": int(expected_runs),
         "canonical_stage_a_keys": sorted({str(cell.stage_a_key) for cell in cells}),
     }
+    if formal_per_dataset:
+        from src.transfer_methods.ms_katl_sita_formal_per_dataset_lr_ae import (
+            FORMAL_PER_DATASET_LR_LABELS,
+        )
+
+        payload["target_learning_rates"] = dict(FORMAL_PER_DATASET_LR_LABELS)
 
 
 def _attempt_cell_dir(run_root: Path, cell: RealCanonicalCellPlan) -> Path:
@@ -979,6 +1015,9 @@ def default_v3_train_stage_b(
         use_adversarial=False,
         trainable_variables=ephemeral.trainable_variables,
         revin=constructed.revin,
+        # 初始化锚定正则：仅 C 臂（FUSED_TRAINABLE）使用，保护融合初始化先验
+        # 默认 0.0（从 context 或全局配置读取；不传时退化为原有行为）
+        init_anchor_lambda=float(context.get("ae_arm_c_init_anchor_lambda", 0.0)) if arm == "C" else 0.0,
         **train_kwargs,
     )
     finalize_stage_b_diagnostics(context, arm=arm, constructed=constructed)
@@ -1497,6 +1536,7 @@ def run_ae_formal_body(
     hardened_attempts: bool = False,
     selected_stage_a_key: Optional[str] = None,
     selected_arm: Optional[str] = None,
+    reused_payloads: Optional[Mapping[str, Mapping[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Canonical formal orchestration. Real trainers stay blocked without dual lock."""
     if resume_root is not None and output_root is None:
@@ -1521,9 +1561,16 @@ def run_ae_formal_body(
     kind = str(matrix_kind).strip().upper().replace("-", "_")
     if kind == "FROZEN270":
         kind = FROZEN_MATRIX_KIND
-    allowed_kinds = {FROZEN_MATRIX_KIND, EXTRA_TARGET_MATRIX_KIND, UNIFORM_3E4_MATRIX_KIND}
+    allowed_kinds = {
+        FROZEN_MATRIX_KIND,
+        EXTRA_TARGET_MATRIX_KIND,
+        UNIFORM_3E4_MATRIX_KIND,
+        FORMAL_PER_DATASET_LR_MATRIX_KIND,
+    }
     if kind not in allowed_kinds:
         raise AEContractError(f"unknown matrix_kind={matrix_kind!r}")
+    if reused_payloads and not hardened_attempts:
+        raise AEContractError("reused formal cells require hardened attempts")
 
     root = project_root_from(project_root)
     load_ae_manifest(root)
@@ -1544,6 +1591,21 @@ def run_ae_formal_body(
         assert_uniform_3e4_slice(cell_plans, arm_plans)
         expected_cells = UNIFORM_3E4_CANONICAL_CELLS
         expected_runs = UNIFORM_3E4_RUNS
+    elif kind == FORMAL_PER_DATASET_LR_MATRIX_KIND:
+        from src.transfer_methods.ms_katl_sita_formal_per_dataset_lr_ae import (
+            assert_formal_per_dataset_lr_slice,
+            enumerate_formal_per_dataset_lr_cell_plans,
+        )
+
+        cell_plans = (
+            list(cells)
+            if cells is not None
+            else enumerate_formal_per_dataset_lr_cell_plans(project_root=root)
+        )
+        arm_plans = enumerate_real_arm_plans(cell_plans, expected_runs=FORMAL_PER_DATASET_LR_RUNS)
+        assert_formal_per_dataset_lr_slice(cell_plans, arm_plans)
+        expected_cells = FORMAL_PER_DATASET_LR_CANONICAL_CELLS
+        expected_runs = FORMAL_PER_DATASET_LR_RUNS
     else:
         cell_plans = list(cells) if cells is not None else enumerate_real_canonical_cell_plans(project_root=root)
         arm_plans = enumerate_real_arm_plans(cell_plans)
@@ -1627,6 +1689,20 @@ def run_ae_formal_body(
                     "extra_target_slice_untouched": True,
                     "only_global_lr_changed": True,
                 }
+            elif kind == FORMAL_PER_DATASET_LR_MATRIX_KIND:
+                from src.transfer_methods.ms_katl_sita_formal_per_dataset_lr_ae import (
+                    FORMAL_PER_DATASET_LR_LABELS,
+                    FORMAL_PER_DATASET_LR_TARGETS,
+                )
+
+                extra_snapshot = {
+                    "matrix_kind": FORMAL_PER_DATASET_LR_MATRIX_KIND,
+                    "target_learning_rates": dict(FORMAL_PER_DATASET_LR_LABELS),
+                    "paper_targets": dict(FORMAL_PER_DATASET_LR_TARGETS),
+                    "uniform_slice_untouched": True,
+                    "d5_reuse_audited": bool(reused_payloads),
+                    "d5_reused": bool(reused_payloads),
+                }
             if provenance is not None:
                 extra_snapshot = dict(extra_snapshot or {})
                 extra_snapshot.update(provenance)
@@ -1645,11 +1721,59 @@ def run_ae_formal_body(
     bundles: Dict[str, str] = dict(completed)
     identity_index: Dict[str, Dict[str, Any]] = {}
     selected_only = selected_stage_a_key is not None
+    reused_count = 0
 
     for cell in cell_plans:
         if selected_only and cell.stage_a_key != selected_stage_a_key:
             continue
         attempt_path: Optional[Path] = None
+        if reused_payloads and cell.stage_a_key in reused_payloads:
+            if provenance is None:
+                raise AEContractError("reused formal cells require formal provenance")
+            action, attempt_path = prepare_formal_cell_attempt(
+                out,
+                cell,
+                resume=resume_root is not None,
+                digests={key: provenance[key] for key in FORMAL_RESUME_DIGEST_KEYS},
+                branch=str(provenance["branch"]),
+                head=str(provenance["HEAD"]),
+            )
+            if action == "SKIPPED_COMPLETE":
+                bundles[cell.stage_a_key] = "PAIR_COMPLETE"
+                reused_count += 1
+                continue
+            reused_payload = dict(reused_payloads[cell.stage_a_key])
+            reused_payload.update(
+                {
+                    "status": "COMPLETE",
+                    "pair_status": "PAIR_COMPLETE",
+                    "dataset": cell.dataset,
+                    "target": cell.target,
+                    "horizon": int(cell.horizon),
+                    "seed": int(cell.seed),
+                    "cell_key": cell.stage_a_key,
+                    "canonical_stage_a_key": cell.stage_a_key,
+                    "stage_a_seed": int(cell.seed),
+                    "attempt_id": attempt_path.name,
+                    "matrix_digest": provenance["matrix_digest"],
+                    "protocol_digest": provenance["protocol_digest"],
+                    "critical_runtime_digest": provenance["critical_runtime_digest"],
+                    "working_tree_protocol_digest": provenance["working_tree_protocol_digest"],
+                    "runtime_commit": provenance["runtime_commit"],
+                    "branch": provenance["branch"],
+                    "reused_in_formal_root": True,
+                }
+            )
+            finalize_formal_cell_attempt(attempt_path, status="COMPLETE", result=reused_payload)
+            bundles[cell.stage_a_key] = "PAIR_COMPLETE"
+            reused_count += 1
+            if kind in {
+                EXTRA_TARGET_MATRIX_KIND,
+                UNIFORM_3E4_MATRIX_KIND,
+                FORMAL_PER_DATASET_LR_MATRIX_KIND,
+            } and not mock_execution_authorized:
+                print(f"AE_CELL_REUSED {cell.stage_a_key} PAIR_COMPLETE", flush=True)
+            continue
         if hardened_attempts:
             if provenance is None:
                 raise AEContractError("hardened attempts require formal provenance")
@@ -1666,7 +1790,11 @@ def run_ae_formal_body(
                 continue
         elif completed.get(cell.stage_a_key) == "PAIR_COMPLETE":
             continue
-        if kind in {EXTRA_TARGET_MATRIX_KIND, UNIFORM_3E4_MATRIX_KIND} and not mock_execution_authorized:
+        if kind in {
+            EXTRA_TARGET_MATRIX_KIND,
+            UNIFORM_3E4_MATRIX_KIND,
+            FORMAL_PER_DATASET_LR_MATRIX_KIND,
+        } and not mock_execution_authorized:
             print(f"AE_CELL_START {cell.stage_a_key}", flush=True)
         context = authorities.prepare_context(cell)
         if not isinstance(context, dict):
@@ -1770,7 +1898,11 @@ def run_ae_formal_body(
                 result=result_payload,
             )
         bundles[cell.stage_a_key] = pair_status
-        if kind in {EXTRA_TARGET_MATRIX_KIND, UNIFORM_3E4_MATRIX_KIND} and not mock_execution_authorized:
+        if kind in {
+            EXTRA_TARGET_MATRIX_KIND,
+            UNIFORM_3E4_MATRIX_KIND,
+            FORMAL_PER_DATASET_LR_MATRIX_KIND,
+        } and not mock_execution_authorized:
             print(f"AE_CELL_DONE {cell.stage_a_key} {pair_status}", flush=True)
 
     counts = active_ledger.counts()
@@ -1798,6 +1930,7 @@ def run_ae_formal_body(
         "E_CALLS": counts["E_CALLS"],
         "PAIR_COMPLETE": pair_complete,
         "PAIR_INCOMPLETE": pair_incomplete,
+        "REUSED_CELLS": reused_count,
         "SINGLE_ARM_COMPLETE": selected_complete if selected_only else 0,
         "bundles": bundles,
         "identity_index": identity_index,
@@ -1835,6 +1968,12 @@ def run_ae_formal_body(
             from src.transfer_methods.ms_katl_sita_ablation_3e4 import write_uniform_3e4_results_table
 
             result["results_csv"] = str(write_uniform_3e4_results_table(out))
+        elif kind == FORMAL_PER_DATASET_LR_MATRIX_KIND:
+            from src.transfer_methods.ms_katl_sita_formal_per_dataset_lr_ae import (
+                write_formal_per_dataset_lr_results_table,
+            )
+
+            result["results_csv"] = str(write_formal_per_dataset_lr_results_table(out))
     return result
 
 

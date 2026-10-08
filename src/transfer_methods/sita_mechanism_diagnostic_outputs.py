@@ -1,14 +1,15 @@
-"""Orchestration outputs for the 42-cell SITA mechanism diagnostic rerun.
+"""Orchestration outputs for the independent SITA mechanism diagnostic rerun.
 
 Numpy-first helpers: formal-test CKA references, training-dynamics rows,
 pointwise predictions, sales-bin summaries, CKA comparison matrix,
-layer_role drift schema, formal-result consistency audit, and resume.
+layer_role drift schema, historical-reference comparison, and resume.
 Does not train models and does not rewrite frozen A–E numbers.
 """
 
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 from datetime import datetime
@@ -18,7 +19,13 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 import numpy as np
 
 from src.evaluation.metrics import smape
-from src.transfer_methods.sita_mechanism_diagnostics import linear_cka, reference_input_digest
+from src.transfer_methods.sita_mechanism_diagnostics import (
+    linear_cka,
+    parameter_frobenius_norm,
+    parameter_l2_distance,
+    reference_input_digest,
+    relative_parameter_drift,
+)
 from src.transfer_methods.sita_mechanism_diagnostics_contract import (
     COMPARISON_A_C_MATCHED_SEED,
     COMPARISON_B_B_CROSS_SEED,
@@ -26,6 +33,7 @@ from src.transfer_methods.sita_mechanism_diagnostics_contract import (
     COMPARISON_C_C_CROSS_SEED,
     COMPARISON_C_INIT_B_FINAL_FROZEN_REFERENCE,
     COMPARISON_C_INIT_C_FINAL_ADAPTATION_DISPLACEMENT,
+    COMPARISON_C_INIT_C_RAW_FINAL,
     FORMAL_EVALUATION_WEIGHT_VARIANT,
     MechanismDiagnosticsContractError,
 )
@@ -45,11 +53,29 @@ LOW_REFERENCE_SAMPLE_COUNT = 100
 FORMAL_AE_UNIFORM_3E4_CSV = Path(
     "/Users/ming/Desktop/复现实验/论文文稿相关/原始实验结果/ae_uniform_3e4_results.csv"
 )
+FORMAL_PER_DATASET_LR_AUTHORITY_ROOT = Path(
+    "/Users/ming/Desktop/复现实验/保留的复现实验修改rfe/outputs/sita_ablation_formal_per_dataset_lr_ae_20260921_185137"
+)
+FORMAL_PER_DATASET_LR_CSV = (
+    FORMAL_PER_DATASET_LR_AUTHORITY_ROOT / "ae_formal_per_dataset_lr_results.csv"
+)
 OUTPUT_ROOT_PARENT = Path("outputs") / "mechanism_diagnostics"
+FORMAL_300_OUTPUT_PREFIX = "mechanism_formal_aligned_300"
+DIAGNOSTIC_42_OUTPUT_PREFIX = "mechanism_rerun"
+CKA_REPRESENTATION_LAYERS = ("flatten", "conv1", "conv2", "conv3")
+CKA_ACTIVATION_RESHAPE_RULE = "reshape(n_samples, -1)"
+EXACT_NUMERIC_MATCH = "EXACT_NUMERIC_MATCH"
+TOLERANCE_MATCH = "TOLERANCE_MATCH"
+MISMATCH = "MISMATCH"
+IDENTITY_ABS_TOL = 1e-12
+IDENTITY_REL_TOL = 1e-12
 CELL_STATUS_PENDING = "PENDING"
 CELL_STATUS_RUNNING = "RUNNING"
 CELL_STATUS_COMPLETE = "COMPLETE"
 CELL_STATUS_FAILED = "FAILED"
+ERROR_BIN_IDENTIFIER_FIELDS = ("dataset", "target", "horizon", "seed", "arm", "bin")
+CELL_JSON_ARTIFACT_NAMES = ("result.json", "status.json", "provenance.json")
+HISTORICAL_COMPARISON_FILENAME = "historical_frozen_comparison.csv"
 
 
 def condition_id(dataset: str, target: str, horizon: int) -> str:
@@ -58,6 +84,10 @@ def condition_id(dataset: str, target: str, horizon: int) -> str:
 
 def cell_id(dataset: str, target: str, horizon: int, seed: int, arm: str) -> str:
     return f"{dataset}|{target}|h{int(horizon)}|s{int(seed)}|{arm}"
+
+
+def canonical_cell_id(dataset: str, target: str, horizon: int, seed: int) -> str:
+    return f"{dataset}|{target}|h{int(horizon)}|s{int(seed)}"
 
 
 def filesystem_safe_id(value: str) -> str:
@@ -214,6 +244,13 @@ def record_diagnostic_epoch_eval(
         "validation_objective_loss": payload.get("validation_objective_loss"),
         "validation_rmse_original_scale": payload.get("validation_rmse_original_scale"),
         "validation_smape_original_scale": payload.get("validation_smape_original_scale"),
+        "learning_rate": payload.get("learning_rate"),
+        "gradient_norm": payload.get("gradient_norm"),
+        "parameter_norm": payload.get("parameter_norm"),
+        "ema_parameter_norm": payload.get("ema_parameter_norm"),
+        "ema_applied": payload.get("ema_applied"),
+        "optimizer_update_count": payload.get("optimizer_update_count"),
+        "ema_update_count": payload.get("ema_update_count"),
     }
     if row["validation_rmse_original_scale"] is None:
         y_true = payload.get("y_true_original")
@@ -285,9 +322,13 @@ def pointwise_prediction_rows(
     sample_ids: Optional[Sequence[Any]] = None,
     dates: Optional[Sequence[Any]] = None,
     weight_variant: str = FORMAL_EVALUATION_WEIGHT_VARIANT,
+    y_pred_ema_original: Optional[np.ndarray] = None,
 ) -> List[Dict[str, Any]]:
     true = np.asarray(y_true_original, dtype=np.float64).reshape(-1)
     pred = np.asarray(y_pred_original, dtype=np.float64).reshape(-1)
+    pred_ema = pred if y_pred_ema_original is None else np.asarray(y_pred_ema_original, dtype=np.float64).reshape(-1)
+    if pred_ema.shape != pred.shape:
+        raise MechanismDiagnosticsContractError("pointwise EMA prediction length mismatch")
     if true.shape != pred.shape:
         raise MechanismDiagnosticsContractError("pointwise y_true/y_pred length mismatch")
     rows = []
@@ -301,9 +342,11 @@ def pointwise_prediction_rows(
                 "seed": int(seed),
                 "arm": arm,
                 "sample_id": sample_ids[i] if sample_ids is not None else i,
+                "sample_index": i,
                 "date_or_prediction_index": dates[i] if dates is not None else i,
                 "y_true": float(true[i]),
                 "y_pred": float(pred[i]),
+                "y_pred_ema_original_scale": float(pred_ema[i]),
                 "signed_error": signed,
                 "absolute_error": abs(signed),
                 "squared_error": signed * signed,
@@ -325,6 +368,23 @@ def error_by_sales_bin(
     *,
     notes: str = "",
 ) -> List[Dict[str, Any]]:
+    if not rows:
+        return []
+    identifiers = {
+        field: rows[0].get(field)
+        for field in ("dataset", "target", "horizon", "seed", "arm")
+    }
+    if any(value is None or str(value).strip() == "" for value in identifiers.values()):
+        raise MechanismDiagnosticsContractError(
+            "error_by_sales_bin requires non-empty dataset/target/horizon/seed/arm identifiers"
+        )
+    for row in rows:
+        for field, expected in identifiers.items():
+            value = row.get(field)
+            if value is None or str(value).strip() == "" or str(value) != str(expected):
+                raise MechanismDiagnosticsContractError(
+                    f"error_by_sales_bin identifier mismatch or blank: {field}={value!r}"
+                )
     y_true = np.asarray([row["y_true"] for row in rows], dtype=np.float64)
     sq = np.asarray([row["squared_error"] for row in rows], dtype=np.float64)
     abs_err = np.asarray([row["absolute_error"] for row in rows], dtype=np.float64)
@@ -356,6 +416,7 @@ def error_by_sales_bin(
         sse = float(np.sum(sq[mask]))
         out.append(
             {
+                **identifiers,
                 "bin": label,
                 "n": n,
                 "MAE": float(np.mean(abs_err[mask])),
@@ -419,6 +480,8 @@ def generate_cka_comparison_matrix(
     if digest_values and len(set(digest_values)) != 1:
         raise MechanismDiagnosticsContractError("CKA matrix mixed reference_input_digest within a condition")
     digest = digest_values[0] if digest_values else ""
+    layer_values = [str(item.get("layer") or "") for item in records if item.get("layer")]
+    layer = layer_values[0] if layer_values and len(set(layer_values)) == 1 else ""
     rows: List[Dict[str, Any]] = []
 
     def _rep(arm: str, seed: int, stage: str) -> Optional[np.ndarray]:
@@ -433,6 +496,8 @@ def generate_cka_comparison_matrix(
         c_init = _rep("C", seed, "INIT")
         a_final = _rep("A", seed, "FINAL")
         extra = {"seed": seed, "reference_scale_available": reference_scale_available}
+        if layer:
+            extra["layer"] = layer
         if b_final is not None and c_final is not None:
             rows.append(
                 cka_row(
@@ -451,6 +516,18 @@ def generate_cka_comparison_matrix(
                     left=c_init,
                     right=c_final,
                     weight_variant=weight_variant,
+                    reference_input_digest_value=digest,
+                    extra=extra,
+                )
+            )
+        c_raw_final = _rep("C", seed, "RAW_FINAL")
+        if c_init is not None and c_raw_final is not None:
+            rows.append(
+                cka_row(
+                    comparison_type=COMPARISON_C_INIT_C_RAW_FINAL,
+                    left=c_init,
+                    right=c_raw_final,
+                    weight_variant="RAW",
                     reference_input_digest_value=digest,
                     extra=extra,
                 )
@@ -484,6 +561,8 @@ def generate_cka_comparison_matrix(
             "seed_right": right_seed,
             "reference_scale_available": reference_scale_available,
         }
+        if layer:
+            extra["layer"] = layer
         b_left = _rep("B", left_seed, "FINAL")
         b_right = _rep("B", right_seed, "FINAL")
         if b_left is not None and b_right is not None:
@@ -543,6 +622,7 @@ def consistency_audit_row(
     weight_variant: str = FORMAL_EVALUATION_WEIGHT_VARIANT,
     same_protocol_metadata: bool = True,
     extra_notes: str = "",
+    comparison_purpose: str = "historical_reference_only",
 ) -> Dict[str, Any]:
     abs_rmse, rel_rmse, note_rmse = _rel_diff_pct(formal_rmse, rerun_rmse)
     abs_smape, rel_smape, note_smape = _rel_diff_pct(formal_smape, rerun_smape)
@@ -569,16 +649,32 @@ def consistency_audit_row(
         "audit_status": status,
         "notes": notes,
         "replaces_frozen_results": False,
+        "comparison_purpose": comparison_purpose,
+        "blocks_execution": False,
     }
 
 
-def timestamped_run_root(now: Optional[datetime] = None) -> Path:
+def timestamped_run_root(
+    now: Optional[datetime] = None,
+    *,
+    matrix_mode: str = "diagnostic-42",
+) -> Path:
     stamp = (now or datetime.now()).strftime("%Y%m%d_%H%M%S")
-    return OUTPUT_ROOT_PARENT / f"mechanism_rerun_{stamp}"
+    prefix = (
+        FORMAL_300_OUTPUT_PREFIX
+        if str(matrix_mode).strip().lower() == "formal-300"
+        else DIAGNOSTIC_42_OUTPUT_PREFIX
+    )
+    return OUTPUT_ROOT_PARENT / f"{prefix}_{stamp}"
 
 
-def create_run_root(base: Optional[Path] = None, now: Optional[datetime] = None) -> Path:
-    named = timestamped_run_root(now)
+def create_run_root(
+    base: Optional[Path] = None,
+    now: Optional[datetime] = None,
+    *,
+    matrix_mode: str = "diagnostic-42",
+) -> Path:
+    named = timestamped_run_root(now, matrix_mode=matrix_mode)
     root = Path(base) / named.name if base is not None else named
     if root.exists():
         raise MechanismDiagnosticsContractError(f"run root already exists: {root}")
@@ -592,6 +688,151 @@ def write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.replace(tmp, path)
+
+
+def formal_reference_result_digest(path: Path = FORMAL_AE_UNIFORM_3E4_CSV) -> str:
+    reference = Path(path)
+    if not reference.is_file():
+        raise MechanismDiagnosticsContractError(f"formal reference result missing: {reference}")
+    return hashlib.sha256(reference.read_bytes()).hexdigest()
+
+
+def cell_artifact_directory(run_dir: Path, cid: str) -> Path:
+    return Path(run_dir) / "cells" / filesystem_safe_id(cid)
+
+
+def canonical_stage_a_path(run_dir: Path, canonical_id: str) -> Path:
+    return Path(run_dir) / "stage_a" / f"{filesystem_safe_id(canonical_id)}.json"
+
+
+def write_canonical_stage_a_artifact(
+    run_dir: Path,
+    cell: Any,
+    payload: Mapping[str, Any],
+) -> Path:
+    """Write one immutable Stage-A record for a canonical cell.
+
+    Repeated arm calls may verify the existing record, but never replace it.
+    """
+    canonical_id = str(
+        getattr(cell, "canonical_cell_key", "")
+        or canonical_cell_id(cell.dataset, cell.target, int(cell.horizon), int(cell.seed))
+    )
+    path = canonical_stage_a_path(run_dir, canonical_id)
+    normalized = {"canonical_cell_id": canonical_id, **dict(payload)}
+    if path.is_file():
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        identity_fields = (
+            "canonical_cell_id",
+            "stage_a_identifier",
+            "stage_a_digest",
+            "selected_source_identities",
+            "source_distances",
+            "source_weights",
+            "source_model_digests",
+            "fused_conv1_digest",
+            "fused_conv2_digest",
+            "fused_conv3_digest",
+            "fused_params_digest",
+            "target_split_digest",
+            "reference_input_digest",
+        )
+        for field in identity_fields:
+            if existing.get(field) != normalized.get(field):
+                raise MechanismDiagnosticsContractError(
+                    f"Stage-A shared artifact drifted for {canonical_id}: {field}"
+                )
+        return path
+    write_json_atomic(path, normalized)
+    return path
+
+
+def write_cell_json_artifacts(
+    run_dir: Path,
+    cid: str,
+    *,
+    result: Mapping[str, Any],
+    status: Mapping[str, Any],
+    provenance: Mapping[str, Any],
+) -> Dict[str, Path]:
+    root = cell_artifact_directory(run_dir, cid)
+    paths = {
+        "result": root / "result.json",
+        "status": root / "status.json",
+        "provenance": root / "provenance.json",
+    }
+    write_json_atomic(paths["result"], result)
+    write_json_atomic(paths["status"], status)
+    write_json_atomic(paths["provenance"], provenance)
+    return paths
+
+
+def write_cell_parameter_snapshots(
+    run_dir: Path,
+    cid: str,
+    named_snapshots: Mapping[Tuple[str, str], Mapping[str, Sequence[np.ndarray]]],
+) -> Path:
+    path = Path(run_dir) / "parameter_snapshots" / f"{filesystem_safe_id(cid)}.npz"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    arrays: Dict[str, np.ndarray] = {}
+    for (arm, stage), named in sorted(named_snapshots.items()):
+        for layer, weights in sorted(named.items()):
+            for index, weight in enumerate(weights):
+                arrays[f"{arm}_{stage}_{layer}_{index}"] = np.asarray(weight)
+    if not arrays:
+        raise MechanismDiagnosticsContractError("parameter snapshot payload is empty")
+    np.savez_compressed(path, **arrays)
+    return path
+
+
+def write_cell_parameter_drift_summary(
+    run_dir: Path,
+    cid: str,
+    rows: Sequence[Mapping[str, Any]],
+) -> Path:
+    backbone = [
+        row for row in rows if str(row.get("layer_role")) == "transferred_backbone"
+    ]
+    values = [
+        float(row["relative_parameter_drift"])
+        for row in backbone
+        if row.get("relative_parameter_drift") not in (None, "")
+    ]
+    by_layer = {str(row.get("layer")): row for row in rows}
+    def _value(layer: str, field: str) -> float:
+        value = by_layer.get(layer, {}).get(field, float("nan"))
+        return float(value)
+
+    backbone_l2 = [
+        _value(layer, "parameter_l2")
+        for layer in TRANSFERRED_BACKBONE_LAYERS
+        if layer in by_layer
+    ]
+    backbone_rel = [
+        _value(layer, "relative_parameter_drift")
+        for layer in TRANSFERRED_BACKBONE_LAYERS
+        if layer in by_layer
+    ]
+    payload = {
+        "cell_id": cid,
+        "n_layers": len(rows),
+        "transferred_backbone_layers": [str(row.get("layer")) for row in backbone],
+        "primary_relative_l2_drift": float(np.mean(values)) if values else float("nan"),
+        "backbone_zero_drift": bool(values) and all(abs(value) <= 1e-12 for value in values),
+        "conv1_l2": _value("conv1", "parameter_l2"),
+        "conv2_l2": _value("conv2", "parameter_l2"),
+        "conv3_l2": _value("conv3", "parameter_l2"),
+        "head_target_l2": _value("head_target", "parameter_l2"),
+        "whole_backbone_l2": float(np.sqrt(np.sum(np.square(backbone_l2)))) if backbone_l2 else float("nan"),
+        "conv1_relative_parameter_drift": _value("conv1", "relative_parameter_drift"),
+        "conv2_relative_parameter_drift": _value("conv2", "relative_parameter_drift"),
+        "conv3_relative_parameter_drift": _value("conv3", "relative_parameter_drift"),
+        "head_target_relative_parameter_drift": _value("head_target", "relative_parameter_drift"),
+        "whole_backbone_relative_parameter_drift": float(np.sqrt(np.sum(np.square(backbone_rel)))) if backbone_rel else float("nan"),
+    }
+    path = cell_artifact_directory(run_dir, cid) / "parameter_drift_summary.json"
+    write_json_atomic(path, payload)
+    return path
 
 
 def mark_cell_complete(run_dir: Path, cid: str, payload: Mapping[str, Any]) -> None:
@@ -694,12 +935,8 @@ def parameter_drift_rows(
     named_final: Mapping[str, Sequence[np.ndarray]],
     *,
     extra: Optional[Mapping[str, Any]] = None,
+    final_variant: str = "EMA_FINAL",
 ) -> List[Dict[str, Any]]:
-    from src.transfer_methods.sita_mechanism_diagnostics import (
-        parameter_l2_distance,
-        relative_parameter_drift,
-    )
-
     names = sorted(set(named_init) | set(named_final))
     rows: List[Dict[str, Any]] = []
     for name in names:
@@ -709,13 +946,20 @@ def parameter_drift_rows(
         if init_w and final_w:
             l2 = parameter_l2_distance(init_w, final_w)
             rel = relative_parameter_drift(init_w, final_w)
+            init_norm = parameter_frobenius_norm(init_w)
+            final_norm = parameter_frobenius_norm(final_w)
         else:
-            l2 = rel = float("nan")
+            l2 = rel = init_norm = final_norm = float("nan")
         row = {
             "layer": name,
             "layer_role": role,
             "parameter_l2": l2,
             "relative_parameter_drift": rel,
+            "absolute_drift": l2,
+            "relative_drift": rel,
+            "init_norm": init_norm,
+            "final_norm": final_norm,
+            "final_variant": final_variant,
         }
         if extra:
             row.update(dict(extra))
@@ -758,9 +1002,11 @@ def write_pointwise_predictions(run_dir: Path, cid: str, rows: Sequence[Mapping[
             "seed",
             "arm",
             "sample_id",
+            "sample_index",
             "date_or_prediction_index",
             "y_true",
             "y_pred",
+            "y_pred_ema_original_scale",
             "signed_error",
             "absolute_error",
             "squared_error",
@@ -787,7 +1033,14 @@ def write_training_dynamics(run_dir: Path, cid: str, rows: Sequence[Mapping[str,
             "validation_objective_loss",
             "validation_rmse_original_scale",
             "validation_smape_original_scale",
+            "learning_rate",
+            "gradient_norm",
+            "parameter_norm",
+            "ema_parameter_norm",
+            "ema_applied",
             "weight_variant",
+            "optimizer_update_count",
+            "ema_update_count",
         ],
     )
     return path
@@ -795,6 +1048,7 @@ def write_training_dynamics(run_dir: Path, cid: str, rows: Sequence[Mapping[str,
 
 def write_error_by_sales_bin(run_dir: Path, rows: Sequence[Mapping[str, Any]]) -> Path:
     path = Path(run_dir) / "summaries" / "error_by_sales_bin.csv"
+    assert_error_bin_identifiers(rows)
     write_csv(
         path,
         rows,
@@ -817,8 +1071,51 @@ def write_error_by_sales_bin(run_dir: Path, rows: Sequence[Mapping[str, Any]]) -
     return path
 
 
-def write_consistency_audit(run_dir: Path, rows: Sequence[Mapping[str, Any]]) -> Path:
-    path = Path(run_dir) / "summaries" / "formal_result_consistency.csv"
+def write_pointwise_summary(run_dir: Path, rows: Sequence[Mapping[str, Any]]) -> Path:
+    path = Path(run_dir) / "summaries" / "pointwise_summary.csv"
+    write_csv(
+        path,
+        rows,
+        [
+            "dataset",
+            "target",
+            "horizon",
+            "seed",
+            "arm",
+            "n_samples",
+            "weight_variant",
+            "reconstructed_rmse",
+            "reconstructed_smape",
+            "max_abs_y_pred_minus_y_pred_ema",
+            "y_pred_equals_y_pred_ema",
+            "prediction_digest",
+        ],
+    )
+    return path
+
+
+def assert_error_bin_identifiers(rows: Sequence[Mapping[str, Any]]) -> None:
+    """Fail closed after summary generation if any identifier is missing."""
+    for row in rows:
+        identifiers = {field: row.get(field) for field in ERROR_BIN_IDENTIFIER_FIELDS}
+        if any(value is None or str(value).strip() == "" for value in identifiers.values()):
+            raise MechanismDiagnosticsContractError(
+                f"error_by_sales_bin identifiers.notna().all() failed: {identifiers!r}"
+            )
+    # Keep the contract explicit without requiring pandas for this CSV writer.
+    identifiers_notna = [
+        all(row.get(field) is not None and str(row.get(field)).strip() != "" for field in ERROR_BIN_IDENTIFIER_FIELDS)
+        for row in rows
+    ]
+    assert all(identifiers_notna), "error_by_sales_bin identifiers.notna().all() failed"
+
+
+def write_historical_frozen_comparison(
+    run_dir: Path,
+    rows: Sequence[Mapping[str, Any]],
+) -> Path:
+    """Persist optional historical comparison outside the diagnostic result set."""
+    path = Path(run_dir) / "summaries" / HISTORICAL_COMPARISON_FILENAME
     write_csv(
         path,
         rows,
@@ -840,9 +1137,16 @@ def write_consistency_audit(run_dir: Path, rows: Sequence[Mapping[str, Any]]) ->
             "same_protocol_metadata",
             "audit_status",
             "notes",
+            "comparison_purpose",
+            "blocks_execution",
         ],
     )
     return path
+
+
+# Kept as an import-level compatibility alias; it intentionally writes the
+# renamed historical-reference file and is never a run-success gate.
+write_consistency_audit = write_historical_frozen_comparison
 
 
 def write_cell_status_summary(run_dir: Path, rows: Sequence[Mapping[str, Any]]) -> Path:
@@ -868,15 +1172,112 @@ def write_cell_representations(
     init_rep: np.ndarray,
     final_rep: np.ndarray,
     reference_input_digest_value: str,
+    raw_final_rep: Optional[np.ndarray] = None,
 ) -> Path:
     path = Path(run_dir) / "representations" / f"{filesystem_safe_id(cid)}.npz"
     path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
+    arrays = {
+        "INIT": np.asarray(init_rep),
+        "FINAL": np.asarray(final_rep),
+        "reference_input_digest": np.asarray(reference_input_digest_value),
+    }
+    if raw_final_rep is not None:
+        arrays["RAW_FINAL"] = np.asarray(raw_final_rep)
+    np.savez_compressed(path, **arrays)
+    return path
+
+
+def write_layer_representations(
+    run_dir: Path,
+    cid: str,
+    layer: str,
+    *,
+    arrays_by_stage: Mapping[str, np.ndarray],
+    reference_input_digest_value: str,
+    metadata: Optional[Mapping[str, Any]] = None,
+) -> Path:
+    path = Path(run_dir) / "representations" / str(layer) / f"{filesystem_safe_id(cid)}.npz"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        str(stage): np.asarray(array)
+        for stage, array in arrays_by_stage.items()
+    }
+    payload["reference_input_digest"] = np.asarray(reference_input_digest_value)
+    payload["layer"] = np.asarray(str(layer))
+    payload["reshape_rule"] = np.asarray(CKA_ACTIVATION_RESHAPE_RULE)
+    if metadata:
+        payload["metadata_json"] = np.asarray(json.dumps(dict(metadata), sort_keys=True))
+    np.savez_compressed(path, **payload)
+    return path
+
+
+def write_parameter_drift_variant_summary(
+    run_dir: Path,
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    filename: str,
+) -> Path:
+    path = Path(run_dir) / "summaries" / filename
+    write_csv(
         path,
-        INIT=np.asarray(init_rep),
-        FINAL=np.asarray(final_rep),
-        reference_input_digest=np.asarray(reference_input_digest_value),
+        rows,
+        [
+            "dataset",
+            "target",
+            "horizon",
+            "seed",
+            "arm",
+            "layer",
+            "layer_role",
+            "final_variant",
+            "absolute_drift",
+            "relative_drift",
+            "init_norm",
+            "final_norm",
+        ],
     )
+    return path
+
+
+def write_formal_consistency(
+    run_dir: Path,
+    rows: Sequence[Mapping[str, Any]],
+) -> Path:
+    path = Path(run_dir) / "summaries" / "formal_consistency.csv"
+    fieldnames = [
+        "dataset",
+        "target",
+        "horizon",
+        "seed",
+        "arm",
+        "formal_selected_lr",
+        "diagnostic_selected_lr",
+        "formal_rmse",
+        "diagnostic_rmse",
+        "abs_rmse_diff",
+        "rel_rmse_diff",
+        "formal_smape",
+        "diagnostic_smape",
+        "abs_smape_diff",
+        "rel_smape_diff",
+        "prediction_digest_match",
+        "final_formal_model_digest_match",
+        "stage_a_digest_match",
+        "fused_init_digest_match",
+        "identity_status",
+        "severity_status",
+        "formal_prediction_digest",
+        "diagnostic_prediction_digest",
+        "formal_final_formal_model_digest",
+        "diagnostic_final_formal_model_digest",
+        "formal_stage_a_digest",
+        "diagnostic_stage_a_digest",
+        "formal_fused_init_digest",
+        "diagnostic_fused_init_digest",
+        "authority_root",
+        "authority_kind",
+    ]
+    write_csv(path, rows, fieldnames)
     return path
 
 
@@ -890,6 +1291,11 @@ def write_cell_parameter_drift(run_dir: Path, cid: str, rows: Sequence[Mapping[s
             "layer_role",
             "parameter_l2",
             "relative_parameter_drift",
+            "absolute_drift",
+            "relative_drift",
+            "init_norm",
+            "final_norm",
+            "final_variant",
             "dataset",
             "target",
             "horizon",
@@ -934,6 +1340,16 @@ def write_parameter_drift_summary(run_dir: Path, rows: Sequence[Mapping[str, Any
             "arm",
             "n_layers",
             "primary_relative_l2_drift",
+            "conv1_l2",
+            "conv2_l2",
+            "conv3_l2",
+            "head_target_l2",
+            "whole_backbone_l2",
+            "conv1_relative_parameter_drift",
+            "conv2_relative_parameter_drift",
+            "conv3_relative_parameter_drift",
+            "head_target_relative_parameter_drift",
+            "whole_backbone_relative_parameter_drift",
         ],
     )
     return path
@@ -979,6 +1395,7 @@ def write_cka_condition_summary(run_dir: Path, rows: Sequence[Mapping[str, Any]]
         rows,
         [
             "condition_id",
+            "layer",
             "n_comparisons",
             "reference_input_digest",
             "weight_variant",
@@ -991,13 +1408,23 @@ def required_cell_output_paths(run_dir: Path, cid: str) -> Tuple[Path, ...]:
     root = Path(run_dir)
     safe = filesystem_safe_id(cid)
     return (
+        cell_artifact_directory(root, cid) / "result.json",
+        cell_artifact_directory(root, cid) / "status.json",
+        cell_artifact_directory(root, cid) / "provenance.json",
+        cell_artifact_directory(root, cid) / "parameter_drift_summary.json",
         root / "status" / f"{safe}.json",
         root / "status" / f"{safe}.COMPLETE",
         root / "predictions" / f"{safe}.csv",
         root / "training_dynamics" / f"{safe}.csv",
         root / "checkpoints" / f"{safe}.json",
         root / "representations" / f"{safe}.npz",
+        root / "parameter_snapshots" / f"{safe}.npz",
         root / "parameter_drift" / f"{safe}.csv",
+        root / "representations" / "flatten" / f"{safe}.npz",
+        root / "representations" / "conv1" / f"{safe}.npz",
+        root / "representations" / "conv2" / f"{safe}.npz",
+        root / "representations" / "conv3" / f"{safe}.npz",
+        canonical_stage_a_path(root, str(cid).rsplit("|", 1)[0]),
     )
 
 
@@ -1149,12 +1576,157 @@ def load_formal_ae_uniform_3e4(
     return out
 
 
+def _relative_diff(abs_diff: float, baseline: float) -> float:
+    denom = abs(float(baseline))
+    if denom <= IDENTITY_ABS_TOL:
+        return float(abs_diff)
+    return float(abs_diff) / denom
+
+
+def identity_match_status(
+    *,
+    abs_rmse: float,
+    abs_smape: float,
+    rel_rmse: float,
+    rel_smape: float,
+    digest_match: bool,
+) -> str:
+    exact_numbers = float(abs_rmse) == 0.0 and float(abs_smape) == 0.0
+    if exact_numbers and digest_match:
+        return EXACT_NUMERIC_MATCH
+    rmse_tol = float(abs_rmse) <= IDENTITY_ABS_TOL or float(rel_rmse) <= IDENTITY_REL_TOL
+    smape_tol = float(abs_smape) <= IDENTITY_ABS_TOL or float(rel_smape) <= IDENTITY_REL_TOL
+    if rmse_tol and smape_tol:
+        return TOLERANCE_MATCH
+    return MISMATCH
+
+
+def formal_authority_attempt_dir(
+    dataset: str,
+    target: str,
+    horizon: int,
+    seed: int,
+    *,
+    root: Path = FORMAL_PER_DATASET_LR_AUTHORITY_ROOT,
+) -> Path:
+    safe_target = str(target).replace("/", "-")
+    return (
+        Path(root)
+        / "cells"
+        / f"{dataset}__{safe_target}__h{int(horizon)}__s{int(seed)}__without"
+        / "attempt_001"
+    )
+
+
+def load_formal_per_dataset_lr_authority(
+    root: Path = FORMAL_PER_DATASET_LR_AUTHORITY_ROOT,
+) -> Dict[Tuple[str, str, int, int, str], Dict[str, Any]]:
+    csv_path = Path(root) / "ae_formal_per_dataset_lr_results.csv"
+    if not csv_path.is_file():
+        raise MechanismDiagnosticsContractError(
+            f"formal per-dataset-LR authority CSV missing: {csv_path}"
+        )
+    out: Dict[Tuple[str, str, int, int, str], Dict[str, Any]] = {}
+    with csv_path.open("r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            key = (
+                str(row["dataset"]),
+                str(row["target"]),
+                int(row["horizon"]),
+                int(row["seed"]),
+                str(row["arm"]),
+            )
+            lr_raw = row.get("learning_rate") or row.get("learning_rate_label") or ""
+            try:
+                selected_lr = float(lr_raw)
+            except (TypeError, ValueError):
+                selected_lr = float("nan")
+            out[key] = {
+                "formal_rmse": float(row.get("rmse_original") or row["RMSE"]),
+                "formal_smape": float(row.get("smape_original") or row["sMAPE"]),
+                "formal_selected_lr": selected_lr,
+                "formal_selected_lr_label": str(row.get("learning_rate_label") or lr_raw),
+            }
+    for (dataset, target, horizon, seed, arm), payload in list(out.items()):
+        attempt = formal_authority_attempt_dir(dataset, target, horizon, seed, root=root)
+        result_path = attempt / "result.json"
+        if not result_path.is_file():
+            continue
+        blob = json.loads(result_path.read_text(encoding="utf-8"))
+        arm_payload = (blob.get("arms") or {}).get(arm, {})
+        if not isinstance(arm_payload, Mapping):
+            continue
+        payload.update(
+            {
+                "prediction_digest": arm_payload.get("prediction_digest"),
+                "final_formal_model_digest": arm_payload.get("final_formal_model_digest"),
+                "stage_a_digest": arm_payload.get("stage_a_digest"),
+                "fused_init_digest": arm_payload.get("fused_init_digest"),
+                "selected_lr": arm_payload.get("selected_lr", payload.get("formal_selected_lr")),
+            }
+        )
+        if arm_payload.get("selected_lr") not in (None, ""):
+            payload["formal_selected_lr"] = float(arm_payload["selected_lr"])
+    return out
+
+
+def audit_formal_per_dataset_lr_authority(
+    root: Path = FORMAL_PER_DATASET_LR_AUTHORITY_ROOT,
+) -> Dict[str, Any]:
+    from src.transfer_methods.ms_katl_sita_formal_per_dataset_lr_ae import (
+        FORMAL_PER_DATASET_LR_LABELS,
+        FORMAL_PER_DATASET_LR_TARGETS,
+        FORMAL_PER_DATASET_LR_VALUES,
+    )
+
+    snapshot_path = Path(root) / "manifest_snapshot.json"
+    if not snapshot_path.is_file():
+        raise MechanismDiagnosticsContractError(
+            f"formal authority manifest_snapshot.json missing: {snapshot_path}"
+        )
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    live_labels = dict(FORMAL_PER_DATASET_LR_LABELS)
+    snap_labels = dict(snapshot.get("target_learning_rates") or {})
+    if snap_labels != live_labels:
+        raise MechanismDiagnosticsContractError(
+            f"formal authority LR map drifted: {snap_labels} != {live_labels}"
+        )
+    if dict(snapshot.get("paper_targets") or snapshot.get("dataset_target_map") or {}) != dict(
+        FORMAL_PER_DATASET_LR_TARGETS
+    ):
+        raise MechanismDiagnosticsContractError("formal authority paper targets drifted")
+    if str(snapshot.get("matrix_kind")) != "FORMAL_PER_DATASET_LR_AE":
+        raise MechanismDiagnosticsContractError(
+            f"formal authority matrix_kind drifted: {snapshot.get('matrix_kind')!r}"
+        )
+    table = load_formal_per_dataset_lr_authority(root)
+    by_dataset: Dict[str, set] = {}
+    for (dataset, _target, _horizon, _seed, _arm), payload in table.items():
+        by_dataset.setdefault(dataset, set()).add(float(payload["formal_selected_lr"]))
+    for dataset, expected in FORMAL_PER_DATASET_LR_VALUES.items():
+        observed = by_dataset.get(dataset, set())
+        if observed != {float(expected)}:
+            raise MechanismDiagnosticsContractError(
+                f"formal authority selected_lr for {dataset} drifted: {observed} != {{{expected}}}"
+            )
+    return {
+        "root": str(Path(root).resolve()),
+        "csv": str((Path(root) / "ae_formal_per_dataset_lr_results.csv").resolve()),
+        "matrix_kind": snapshot.get("matrix_kind"),
+        "target_learning_rates": live_labels,
+        "n_rows": len(table),
+        "source_lr": snapshot.get("source_lr"),
+        "ema_decay": 0.99,
+    }
+
+
 def resolve_run_directory(
     *,
     plan_only: bool,
     resume: bool,
     run_dir: Optional[str],
     now: Optional[datetime] = None,
+    matrix_mode: str = "diagnostic-42",
 ) -> Optional[Path]:
     if plan_only:
         return None
@@ -1167,7 +1739,7 @@ def resolve_run_directory(
         return path
     if run_dir:
         raise MechanismDiagnosticsContractError("new --run must not reuse --run-dir; resume requires both flags")
-    return create_run_root(now=now)
+    return create_run_root(now=now, matrix_mode=matrix_mode)
 
 
 def prepare_run_root(
@@ -1177,6 +1749,7 @@ def prepare_run_root(
     matrix_digest: str,
     resume: bool,
     code_digest: Optional[str] = None,
+    matrix_mode: str = "diagnostic-42",
 ) -> Path:
     run_dir = Path(run_dir)
     manifest = run_dir / "config_digest.json"
@@ -1186,6 +1759,7 @@ def prepare_run_root(
         "weight_variant": FORMAL_EVALUATION_WEIGHT_VARIANT,
         "reference_split": FORMAL_TEST_REFERENCE_SPLIT,
         "sita_ablation_3e4_manifest_runtime_authority": "NO",
+        "matrix_mode": str(matrix_mode),
     }
     if code_digest is not None:
         payload["code_digest"] = code_digest
@@ -1222,5 +1796,6 @@ def diagnostics_disabled_keeps_formal_train_kwargs(kwargs: Mapping[str, Any]) ->
     forbidden = {
         "on_before_first_target_optimizer_update",
         "on_diagnostic_epoch_eval",
+        "on_before_ema_assign",
     }
     return not any(key in kwargs for key in forbidden)

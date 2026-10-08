@@ -12,7 +12,7 @@ import logging
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -403,6 +403,91 @@ def select_stage_b_trainable_variables(
     return variables
 
 
+def build_prediction_parameter_map(
+    *,
+    conv_layers: Mapping[str, Any],
+    head_target: Any,
+    dense_out: Any = None,
+    revin: Any = None,
+    trainable_variables: Sequence[Any],
+    use_ema: bool,
+) -> Dict[str, Any]:
+    """Map forecast-path parameters by layer object, not by variable-name text."""
+    optimizer_ids = {id(variable) for variable in trainable_variables}
+    entries: List[Dict[str, Any]] = []
+    seen: set = set()
+
+    def add_variable(semantic: str, index: int, path: str, variable: Any, *, role: str, on_prediction_path: bool) -> None:
+        seen.add(id(variable))
+        in_optimizer = id(variable) in optimizer_ids
+        entries.append(
+            {
+                "semantic_module": semantic,
+                "variable_index": int(index),
+                "variable_path": path,
+                "variable_name": str(getattr(variable, "name", "")),
+                "shape": [int(dim) for dim in tuple(variable.shape)],
+                "trainable_flag": bool(getattr(variable, "trainable", False)),
+                "in_optimizer": bool(in_optimizer),
+                "ema_shadow": bool(use_ema and in_optimizer),
+                "on_prediction_path": bool(on_prediction_path),
+                "role": role,
+            }
+        )
+
+    def add_layer(semantic: str, layer: Any, *, role: str, on_prediction_path: bool) -> None:
+        for index, variable in enumerate(list(getattr(layer, "weights", []) or [])):
+            add_variable(
+                semantic,
+                index,
+                f"{semantic}/{index}",
+                variable,
+                role=role,
+                on_prediction_path=on_prediction_path,
+            )
+
+    for name in ("conv1", "conv2", "conv3"):
+        layer = conv_layers.get(name)
+        if layer is not None:
+            add_layer(name, layer, role="forecast_convolution", on_prediction_path=True)
+    add_layer("head_target", head_target, role="prediction_output", on_prediction_path=True)
+    if dense_out is not None:
+        add_layer(
+            "dense_out",
+            dense_out,
+            role="cnn_output_not_forecast_head",
+            on_prediction_path=False,
+        )
+    if revin is not None and bool(getattr(revin, "affine", False)):
+        for index, label in enumerate(("affine_weight", "affine_bias")):
+            variable = getattr(revin, label, None)
+            if variable is not None:
+                add_variable(
+                    "revin_affine",
+                    index,
+                    f"revin_affine/{label}",
+                    variable,
+                    role="revin_affine",
+                    on_prediction_path=True,
+                )
+    for index, variable in enumerate(trainable_variables):
+        if id(variable) in seen:
+            continue
+        add_variable(
+            "other",
+            index,
+            f"other/{index}",
+            variable,
+            role="other_optimizer_variable",
+            on_prediction_path=False,
+        )
+    return {
+        "identity": "python_object_id",
+        "use_ema": bool(use_ema),
+        "entries": entries,
+    }
+
+
 def _to_jsonable(value: Any) -> Any:
     if value is None or isinstance(value, (str, int, float, bool)):
         if isinstance(value, float) and not math.isfinite(value):
@@ -498,11 +583,22 @@ def run_ablation_arm(
     revin_target_channel: int = DEFAULT_REVIN_TARGET_CHANNEL,
     revin_include_mean: bool = True,
     return_runtime: bool = False,
+    init_weight_snapshot: Optional[Sequence[np.ndarray]] = None,
+    head_target_init_weights: Optional[Sequence[np.ndarray]] = None,
+    revin_affine_init: Optional[Mapping[str, np.ndarray]] = None,
+    on_before_ema_assign: Optional[Callable[[Mapping[str, object]], None]] = None,
+    on_diagnostic_epoch_eval: Optional[Callable[[Mapping[str, object]], None]] = None,
+    on_epoch_metric_record: Optional[Callable[[Mapping[str, object]], None]] = None,
+    record_update_counters: bool = False,
+    capture_weight_states: bool = False,
 ) -> Dict[str, Any]:
     recipe_kwargs = validate_training_recipe(training_recipe)
-    snapshot = (
-        bundle.fused_target_snapshot if spec.use_fused_target_init else bundle.raw_target_snapshot
-    )
+    if init_weight_snapshot is None:
+        snapshot = (
+            bundle.fused_target_snapshot if spec.use_fused_target_init else bundle.raw_target_snapshot
+        )
+    else:
+        snapshot = [np.array(weight, copy=True) for weight in init_weight_snapshot]
     tf.random.set_seed(int(bundle.seed))
     target_cnn, target_extractor = clone_cnn_from_snapshot(
         bundle.stage_a.input_shape,
@@ -541,6 +637,15 @@ def run_ablation_arm(
             name=_unique_name(f"revin_{spec.arm}"),
         )
         _ = revin.normalize(tf.constant(bundle.X_train[:1], dtype=tf.float32))
+        if revin_affine_init is not None:
+            if not bool(revin.affine) or revin.affine_weight is None or revin.affine_bias is None:
+                raise ValueError("revin_affine_init requires an affine RevIN that has been built")
+            revin.affine_weight.assign(
+                np.asarray(revin_affine_init["affine_weight"], dtype=np.float32)
+            )
+            revin.affine_bias.assign(
+                np.asarray(revin_affine_init["affine_bias"], dtype=np.float32)
+            )
     has_val = len(bundle.y_val) > 0 and all(f is not None for f in bundle.f_t["val"])
     probe_z, _, _ = extract_features_maybe_revin(
         target_extractor, bundle.X_train[:1], revin=revin, training=False
@@ -551,6 +656,12 @@ def run_ablation_arm(
         tf.constant(np.repeat(bundle.stage_a.knn_prior.reshape(1, -1), 1, axis=0), dtype=tf.float32),
         training=False,
     )
+    if head_target_init_weights is not None:
+        if not head.head_target.built:
+            raise ValueError("head_target must be built before applying paired initial weights")
+        head.head_target.set_weights(
+            [np.array(weight, copy=True) for weight in head_target_init_weights]
+        )
     trainable_vars = select_stage_b_trainable_variables(head, target_extractor, spec, revin=revin)
     disc_init = (
         [snapshot_model_weights(disc) for disc in head.discriminators]
@@ -562,6 +673,78 @@ def run_ablation_arm(
         if spec.gate_mode == "learnable" and head.residual_gate.built
         else None
     )
+
+    def _state_snapshot() -> Dict[str, Any]:
+        revin_state = None
+        if revin is not None and bool(revin.affine) and revin.affine_weight is not None:
+            revin_state = {
+                "affine_weight": np.array(revin.affine_weight.numpy(), copy=True),
+                "affine_bias": np.array(revin.affine_bias.numpy(), copy=True),
+            }
+        return {
+            "conv": snapshot_named_layer_weights(target_cnn, CONV_LAYER_NAMES),
+            "head_target": [np.array(weight, copy=True) for weight in head.head_target.get_weights()],
+            "cnn_full": [np.array(weight, copy=True) for weight in target_cnn.get_weights()],
+            "revin_affine": revin_state,
+        }
+
+    init_state = _state_snapshot() if capture_weight_states else None
+    epoch_diagnostics: List[Dict[str, Any]] = []
+    raw_state: Dict[str, Any] = {}
+
+    def _epoch_hook(payload: Mapping[str, object]) -> None:
+        if capture_weight_states:
+            epoch_diagnostics.append({key: payload.get(key) for key in (
+                "epoch",
+                "before_first_target_optimizer_update",
+                "optimizer_update_count",
+                "ema_update_count",
+                "weight_variant",
+                "train_objective_loss",
+                "learning_rate",
+                "gradient_norm",
+                "ema_applied",
+            )})
+        if on_diagnostic_epoch_eval is not None:
+            on_diagnostic_epoch_eval(payload)
+
+    def _ema_hook(payload: Mapping[str, object]) -> None:
+        if capture_weight_states:
+            raw_state["weights"] = _state_snapshot()
+            raw_state["hook"] = {
+                key: payload.get(key)
+                for key in (
+                    "optimizer_update_count",
+                    "ema_update_count",
+                    "captured_before_ema_assign",
+                    "weight_variant",
+                    "ema_applied",
+                )
+            }
+        if on_before_ema_assign is not None:
+            on_before_ema_assign(payload)
+
+    train_callbacks: Dict[str, Any] = {}
+    if capture_weight_states or on_diagnostic_epoch_eval is not None:
+        train_callbacks["on_diagnostic_epoch_eval"] = _epoch_hook
+    if capture_weight_states or on_before_ema_assign is not None:
+        train_callbacks["on_before_ema_assign"] = _ema_hook
+    if on_epoch_metric_record is not None:
+        train_callbacks["on_epoch_metric_record"] = on_epoch_metric_record
+    if record_update_counters:
+        train_callbacks["record_update_counters"] = True
+    parameter_map = None
+    if capture_weight_states:
+        from src.transfer_methods.ms_katl_lite import DEFAULT_USE_EMA
+
+        parameter_map = build_prediction_parameter_map(
+            conv_layers={name: target_cnn.get_layer(name) for name in ("conv1", "conv2", "conv3")},
+            head_target=head.head_target,
+            dense_out=target_cnn.get_layer("dense_out"),
+            revin=revin,
+            trainable_variables=trainable_vars,
+            use_ema=bool(recipe_kwargs.get("use_ema", DEFAULT_USE_EMA)),
+        )
 
     training_summary = train_ms_katl_head(
         head,
@@ -584,6 +767,7 @@ def run_ablation_arm(
         revin=revin,
         revin_include_mean=bool(revin_include_mean),
         **recipe_kwargs,
+        **train_callbacks,
     )
 
     z_t_test, test_mean, test_stdev = extract_features_maybe_revin(
@@ -772,6 +956,19 @@ def run_ablation_arm(
         "metric_protocol": protocol_metrics,
         "history": training_summary["history"],
     }
+    if capture_weight_states:
+        if "weights" not in raw_state:
+            raise ValueError("RAW weight capture did not run before EMA assignment")
+        result["weight_states"] = {
+            "init": init_state,
+            "raw": raw_state["weights"],
+            "raw_hook": raw_state.get("hook", {}),
+            "ema": _state_snapshot(),
+            "trainable_names": [str(variable.name) for variable in trainable_vars],
+            "epoch_diagnostics": epoch_diagnostics,
+            "parameter_map": parameter_map,
+            "update_counters": training_summary.get("update_counters"),
+        }
     if return_runtime:
         result["runtime"] = {
             "head": head,

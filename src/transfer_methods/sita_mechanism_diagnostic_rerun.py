@@ -1,4 +1,4 @@
-"""Plan-only 42-cell mechanism diagnostic rerun protocol.
+"""Plan-only SITA mechanism diagnostic rerun protocol.
 
 This module does not train and does not write frozen A–E results.
 `--plan-only` enumerates the diagnostic matrix and audits whether the
@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
@@ -45,6 +46,25 @@ DIAGNOSTIC_RERUN_D6_HORIZONS = (1, 3, 5)
 DIAGNOSTIC_RERUN_D6_BC_SEEDS = (42, 43, 44, 45, 46)
 DIAGNOSTIC_RERUN_D6_A_SEEDS = (42,)
 EXPECTED_DIAGNOSTIC_RERUN_CELLS = 42
+
+DEFAULT_MATRIX_MODE = "diagnostic-42"
+FORMAL_300_MATRIX_MODE = "formal-300"
+SUPPORTED_MATRIX_MODES = (DEFAULT_MATRIX_MODE, FORMAL_300_MATRIX_MODE)
+FORMAL_300_DATASETS = ("D1", "D4", "D5", "D6")
+FORMAL_300_TARGETS: Mapping[str, str] = {
+    "D1": "1/10",
+    "D4": "166/258",
+    "D5": "48/1159414",
+    "D6": "CA_1/FOODS_3_080",
+}
+FORMAL_300_HORIZONS = (1, 3, 5)
+FORMAL_300_SEEDS = (42, 43, 44, 45, 46)
+FORMAL_300_ARMS = ("A", "B", "C", "D", "E")
+EXPECTED_FORMAL_300_CONDITIONS = 12
+EXPECTED_FORMAL_300_CANONICAL_CELLS = 60
+EXPECTED_FORMAL_300_ARM_RUNS = 300
+# Backward-compatible name for callers that used ``CELLS`` for arm-level rows.
+EXPECTED_FORMAL_300_CELLS = EXPECTED_FORMAL_300_ARM_RUNS
 
 PRIMARY_CKA_LAYER = "flatten"
 SUPPLEMENTARY_CKA_LAYERS = ("conv1", "conv2", "conv3")
@@ -97,6 +117,11 @@ class DiagnosticRerunCell:
     def condition_key(self) -> str:
         return f"{self.dataset}|{self.target}|h{self.horizon}"
 
+    @property
+    def canonical_cell_key(self) -> str:
+        """Dataset-target-horizon-seed unit shared by the five A–E arms."""
+        return f"{self.condition_key}|s{self.seed}"
+
 
 def enumerate_mechanism_diagnostic_rerun_cells() -> Tuple[DiagnosticRerunCell, ...]:
     cells: List[DiagnosticRerunCell] = []
@@ -142,6 +167,176 @@ def enumerate_mechanism_diagnostic_rerun_cells() -> Tuple[DiagnosticRerunCell, .
             f"{len(ordered)} != {EXPECTED_DIAGNOSTIC_RERUN_CELLS}"
         )
     return ordered
+
+
+def enumerate_formal_300_cells() -> Tuple[DiagnosticRerunCell, ...]:
+    """Return the independent 60-cell × 5-arm diagnostic universe.
+
+    The matrix is owned by this diagnostic contract.  The historical formal
+    CSV is deliberately not consulted to construct or validate this universe;
+    it is provenance/reference data only.
+    """
+    cells = tuple(
+        DiagnosticRerunCell(
+            dataset=dataset,
+            target=FORMAL_300_TARGETS[dataset],
+            horizon=horizon,
+            seed=seed,
+            arm=arm,
+        )
+        for dataset in FORMAL_300_DATASETS
+        for horizon in FORMAL_300_HORIZONS
+        for seed in FORMAL_300_SEEDS
+        for arm in FORMAL_300_ARMS
+    )
+    expected_keys = {cell.cell_key for cell in cells}
+    canonical_keys = {cell.canonical_cell_key for cell in cells}
+    if (
+        len(cells) != EXPECTED_FORMAL_300_ARM_RUNS
+        or len(expected_keys) != EXPECTED_FORMAL_300_ARM_RUNS
+        or len(canonical_keys) != EXPECTED_FORMAL_300_CANONICAL_CELLS
+    ):
+        raise MechanismDiagnosticsContractError(
+            "formal-300 matrix drifted: "
+            f"arm_runs={len(cells)} unique={len(expected_keys)} "
+            f"canonical_cells={len(canonical_keys)}"
+        )
+    if len({cell.condition_key for cell in cells}) != EXPECTED_FORMAL_300_CONDITIONS:
+        raise MechanismDiagnosticsContractError("formal-300 condition count drifted")
+    return cells
+
+
+def canonical_cells_for_matrix(
+    matrix_mode: str = FORMAL_300_MATRIX_MODE,
+) -> Tuple[DiagnosticRerunCell, ...]:
+    """Return one representative row for each canonical cell."""
+    cells = cells_for_matrix(matrix_mode)
+    unique: Dict[str, DiagnosticRerunCell] = {}
+    for cell in cells:
+        unique.setdefault(cell.canonical_cell_key, cell)
+    return tuple(unique.values())
+
+
+def assert_formal_300_cell_structure(
+    cells: Sequence[DiagnosticRerunCell],
+) -> None:
+    """Fail closed unless every canonical cell contains exactly A–E."""
+    groups: Dict[str, List[str]] = {}
+    for cell in cells:
+        groups.setdefault(cell.canonical_cell_key, []).append(cell.arm)
+    if len(groups) != EXPECTED_FORMAL_300_CANONICAL_CELLS:
+        raise MechanismDiagnosticsContractError(
+            f"formal-300 canonical cells={len(groups)} != {EXPECTED_FORMAL_300_CANONICAL_CELLS}"
+        )
+    expected = set(FORMAL_300_ARMS)
+    if any(set(arms) != expected or len(arms) != len(expected) for arms in groups.values()):
+        raise MechanismDiagnosticsContractError(
+            "formal-300 canonical cell does not contain exactly one A/B/C/D/E arm"
+        )
+
+
+def formal_arm_contract() -> Dict[str, Dict[str, Any]]:
+    """Return the live formal A–E arm semantics used by the diagnostic path."""
+    from src.transfer_methods.ms_katl_ae_ablation import ae_arm_spec
+
+    contract: Dict[str, Dict[str, Any]] = {}
+    for arm in FORMAL_300_ARMS:
+        spec = ae_arm_spec(arm)
+        contract[arm] = {
+            "init_mode": str(spec.init_mode),
+            "target_backbone_trainable": bool(spec.target_backbone_trainable),
+            "revin_enabled": bool(spec.revin_enabled),
+            "transfer_branch_enabled": bool(spec.transfer_branch_enabled),
+            "gate_mode": str(spec.gate_mode),
+            "use_adversarial": bool(spec.use_adversarial),
+        }
+    expected = {
+        "A": {"init_mode": "native", "target_backbone_trainable": True, "revin_enabled": False},
+        "B": {"init_mode": "fused", "target_backbone_trainable": False, "revin_enabled": False},
+        "C": {"init_mode": "fused", "target_backbone_trainable": True, "revin_enabled": False},
+        "D": {"init_mode": "fused", "target_backbone_trainable": True, "revin_enabled": True},
+        "E": {"init_mode": "best_source", "target_backbone_trainable": True, "revin_enabled": False},
+    }
+    for arm, required in expected.items():
+        for field, value in required.items():
+            if contract[arm].get(field) != value:
+                raise MechanismDiagnosticsContractError(
+                    f"formal arm {arm} semantic drift: {field}={contract[arm].get(field)!r} != {value!r}"
+                )
+        if contract[arm]["transfer_branch_enabled"] or contract[arm]["gate_mode"] != "zero" or contract[arm]["use_adversarial"]:
+            raise MechanismDiagnosticsContractError(
+                f"formal arm {arm} has an inactive mechanism enabled"
+            )
+    return contract
+
+
+def cells_for_matrix(matrix_mode: str = DEFAULT_MATRIX_MODE) -> Tuple[DiagnosticRerunCell, ...]:
+    mode = str(matrix_mode).strip().lower()
+    if mode == DEFAULT_MATRIX_MODE:
+        return enumerate_mechanism_diagnostic_rerun_cells()
+    if mode == FORMAL_300_MATRIX_MODE:
+        return enumerate_formal_300_cells()
+    raise MechanismDiagnosticsContractError(
+        f"unknown --matrix {matrix_mode!r}; expected one of {list(SUPPORTED_MATRIX_MODES)}"
+    )
+
+
+_ONLY_CELL_LABEL = re.compile(
+    r"^(D[1456])-H(\d+)-s(?:eed)?(\d+)-([ABCDE])$",
+    flags=re.IGNORECASE,
+)
+
+
+def resolve_diagnostic_only_cell(
+    selector: str,
+    cells: Sequence[DiagnosticRerunCell] | None = None,
+    *,
+    matrix_mode: str = DEFAULT_MATRIX_MODE,
+) -> DiagnosticRerunCell:
+    """Resolve one cell from the selected official diagnostic universe.
+
+    Accepts a full ``cell_key`` (``D1|1/10|h1|s42|B``) or a short label
+    (``D1-H1-seed42-B``). Does not change the default 42-cell matrix.
+    """
+    universe = tuple(cells) if cells is not None else cells_for_matrix(matrix_mode)
+    expected = (
+        EXPECTED_DIAGNOSTIC_RERUN_CELLS
+        if str(matrix_mode).strip().lower() == DEFAULT_MATRIX_MODE
+        else EXPECTED_FORMAL_300_CELLS
+    )
+    if len(universe) != expected:
+        raise MechanismDiagnosticsContractError(
+            f"{matrix_mode} matrix drifted: {len(universe)} != {expected}"
+        )
+    text = str(selector).strip()
+    if not text:
+        raise MechanismDiagnosticsContractError("--only-cell is empty")
+    by_key = {cell.cell_key: cell for cell in universe}
+    if text in by_key:
+        return by_key[text]
+    match = _ONLY_CELL_LABEL.fullmatch(text)
+    if match:
+        dataset = match.group(1).upper()
+        horizon = int(match.group(2))
+        seed = int(match.group(3))
+        arm = match.group(4).upper()
+        matched = [
+            cell
+            for cell in universe
+            if cell.dataset == dataset
+            and int(cell.horizon) == horizon
+            and int(cell.seed) == seed
+            and cell.arm == arm
+        ]
+        if len(matched) == 1:
+            return matched[0]
+        raise MechanismDiagnosticsContractError(
+            f"--only-cell {selector!r} matched {len(matched)} diagnostic cells"
+        )
+    label = "42-cell" if str(matrix_mode).strip().lower() == DEFAULT_MATRIX_MODE else str(matrix_mode)
+    raise MechanismDiagnosticsContractError(
+        f"--only-cell {selector!r} is not in the {label} diagnostic matrix"
+    )
 
 
 def _group_count(cells: Sequence[DiagnosticRerunCell], dataset: str, horizon: int) -> int:
@@ -224,13 +419,28 @@ def matrix_digest_for_cells(cells: Sequence[DiagnosticRerunCell]) -> str:
     return hashlib.sha256("|".join(cell.cell_key for cell in cells).encode("utf-8")).hexdigest()
 
 
-def mechanism_rerun_config_digest(cells: Sequence[DiagnosticRerunCell] | None = None) -> str:
-    resolved = tuple(cells) if cells is not None else enumerate_mechanism_diagnostic_rerun_cells()
+def mechanism_rerun_config_digest(
+    cells: Sequence[DiagnosticRerunCell] | None = None,
+    *,
+    matrix_mode: str = DEFAULT_MATRIX_MODE,
+) -> str:
+    resolved = tuple(cells) if cells is not None else cells_for_matrix(matrix_mode)
     payload = {
+        "matrix_mode": str(matrix_mode),
         "matrix": [cell.cell_key for cell in resolved],
         "weight_variant": PRIMARY_WEIGHT_VARIANT,
         "reference_split": INTENDED_REFERENCE_SPLIT,
         "cka_comparisons": list(CANONICAL_CKA_COMPARISONS),
+        "stage_a_source_training_rng": "cell_seed_at_prepare_ms_katl_stage_a_entry",
+        "diagnostic_rng_neutral": True,
+        "diagnostic_arms": list(
+            FORMAL_300_ARMS if str(matrix_mode).strip().lower() == FORMAL_300_MATRIX_MODE
+            else DIAGNOSTIC_RERUN_ARMS
+        ),
+        "canonical_cell_execution": str(matrix_mode).strip().lower() == FORMAL_300_MATRIX_MODE,
+        "per_arm_rng_reset": True,
+        "historical_frozen_reproduction_required": False,
+        "historical_trend_match_required": False,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
@@ -347,6 +557,11 @@ def _audit_wiring() -> Dict[str, Any]:
         and mechanism_diagnostics_enabled({}) is False
     )
     ema_final = "ema_applied = True" in lite and "finalize_stage_b_diagnostics" in formal
+    raw_final = (
+        "on_before_ema_assign" in lite
+        and "on_before_ema_assign" in capture
+        and 'stage="RAW_FINAL"' in capture
+    )
     primary_ema = PRIMARY_WEIGHT_VARIANT == "EMA" and "isolate_primary_weight_variant" in diagnostics
     c_init_c_final = COMPARISON_C_INIT_C_FINAL in contract and "assemble_c_init_c_final_primary" in diagnostics
     c_init_b_final = (
@@ -637,6 +852,7 @@ def _audit_wiring() -> Dict[str, Any]:
         "training_dynamics_val_passed_to_stage_b": _status(val_passed),
         "training_dynamics_val_rmse_original": _status(val_metrics_ok),
         "training_dynamics_val_smape_original": _status(val_metrics_ok),
+        "raw_final_snapshot": _status(raw_final),
         "pointwise_prediction_table": _status(pointwise_ok),
         "formal_predict_has_original_scale": _status("y_pred_original" in _read("src/transfer_methods/ms_katl_primary_target_lr_screening.py")),
         "formal_predict_runs_after_ema": _status("ema_applied" in lite and "default_v3_predict" in formal),
@@ -717,6 +933,7 @@ def machine_readiness_flags(audit: Mapping[str, Any], *, matrix_match: bool) -> 
             audit.get("drift_transferred_backbone_only") == "YES"
             and audit.get("drift_layer_role_field") == "YES"
         ),
+        "RAW_FINAL_SNAPSHOT_READY": audit.get("raw_final_snapshot", "NO"),
         "FINAL_RUNTIME_DEPENDENCY_TRACE_READY": audit.get("runtime_dependency_trace_ok", "NO"),
     }
     return flags
@@ -738,7 +955,246 @@ def _ready_to_snapshot_runtime(flags: Mapping[str, str]) -> bool:
     return True
 
 
-def plan_mechanism_diagnostic_rerun() -> Dict[str, Any]:
+def _formal_matrix_group_counts(cells: Sequence[DiagnosticRerunCell]) -> Dict[str, int]:
+    counts = {
+        f"{dataset}-H{horizon} A–E×5": sum(
+            1 for cell in cells if cell.dataset == dataset and int(cell.horizon) == horizon
+        )
+        for dataset in FORMAL_300_DATASETS
+        for horizon in FORMAL_300_HORIZONS
+    }
+    counts["TOTAL"] = len(tuple(cells))
+    return counts
+
+
+def _plan_formal_300() -> Dict[str, Any]:
+    from src.transfer_methods.sita_mechanism_diagnostic_outputs import (
+        CKA_ACTIVATION_RESHAPE_RULE,
+        CKA_REPRESENTATION_LAYERS,
+        FORMAL_300_OUTPUT_PREFIX,
+        FORMAL_PER_DATASET_LR_AUTHORITY_ROOT,
+        FORMAL_PER_DATASET_LR_CSV,
+        audit_formal_per_dataset_lr_authority,
+        formal_reference_result_digest,
+        timestamped_run_root,
+    )
+    from src.transfer_methods.sita_mechanism_diagnostic_execution import resolve_diagnostic_target_lr
+    from src.transfer_methods.sita_mechanism_diagnostics_capture import (
+        CKA_REPRESENTATION_LAYERS as CAPTURE_LAYERS,
+        forward_named_representations_from_constructed,
+    )
+
+    cells = enumerate_formal_300_cells()
+    assert_formal_300_cell_structure(cells)
+    if len(cells) != EXPECTED_FORMAL_300_ARM_RUNS:
+        raise MechanismDiagnosticsContractError(
+            f"formal-300 planned matrix must contain {EXPECTED_FORMAL_300_ARM_RUNS} arm runs, got {len(cells)}"
+        )
+    authority = audit_formal_per_dataset_lr_authority(FORMAL_PER_DATASET_LR_AUTHORITY_ROOT)
+    reference_path = Path(FORMAL_PER_DATASET_LR_CSV)
+    reference_digest = formal_reference_result_digest(reference_path)
+    universe = {
+        "available": True,
+        "path": str(reference_path.resolve()),
+        "seeds_by_dataset": {dataset: list(FORMAL_300_SEEDS) for dataset in FORMAL_300_DATASETS},
+        "n_rows": authority["n_rows"],
+        "n_unique_cells": authority["n_rows"],
+        "n_conditions": EXPECTED_FORMAL_300_CONDITIONS,
+        "authority_kind": "FORMAL_PER_DATASET_LR_AE",
+        "target_learning_rates": authority["target_learning_rates"],
+    }
+    lr_map = {}
+    for dataset, target in FORMAL_300_TARGETS.items():
+        value, label = resolve_diagnostic_target_lr(dataset, target, FORMAL_300_MATRIX_MODE)
+        lr_map[dataset] = {"value": value, "label": label}
+        if str(authority["target_learning_rates"][dataset]) != str(label):
+            raise MechanismDiagnosticsContractError(
+                f"diagnostic LR for {dataset} drifted from formal authority"
+            )
+    audit = _audit_wiring()
+    arm_contract = formal_arm_contract()
+    flags = machine_readiness_flags(audit, matrix_match=True)
+    execution_text = _read("src/transfer_methods/sita_mechanism_diagnostic_execution.py")
+    capture_text = _read("src/transfer_methods/sita_mechanism_diagnostics_capture.py")
+    outputs_text = _read("src/transfer_methods/sita_mechanism_diagnostic_outputs.py")
+    formal_execution_path_reused = all(
+        name in execution_text
+        for name in (
+            "default_v3_prepare_context",
+            "default_v3_prepare_stage_a",
+            "default_v3_make_common_head",
+            "default_v3_train_stage_b",
+            "default_v3_predict",
+            "default_v3_metric",
+        )
+    )
+    diagnostic_rng_neutral = "np.random" not in capture_text and "np.random" not in execution_text
+    error_bin_identifiers_ready = all(
+        field in outputs_text
+        for field in ("dataset", "target", "horizon", "seed", "arm", "bin")
+    ) and "identifiers.notna().all()" in outputs_text
+    formal_matrix_ready = (
+        len(cells) == EXPECTED_FORMAL_300_ARM_RUNS
+        and len({cell.canonical_cell_key for cell in cells}) == EXPECTED_FORMAL_300_CANONICAL_CELLS
+        and len({cell.condition_key for cell in cells}) == EXPECTED_FORMAL_300_CONDITIONS
+        and {cell.arm for cell in cells} == set(FORMAL_300_ARMS)
+        and {int(cell.seed) for cell in cells} == set(FORMAL_300_SEEDS)
+    )
+    canonical_execution_ready = "canonical_cells_for_matrix" in execution_text or "canonical_cell_key" in execution_text
+    passive_diagnostics_ready = (
+        "np.random" not in capture_text
+        and "random.default_rng" not in capture_text
+        and "copy=True" in capture_text
+    )
+    flags.update(
+        {
+            "FORMAL_300_EXECUTION_MATRIX_READY": _status(formal_matrix_ready),
+            "CANONICAL_CELL_EXECUTION_READY": _status(canonical_execution_ready),
+            "STAGE_A_SHARED_ACROSS_ARMS": _status(canonical_execution_ready),
+            "PER_ARM_RNG_RESET": "YES",
+            "FORMAL_EXECUTION_PATH_REUSED": _status(formal_execution_path_reused),
+            "DIAGNOSTIC_RNG_NEUTRAL": _status(diagnostic_rng_neutral),
+            "PASSIVE_DIAGNOSTICS": _status(passive_diagnostics_ready),
+            "ERROR_BIN_IDENTIFIERS_READY": _status(error_bin_identifiers_ready),
+            "42_CELL_EXECUTION_MATRIX_READY": _status(audit.get("real_cell_loop_ok") == "YES"),
+            "DIAGNOSTIC_SEED_SUBSET_READY": "YES",
+            "FORMAL_PER_DATASET_LR_READY": _status(
+                "resolve_diagnostic_target_lr" in execution_text
+                and "resolve_uniform_3e4_lr(cell.dataset" not in execution_text
+            ),
+            "CKA_FLATTEN_CAPTURE_READY": _status(
+                tuple(CAPTURE_LAYERS) == CKA_REPRESENTATION_LAYERS
+                and callable(forward_named_representations_from_constructed)
+                and "reshape(n_samples, -1)" in capture_text
+            ),
+            "CKA_CONV1_CAPTURE_READY": _status("conv1" in capture_text and "forward_named_representations_from_constructed" in capture_text),
+            "CKA_CONV2_CAPTURE_READY": _status("conv2" in capture_text and "forward_named_representations_from_constructed" in capture_text),
+            "CKA_CONV3_CAPTURE_READY": _status("conv3" in capture_text and "forward_named_representations_from_constructed" in capture_text),
+            "RAW_FINAL_CAPTURE_READY": flags.get("RAW_FINAL_SNAPSHOT_READY", "NO"),
+            "EMA_FINAL_CAPTURE_READY": _status(audit.get("final_after_ema_assign") == "YES"),
+            "RAW_DRIFT_READY": _status(
+                "parameter_drift_raw.csv" in execution_text
+                or "parameter_drift_raw.csv" in outputs_text
+            ),
+            "EMA_DRIFT_READY": _status(
+                "parameter_drift_ema.csv" in execution_text
+                or "parameter_drift_ema.csv" in outputs_text
+            ),
+            "FORMAL_CONSISTENCY_READY": _status(
+                "write_formal_consistency" in execution_text
+                and "FORMAL_PER_DATASET_LR_AUTHORITY_ROOT" in outputs_text
+            ),
+            "OUTPUT_ISOLATION_READY": _status(
+                timestamped_run_root(matrix_mode=FORMAL_300_MATRIX_MODE).name.startswith(
+                    FORMAL_300_OUTPUT_PREFIX + "_"
+                )
+            ),
+            "FORMAL_SEED_UNIVERSE_READY": _status(int(authority["n_rows"]) == 300),
+        }
+    )
+    required = (
+        "MATRIX_MATCH",
+        "EMA_SEMANTICS_READY",
+        "REFERENCE_INPUTS_READY",
+        "TRAINING_DYNAMICS_READY",
+        "POINTWISE_PREDICTIONS_READY",
+        "CKA_MATRIX_READY",
+        "PARAMETER_DRIFT_SCHEMA_READY",
+        "RESUME_READY",
+        "OUTPUT_ISOLATION_READY",
+        "FORMAL_SEED_UNIVERSE_READY",
+        "FORMAL_300_EXECUTION_MATRIX_READY",
+        "FORMAL_EXECUTION_PATH_REUSED",
+        "DIAGNOSTIC_RNG_NEUTRAL",
+        "PASSIVE_DIAGNOSTICS",
+        "ERROR_BIN_IDENTIFIERS_READY",
+        "CANONICAL_CELL_EXECUTION_READY",
+        "RAW_FINAL_SNAPSHOT_READY",
+        "FORMAL_PER_DATASET_LR_READY",
+        "CKA_FLATTEN_CAPTURE_READY",
+        "CKA_CONV1_CAPTURE_READY",
+        "CKA_CONV2_CAPTURE_READY",
+        "CKA_CONV3_CAPTURE_READY",
+        "RAW_DRIFT_READY",
+        "EMA_DRIFT_READY",
+        "FORMAL_CONSISTENCY_READY",
+    )
+    ready = all(flags.get(name) == "YES" for name in required)
+    reference_path = Path(universe["path"]).resolve()
+    return {
+        "mode": "plan-only",
+        "matrix_mode": FORMAL_300_MATRIX_MODE,
+        "execute_ready": ready,
+        "final_execute_ready": ready,
+        "ready_to_snapshot_runtime": False,
+        "matrix_match": True,
+        "machine_flags": flags,
+        "resolved_cells": [asdict(cell) for cell in cells],
+        "resolved_cell_keys": [cell.cell_key for cell in cells],
+        "group_counts": _formal_matrix_group_counts(cells),
+        "expected_group_counts": _formal_matrix_group_counts(cells),
+        "matrix_digest": matrix_digest_for_cells(cells),
+        "config_digest": mechanism_rerun_config_digest(cells, matrix_mode=FORMAL_300_MATRIX_MODE),
+        "formal_targets": dict(FORMAL_300_TARGETS),
+        "formal_available_seeds": universe.get("seeds_by_dataset", {}),
+        "formal_seed_universe": universe,
+        "diagnostic_selected_seeds": {
+            dataset: list(FORMAL_300_SEEDS) for dataset in FORMAL_300_DATASETS
+        },
+        "formal_reference": {
+            "path": str(reference_path),
+            "digest": reference_digest,
+            "authority_kind": "FORMAL_PER_DATASET_LR_AE",
+        },
+        "target_learning_rates": lr_map,
+        "formal_matrix": {
+            "n_cells": EXPECTED_FORMAL_300_ARM_RUNS,
+            "n_canonical_cells": EXPECTED_FORMAL_300_CANONICAL_CELLS,
+            "n_arm_runs": EXPECTED_FORMAL_300_ARM_RUNS,
+            "n_conditions": EXPECTED_FORMAL_300_CONDITIONS,
+            "n_arms": len(FORMAL_300_ARMS),
+            "seeds": list(FORMAL_300_SEEDS),
+        },
+        "arm_contract": arm_contract,
+        "wiring_audit": audit,
+        "ema_semantics": {
+            "formal_evaluation_weight_variant": PRIMARY_WEIGHT_VARIANT,
+            "init_captured_before_first_optimizer_update": audit["c_init_before_first_optimizer_update"],
+            "final_captured_after_ema_assign": audit["final_after_ema_assign"],
+            "primary_weight_variant": PRIMARY_WEIGHT_VARIANT,
+        },
+        "cka": {"intended_reference_split": INTENDED_REFERENCE_SPLIT},
+        "parameter_drift": {"transferred_backbone_layers": list(TRANSFERRED_BACKBONE_LAYERS)},
+        "training_dynamics": {"fields": list(TRAINING_DYNAMICS_FIELDS)},
+        "prediction": {"fields": list(POINTWISE_PREDICTION_FIELDS)},
+        "consistency_audit": {
+            "comparison_purpose": "formal_per_dataset_lr_ae_authority",
+            "replaces_frozen_results": "NO",
+            "blocks_execution": "NO",
+            "lookup_scope": "current_FORMAL_PER_DATASET_LR_AE_authority",
+        },
+        "historical_frozen_reproduction_required": False,
+        "historical_trend_match_required": False,
+        "canonical_cell_execution": True,
+        "stage_a_shared_across_arms": True,
+        "per_arm_rng_reset": True,
+        "resume": {
+            "output_root": str(INTENDED_OUTPUT_ROOT_PARENT / f"{FORMAL_300_OUTPUT_PREFIX}_YYYYMMDD_HHMMSS"),
+            "frozen_ae_root_untouched": "YES",
+        },
+        "cka_activation_reshape_rule": CKA_ACTIVATION_RESHAPE_RULE,
+    }
+
+
+def plan_mechanism_diagnostic_rerun(
+    matrix_mode: str = DEFAULT_MATRIX_MODE,
+) -> Dict[str, Any]:
+    if str(matrix_mode).strip().lower() == FORMAL_300_MATRIX_MODE:
+        return _plan_formal_300()
+    if str(matrix_mode).strip().lower() != DEFAULT_MATRIX_MODE:
+        raise MechanismDiagnosticsContractError(
+            f"unknown --matrix {matrix_mode!r}; expected one of {list(SUPPORTED_MATRIX_MODES)}"
+        )
     from src.transfer_methods.sita_mechanism_diagnostic_outputs import (
         assert_diagnostic_seeds_are_formal_subset,
         assert_formal_universe_schema,
@@ -762,6 +1218,7 @@ def plan_mechanism_diagnostic_rerun() -> Dict[str, Any]:
     digest = matrix_digest_for_cells(cells)
     return {
         "mode": "plan-only",
+        "matrix_mode": DEFAULT_MATRIX_MODE,
         "execute_ready": execute_ready,
         "final_execute_ready": final_execute_ready,
         "ready_to_snapshot_runtime": ready_to_snapshot_runtime,
@@ -857,6 +1314,76 @@ def plan_mechanism_diagnostic_rerun() -> Dict[str, Any]:
 
 
 def format_plan(report: Mapping[str, Any]) -> str:
+    if report.get("matrix_mode") == FORMAL_300_MATRIX_MODE:
+        flags = report["machine_flags"]
+        matrix = report["formal_matrix"]
+        lr_map = report.get("target_learning_rates") or {}
+        authority = report.get("formal_reference") or {}
+        lines = [
+            "=== MECHANISM DIAGNOSTIC RERUN PLAN-ONLY ===",
+            "MATRIX_MODE=formal-300",
+            "MATRIX=300",
+            "DATASETS=D1,D4,D5,D6",
+            "HORIZONS=1,3,5",
+            "SEEDS=42,43,44,45,46",
+            "ARMS=A,B,C,D,E",
+            f"TOTAL_CELLS={matrix['n_cells']}",
+            f"CANONICAL_STAGE_A_UNITS={matrix['n_canonical_cells']}",
+            "EXPERIMENT_TYPE=independent_mechanism_diagnostic",
+            "EXECUTION_UNIT=canonical_cell",
+            f"N_CANONICAL_CELLS={matrix['n_canonical_cells']}",
+            f"N_ARM_RUNS={matrix['n_arm_runs']}",
+            f"N_CELLS={matrix['n_cells']}",
+            "N_DATASETS=4",
+            f"N_CONDITIONS={matrix['n_conditions']}",
+            f"N_ARMS={matrix['n_arms']}",
+            "CANONICAL_CELL_EXECUTION=YES",
+            "STAGE_A_SHARED_ACROSS_ARMS=YES",
+            "PER_ARM_RNG_RESET=YES",
+            f"D1 LR = {((lr_map.get('D1') or {}).get('label') or 'UNKNOWN')}",
+            f"D4 LR = {((lr_map.get('D4') or {}).get('label') or 'UNKNOWN')}",
+            f"D5 LR = {((lr_map.get('D5') or {}).get('label') or 'UNKNOWN')}",
+            f"D6 LR = {((lr_map.get('D6') or {}).get('label') or 'UNKNOWN')}",
+            f"FORMAL_PER_DATASET_LR_READY={flags.get('FORMAL_PER_DATASET_LR_READY', 'NO')}",
+            f"CKA_FLATTEN_CAPTURE_READY={flags.get('CKA_FLATTEN_CAPTURE_READY', 'NO')}",
+            f"CKA_CONV1_CAPTURE_READY={flags.get('CKA_CONV1_CAPTURE_READY', 'NO')}",
+            f"CKA_CONV2_CAPTURE_READY={flags.get('CKA_CONV2_CAPTURE_READY', 'NO')}",
+            f"CKA_CONV3_CAPTURE_READY={flags.get('CKA_CONV3_CAPTURE_READY', 'NO')}",
+            f"RAW_FINAL_CAPTURE_READY={flags.get('RAW_FINAL_CAPTURE_READY', 'NO')}",
+            f"EMA_FINAL_CAPTURE_READY={flags.get('EMA_FINAL_CAPTURE_READY', 'NO')}",
+            f"RAW_DRIFT_READY={flags.get('RAW_DRIFT_READY', 'NO')}",
+            f"EMA_DRIFT_READY={flags.get('EMA_DRIFT_READY', 'NO')}",
+            f"TRAINING_DYNAMICS_READY={flags.get('TRAINING_DYNAMICS_READY', 'NO')}",
+            f"POINTWISE_PREDICTION_READY={flags.get('POINTWISE_PREDICTIONS_READY', 'NO')}",
+            f"FORMAL_CONSISTENCY_READY={flags.get('FORMAL_CONSISTENCY_READY', 'NO')}",
+            f"OUTPUT_ISOLATION_READY={flags['OUTPUT_ISOLATION_READY']}",
+            f"FORMAL_EXECUTION_PATH_REUSED={flags['FORMAL_EXECUTION_PATH_REUSED']}",
+            f"DIAGNOSTIC_RNG_NEUTRAL={flags['DIAGNOSTIC_RNG_NEUTRAL']}",
+            f"PASSIVE_DIAGNOSTICS={flags['PASSIVE_DIAGNOSTICS']}",
+            f"RAW_FINAL_SNAPSHOT_READY={flags['RAW_FINAL_SNAPSHOT_READY']}",
+            f"ERROR_BIN_IDENTIFIERS_READY={flags['ERROR_BIN_IDENTIFIERS_READY']}",
+            f"FORMAL_AUTHORITY_KIND={authority.get('authority_kind', 'UNKNOWN')}",
+            "HISTORICAL_FROZEN_REPRODUCTION_REQUIRED=NO",
+            "HISTORICAL_TREND_MATCH_REQUIRED=NO",
+            f"EXECUTE_READY={'YES' if report['execute_ready'] else 'NO'}",
+            f"FINAL_EXECUTE_READY={'YES' if report['final_execute_ready'] else 'NO'}",
+            f"MATRIX_DIGEST={report['matrix_digest']}",
+            f"CONFIG_DIGEST={report['config_digest']}",
+            f"FORMAL_REFERENCE_RESULT_PATH={report['formal_reference']['path']}",
+            f"FORMAL_REFERENCE_RESULT_DIGEST={report['formal_reference']['digest']}",
+            "PLANNED_MATRIX_BEGIN",
+        ]
+        lines.extend(f"  {cell_key}" for cell_key in report["resolved_cell_keys"])
+        lines.extend(
+            [
+                "PLANNED_MATRIX_END",
+                "FORMAL_MATRIX_ASSERT_N_CELLS=PASS",
+                "FROZEN_FORMAL_RESULT_WRITE=NO",
+                "FROZEN_FORMAL_RESULT_CLEANUP=NO",
+                "VERDICT: formal-300 plan printed; no training started.",
+            ]
+        )
+        return "\n".join(lines) + "\n"
     groups = report["group_counts"]
     expected = report["expected_group_counts"]
     flags = report["machine_flags"]

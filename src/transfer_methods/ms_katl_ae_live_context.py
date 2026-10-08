@@ -268,6 +268,7 @@ def build_stage_a_kwargs(cell: RealCanonicalCellPlan, frames: Mapping[str, Any])
         "k3_selection_context": frames["k3_selection_context"],
         "k3_raw_source_context": frames["k3_raw_source_context"],
         "transformation_reuse_context": frames["transformation_reuse_context"],
+        "seed": int(cell.seed),
     }
     validate_stage_a_kwargs_signature(kwargs)
     validate_stage_a_kwargs_objects(kwargs, cell)
@@ -308,6 +309,12 @@ def validate_stage_a_kwargs_objects(kwargs: Mapping[str, Any], cell: RealCanonic
         raise AEContractError(f"K contract drifted for {cell.stage_a_key}")
     if kwargs["k3_selection_context"] is None:
         raise AEContractError(f"source selection authority missing for {cell.stage_a_key}")
+    if kwargs.get("seed") is None:
+        raise AEContractError(f"stage_a seed missing for {cell.stage_a_key}")
+    if int(kwargs["seed"]) != int(cell.seed):
+        raise AEContractError(
+            f"stage_a seed {kwargs['seed']} != cell.seed {cell.seed} for {cell.stage_a_key}"
+        )
     scenario = str(target_df.attrs.get("information_sharing_scenario") or "")
     if "without" not in scenario.lower() and str(cell.scenario) != "without":
         raise AEContractError(f"scenario drifted for {cell.stage_a_key}: {scenario}")
@@ -437,6 +444,7 @@ def live_context_matrix_row(ctx: LiveAECellContext) -> Dict[str, Any]:
                 "batch_size": ctx.stage_a_kwargs["batch_size"],
                 "group_cols": list(ctx.stage_a_kwargs["group_cols"]),
                 "feature_cols": list(ctx.feature_cols),
+                "seed": int(ctx.stage_a_kwargs["seed"]),
                 "source_digest": ctx.source_data_digest,
                 "target_digest": ctx.target_data_digest,
             }

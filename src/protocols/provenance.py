@@ -8,7 +8,7 @@ from typing import Mapping, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-from .candidate_pool import CanonicalSourceIndex, SelectionResult
+from .candidate_pool import CanonicalSourceIndex, SelectionEntry, SelectionResult
 from .experiment_protocol import ProtocolViolation, SourceKey, normalize_source_key
 from .transformation_identity import SequenceEvidence, exact_array_digest
 from src.utils.dataframe_attrs import (
@@ -304,6 +304,7 @@ def extract_selected_source_slices(
     training_start: object,
     model_feature_cols: Sequence[str],
     training_end: object | None = None,
+    match_history_frame: pd.DataFrame | None = None,
 ) -> Tuple[SourceSliceRef, ...]:
     """Extract only selected sources and prove their KNN vectors against raw rows."""
 
@@ -376,6 +377,15 @@ def extract_selected_source_slices(
             raise ProtocolViolation(
                 f"selected source {entry.source_key!r} KNN vector differs from raw slice"
             )
+        if entry.match_window_start is not None:
+            history_rows = candidate
+            if match_history_frame is not None:
+                history_rows = _selected_source_rows(
+                    match_history_frame,
+                    entry.source_key,
+                    selection.group_cols,
+                )
+            _assert_historical_match_window(entry, history_rows, selection)
 
         values = sliced.loc[:, list(model_feature_cols)].to_numpy(dtype=np.float64)
         if not np.isfinite(values).all():
@@ -396,6 +406,61 @@ def extract_selected_source_slices(
     if tuple(item.source_key for item in extracted) != selection.ordered_source_keys:
         raise ProtocolViolation("CNN extractor source key order differs from KNN selection")
     return tuple(extracted)
+
+
+def _assert_historical_match_window(
+    entry: SelectionEntry,
+    candidate: pd.DataFrame,
+    selection: SelectionResult,
+) -> None:
+    """Prove a v2 match window lies inside the frozen source history and matches raw rows.
+
+    The CNN training slice remains the caller-supplied history. This check does
+    not replace that slice with the matched 30-day window.
+    """
+
+    if selection.source_history_start is None or selection.source_history_end is None:
+        raise ProtocolViolation(
+            "historical match window proof requires frozen source history bounds"
+        )
+    start = pd.Timestamp(entry.match_window_start).normalize()
+    end = pd.Timestamp(entry.match_window_end).normalize()
+    history_start = pd.Timestamp(selection.source_history_start).normalize()
+    history_end = pd.Timestamp(selection.source_history_end).normalize()
+    cutoff = pd.Timestamp(selection.source_observation_cutoff).normalize()
+    if (
+        pd.isna(start)
+        or pd.isna(end)
+        or start < history_start
+        or end > history_end
+        or end > cutoff
+    ):
+        raise ProtocolViolation(
+            f"selected source {entry.source_key!r} match window is outside the frozen source history"
+        )
+    expected = pd.date_range(start, end, freq="D")
+    if len(expected) != 30:
+        raise ProtocolViolation(
+            f"selected source {entry.source_key!r} match window is not 30 calendar days"
+        )
+    rows = candidate[candidate["date"].isin(expected)].sort_values("date")
+    if rows["date"].duplicated().any() or not pd.DatetimeIndex(rows["date"]).equals(expected):
+        raise ProtocolViolation(
+            f"selected source {entry.source_key!r} match window is not a contiguous raw history slice"
+        )
+    raw_vector = np.concatenate(
+        [
+            pd.to_numeric(rows[column], errors="coerce").to_numpy(dtype=np.float64)
+            for column in selection.feature_cols
+        ]
+    )
+    if not np.isfinite(raw_vector).all() or not np.array_equal(
+        raw_vector,
+        np.asarray(entry.match_raw_vector, dtype=np.float64),
+    ):
+        raise ProtocolViolation(
+            f"selected source {entry.source_key!r} match window differs from raw source history"
+        )
 
 
 def build_cnn_tensor_provenance(

@@ -12,13 +12,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence, Tuple
 
-WEIGHT_VARIANTS = ("EMA", "RAW")
+WEIGHT_VARIANTS = ("EMA", "RAW", "INITIAL")
 PRIMARY_ARTIFACT_KINDS = ("prediction", "parameter_drift", "CKA")
-CHECKPOINT_STAGES = ("INIT", "FINAL")
+CHECKPOINT_STAGES = ("INIT", "RAW_FINAL", "FINAL")
 FORMAL_EVALUATION_WEIGHT_VARIANT = "EMA"
+INITIAL_WEIGHT_VARIANT = "INITIAL"
 
 COMPARISON_C_INIT_C_FINAL = "C_INIT_C_FINAL"
 COMPARISON_C_INIT_C_FINAL_ADAPTATION_DISPLACEMENT = "C_INIT_C_FINAL_ADAPTATION_DISPLACEMENT"
+COMPARISON_C_INIT_C_RAW_FINAL = "C_INIT_C_RAW_FINAL"
 COMPARISON_C_INIT_B_FINAL_FROZEN_REFERENCE = "C_INIT_B_FINAL_FROZEN_REFERENCE"
 COMPARISON_B_C_MATCHED_SEED = "B_C_MATCHED_SEED"
 COMPARISON_A_C_MATCHED_SEED = "A_C_MATCHED_SEED"
@@ -32,6 +34,7 @@ CANONICAL_CKA_COMPARISONS = (
     COMPARISON_B_B_CROSS_SEED,
     COMPARISON_C_C_CROSS_SEED,
 )
+AUXILIARY_CKA_COMPARISONS = (COMPARISON_C_INIT_C_RAW_FINAL,)
 
 PAIRING_IDENTITY_FIELDS = (
     "dataset",
@@ -78,9 +81,10 @@ class MechanismCheckpoint:
     captured_before_first_target_optimizer_update: bool
     init_mode: str = "fused"
     backbone_trainable: Optional[bool] = None
+    ema_update_count: int = 0
 
     def __post_init__(self) -> None:
-        if self.arm not in {"A", "B", "C"}:
+        if self.arm not in {"A", "B", "C", "D", "E"}:
             raise MechanismDiagnosticsContractError(f"unsupported diagnostic arm={self.arm!r}")
         if self.stage not in CHECKPOINT_STAGES:
             raise MechanismDiagnosticsContractError(f"unsupported checkpoint stage={self.stage!r}")

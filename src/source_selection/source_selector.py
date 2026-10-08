@@ -24,6 +24,7 @@ import pandas as pd
 from src.data_processing.data_preprocessing import infer_source_selection_feature_columns
 from src.constants import D4_D6_RUNTIME_KNN_PROTOCOL_VERSION, SOURCE_HISTORY_DAYS
 from src.protocols.candidate_pool import (
+    SOURCE_SELECTION_MODE_ALIGNED_30D,
     build_candidate_pool_digest,
     build_consumer_fingerprint,
     build_source_pool_fingerprint,
@@ -78,6 +79,7 @@ class K3SelectionEvidence:
     selection_result_digest: str
     prepared_pool_id: int
     _selection_payload: bytes = field(repr=False, compare=False)
+    source_selection_mode: str = SOURCE_SELECTION_MODE_ALIGNED_30D
 
     def __deepcopy__(self, memo: Dict[int, object]) -> "K3SelectionEvidence":
         memo[id(self)] = self
@@ -93,6 +95,7 @@ class K3SelectionEvidence:
         feature_cols: Sequence[str],
         group_cols: Sequence[str],
         weight_mode: str = "inverse_distance",
+        source_selection_mode: str = SOURCE_SELECTION_MODE_ALIGNED_30D,
     ) -> "K3SelectionEvidence":
         """Execute the legacy selector exactly once and seal its K3 result."""
 
@@ -103,6 +106,7 @@ class K3SelectionEvidence:
             k=3,
             group_cols=tuple(group_cols),
             weight_mode=weight_mode,
+            source_selection_mode=source_selection_mode,
         )
         target_context = get_protocol_frame_context(target_df)
         source_context = get_protocol_frame_context(source_df)
@@ -140,6 +144,7 @@ class K3SelectionEvidence:
             selection_result_digest=str(meta.get("selection_result_digest", "")),
             prepared_pool_id=id(prepared_pool),
             _selection_payload=pickle.dumps(selection, protocol=5),
+            source_selection_mode=str(source_selection_mode),
         )
 
     def method_wrapper(
@@ -152,6 +157,7 @@ class K3SelectionEvidence:
         group_cols: Sequence[str],
         k: int,
         weight_mode: str,
+        source_selection_mode: str = SOURCE_SELECTION_MODE_ALIGNED_30D,
     ) -> Dict[str, object]:
         """Validate the consumer input and return a distinct mutable wrapper."""
 
@@ -159,6 +165,11 @@ class K3SelectionEvidence:
             raise ProtocolViolation("K3 selection evidence cannot serve a non-K3 consumer")
         if str(weight_mode) != "inverse_distance":
             raise ProtocolViolation("K3 selection evidence requires inverse_distance weights")
+        if str(source_selection_mode) != self.source_selection_mode:
+            raise ProtocolViolation(
+                "K3 selection evidence source_selection_mode mismatch: "
+                f"cached={self.source_selection_mode!r} requested={source_selection_mode!r}"
+            )
         if tuple(lifecycle_identity) != self.lifecycle_identity:
             raise ProtocolViolation("K3 selection lifecycle identity mismatch")
         if tuple(str(column) for column in group_cols) != self.group_cols:
@@ -228,6 +239,7 @@ class TargetK3SelectionContext:
         group_cols: Sequence[str],
         k: int,
         weight_mode: str,
+        source_selection_mode: str = SOURCE_SELECTION_MODE_ALIGNED_30D,
     ) -> K3SelectionEvidence:
         if int(k) != 3:
             raise ProtocolViolation("target K3 context accepts only K=3")
@@ -239,6 +251,13 @@ class TargetK3SelectionContext:
                 feature_cols=feature_cols,
                 group_cols=group_cols,
                 weight_mode=weight_mode,
+                source_selection_mode=source_selection_mode,
+            )
+        elif self._evidence.source_selection_mode != str(source_selection_mode):
+            raise ProtocolViolation(
+                "K3 selection evidence source_selection_mode mismatch: "
+                f"cached={self._evidence.source_selection_mode!r} "
+                f"requested={source_selection_mode!r}"
             )
         return self._evidence
 
@@ -328,6 +347,7 @@ class SourceSelector:
         weight_mode: str,
         include_sales_in_knn: bool,
         consumer_source_df: pd.DataFrame | None = None,
+        source_selection_mode: str = SOURCE_SELECTION_MODE_ALIGNED_30D,
     ) -> Dict[str, object]:
         if weight_mode != "inverse_distance":
             raise ProtocolViolation("formal D1-D6 selection requires inverse_distance weights")
@@ -475,6 +495,8 @@ class SourceSelector:
             observed_start=target_df.attrs["knn_observed_start"],
             feature_cols=knn_feature_columns,
             k=k,
+            source_selection_mode=source_selection_mode,
+            source_history_frame=source_df,
         )
         provenance_source_df = source_df
         if prepared_pool is not None:
@@ -504,6 +526,11 @@ class SourceSelector:
             training_start=result.observed_start,
             training_end=result.source_observation_cutoff,
             model_feature_cols=model_feature_cols,
+            match_history_frame=(
+                None
+                if result.source_selection_mode == SOURCE_SELECTION_MODE_ALIGNED_30D
+                else source_df
+            ),
         )
         tensor_provenance = tuple(
             build_cnn_tensor_provenance(
@@ -539,6 +566,15 @@ class SourceSelector:
                 "tie_group": entry.tie_group,
                 "date_start": entry.observed_start,
                 "date_end": entry.observed_end,
+                **(
+                    {}
+                    if entry.match_window_start is None
+                    else {
+                        "match_window_start": entry.match_window_start,
+                        "match_window_end": entry.match_window_end,
+                        "valid_window_count": entry.valid_window_count,
+                    }
+                ),
             }
             for entry in result.entries
         ]
@@ -667,6 +703,31 @@ class SourceSelector:
             "effective_k": int(k),
             "scaler_min": result.scaler_min,
             "scaler_max": result.scaler_max,
+            **(
+                {}
+                if result.source_selection_mode == SOURCE_SELECTION_MODE_ALIGNED_30D
+                else {
+                    "source_selection_mode": result.source_selection_mode,
+                    "source_history_start": result.source_history_start,
+                    "source_history_end": result.source_history_end,
+                    "candidate_search_records": [
+                        {
+                            **{
+                                key: (
+                                    list(value)
+                                    if isinstance(value, tuple)
+                                    else value
+                                )
+                                for key, value in record.items()
+                            }
+                        }
+                        for record in result.candidate_search_records
+                    ],
+                    "scaled_outside_unit_interval": result.scaled_outside_unit_interval,
+                    "scaler_range_is_zero": result.scaler_range_is_zero,
+                    "historical_window_count_expected": 151,
+                }
+            ),
             "cnn_provenance_validated": True,
             "cnn_provenance_source_keys": [item.source_key for item in source_slices],
             "cnn_provenance_sample_counts": [
@@ -1549,6 +1610,7 @@ class SourceSelector:
         debug_mode: bool = False,
         include_sales_in_knn: bool = True,
         consumer_source_df: pd.DataFrame | None = None,
+        source_selection_mode: str = SOURCE_SELECTION_MODE_ALIGNED_30D,
     ) -> Dict[str, object]:
         """
         选择 top-k 相似 source，并返回距离与权重。
@@ -1611,6 +1673,7 @@ class SourceSelector:
                 weight_mode=weight_mode,
                 include_sales_in_knn=include_sales_in_knn,
                 consumer_source_df=consumer_source_df,
+                source_selection_mode=source_selection_mode,
             )
         runtime_protocol = self._runtime_protocol_requested(target_df, source_df)
         if (self._declares_d1_d6(target_df) or self._declares_d1_d6(source_df)) and not runtime_protocol:

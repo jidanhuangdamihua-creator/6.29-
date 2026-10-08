@@ -1854,7 +1854,18 @@ def run_experiment(
         target_metadata=target_metadata,
     )
     _finalize_result_metrics(result)
-    return _apply_result_contract_defaults(result, SCHEMA_FAMILY_D1_D3)
+    result = _apply_result_contract_defaults(result, SCHEMA_FAMILY_D1_D3)
+    if bool(cfg.get("bl8_capture")):
+        result["_bl8_trace"] = {
+            "timestamps": [
+                str(record.label_date)
+                for record in protocol_manifest.for_horizon(int(exp_cfg["horizon"]))
+            ],
+            "y_true_original": raw.get("y_true_original"),
+            "y_pred_original": raw.get("y_pred_original"),
+            "meta": method_meta,
+        }
+    return result
 
 
 def _build_run_plan(

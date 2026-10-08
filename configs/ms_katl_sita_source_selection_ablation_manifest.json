@@ -1,0 +1,58 @@
+{
+  "arm_c_config_identity": "b09fc76caac8380f5185a3557c75613dcc7ce3be01a01ed04782b18e889104cb",
+  "arm_f_identity": "SITA_ABLATION_F_RANDOM3",
+  "arm_g_identity": "SITA_ABLATION_G_BOTTOM3",
+  "copied_from_arm": "C",
+  "datasets": [
+    "D1",
+    "D4",
+    "D5",
+    "D6"
+  ],
+  "expected_f_full_runs": 300,
+  "expected_f_stage1_runs": 180,
+  "expected_g_runs": 60,
+  "horizons": [
+    1,
+    3,
+    5
+  ],
+  "label": "SITA_SOURCE_SELECTION_ABLATION",
+  "learning_rate": "3e-4",
+  "output_relpath": "outputs/sita_ablation_fg_source_selection",
+  "paper_targets": {
+    "D1": "1/10",
+    "D4": "166/258",
+    "D5": "48/1159414",
+    "D6": "CA_1/FOODS_3_080"
+  },
+  "similarity_direction": "LOWER_IS_MORE_SIMILAR",
+  "source_manifest_csv": "/Users/ming/Desktop/复现实验/保留的复现实验修改rfe/SOURCE_SELECTION_MANIFEST.csv",
+  "source_selection_granularity": "target-level",
+  "source_set_ids": [
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5"
+  ],
+  "source_set_seeds": {
+    "R1": 1001,
+    "R2": 1002,
+    "R3": 1003,
+    "R4": 1004,
+    "R5": 1005
+  },
+  "stage1_source_sets": [
+    "R1",
+    "R2",
+    "R3"
+  ],
+  "training_seeds": [
+    42,
+    43,
+    44,
+    45,
+    46
+  ]
+}

@@ -43,6 +43,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--execute", action="store_true", help="Explicitly execute model training cells.")
     parser.add_argument("--output-root", type=Path, default=None, help="New isolated output root; required with --execute unless --resume is used.")
     parser.add_argument("--resume", type=Path, default=None, help="Explicit existing run root to resume.")
+    parser.add_argument(
+        "--source-selection-mode",
+        default="aligned_30d",
+        choices=("aligned_30d", "historical_window_30d"),
+        help="Formal source selection. Default aligned_30d keeps the current SITA.",
+    )
+    parser.add_argument(
+        "--only-cell",
+        default=None,
+        help="Optional cell key such as D4__166-258__h1__s42. Default runs the full 60-cell matrix.",
+    )
     return parser.parse_args(argv)
 
 
@@ -106,7 +117,15 @@ def run_execute(manifest: dict, cells: tuple, digests: dict, args: argparse.Name
         raise CorrectedSITAContractError("output root already exists; use --resume only with matching manifest")
     else:
         output_root.mkdir(parents=True, exist_ok=False)
-        _write_manifest = create_manifest(output_root, manifest=manifest, cells=cells, digests=digests, branch=branch, head=head)
+        _write_manifest = create_manifest(
+            output_root,
+            manifest=manifest,
+            cells=cells,
+            digests=digests,
+            branch=branch,
+            head=head,
+            source_selection_mode=args.source_selection_mode,
+        )
         (output_root / "manifest.json").write_text(json.dumps(_write_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         (output_root / "execution_matrix.csv").write_bytes(
             __import__("src.transfer_methods.ms_katl_corrected_sita_60cell", fromlist=["canonical_matrix_csv"]).canonical_matrix_csv(cells)
@@ -118,7 +137,13 @@ def run_execute(manifest: dict, cells: tuple, digests: dict, args: argparse.Name
         assert attempt_path is not None
         start_time = json.loads((attempt_path / "status.json").read_text(encoding="utf-8"))["start_time"]
         try:
-            authority = execute_authority_cell(cell, attempt_path=attempt_path, project_root=PROJECT_ROOT, manifest=manifest)
+            authority = execute_authority_cell(
+            cell,
+            attempt_path=attempt_path,
+            project_root=PROJECT_ROOT,
+            manifest=manifest,
+            source_selection_mode=args.source_selection_mode,
+        )
             result = build_result_payload(
                 cell=cell,
                 attempt_path=attempt_path,
@@ -149,6 +174,10 @@ def main(argv: list[str] | None = None) -> int:
         assert_formal_target_authority(manifest)
         validate_authority_against_runtime(manifest)
         cells = enumerate_cells(manifest)
+        if args.only_cell:
+            cells = tuple(cell for cell in cells if cell.cell_key == args.only_cell)
+            if len(cells) != 1:
+                raise CorrectedSITAContractError(f"unknown formal cell key: {args.only_cell}")
         digests = build_digests(manifest, cells, PROJECT_ROOT)
         output_root = resolve_output_root(PROJECT_ROOT, args.resume or args.output_root)
         assert_output_isolation(output_root, PROJECT_ROOT)

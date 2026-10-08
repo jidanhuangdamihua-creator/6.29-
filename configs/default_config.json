@@ -54,6 +54,9 @@
       "SS-TL",
       "MSML-TL",
       "MSML-TL-RFE"
+    ],
+    "extended_methods": [
+      "MS-KATL-Lite"
     ]
   },
   "single_experiment": {

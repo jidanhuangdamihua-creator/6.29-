@@ -1,0 +1,30 @@
+{
+  "paper_method_name": "SITA",
+  "ablation_protocol_name": "FORMAL A-E ABLATION UNDER THE FROZEN PER-DATASET TARGET-LR PROTOCOL",
+  "matrix_kind": "FORMAL_PER_DATASET_LR_AE",
+  "datasets": ["D1", "D4", "D5", "D6"],
+  "paper_targets": {
+    "D1": "1/10",
+    "D4": "166/258",
+    "D5": "48/1159414",
+    "D6": "CA_1/FOODS_3_080"
+  },
+  "target_learning_rates": {
+    "D1": "3e-5",
+    "D4": "3e-5",
+    "D5": "3e-4",
+    "D6": "3e-5"
+  },
+  "stage_a_learning_rate": "1e-4",
+  "horizons": [1, 3, 5],
+  "seeds": [42, 43, 44, 45, 46],
+  "arms": ["A", "B", "C", "D", "E"],
+  "stage_a_epochs": 50,
+  "stage_b_epochs": 50,
+  "batch_size": 16,
+  "ema_decay": 0.99,
+  "expected_canonical_cells": 60,
+  "expected_runs": 300,
+  "d5_reuse_policy": "reuse only after exact parity audit; otherwise rerun all 300",
+  "uniform_slice_retained": true
+}
