@@ -1,15 +1,18 @@
 """Synthetic target-adaptation tests.
 
 The trainer and optimizer are mocked. These tests do not read sealed data,
-call model.fit, fit a source model, or write a result file.
+call model.fit, fit a source model, or write a formal result file.
 """
 
 from __future__ import annotations
 
 import inspect
 import json
+import math
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import numpy as np
@@ -27,8 +30,10 @@ from sita_ablation.adaptation import (
     parameter_shift,
     run_target_training,
 )
-from sita_ablation.arms import BLOCKED_GAP_TCN_SOURCE_FIT, expand_runs, frozen_tensors
+from sita_ablation.arms import BLOCKED_GAP_TCN_SOURCE_FIT, expand_runs, frozen_tensors, run_directory
 from sita_ablation.data import ConditionFrames, ContractError, DateSpan, load_dataset_contract
+from sita_ablation.io import RunPayload, write_run_atomically
+from sita_ablation.metrics import evaluate_test, signed_error
 from sita_ablation.models import TCN_FUSIBLE_SHAPES
 from sita_ablation.scaling import fit_target_model_scaler, inverse_sales
 from sita_ablation.stage_a import (
@@ -191,7 +196,10 @@ class AdaptationTests(unittest.TestCase):
                 self.assertEqual(result.raw_shift["conv1"].status, DEFINED)
                 self.assertEqual(result.raw_shift["conv1"].relative, 0.0)
                 self.assertEqual(result.raw_shift["head"].relative, 0.0)
-                self.assertIsNone(result.signed_error)
+                expected_error = signed_error(windows.test.y_original, result.test_predictions)
+                self.assertEqual(result.signed_error, expected_error)
+                self.assertIsInstance(result.signed_error, float)
+                self.assertTrue(math.isfinite(result.signed_error))
                 if spec.selection_rule == "none":
                     self.assertIsNone(result.alpha_entropy)
                 else:
@@ -471,7 +479,11 @@ class AdaptationTests(unittest.TestCase):
         np.testing.assert_allclose(sourced.conv[0][0], fuse_init(tcn_bundle, "inverse_distance")["blocks.0.conv1"][0])
         self.assertEqual(sourced_result.source_validation_metric, NOT_APPLICABLE)
         self.assertIsInstance(sourced_result.alpha_entropy, float)
-        self.assertIsNone(sourced_result.signed_error)
+        self.assertEqual(
+            sourced_result.signed_error,
+            signed_error(windows.test.y_original, sourced_result.test_predictions),
+        )
+        self.assertIsInstance(sourced_result.signed_error, float)
         self.assertEqual(self.source_fit_mock.call_count, 0)
         self.assertEqual(self.stage_a_mock.call_count, 0)
         self.assertEqual(self.real_mock.call_count, 0)
@@ -497,6 +509,38 @@ class AdaptationTests(unittest.TestCase):
         self.assertIsNone(result.source_validation_metric)
         self.assertEqual(result.test_predictions.shape, (180,))
         self.assertEqual(result.test_weight_sha256_before, result.test_weight_sha256_after)
+
+    def test_completed_record_accepts_the_clipped_signed_error(self):
+        windows = _windows("D1", train_value=1.0, val_value=2.0, test_value=-1.5)
+        spec = _spec("F1")
+        result = adapt_target(spec, windows, _scaler("D1"), _cnn_template(5), None, trainer=MockTrainer())
+        true = np.asarray(windows.test.y_original, dtype=np.float64)
+        pred = np.asarray(result.test_predictions, dtype=np.float64)
+        clipped = float(np.mean(np.maximum(pred, 0.0) - np.maximum(true, 0.0), dtype=np.float64))
+        expected = signed_error(true, pred)
+        self.assertTrue(np.any(true < 0.0))
+        self.assertEqual(result.signed_error, expected)
+        self.assertEqual(np.float64(result.signed_error), np.float64(clipped))
+        self.assertNotEqual(result.signed_error, float(np.mean(pred - true, dtype=np.float64)))
+        metrics = evaluate_test(result, true)
+        self.assertEqual(metrics.signed_error, result.signed_error)
+        started = datetime(2026, 10, 2, 1, 2, 3, 123456, tzinfo=timezone.utc)
+        with TemporaryDirectory() as temp:
+            directory = run_directory(spec, Path(temp))
+            done = write_run_atomically(
+                directory,
+                RunPayload(
+                    spec=spec,
+                    started_at=started,
+                    finished_at=started + timedelta(seconds=1),
+                    adaptation=result,
+                    metrics=metrics,
+                ),
+            )
+            record = json.loads((directory / "cell_record.json").read_text(encoding="utf-8"))
+        self.assertEqual(done.status, "COMPLETED")
+        self.assertEqual(record["signed_error"], result.signed_error)
+        self.assertEqual(set(done.artifact_sha256), {"predictions.parquet", "cell_record.json"})
 
     def test_bundle_identity_and_shift_rules(self):
         windows = _windows("D1", train_value=1.0, val_value=2.0, test_value=0.0)

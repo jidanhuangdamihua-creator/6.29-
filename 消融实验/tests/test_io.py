@@ -942,6 +942,13 @@ class GapIoSchemaTests(unittest.TestCase):
             self.assertEqual(set(body), set(PHASE_AUDIT_CATEGORIES))
             self.assertEqual(body["missing"], ["F4:bottom3:D1:h5:seed46", "F4:random3:D1:h3:seed42"])
             self.assertEqual(body["failed"], [])
+            write_phase_audit(root / "phase_5_h1_audit.json", phase=5)
+            self.assertEqual(
+                json.loads((root / "phase_5_h1_audit.json").read_text(encoding="utf-8"))["missing"],
+                [],
+            )
+            with self.assertRaises(ContractError):
+                write_phase_audit(root / "phase_5_h2_audit.json", phase=5)
             with self.assertRaises(ContractError):
                 write_phase_audit(root / "phase_audit.json", phase=1, missing=("F4:main:D1:h1:seed42",))
             with self.assertRaises(ContractError):

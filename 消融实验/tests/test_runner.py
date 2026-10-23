@@ -15,22 +15,43 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import numpy as np
+
+from sita_ablation.adaptation import TargetWindows
 from sita_ablation.arms import BLOCKED_GAP_TCN_SOURCE_FIT, expand_runs, run_directory
 from sita_ablation.data import ContractError
-from sita_ablation.io import PHASE_AUDIT_CATEGORIES
+from sita_ablation.formal_context import PreparedCondition, load_plan_frames, prepare_conditions
+from sita_ablation.io import PHASE_AUDIT_CATEGORIES, phase_audit_path
 from sita_ablation.runner import (
     PLANNED,
     PROTOCOL_VERSION,
     CellContext,
+    ExecutionResult,
+    PreflightResult,
     dispatch_cells,
     dry_run,
     execute,
+    main,
 )
 from sita_ablation.source_selection import STATUS_SKIPPED
 from sita_ablation.stage_a import assess_tcn_source_fit, frozen_config_sha256
 
 _PACKAGE = Path(__file__).resolve().parents[1]
+_REPO = _PACKAGE.parent
 _RUNNER = _PACKAGE / "sita_ablation" / "runner.py"
+_CELL_FILES = {
+    "FAILED.json",
+    "DONE.json",
+    "selection.json",
+    "cell_record.json",
+    "predictions.parquet",
+    "phase_1_audit.json",
+    "phase_2_audit.json",
+    "phase_3_audit.json",
+    "phase_4_audit.json",
+    "phase_5_audit.json",
+}
+_FORMAL_ARGV = ["--phase", "1", "--arms", "F4", "--workers", "1", "--only-cell", "D1:1:42"]
 _TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+00:00$")
 _CELL_ID_RE = re.compile(
     r"^(?:F1|F2|F3|F4|P1|P2|P3|SITA_TCN|TCN_REVIN):"
@@ -91,6 +112,33 @@ def _files(root: Path) -> tuple[str, ...]:
     return tuple(sorted(str(path.relative_to(root)) for path in root.rglob("*") if path.is_file()))
 
 
+def _cell_files(package: Path = _PACKAGE) -> tuple[str, ...]:
+    found = []
+    for folder in ("runs", "audit", "logs", "cache"):
+        root = package / folder
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if path.is_file() and path.name in _CELL_FILES:
+                found.append(str(path.relative_to(package)))
+    return tuple(sorted(found))
+
+
+def _accepted_result(audit: Path) -> ExecutionResult:
+    gate = PreflightResult(
+        accepted=True,
+        workspace_dirty=False,
+        open_1="CLOSED",
+        open_2="CLOSED",
+        gap_tcn_source_fit="CLOSED",
+        frozen_config_sha256="a" * 64,
+        protocol_version=PROTOCOL_VERSION,
+        schema_version=1,
+        reasons=(),
+    )
+    return ExecutionResult(gate, (), (), audit)
+
+
 class RunnerGateTests(unittest.TestCase):
     def test_dirty_workspace_refuses_and_writes_nothing(self):
         with TemporaryDirectory() as temp:
@@ -117,6 +165,17 @@ class RunnerGateTests(unittest.TestCase):
             self.assertIsNone(result.audit_path)
             self.assertEqual(result.plan, ())
             self.assertEqual(_files(root), ())
+
+    def test_only_horizon_splits_phase5_into_three_disjoint_groups(self):
+        shards = []
+        for horizon in (1, 3, 5):
+            preview = dry_run(5, workers=1, only_horizon=horizon, workspace_dirty=False)
+            self.assertTrue(preview.preflight.accepted)
+            self.assertEqual(len(preview.plan), 20)
+            self.assertTrue(all(cell.spec.horizon == horizon and cell.spec.protocol_tag == "k5" for cell in preview.plan))
+            shards.append({cell.cell_id for cell in preview.plan})
+        self.assertEqual(len(set().union(*shards)), 60)
+        self.assertTrue(shards[0].isdisjoint(shards[1]) and shards[1].isdisjoint(shards[2]))
 
     def test_closed_gaps_do_not_refuse_a_clean_preflight(self):
         with TemporaryDirectory() as temp:
@@ -511,6 +570,157 @@ class RunnerScheduleTests(unittest.TestCase):
             self.assertNotIn("planned", body)
             self.assertNotIn("blocked", body)
             self.assertEqual((mismatch_dir / "DONE.json").read_bytes(), b"keep")
+
+
+class FormalCliAssemblyTests(unittest.TestCase):
+    def test_dry_run_does_not_load_context_or_create_an_audit_file(self):
+        before = _cell_files()
+        with patch("sita_ablation.runner.probe_workspace_dirty", return_value=False), \
+             patch("sita_ablation.runner.assemble_formal_context", side_effect=AssertionError("context")) as loader, \
+             patch("sita_ablation.runner.execute", side_effect=AssertionError("execute")) as execute_fn, \
+             patch("sita_ablation.formal_context.load_condition_frames", side_effect=AssertionError("sealed")):
+            code = main([*_FORMAL_ARGV, "--dry-run"])
+        self.assertEqual(code, 0)
+        loader.assert_not_called()
+        execute_fn.assert_not_called()
+        self.assertEqual(_cell_files(), before)
+
+    def test_failed_preflight_does_not_load_context(self):
+        before = _cell_files()
+        with patch("sita_ablation.runner.probe_workspace_dirty", return_value=True), \
+             patch("sita_ablation.runner.assemble_formal_context", side_effect=AssertionError("context")) as loader, \
+             patch("sita_ablation.runner.execute", side_effect=AssertionError("execute")) as execute_fn, \
+             patch("sita_ablation.formal_context.load_condition_frames", side_effect=AssertionError("sealed")):
+            code = main(_FORMAL_ARGV)
+        self.assertEqual(code, 2)
+        loader.assert_not_called()
+        execute_fn.assert_not_called()
+        self.assertEqual(_cell_files(), before)
+
+    def test_formal_cli_passes_context_and_audit_path_for_the_only_cell(self):
+        sentinel = _context(_PACKAGE)
+        loaded = []
+        seen = {}
+
+        def loader(specs):
+            loaded.append(tuple(specs))
+            return sentinel
+
+        def fake_execute(*_args, **kwargs):
+            seen.update(kwargs)
+            return _accepted_result(kwargs["audit_path"])
+
+        before = _cell_files()
+        with patch("sita_ablation.runner.probe_workspace_dirty", return_value=False), \
+             patch("sita_ablation.runner.assemble_formal_context", side_effect=loader), \
+             patch("sita_ablation.runner.execute", side_effect=fake_execute), \
+             patch("sita_ablation.formal_context.load_condition_frames", side_effect=AssertionError("sealed")), \
+             patch("sita_ablation.adaptation.adapt_target", side_effect=AssertionError("adapt")):
+            code = main(_FORMAL_ARGV)
+        self.assertEqual(code, 0)
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(
+            [(spec.arm, spec.protocol_tag, spec.dataset, spec.horizon, spec.seed) for spec in loaded[0]],
+            [("F4", "main", "D1", 1, 42)],
+        )
+        self.assertIs(seen["context"], sentinel)
+        self.assertEqual(seen["audit_path"], _REPO / phase_audit_path(1))
+        self.assertEqual(seen["only_cell"], "D1:1:42")
+        self.assertIsNotNone(seen["context"])
+        self.assertIsNotNone(seen["audit_path"])
+        self.assertEqual(_cell_files(), before)
+
+    def test_only_cell_loads_that_dataset_and_horizon(self):
+        calls = []
+
+        def fake_load(dataset):
+            calls.append(dataset)
+            return dataset
+
+        with patch("sita_ablation.formal_context.load_condition_frames", side_effect=fake_load):
+            one = load_plan_frames((_spec("F4"),))
+            calls.clear()
+            several = load_plan_frames((_spec("F4"), _spec("F4", horizon=3), _spec("F4", dataset="D4")))
+        self.assertEqual(one, {"D1": "D1"})
+        self.assertEqual(calls, ["D1", "D4"])
+        self.assertEqual(several, {"D1": "D1", "D4": "D4"})
+
+        frame = SimpleNamespace(
+            model_features=("sales", "on_promo"),
+            key_fields=("series_id",),
+            target_key=("target",),
+            target_test=SimpleNamespace(iso=lambda: ("2020-01-01", "2020-06-28")),
+        )
+        built = []
+
+        def fake_windows(_rows, **kwargs):
+            built.append((kwargs["horizon"], kwargs["partition"]))
+            return SimpleNamespace()
+
+        def fake_test(_rows, **kwargs):
+            built.append((kwargs["horizon"], "test"))
+            return SimpleNamespace(y_original=np.zeros(180, dtype=np.float64))
+
+        with patch("sita_ablation.formal_context.partition_rows", return_value=frame), \
+             patch("sita_ablation.formal_context.fit_target_model_scaler", return_value="scaler"), \
+             patch("sita_ablation.formal_context.transform_model_frame", side_effect=lambda _scaler, rows: rows), \
+             patch("sita_ablation.formal_context.observed_through_test", return_value=frame), \
+             patch("sita_ablation.formal_context.build_target_partition_windows", side_effect=fake_windows), \
+             patch("sita_ablation.formal_context.build_test_windows", side_effect=fake_test):
+            prepared = prepare_conditions((_spec("F4"), _spec("F4")), {"D1": frame})
+        self.assertEqual(set(prepared), {("D1", 1)})
+        self.assertEqual(built, [(1, "train"), (1, "validation"), (1, "test")])
+
+    def test_context_construction_failure_creates_no_cell_files(self):
+        before = _cell_files()
+
+        def loader(_specs):
+            raise ContractError("formal context could not be assembled: sealed table missing")
+
+        with patch("sita_ablation.runner.probe_workspace_dirty", return_value=False), \
+             patch("sita_ablation.runner.assemble_formal_context", side_effect=loader), \
+             patch("sita_ablation.runner.execute", side_effect=AssertionError("execute")) as execute_fn, \
+             patch("sita_ablation.formal_context.load_condition_frames", side_effect=AssertionError("sealed")):
+            with self.assertRaises(ContractError) as caught:
+                main(_FORMAL_ARGV)
+        self.assertIn("formal context could not be assembled", str(caught.exception))
+        self.assertNotIn("sealed tables are not read", str(caught.exception))
+        execute_fn.assert_not_called()
+        self.assertEqual(_cell_files(), before)
+
+    def test_assembled_context_keeps_the_loaded_frames_and_candidate_rule(self):
+        spec = _spec("F4")
+        frame = SimpleNamespace(dataset="D1", model_features=("sales",))
+        windows = TargetWindows(train=SimpleNamespace(), validation=SimpleNamespace(), test=SimpleNamespace())
+        condition = PreparedCondition(windows=windows, target_scaler="scaler", y_true=np.zeros(180))
+        template = SimpleNamespace(tensors={})
+        selection = SimpleNamespace(status="ok")
+        with patch("sita_ablation.formal_context.load_plan_frames", return_value={"D1": frame}), \
+             patch("sita_ablation.formal_context.prepare_conditions", return_value={("D1", 1): condition}), \
+             patch("sita_ablation.formal_context._templates_for", return_value={("cnn", 1, True, 42): template}), \
+             patch("sita_ablation.formal_context.load_or_train_stage_a", side_effect=AssertionError("stage-a")), \
+             patch("sita_ablation.formal_context.adapt_target", side_effect=AssertionError("adapt")), \
+             patch("sita_ablation.formal_context.rank_candidates", return_value=selection) as rank:
+            from sita_ablation.formal_context import assemble_formal_context
+
+            context = assemble_formal_context((spec,))
+            chosen = context.select(spec)
+        rank.assert_called_once_with(
+            "D1",
+            frame,
+            comparison_days=30,
+            rule="top",
+            k=3,
+            seed=42,
+        )
+        self.assertIs(chosen, selection)
+        self.assertIs(context.frames["D1"], frame)
+        self.assertIs(context.conditions[("D1", 1)], condition)
+        self.assertIs(context.windows, windows)
+        self.assertEqual(context.target_scaler, "scaler")
+        self.assertEqual(context.y_true.shape, (180,))
+        self.assertIs(context.init_template, template)
+        self.assertIsNone(context.stage_a)
 
 
 if __name__ == "__main__":

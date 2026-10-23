@@ -174,6 +174,33 @@ class SourceSelectionTests(unittest.TestCase):
         self.assertEqual(short_scaled.shape, (45,))
         np.testing.assert_array_equal(short_scaled[30:], np.ones(15))
 
+    def test_one_process_reconstructs_a_loaded_d5_source_once(self):
+        from unittest.mock import patch
+
+        from sita_ablation.d5_source_history import reconstruct_d5_source_history
+        from sita_ablation.source_selection import _RECONSTRUCTED_D5
+
+        _RECONSTRUCTED_D5.clear()
+        frames = make_frames(
+            "D5",
+            [
+                _d5("target", ("48", "1159414"), 0.0, 0.0, 0.0),
+                _d5("source", ("48", "1"), 1.0, 0.0, 1.0),
+            ],
+        )
+        calls = {"n": 0}
+        real = reconstruct_d5_source_history
+
+        def counted(observed, **kwargs):
+            calls["n"] += 1
+            return real(observed, **kwargs)
+
+        with patch("sita_ablation.source_selection.reconstruct_d5_source_history", counted):
+            first = rank_candidates(frames.dataset, frames, comparison_days=30, rule="top", k=1, seed=42)
+            second = rank_candidates(frames.dataset, frames, comparison_days=15, rule="top", k=1, seed=46)
+        self.assertEqual(calls["n"], 1)
+        self.assertEqual(_keys(first), _keys(second))
+
     def test_zero_range_variable_is_zero_for_the_target_and_every_candidate(self):
         frames = make_frames(
             "D5",

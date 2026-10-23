@@ -1,0 +1,313 @@
+{
+  "status": "PROTOCOL_AUDIT_FREEZE",
+  "acceptance": "not_phase0_acceptance",
+  "phase": 0,
+  "identity_name": {
+    "value": "FUSED_TARGET_ONLY_V3",
+    "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:4; src/transfer_methods/ms_katl_corrected_sita_60cell.py:26"
+  },
+  "source_selection": {
+    "dates": {
+      "value": "目标训练加验证覆盖的 30 个闭区间日期；源使用相同日期；截止日等于窗口终点",
+      "ref": "930 第三章.md:41; src/protocols/experiment_protocol.py:131-146; src/protocols/runner_adapter.py:643-649"
+    },
+    "source_observation_cutoff": {
+      "value": "等于各数据集 source_history 终点；D5 为 2017-02-15。源候选与源历史资格只使用 date <= cutoff 的源行。2017-08-14 只是 D5 目标测试终点。",
+      "ref": "消融实验/configs/features_frozen.json datasets.*.source_history; src/protocols/runner_adapter.py:536-551; 消融实验/DECISIONS.md STOP-D5-CUTOFF"
+    },
+    "legal_candidate_gates": {
+      "status": "FROZEN",
+      "order_before_scaler_and_distance": [
+        "identity_and_grouping",
+        "exact_180_source_history",
+        "comparison_window_complete_dates",
+        "comparison_variables_finite_and_encodable"
+      ],
+      "exact_180_source_history": {
+        "policy": "exact_expected_date_set",
+        "history_days": 180,
+        "calendar": "Gregorian daily",
+        "rule": "冻结源历史闭区间上恰好 180 个不重复公历日，无重复实体-日期；行数或非空值数不得代替日期集合检查。ℓ=15 不取消本门。",
+        "ref": "src/constants.py:4-6; src/protocols/source_history.py:43-56,137-234; src/source_selection/source_selector.py:1243-1254"
+      },
+      "scaler_population": "目标比较窗口与全部通过上述四道门的合法候选；未通过的键不得进入 fit_selection_scaler 或距离计算",
+      "ref": "消融实验/DECISIONS.md STOP-HISTORY"
+    },
+    "d5_source_history_reconstruction": {
+      "status": "FROZEN",
+      "required": true,
+      "applies_before": "exact_180_source_history",
+      "window": ["2016-08-20", "2017-02-15"],
+      "entity_scope": "裁到该窗后出现过的 store_nbr/item_nbr（经 entity_id）；窗外日期不得进入重建输入",
+      "original_rows": "unchanged",
+      "synthetic_fills": {
+        "sales": 0,
+        "onpromotion": 0,
+        "date_parts": "year/month/week/day from calendar date",
+        "item_static": "family/class/perishable from items.csv by item_nbr",
+        "store_static": "city/state/type/cluster from stores.csv by store_nbr",
+        "transactions": "transactions.csv by (store_nbr,date); missing -> 0",
+        "oil_price": "authoritative oil_by_date; missing -> fail",
+        "is_holiday": "if column present: holidays_events derived (store_nbr,date); missing -> 0"
+      },
+      "oil_authority_rule": "align dcoilwtico to natural days, forward-fill, lag one day to oil_price",
+      "implementation": "independent copy under 消融实验/; no import src; do not rewrite sealed parquet; do not use prepared_180day_source.parquet as selection input",
+      "authority_manifest": "数据集/固化数据/d1_d6_sealed_v1/dataset5/prepared_180day_source_manifest.json",
+      "ref": "src/utils/d5_calendar_reconstruction.py:125-142,248-297,554-809; 消融实验/DECISIONS.md STOP-D5-RECON"
+    },
+    "comparison_variables": {
+      "value": "见 features_frozen.json 的 similarity_variables",
+      "ref": "src/protocols/transformation_identity.py:1103-1109"
+    },
+    "scaling": {
+      "adopted": "per_similarity_variable_minmax",
+      "rule": "对每个相似性变量单独取比较窗口内目标与全部合法候选的最小值和最大值，再按该变量缩放；缩放后按变量声明顺序拼接成比较向量",
+      "ref": "930 第三章.md:43; 消融实验/ABLATION_EXECUTION_SPEC.md:370",
+      "code_difference": {
+        "value": "正式代码把所有变量拼接后只计算一个全局 scaler_min/scaler_max，并且只在全局全距为 0 时把向量置零",
+        "same_result_when": "相似性变量只有 sales 时，D1、D4、D6 与逐变量规则结果相同",
+        "different_result_when": "D5 的 sales、onpromotion、oil_price 被放进同一个标量",
+        "ref": "src/protocols/candidate_pool.py:1441-1451",
+        "authority": "旧选择距离、Top-3、摘要和下游正式结果不能直接继承。正式实现改为逐变量缩放并重新生成源选择权威文件之后，新结果才有效。"
+      },
+      "zero_range_per_variable": {
+        "value": 0,
+        "status": "FROZEN",
+        "rule": "r_j = M_j - m_j。r_j > 0 时 g_j(x) = (x - m_j) / r_j；r_j = 0 时该变量在目标和全部合法候选上整列缩放为 0。该列不提供距离区分，也不除零。"
+      }
+    },
+    "distance": {
+      "value": "np.linalg.norm(scaled_sources - scaled_target, axis=1)",
+      "ref": "src/protocols/candidate_pool.py:1452"
+    },
+    "weights": {
+      "value": "1/(distance+1e-8) 后归一化",
+      "ref": "src/protocols/candidate_pool.py:1499-1500; src/protocols/experiment_protocol.py:206-207"
+    },
+    "k": {
+      "value": 3,
+      "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:15"
+    },
+    "mode": {
+      "value": "aligned_30d",
+      "ref": "src/protocols/candidate_pool.py:30; src/protocols/runner_adapter.py:631-654"
+    }
+  },
+  "source_training": {
+    "history_days": {
+      "value": 180,
+      "also_selection_gate": true,
+      "note": "同一 180 日资格在选源 scaler 拟合前检查；见 source_selection.legal_candidate_gates",
+      "ref": "src/constants.py:4; 消融实验/DECISIONS.md STOP-HISTORY"
+    },
+    "split": {
+      "value": {"train_ratio": 0.8, "val_ratio": 0.1, "test_ratio": 0.1},
+      "unit": "一个源序列排序后的不重复日期行；滑窗在每个切分内部单独构造",
+      "cut_rule": "train_end=max(1,int(n*0.8)); val_end=min(n-1,max(train_end+1,int(n*0.9)))",
+      "measured_d4_horizon1": {
+        "scope": "D4 target 166/258, without, horizon 1, sources 166/492, 166/277, 166/184; selection mode in that audit was historical_window_30d, not the ablation default aligned_30d",
+        "history": ["2024-07-19", "2025-01-14"],
+        "train_dates": ["2024-07-19", "2024-12-09"],
+        "validation_dates": ["2024-12-10", "2024-12-27"],
+        "test_dates": ["2024-12-28", "2025-01-14"],
+        "fit_target_dates_horizon1": ["2024-07-29", "2024-12-09"],
+        "fit_sample_count_horizon1": 134,
+        "validation_entered_model_fit": false,
+        "ref": "对话 b8f1d14a-59b0-4dd0-a0a4-a38715d05067 对 _prepare_source_split 的实测"
+      },
+      "ref": "src/utils/parquet_data_loader.py:317-322; src/data_processing/data_preprocessing.py:698-704"
+    },
+    "fit_rows": {
+      "value": "只用源训练切片构造窗口",
+      "ref": "src/transfer_methods/msml_tl.py:325-334,350-356"
+    },
+    "learning_rate": {
+      "value": 0.0001,
+      "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:16-17; src/utils/experiment_hyperparams.py:5"
+    },
+    "epochs": {
+      "value": 50,
+      "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:18; src/utils/experiment_hyperparams.py:6"
+    },
+    "loss": {
+      "value": "mse",
+      "ref": "src/models/cnn_model.py:157-159; 930 第三章.md:59"
+    },
+    "input_minmax": {
+      "adopted": "source_train_rows_only",
+      "not_target_scaler": true,
+      "not_source_selection_scaler": true,
+      "population": "已经裁到 source_observation_cutoff 的单个源序列",
+      "fit_rows": "该序列按不重复日期做 0.8/0.1/0.1 切分后的训练日期行",
+      "fit_columns": "该源模型的输入特征列，含 sales",
+      "transform_rows": "同一 scaler 变换训练、验证和测试日期行",
+      "label": "滑窗标签取变换后的 sales",
+      "missing_values": {
+        "value": "切分前把数值模型列的缺失填 0；布尔列和分类列不填",
+        "ref": "src/utils/source_fillna.py:27-68"
+      },
+      "constant_column": {
+        "value": "sklearn MinMaxScaler 默认 feature_range=(0,1)、clip=False；全距为 0 的列 scale 置 1，变换结果为 0",
+        "ref": "src/data_processing/data_preprocessing.py:1058-1072; .venv/lib/python3.9/site-packages/sklearn/preprocessing/_data.py:85-116,408-411,505-509"
+      },
+      "history_before_split": {
+        "D1": ["2017-01-02", "2017-06-30"],
+        "D4": ["2024-07-19", "2025-01-14"],
+        "D5": ["2016-08-20", "2017-02-15"],
+        "D6": ["2015-05-29", "2015-11-24"],
+        "ref": "src/protocols/gate1_transformation.py:239-244; src/protocols/runner_adapter.py:536-551"
+      },
+      "ref": "src/transfer_methods/msml_tl.py:324-333; src/data_processing/data_preprocessing.py:690-704,1058-1072,1224-1236"
+    },
+    "validation_error": {
+      "source_validation_metric": "NOT_APPLICABLE",
+      "source_validation_value_space": "NOT_APPLICABLE",
+      "status": "FROZEN",
+      "statement": "每个源模型仅使用源训练窗口进行 MSE 优化。源验证窗口不参与参数更新、早停、检查点选择、源模型排序或融合权重计算，因此本文不定义或报告源侧验证误差。",
+      "code_ref": "src/transfer_methods/msml_tl.py:325-367",
+      "spec_field_not_reported": "消融实验/ABLATION_EXECUTION_SPEC.md:181",
+      "future_diagnostic": "若以后记录源验证 RMSE，须另立诊断协议并写明 scaler、预测公式和数值空间，不得补进当前正式结果。"
+    }
+  },
+  "minmax": {
+    "target_model": {
+      "value": "每列 MinMaxScaler，只在目标训练行 fit",
+      "ref": "src/data_processing/data_preprocessing.py:969-982,1058-1071"
+    },
+    "source_selection": {
+      "value": "per_similarity_variable_minmax",
+      "zero_range": "整列缩放为 0",
+      "ref": "930 第三章.md:43; src/protocols/candidate_pool.py:1441-1451"
+    }
+  },
+  "cnn": {
+    "layers": {
+      "value": ["conv1 Conv1D 32 k=3 same relu", "pool1 MaxPool 2", "conv2 Conv1D 64 k=3 same relu", "pool2 MaxPool 2", "conv3 Conv1D 128 k=3 same relu", "flatten", "dropout", "dense_out Dense 1"],
+      "ref": "src/models/cnn_model.py:143-154"
+    },
+    "dropout": {
+      "source_model_rate": 0.1,
+      "source_model_position": "flatten 之后、dense_out 之前",
+      "target_path": "提取器停在 flatten；head 前 feature_dropout 0.1",
+      "ref": "src/utils/experiment_hyperparams.py:8; src/models/cnn_model.py:152; src/transfer_methods/ms_katl_lite.py:97,293,321"
+    },
+    "fusion": {
+      "value": "conv1-3 的 kernel 与 bias，位置对应加权平均",
+      "ref": "src/transfer_methods/msml_tl.py:503-520; 930 第三章.md:71-77"
+    }
+  },
+  "revin": {
+    "code": {
+      "eps": 1e-5,
+      "affine": true,
+      "target_channel": 0,
+      "std": "sqrt(mean((x-mean)^2)+eps)",
+      "inverse": "(y-bias)/(weight+eps*eps)*stdev+mean",
+      "ref": "src/transfer_methods/revin.py:19-21,83-88,125-130"
+    },
+    "chapter_930_structure_match": {
+      "value": true,
+      "ref": "930 第三章.md:97-115"
+    },
+    "epsilon_identity": {
+      "value": 1e-5,
+      "status": "RESOLVED",
+      "normalize": "sqrt(variance + 1e-5)",
+      "inverse_denominator": "affine_weight + (1e-5)^2 = affine_weight + 1e-10",
+      "not_equal_to_fusion_weight_epsilon": 1e-8,
+      "ref": "src/transfer_methods/revin.py:19,83-88,125-130"
+    }
+  },
+  "huber": {
+    "delta": {
+      "value": 1.0,
+      "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:32; src/transfer_methods/ms_katl_lite.py:106,549"
+    }
+  },
+  "target_optimizer": {
+    "name": {
+      "value": "Adam",
+      "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:33"
+    },
+    "schedule": {
+      "value": "cosine",
+      "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:34; src/transfer_methods/ms_katl_lite.py:541"
+    },
+    "learning_rates": {
+      "status": "RESOLVED",
+      "main_protocol": "dataset_specific",
+      "D1": {"value": 3e-5, "ref": "消融实验/ABLATION_EXECUTION_SPEC.md:88; configs/ms_katl_corrected_sita_60cell_manifest.json:20; 论文文稿相关/4 Experiments and Results.docx 表3"},
+      "D4": {"value": 3e-5, "ref": "消融实验/ABLATION_EXECUTION_SPEC.md:88; configs/ms_katl_corrected_sita_60cell_manifest.json:21; 论文文稿相关/4 Experiments and Results.docx 表3"},
+      "D5": {"value": 3e-4, "ref": "消融实验/ABLATION_EXECUTION_SPEC.md:88; configs/ms_katl_corrected_sita_60cell_manifest.json:22; 论文文稿相关/4 Experiments and Results.docx 表3"},
+      "D6": {"value": 3e-5, "ref": "消融实验/ABLATION_EXECUTION_SPEC.md:88; configs/ms_katl_corrected_sita_60cell_manifest.json:23; 论文文稿相关/4 Experiments and Results.docx 表3"},
+      "not_main_protocol": {
+        "value": "论文 4.1.2 中 A-E 统一 3e-4 不替代主协议",
+        "ref": "论文文稿相关/4 Experiments and Results.docx 4.1.2; 消融实验/ABLATION_EXECUTION_SPEC.md:111"
+      }
+    },
+    "epochs": {
+      "value": 50,
+      "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:29"
+    },
+    "batch_size": {
+      "value": 16,
+      "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:30"
+    },
+    "early_stopping": {
+      "value": false,
+      "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:42"
+    }
+  },
+  "ema": {
+    "enabled_for_test": {
+      "value": true,
+      "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:35-39; src/transfer_methods/ms_katl_lite.py:900-902"
+    },
+    "momentum": {
+      "value": 0.99,
+      "ref": "configs/ms_katl_corrected_sita_60cell_manifest.json:36; src/transfer_methods/ms_katl_lite.py:109,781-782"
+    },
+    "in_loop_validation_weights": {
+      "value": "RAW",
+      "ref": "src/transfer_methods/ms_katl_lite.py:849-852"
+    }
+  },
+  "smape": {
+    "formula": {
+      "value": "100 * mean(2*|pred-true| / (|true|+|pred|+1e-8))",
+      "ref": "src/evaluation/metrics.py:73-79; src/evaluation/metric_contract.py:15-17"
+    },
+    "zero_denominator": {
+      "value": "不丢样本；分母加 1e-8。原销量空间先把负数裁成 0",
+      "ref": "src/evaluation/metrics.py:73-79,276-294"
+    }
+  },
+  "tcn_reference": {
+    "structure_path": {
+      "value": "scripts/baselines/bl7_tcn.py",
+      "ref": "scripts/baselines/bl7_tcn.py:18-23,63-93,187-207"
+    },
+    "revin_wrapper_path": {
+      "value": "scripts/baselines/bl7_tcn_revin.py",
+      "ref": "scripts/baselines/bl7_tcn_revin.py:149"
+    },
+    "fusion_key_path": {
+      "value": "src/transfer_methods/sita_tcn.py",
+      "ref": "src/transfer_methods/sita_tcn.py:43-59,142"
+    },
+    "channels": {"value": 16, "ref": "scripts/baselines/bl7_tcn.py:18"},
+    "levels": {"value": 2, "ref": "scripts/baselines/bl7_tcn.py:19"},
+    "kernel_size": {"value": 3, "ref": "scripts/baselines/bl7_tcn.py:20"},
+    "dilations": {"value": [1, 2], "ref": "scripts/baselines/bl7_tcn.py:192-199"},
+    "input_channels": {"value": 1, "ref": "scripts/baselines/bl7_tcn.py:191; src/transfer_methods/sita_tcn.py:142"},
+    "head": {"value": "Linear(16, 1) on last timestep", "ref": "scripts/baselines/bl7_tcn.py:203-207"},
+    "fused_tensors": {
+      "value": ["blocks.0.conv1", "blocks.0.conv2", "blocks.0.residual", "blocks.1.conv1", "blocks.1.conv2"],
+      "ref": "src/transfer_methods/sita_tcn.py:43-54"
+    },
+    "bl7_fit_not_for_ablation": {
+      "value": "PyTorch, MSE, Adam 1e-4, max 50 epochs, patience 5",
+      "ref": "scripts/baselines/bl7_tcn.py:21-23,214-236"
+    }
+  }
+}

@@ -36,6 +36,7 @@ from sita_ablation.arms import (
     stage_a_key_for,
 )
 from sita_ablation.data import ConditionFrames, ContractError, DateSpan, DatasetId, load_dataset_contract
+from sita_ablation.formal_context import assemble_formal_context
 from sita_ablation.io import RunPayload, cell_id, require_clean_workspace_for_formal_run
 from sita_ablation.source_selection import STATUS_SKIPPED
 from sita_ablation.stage_a import StageAKey
@@ -44,7 +45,7 @@ OPEN_1_STATUS = "CLOSED"
 OPEN_2_STATUS = "CLOSED"
 PROTOCOL_VERSION = "PROTOCOL_AUDIT_FREEZE"
 PLANNED = "planned"
-_PHASES = (1, 2, 3)
+_PHASES = (1, 2, 3, 4, 5)
 _DATASETS = {"D1", "D4", "D5", "D6"}
 _HORIZONS = {"1", "3", "5"}
 _SEEDS = {"42", "43", "44", "45", "46"}
@@ -149,6 +150,8 @@ class CellContext:
     init_template: object = None
     stage_a: object = None
     y_true: object = None
+    frames: dict[str, ConditionFrames] | None = None
+    conditions: dict[tuple[str, int], object] | None = None
 
 
 def probe_workspace_dirty(repo_root: Path | None = None) -> bool:
@@ -234,6 +237,7 @@ def dry_run(
     workers: int,
     arms: Sequence[str] | None = None,
     only_cell: str | None = None,
+    only_horizon: int | None = None,
     workspace_dirty: bool | None = None,
     repo_root: Path | None = None,
 ) -> DryRunResult:
@@ -243,7 +247,7 @@ def dry_run(
     gate = preflight(workspace_dirty=workspace_dirty, repo_root=repo_root)
     if gate.workspace_dirty:
         return DryRunResult(preflight=gate, plan=(), phase=phase, workers=workers)
-    plan = _plan(phase, arms=arms, only_cell=only_cell)
+    plan = _plan(phase, arms=arms, only_cell=only_cell, only_horizon=only_horizon)
     return DryRunResult(preflight=gate, plan=plan, phase=phase, workers=workers)
 
 
@@ -254,6 +258,7 @@ def execute(
     runs_root: Path,
     arms: Sequence[str] | None = None,
     only_cell: str | None = None,
+    only_horizon: int | None = None,
     workspace_dirty: bool | None = None,
     repo_root: Path | None = None,
     context: CellContext | None = None,
@@ -266,6 +271,7 @@ def execute(
         workers=workers,
         arms=arms,
         only_cell=only_cell,
+        only_horizon=only_horizon,
         workspace_dirty=workspace_dirty,
         repo_root=repo_root,
     )
@@ -430,8 +436,14 @@ def _selection_for(spec: RunSpec, context: CellContext) -> object:
     return context.select(spec)
 
 
-def _plan(phase: int, *, arms: Sequence[str] | None, only_cell: str | None) -> tuple[PlannedCell, ...]:
-    selected = _filter_specs(_expand(phase), arms=arms, only_cell=only_cell)
+def _plan(
+    phase: int,
+    *,
+    arms: Sequence[str] | None,
+    only_cell: str | None,
+    only_horizon: int | None = None,
+) -> tuple[PlannedCell, ...]:
+    selected = _filter_specs(_expand(phase), arms=arms, only_cell=only_cell, only_horizon=only_horizon)
     frames: dict[str, ConditionFrames] = {}
     cells = []
     for spec in selected:
@@ -457,7 +469,11 @@ def _expand(phase: int) -> tuple[RunSpec, ...]:
         return expand_runs(2)
     if phase == 3:
         return expand_runs(3)
-    raise ContractError(f"phase must be 1, 2, or 3, got {phase!r}")
+    if phase == 4:
+        return expand_runs(4)
+    if phase == 5:
+        return expand_runs(5)
+    raise ContractError(f"phase must be 1, 2, 3, 4, or 5, got {phase!r}")
 
 
 def _filter_specs(
@@ -465,6 +481,7 @@ def _filter_specs(
     *,
     arms: Sequence[str] | None,
     only_cell: str | None,
+    only_horizon: int | None = None,
 ) -> tuple[RunSpec, ...]:
     chosen = tuple(specs)
     if arms is not None:
@@ -479,6 +496,9 @@ def _filter_specs(
         chosen = tuple(
             spec for spec in chosen if spec.dataset == dataset and spec.horizon == horizon and spec.seed == seed
         )
+    if only_horizon is not None:
+        _require_horizon(only_horizon)
+        chosen = tuple(spec for spec in chosen if spec.horizon == only_horizon)
     return chosen
 
 
@@ -611,6 +631,11 @@ def _parse_only_cell(text: str) -> tuple[str, int, int]:
     return dataset, int(horizon_text), int(seed_text)
 
 
+def _require_horizon(horizon: int) -> None:
+    if type(horizon) is not int or horizon not in (1, 3, 5):
+        raise ContractError("only-horizon must be 1, 3, or 5")
+
+
 def _require_workers(workers: int) -> None:
     if type(workers) is not int or workers < 1:
         raise ContractError("workers must be an integer greater than or equal to 1")
@@ -618,11 +643,11 @@ def _require_workers(workers: int) -> None:
 
 def _require_phase(phase: int) -> None:
     if type(phase) is not int or phase not in _PHASES:
-        raise ContractError(f"phase must be 1, 2, or 3, got {phase!r}")
+        raise ContractError(f"phase must be 1, 2, 3, 4, or 5, got {phase!r}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """CLI entry. A formal invocation hits preflight and does not train."""
+    """CLI entry. Dry-run stops after preflight. A formal run loads inputs only after the gates pass."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Ablation runner gates and dry-run plan")
@@ -631,17 +656,44 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--workers", type=int, required=True)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--only-cell", default=None)
+    parser.add_argument("--only-horizon", type=int, choices=(1, 3, 5), default=None)
     args = parser.parse_args(list(argv) if argv is not None else None)
     if args.dry_run:
-        result = dry_run(args.phase, workers=args.workers, arms=args.arms, only_cell=args.only_cell)
+        result = dry_run(
+            args.phase,
+            workers=args.workers,
+            arms=args.arms,
+            only_cell=args.only_cell,
+            only_horizon=args.only_horizon,
+        )
         print(json.dumps({"accepted": result.preflight.accepted, "reasons": list(result.preflight.reasons), "plan": len(result.plan)}))
         return 0 if result.preflight.accepted else 2
+    preview = dry_run(
+        args.phase,
+        workers=args.workers,
+        arms=args.arms,
+        only_cell=args.only_cell,
+        only_horizon=args.only_horizon,
+    )
+    if not preview.preflight.accepted:
+        print(json.dumps({"accepted": preview.preflight.accepted, "reasons": list(preview.preflight.reasons)}))
+        return 2
+    context = assemble_formal_context(tuple(cell.spec for cell in preview.plan))
+    audit_name = (
+        io_mod.phase_audit_path(args.phase)
+        if args.only_horizon is None
+        else io_mod.phase_horizon_audit_path(args.phase, args.only_horizon)
+    )
+    audit_path = _REPO_ROOT / audit_name
     result = execute(
         args.phase,
         workers=args.workers,
         runs_root=_PACKAGE_ROOT / "runs",
         arms=args.arms,
         only_cell=args.only_cell,
+        only_horizon=args.only_horizon,
+        context=context,
+        audit_path=audit_path,
     )
     print(json.dumps({"accepted": result.preflight.accepted, "reasons": list(result.preflight.reasons)}))
     return 0 if result.preflight.accepted else 2

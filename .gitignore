@@ -17,3 +17,9 @@ output/
 _root_inventory.md
 _import_scan.md
 _column_scan.md
+
+# Ablation run artifacts. Protocol audit stays tracked.
+消融实验/cache/
+消融实验/logs/
+消融实验/runs/
+消融实验/audit/phase_*.json
