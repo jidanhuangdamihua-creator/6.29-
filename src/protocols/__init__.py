@@ -16,6 +16,16 @@ from .experiment_protocol import (
     serialize_canonical_target_key,
     validate_canonical_target_key,
 )
+from .sealing_protocol import (
+    SEALED_PROTOCOL_VERSION,
+    SOURCE_PRETRAIN_DAYS,
+    FeatureRoles,
+    SourcePretrainWindow,
+    TargetWindow,
+    classify_feature_roles,
+    get_source_pretrain_window,
+    get_target_window,
+)
 
 __all__ = [
     "FORMAL_HORIZONS",
@@ -32,4 +42,12 @@ __all__ = [
     "normalize_canonical_target_key",
     "serialize_canonical_target_key",
     "validate_canonical_target_key",
+    "SEALED_PROTOCOL_VERSION",
+    "SOURCE_PRETRAIN_DAYS",
+    "FeatureRoles",
+    "SourcePretrainWindow",
+    "TargetWindow",
+    "classify_feature_roles",
+    "get_source_pretrain_window",
+    "get_target_window",
 ]

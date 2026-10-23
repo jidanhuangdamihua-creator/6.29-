@@ -119,7 +119,7 @@ def test_d5_loader_returns_explicit_report_and_preserves_tuple_api(tmp_path: Pat
         dataset_id=5,
         parquet_dir=parquet_dir,
         windows=windows,
-        source_history_days=300,
+        source_history_days=180,
         expected_dates=expected_dates,
         d5_authorities=authorities,
     )
@@ -139,7 +139,7 @@ def test_d5_loader_returns_explicit_report_and_preserves_tuple_api(tmp_path: Pat
         dataset_id=5,
         parquet_dir=parquet_dir,
         windows=windows,
-        source_history_days=300,
+        source_history_days=180,
         expected_dates=expected_dates,
         d5_authorities=authorities,
     )
@@ -148,7 +148,7 @@ def test_d5_loader_returns_explicit_report_and_preserves_tuple_api(tmp_path: Pat
 
 
 def test_runner_loads_authorities_once_and_passes_window_dates(monkeypatch) -> None:
-    expected_dates = pd.date_range("2017-01-17", "2017-08-15", freq="D")
+    expected_dates = pd.date_range("2017-01-17", "2017-08-14", freq="D")
     bundle = object()
     load_result = Mock(spec=ParquetSourceTargetLoad)
     authority_loader = Mock(return_value=bundle)
@@ -159,8 +159,8 @@ def test_runner_loads_authorities_once_and_passes_window_dates(monkeypatch) -> N
     result = d5_runner.load_d5_runtime_inputs(
         raw_dir=Path("raw"),
         parquet_dir=Path("parquet"),
-        windows={"dataset_id": 5, "train_start": "2017-01-17", "test_end": "2017-08-15"},
-        source_history_days=300,
+        windows={"dataset_id": 5, "train_start": "2017-01-17", "test_end": "2017-08-14"},
+        source_history_days=180,
     )
 
     assert result is load_result
@@ -173,9 +173,9 @@ def test_runner_loads_authorities_once_and_passes_window_dates(monkeypatch) -> N
 
 def test_expected_target_dates_come_from_fixed_window_authority() -> None:
     dates = expected_target_dates_from_windows(
-        {"dataset_id": 5, "train_start": "2017-01-17", "test_end": "2017-08-15"}
+        {"dataset_id": 5, "train_start": "2017-01-17", "test_end": "2017-08-14"}
     )
 
-    assert len(dates) == 211
+    assert len(dates) == 210
     assert dates[0] == pd.Timestamp("2017-01-17")
-    assert dates[-1] == pd.Timestamp("2017-08-15")
+    assert dates[-1] == pd.Timestamp("2017-08-14")

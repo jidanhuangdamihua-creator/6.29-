@@ -1,7 +1,10 @@
-# source domain 历史窗口天数，论文固定值
 import json
 
-SOURCE_HISTORY_DAYS = 300
+from src.protocols.sealing_protocol import SOURCE_PRETRAIN_DAYS
+
+
+# Backward-compatible name for the sealed source pretraining window.
+SOURCE_HISTORY_DAYS = SOURCE_PRETRAIN_DAYS
 D4_D6_RUNTIME_KNN_PROTOCOL_VERSION = "runtime_knn_windowed_stats_v1"
 MIXED_METRIC_SPACE = "mixed_metric_space"
 MIXED_METRIC_PROTOCOL_NOTE = (
@@ -285,7 +288,7 @@ SOLIDIFIED_TARGET_WINDOWS: dict[int, dict[str, str]] = {
     },
     5: {
         "train_start": "2017-01-17",
-        "test_end": "2017-08-15",
+        "test_end": "2017-08-14",
     },
     6: {
         "train_start": "2015-10-26",
