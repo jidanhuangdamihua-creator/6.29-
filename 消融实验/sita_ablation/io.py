@@ -242,6 +242,14 @@ def phase_audit_path(phase: int) -> Path:
     return Path("消融实验") / "audit" / f"phase_{phase}_audit.json"
 
 
+def phase_horizon_audit_path(phase: int, horizon: int) -> Path:
+    """Audit for one horizon shard. It does not replace ``phase_<phase>_audit.json``."""
+    _require_phase(phase)
+    if type(horizon) is not int or horizon not in (1, 3, 5):
+        raise ContractError("only-horizon must be 1, 3, or 5")
+    return Path("消融实验") / "audit" / f"phase_{phase}_h{horizon}_audit.json"
+
+
 def cell_id(spec: RunSpec) -> str:
     """Frozen audit id ``<arm>:<protocol_tag>:<dataset>:h<horizon>:seed<seed>``."""
     text = f"{spec.arm}:{spec.protocol_tag}:{spec.dataset}:h{spec.horizon}:seed{spec.seed}"
@@ -339,7 +347,9 @@ def write_phase_audit(
     """Write the four audit categories. Rows that were not supplied stay absent."""
     _require_phase(phase)
     destination = Path(path)
-    if destination.name != phase_audit_path(phase).name:
+    allowed = {phase_audit_path(phase).name}
+    allowed.update(phase_horizon_audit_path(phase, horizon).name for horizon in (1, 3, 5))
+    if destination.name not in allowed:
         raise ContractError("phase audit file name must be phase_<phase>_audit.json")
     seen: set[str] = set()
     payload = {
@@ -1150,8 +1160,8 @@ def _audit_ids(values: Sequence[str], seen: set[str]) -> list[str]:
 
 
 def _require_phase(phase: object) -> None:
-    if type(phase) is not int or phase not in (1, 2, 3):
-        raise ContractError(f"phase must be 1, 2, or 3, got {phase!r}")
+    if type(phase) is not int or phase not in (1, 2, 3, 4, 5):
+        raise ContractError(f"phase must be 1, 2, 3, 4, or 5, got {phase!r}")
 
 
 def _require_cell_id(value: object) -> None:

@@ -517,6 +517,9 @@ def _source_history_dates(frames: ConditionFrames) -> pd.DatetimeIndex:
     return dates
 
 
+_RECONSTRUCTED_D5: dict[tuple[int, str, str], tuple[pd.DataFrame, ReconstructionSummary]] = {}
+
+
 def _reconstruct_d5_groups(
     frames: ConditionFrames,
     groups: list[tuple[tuple[str, ...], pd.DataFrame]],
@@ -544,8 +547,13 @@ def _reconstruct_d5_groups(
             identities_only_after_cutoff=only_after,
             authority_sha256=(),
         )
-    observed = pd.concat([series for _key, series in clean], ignore_index=True)
-    reconstructed, summary = reconstruct_d5_source_history(observed)
+    cache_key = (id(frames.source_rows), start, end)
+    cached = _RECONSTRUCTED_D5.get(cache_key)
+    if cached is None:
+        observed = pd.concat([series for _key, series in clean], ignore_index=True)
+        cached = reconstruct_d5_source_history(observed)
+        _RECONSTRUCTED_D5[cache_key] = cached
+    reconstructed, summary = cached
     summary = replace(
         summary,
         identities_only_after_cutoff=only_after,

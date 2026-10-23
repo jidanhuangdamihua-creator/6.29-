@@ -206,7 +206,7 @@ D6 的“同一 department”用封存列 `dept_id`。依据是 `数据集/固�
    - D4：`require_same_group` 为假，源池不做域过滤。`without` 只保留 `store_id=166`，并排除目标本身。
    - D5：同一 `family`，源池做域过滤，`without` 只保留 `store_nbr=48`，排除目标。
    - D6：同一 `dept_id`，`without` 只保留 `store_id=CA_1`，排除目标。
-2. 源历史资格：冻结源历史闭区间上恰好 180 个不重复公历日（`exact_expected_date_set`）。D1/D4/D6 直接在裁窗后的源行上检查。D5 先按正式规则重建缺失自然日，再检查；观测行不变，合成行 `sales=0`、`onpromotion=0`，协变量按权威 CSV 填充（见 `protocol_frozen.json` 的 `d5_source_history_reconstruction` 与 `DECISIONS.md` STOP-D5-RECON）。
+2. 源历史资格：冻结源历史闭区间上恰好 180 个不重复公历日（`exact_expected_date_set`）。D1/D4/D6 直接在裁窗后的源行上检查。D5 先按正式规则重建缺失自然日，再检查；观测行不变，合成行 `sales=0`、`onpromotion=0`，协变量按权威 CSV 填充（见 `protocol_frozen.json` 的 `d5_source_history_reconstruction` 与 `DECISIONS.md` STOP-D5-RECON）。同一次进程里，同一份已载入的 D5 源表只重建一次，后续格子复用这次结果，仍然不读取 `prepared_180day_source.parquet`。
 3. 比较窗口：当前 `ℓ` 对应的每一个日历日都存在，无重复日。
 4. 比较变量：声明顺序上的每个相似性变量有限且可编码。
 
@@ -615,7 +615,7 @@ canonical JSON 使用 UTF-8、递归 `sort_keys`、`separators=(",", ":")`、`al
 ## 12. `runner`
 
 ```python
-python -m sita_ablation.runner --phase {1|2|3} --arms ... --workers N [--dry-run] [--only-cell D1:1:42]
+python -m sita_ablation.runner --phase {1|2|3|4|5} --arms ... --workers N [--dry-run] [--only-cell D1:1:42] [--only-horizon {1|3|5}]
 ```
 
 `--workers` 没有冻结默认值，调用时必须给出，且大于等于 1。每个进程设置 TensorFlow `intra_op_parallelism_threads=1` 和 `inter_op_parallelism_threads=1`。进程上限是当时机器物理核数减 1；接口不把核数写成常数。
@@ -623,6 +623,10 @@ python -m sita_ablation.runner --phase {1|2|3} --arms ... --workers N [--dry-run
 每个 cell 开始时调用 `tf.config.experimental.enable_op_determinism()`。确定性抽查与正式 cell 使用同一设置。抽查重复三个 cell，比较预测逐元素是否相同；不同则记录最大绝对差，不改写已有 `DONE.json`。
 
 `--dry-run` 只展开 `RunSpec`、缓存键和将要跳过的目录，不建网络、不写预测。`--only-cell` 的三个整数或字符串按 `dataset:horizon:seed` 过滤。
+
+Phase 4 只展开 `F4/ell15` 的 60 格。这 60 格与 Phase 2 名单里的 `ell15` 是同一套 `RunSpec`，目录仍是 `消融实验/runs/F4/ell15/<dataset>_h<horizon>/seed<seed>/`。Phase 2 的九组名单不因此减少。审计写到 `phase_4_audit.json`，不写 `phase_2_audit.json`。
+
+Phase 5 只展开 `F4/k5` 的 60 格。这 60 格与 Phase 2 名单里的 `k5` 是同一套 `RunSpec`，目录仍是 `消融实验/runs/F4/k5/<dataset>_h<horizon>/seed<seed>/`。审计写到 `phase_5_audit.json`。`--only-horizon` 只保留一个预测步长，三份分别是 20 格且互不重叠；对应审计写到 `phase_5_h1_audit.json`、`phase_5_h3_audit.json`、`phase_5_h5_audit.json`，不覆盖 `phase_5_audit.json`。
 
 正式 runner 启动前调用 `require_clean_workspace_for_formal_run`。`workspace_dirty=True` 时拒绝启动。不用代码 diff digest 代替这个判断。`tcn_source_fit` 完整且类型正确后，GAP-TCN-SOURCE-FIT 不再单独阻断。字段不完整时仍阻断，不自动补默认值。OPEN-1 与 OPEN-2 已有公式，不再单独阻断。
 

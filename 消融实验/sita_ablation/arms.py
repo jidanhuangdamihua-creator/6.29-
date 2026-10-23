@@ -105,6 +105,12 @@ _PHASE_ARMS: dict[int, tuple[_ArmDef, ...]] = {
         _sourced("SITA_TCN", "main", revin=True, rule="top", k=3, weight_mode="inverse_distance", backbone="tcn"),
         _plain("TCN_REVIN", "main", revin=True, backbone="tcn"),
     ),
+    4: (
+        _sourced("F4", "ell15", revin=True, rule="top", k=3, weight_mode="inverse_distance", comparison_days=15),
+    ),
+    5: (
+        _sourced("F4", "k5", revin=True, rule="top", k=5, weight_mode="inverse_distance"),
+    ),
 }
 
 _NO_REVIN_P_ARMS: tuple[_ArmDef, ...] = (
@@ -165,10 +171,14 @@ class ArmPreparation:
     source_validation_value_space: str
 
 
-def expand_runs(phase: Literal[1, 2, 3], *, include_no_revin_variants: bool = False) -> tuple[RunSpec, ...]:
-    """Expand one frozen phase. Tier 3 arms X1, X2, and X3 are never returned."""
+def expand_runs(phase: Literal[1, 2, 3, 4, 5], *, include_no_revin_variants: bool = False) -> tuple[RunSpec, ...]:
+    """Expand one frozen phase. Tier 3 arms X1, X2, and X3 are never returned.
+
+    Phase 4 is only ``F4/ell15``. Phase 5 is only ``F4/k5``.
+    Phase 2 keeps both tags in its own list.
+    """
     if phase not in _PHASE_ARMS:
-        raise ContractError(f"phase must be 1, 2, or 3, got {phase!r}")
+        raise ContractError(f"phase must be 1, 2, 3, 4, or 5, got {phase!r}")
     definitions = list(_PHASE_ARMS[phase])
     if include_no_revin_variants and phase == 1:
         definitions.extend(_NO_REVIN_P_ARMS)

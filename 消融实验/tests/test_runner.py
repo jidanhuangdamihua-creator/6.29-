@@ -48,6 +48,8 @@ _CELL_FILES = {
     "phase_1_audit.json",
     "phase_2_audit.json",
     "phase_3_audit.json",
+    "phase_4_audit.json",
+    "phase_5_audit.json",
 }
 _FORMAL_ARGV = ["--phase", "1", "--arms", "F4", "--workers", "1", "--only-cell", "D1:1:42"]
 _TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+00:00$")
@@ -163,6 +165,17 @@ class RunnerGateTests(unittest.TestCase):
             self.assertIsNone(result.audit_path)
             self.assertEqual(result.plan, ())
             self.assertEqual(_files(root), ())
+
+    def test_only_horizon_splits_phase5_into_three_disjoint_groups(self):
+        shards = []
+        for horizon in (1, 3, 5):
+            preview = dry_run(5, workers=1, only_horizon=horizon, workspace_dirty=False)
+            self.assertTrue(preview.preflight.accepted)
+            self.assertEqual(len(preview.plan), 20)
+            self.assertTrue(all(cell.spec.horizon == horizon and cell.spec.protocol_tag == "k5" for cell in preview.plan))
+            shards.append({cell.cell_id for cell in preview.plan})
+        self.assertEqual(len(set().union(*shards)), 60)
+        self.assertTrue(shards[0].isdisjoint(shards[1]) and shards[1].isdisjoint(shards[2]))
 
     def test_closed_gaps_do_not_refuse_a_clean_preflight(self):
         with TemporaryDirectory() as temp:
