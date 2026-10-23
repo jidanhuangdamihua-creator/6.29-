@@ -55,6 +55,7 @@ from src.protocols.provenance import (
     assert_actual_cnn_training_validated,
     bind_actual_cnn_source_frame,
 )
+from src.protocols.experiment_protocol import PROTOCOL_VERSION
 
 if TYPE_CHECKING:
     from src.protocols.transformation_reuse import TargetTransformationReuseContext
@@ -62,8 +63,33 @@ if TYPE_CHECKING:
 
 LOGGER_NAME = "experiment"
 
-# 默认参与参数融合的层名
+# Historical/generic transferable list used by MSML-TL-RFE and MS-KATL.
+# Formal BL8 must NOT treat this list as the frozen-layer identity.
 _DEFAULT_TRANSFERABLE_LAYERS = ["conv1", "conv2", "conv3"]
+
+# Formal BL8 original-paper mechanism contract.
+# Fused-parameter layers and frozen target layers are distinct identities.
+BL8_FUSED_PARAMETER_LAYERS = (
+    "conv1",
+    "conv2",
+)
+BL8_FROZEN_TARGET_LAYERS = (
+    "conv1",
+    "pool1",
+    "conv2",
+    "pool2",
+)
+BL8_TARGET_TRAINABLE_PARAMETER_LAYERS = (
+    "conv3",
+    "dense_out",
+)
+BL8_FORMAL_K = 3
+BL8_FORMAL_WEIGHT_MODE = "inverse_distance"
+BL8_WEIGHT_EPSILON = 1e-8
+
+
+class FormalBL8ContractError(ValueError):
+    """Raised when a formal BL8 execution violates the original-paper contract."""
 
 
 def _get_logger() -> logging.Logger:
@@ -84,6 +110,158 @@ def _validate_feature_cols(df: pd.DataFrame, feature_cols: Sequence[str], where:
     if missing:
         raise ValueError(f"Missing feature columns in {where}: {missing}")
     return cols
+
+
+def _frame_is_formal_protocol(frame: object) -> bool:
+    attrs = getattr(frame, "attrs", None)
+    if attrs is None:
+        return False
+    return attrs.get("protocol_version") == PROTOCOL_VERSION
+
+
+def resolve_formal_bl8_mode(
+    formal_bl8: bool,
+    source_df: object,
+    target_df: object,
+) -> bool:
+    """Resolve formal BL8 mode from an explicit flag or sealed protocol frames."""
+    if bool(formal_bl8):
+        return True
+    return _frame_is_formal_protocol(source_df) and _frame_is_formal_protocol(target_df)
+
+
+def assert_formal_bl8_preconditions(
+    *,
+    k: int,
+    weight_mode: str,
+    k3_selection_context: TargetK3SelectionContext | None,
+) -> None:
+    """Fail closed before source selection when formal BL8 contract is violated."""
+    if int(k) != BL8_FORMAL_K:
+        raise FormalBL8ContractError(
+            f"Formal BL8 requires k=={BL8_FORMAL_K}, got k={k}"
+        )
+    if str(weight_mode) != BL8_FORMAL_WEIGHT_MODE:
+        raise FormalBL8ContractError(
+            "Formal BL8 requires weight_mode="
+            f"{BL8_FORMAL_WEIGHT_MODE!r}, got {weight_mode!r}"
+        )
+    if k3_selection_context is None:
+        raise FormalBL8ContractError(
+            "Formal BL8 requires the sealed formal KNN source-selection context; "
+            "refusing legacy/no-context target signature selection"
+        )
+
+
+def assert_formal_bl8_selected_source_count(selected_sources: Sequence[object]) -> None:
+    selected_count = len(selected_sources)
+    if selected_count != BL8_FORMAL_K:
+        raise FormalBL8ContractError(
+            "Formal BL8 requires exactly "
+            f"{BL8_FORMAL_K} selected sources, got {selected_count}. "
+            "Refusing to continue with a reduced source set."
+        )
+
+
+def assert_formal_bl8_successful_source_models(
+    source_models: Sequence[object],
+    failed_sources: Sequence[object] | None = None,
+) -> None:
+    successful_count = len(source_models)
+    if successful_count != BL8_FORMAL_K:
+        failed_count = len(failed_sources or ())
+        raise FormalBL8ContractError(
+            "Formal BL8 requires exactly "
+            f"{BL8_FORMAL_K} successful source models, got {successful_count} "
+            f"(failed_source_count={failed_count}). "
+            "Refusing to renormalize surviving sources as formal BL8."
+        )
+
+
+def get_bl8_fused_parameter_layer_names(model=None) -> List[str]:
+    """Return the formal BL8 fused-parameter identity: conv1, conv2."""
+    layer_names = list(BL8_FUSED_PARAMETER_LAYERS)
+    if "conv3" in layer_names or "dense_out" in layer_names:
+        raise FormalBL8ContractError(
+            "Formal BL8 fused-parameter layers must not include conv3 or dense_out"
+        )
+    if model is not None:
+        model_layer_names = {layer.name for layer in model.layers}
+        missing = [name for name in layer_names if name not in model_layer_names]
+        if missing:
+            raise ValueError(
+                f"BL8 fused layer(s) {missing} not found in model. "
+                f"Available: {sorted(model_layer_names)}"
+            )
+    return layer_names
+
+
+def get_bl8_frozen_target_layer_names() -> List[str]:
+    """Return the formal BL8 frozen-block identity, including pooling layers."""
+    return list(BL8_FROZEN_TARGET_LAYERS)
+
+
+def get_bl8_target_trainable_parameter_layer_names() -> List[str]:
+    """Return the formal BL8 trainable parameter-layer identity."""
+    return list(BL8_TARGET_TRAINABLE_PARAMETER_LAYERS)
+
+
+def get_trainable_parameter_layer_names(model) -> List[str]:
+    """Return trainable layers that actually own parameter arrays."""
+    return [
+        layer.name
+        for layer in model.layers
+        if bool(getattr(layer, "trainable", False)) and len(getattr(layer, "trainable_weights", [])) > 0
+    ]
+
+
+def compute_bl8_inverse_distance_weights(
+    distances: Sequence[float],
+    epsilon: float = BL8_WEIGHT_EPSILON,
+) -> np.ndarray:
+    """Formal BL8 weighting: q_i = 1/(d_i+eps), alpha_i = q_i / sum(q)."""
+    d = np.asarray(distances, dtype=np.float64).reshape(-1)
+    if d.size == 0:
+        raise ValueError("Formal BL8 inverse-distance weights require a non-empty distance vector")
+    if np.any(d < 0):
+        raise ValueError("Distances must be non-negative")
+    scores = 1.0 / (d + float(epsilon))
+    denom = float(np.sum(scores))
+    if denom <= 0.0 or not np.isfinite(denom):
+        raise ValueError(f"Formal BL8 inverse-distance weight denominator is invalid: {denom}")
+    return scores / denom
+
+
+def apply_bl8_target_trainability(target_model) -> List[str]:
+    """
+    Assign formal BL8 frozen/trainable flags without compiling.
+
+    Frozen block: conv1, pool1, conv2, pool2.
+    Trainable parameter layers: conv3, dense_out.
+    """
+    logger = _get_logger()
+    layer_by_name = {layer.name: layer for layer in target_model.layers}
+    required = list(BL8_FROZEN_TARGET_LAYERS) + list(BL8_TARGET_TRAINABLE_PARAMETER_LAYERS)
+    missing = [name for name in required if name not in layer_by_name]
+    if missing:
+        raise ValueError(
+            f"BL8 trainability assignment missing layer(s) {missing}. "
+            f"Available: {sorted(layer_by_name)}"
+        )
+
+    frozen: List[str] = []
+    for name in BL8_FROZEN_TARGET_LAYERS:
+        layer_by_name[name].trainable = False
+        frozen.append(name)
+    for name in BL8_TARGET_TRAINABLE_PARAMETER_LAYERS:
+        layer_by_name[name].trainable = True
+
+    logger.info(
+        "[apply_bl8_target_trainability] frozen=%s trainable_parameter_layers=%s",
+        frozen,
+        list(BL8_TARGET_TRAINABLE_PARAMETER_LAYERS),
+    )
+    return frozen
 
 
 def _prepare_source_split(source_sequence_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -195,10 +373,12 @@ def train_source_cnn_for_msml(
 
 def get_transferable_layer_names(model=None) -> List[str]:
     """
-    返回参与参数融合的层名列表。
+    Return the historical/generic transferable-layer list.
 
-    默认只返回卷积层 ['conv1', 'conv2', 'conv3']，
-    不包含 flatten 和 dense_out。
+    This helper remains ['conv1', 'conv2', 'conv3'] so MSML-TL-RFE and
+    MS-KATL keep their existing fusion identity. Formal BL8 fusion uses
+    get_bl8_fused_parameter_layer_names() / BL8_FUSED_PARAMETER_LAYERS
+    and must not treat this list as the frozen-layer identity.
 
     Args:
         model: 可选的 Keras 模型，用于校验层名是否存在。
@@ -414,7 +594,11 @@ def freeze_fused_layers(
     fused_layer_names: Sequence[str],
 ) -> List[str]:
     """
-    冻结已融合层，其余层保持可训练。
+    Freeze the supplied layer names and keep every other layer trainable.
+
+    Historical helper used by MSML-TL-RFE. Formal BL8 must not pass the
+    fused-parameter list into this function; use apply_bl8_target_trainability
+    so pooling layers can be frozen without fusing conv3.
 
     Args:
         target_model: Keras 模型。
@@ -623,6 +807,8 @@ def run_msml_tl(
     k3_selection_context: TargetK3SelectionContext | None = None,
     k3_raw_source_context: TargetK3RawSourceContext | None = None,
     transformation_reuse_context: "TargetTransformationReuseContext | None" = None,
+    formal_bl8: bool = False,
+    seed: Optional[int] = None,
 ) -> Dict[str, object]:
     """
     运行 MSML-TL 完整流程。
@@ -668,11 +854,18 @@ def run_msml_tl(
         }
     """
     logger = _get_logger()
-    logger.info("[run_msml_tl] Start. k=%d weight_mode=%s", k, weight_mode)
+    logger.info("[run_msml_tl] Start. k=%d weight_mode=%s formal_bl8=%s", k, weight_mode, formal_bl8)
 
     _validate_feature_cols(source_df, feature_cols, where="source_df")
     _validate_feature_cols(target_df, feature_cols, where="target_df")
     resolved_group_cols = tuple(group_cols)
+    formal_mode = resolve_formal_bl8_mode(formal_bl8, source_df, target_df)
+    if formal_mode:
+        assert_formal_bl8_preconditions(
+            k=k,
+            weight_mode=weight_mode,
+            k3_selection_context=k3_selection_context,
+        )
 
     # --- Step 1: 选源 ---
     if k3_selection_context is None:
@@ -706,6 +899,8 @@ def run_msml_tl(
     selected_sources = selection_result.get("sources", []) if isinstance(selection_result, dict) else selection_result
     if not selected_sources:
         raise ValueError("No source selected from source pool.")
+    if formal_mode:
+        assert_formal_bl8_selected_source_count(selected_sources)
 
     # --- Step 2: 逐源训练 CNN ---
     source_models: List = []
@@ -800,19 +995,27 @@ def run_msml_tl(
             selected_sources=selected_sources,
             selection_meta=runtime_selection_meta(selection_result),
         )
+    if formal_mode:
+        assert_formal_bl8_successful_source_models(source_models, failed_sources)
 
     source_weights = normalize_successful_source_weights(source_weights)
     for info, normalized_weight in zip(source_models_info, source_weights):
         info["weight"] = float(normalized_weight)
 
-    # --- Step 3: 确定可融合层并做加权参数融合 ---
-    layer_names = get_transferable_layer_names(source_models[0])
-    fused_params = fuse_source_models_layerwise(source_models, source_weights, layer_names)
+    # --- Step 3: fuse only BL8 parameter layers (conv1, conv2) ---
+    fused_layer_names = get_bl8_fused_parameter_layer_names(source_models[0])
+    fused_params = fuse_source_models_layerwise(source_models, source_weights, fused_layer_names)
+    if "conv3" in fused_params or "dense_out" in fused_params:
+        raise FormalBL8ContractError(
+            "BL8 fusion must not include conv3 or dense_out; "
+            f"got fused keys={sorted(fused_params)}"
+        )
 
-    # --- Step 4: 构建 target model → 加载融合参数 → 冻结 ---
+    # --- Step 4: fresh target model → load fused conv1/conv2 → freeze first block ---
     target_model = build_base_cnn(input_shape_ref, learning_rate=learning_rate)
     target_model = load_fused_params_into_target_model(target_model, fused_params)
-    frozen_layers = freeze_fused_layers(target_model, layer_names)
+    frozen_layers = apply_bl8_target_trainability(target_model)
+    target_trainable_parameter_layers = get_trainable_parameter_layer_names(target_model)
 
     # --- Step 5: 切分 target → 归一化 → 微调 ---
     target_train_df, target_val_df, target_test_df = temporal_split_by_ratio_or_dates(target_df)
@@ -849,23 +1052,34 @@ def run_msml_tl(
         eval_result["rmse"], eval_result["accuracy"], eval_result["prediction_shape"],
     )
 
+    meta = {
+        "method": "MSML-TL",
+        "k": int(k),
+        "weight_mode": weight_mode,
+        "weight_epsilon": float(BL8_WEIGHT_EPSILON),
+        "feature_cols": list(feature_cols),
+        "knn_feature_mode": (selection_result.get("meta", {}) or {}).get("knn_feature_mode", ""),
+        "selected_sources": selected_sources,
+        **runtime_selection_meta(selection_result),
+        "fused_layers": list(fused_layer_names),
+        "frozen_layers": list(frozen_layers),
+        "target_trainable_parameter_layers": list(target_trainable_parameter_layers),
+        "requested_source_count": int(k),
+        "effective_selected_source_count": int(len(selected_sources)),
+        "successful_source_model_count": int(len(source_models)),
+        "formal_bl8": bool(formal_mode),
+        "rfe": False,
+        **source_failure_meta(
+            requested_k=k,
+            selected_sources=selected_sources,
+            valid_source_count=len(source_models_info),
+            failed_sources=failed_sources,
+        ),
+    }
+    if seed is not None:
+        meta["seed"] = int(seed)
     return {
-        "meta": {
-            "method": "MSML-TL",
-            "k": int(k),
-            "weight_mode": weight_mode,
-            "feature_cols": list(feature_cols),
-            "knn_feature_mode": (selection_result.get("meta", {}) or {}).get("knn_feature_mode", ""),
-            "selected_sources": selected_sources,
-            **runtime_selection_meta(selection_result),
-            "fused_layers": list(layer_names),
-            **source_failure_meta(
-                requested_k=k,
-                selected_sources=selected_sources,
-                valid_source_count=len(source_models_info),
-                failed_sources=failed_sources,
-            ),
-        },
+        "meta": meta,
         "source_models_info": source_models_info,
         "fused_result": {
             "rmse": eval_result["rmse"],

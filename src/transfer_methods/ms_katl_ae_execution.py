@@ -580,6 +580,7 @@ STAGE_A_KWARG_KEYS: Tuple[str, ...] = (
     "batch_size",
     "tau_k",
     "group_cols",
+    "seed",
 )
 SHARED_BUNDLE_INPUT_KEYS: Tuple[str, ...] = (
     "target_identity",
@@ -641,6 +642,7 @@ def plan_formal_stage_a_kwargs(
         "batch_size": int(STAGE_B_BATCH_SIZE),
         "tau_k": 1.0,
         "group_cols": tuple(group_cols),
+        "seed": int(cell.seed),
     }
     missing_kwargs = [key for key in STAGE_A_KWARG_KEYS if key not in kwargs_plan]
     if missing_kwargs:

@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import random
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
@@ -46,6 +45,7 @@ from src.transfer_methods.ms_katl_lite import (
     fused_params_digest,
     fused_target_init_snapshot,
     raw_target_init_snapshot,
+    reset_stage_a_source_training_rng,
     snapshot_model_weights,
     snapshot_named_layer_weights,
 )
@@ -484,13 +484,7 @@ def _ae_name(prefix: str) -> str:
 
 
 def reset_ae_rng(seed: int) -> None:
-    normalized = int(seed)
-    os.environ["PYTHONHASHSEED"] = str(normalized)
-    random.seed(normalized)
-    np.random.seed(normalized)
-    tf.random.set_seed(normalized)
-    if hasattr(tf.keras.utils, "set_random_seed"):
-        tf.keras.utils.set_random_seed(normalized)
+    reset_stage_a_source_training_rng(seed)
 
 
 def _json_digest(payload: Mapping[str, Any]) -> str:
@@ -1049,6 +1043,7 @@ def build_ae_stage_a_from_shared_bundle(shared_bundle: Any) -> AESyntheticStageA
                 "selection": selection_digest,
                 "source_weight_digests": list(artifacts.source_weight_digests),
                 "fused_params_digest": str(artifacts.fused_params_digest),
+                "stage_a_seed": int(getattr(artifacts, "stage_a_seed", seed) or seed),
             }
         ),
         knn_prior=np.asarray(artifacts.knn_prior, dtype=np.float64),
